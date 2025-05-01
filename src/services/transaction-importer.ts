@@ -14,6 +14,11 @@ export interface Transaction {
    * The amount of the transaction.  Positive numbers indicate income, negative indicate expenses.
    */
   amount: number;
+  /**
+   * The mode of payment used for the transaction.
+   * Optional for now, as the import logic needs to determine this.
+   */
+  modeOfPayment?: 'Cash' | 'Bank' | 'Mpesa';
 }
 
 /**
@@ -23,13 +28,22 @@ export interface Transaction {
  * @returns A promise that resolves to an array of Transaction objects.
  */
 export async function importTransactions(file: File): Promise<Transaction[]> {
-  // TODO: Implement this by calling an API.
+  // TODO: Implement this by calling an API or parsing the file locally.
+  // This implementation should ideally parse the file content (CSV, XLSX, OFX, QIF)
+  // and map the columns to the Transaction interface fields, including attempting
+  // to infer the modeOfPayment if possible, or setting it to undefined/default.
 
+  console.log(`Simulating import for file: ${file.name}`);
+  // Simulate network delay or processing time
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Return example data for now. Replace with actual parsed data.
   return [
     {
       date: new Date(),
-      description: 'Example Transaction',
+      description: 'Example Imported Transaction',
       amount: -25.00,
+      modeOfPayment: 'Bank', // Example default for imported
     },
   ];
 }

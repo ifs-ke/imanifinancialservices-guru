@@ -30,23 +30,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
 
-// Adding ID to transaction interface and mock data
+// Define allowed modes of payment
+type ModeOfPayment = 'Cash' | 'Bank' | 'Mpesa';
+
+// Adding ID and modeOfPayment to transaction interface and mock data
 interface TransactionWithId extends Transaction {
   id: string; // Using string ID for flexibility, could be number
+  modeOfPayment: ModeOfPayment;
 }
 
 // Generate unique IDs for mock data
 const generateId = () => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Mock initial transactions (values in KES) with IDs
+// Mock initial transactions (values in KES) with IDs and modeOfPayment
 const initialTransactions: TransactionWithId[] = [
-  { id: generateId(), date: new Date(2024, 5, 15), description: 'Salary Deposit', amount: 300000 },
-  { id: generateId(), date: new Date(2024, 5, 16), description: 'Groceries - Naivas', amount: -8550 },
-  { id: generateId(), date: new Date(2024, 5, 17), description: 'Rent Payment', amount: -120000 },
-  { id: generateId(), date: new Date(2024, 5, 18), description: 'Coffee Shop', amount: -525 },
-  { id: generateId(), date: new Date(2024, 5, 20), description: 'Utility Bill - KPLC', amount: -7500 },
-  { id: generateId(), date: new Date(2024, 5, 22), description: 'Dinner Out - Artcaffe', amount: -6000 },
+  { id: generateId(), date: new Date(2024, 5, 15), description: 'Salary Deposit', amount: 300000, modeOfPayment: 'Bank' },
+  { id: generateId(), date: new Date(2024, 5, 16), description: 'Groceries - Naivas', amount: -8550, modeOfPayment: 'Mpesa' },
+  { id: generateId(), date: new Date(2024, 5, 17), description: 'Rent Payment', amount: -120000, modeOfPayment: 'Bank' },
+  { id: generateId(), date: new Date(2024, 5, 18), description: 'Coffee Shop', amount: -525, modeOfPayment: 'Cash' },
+  { id: generateId(), date: new Date(2024, 5, 20), description: 'Utility Bill - KPLC', amount: -7500, modeOfPayment: 'Mpesa' },
+  { id: generateId(), date: new Date(2024, 5, 22), description: 'Dinner Out - Artcaffe', amount: -6000, modeOfPayment: 'Mpesa' },
 ];
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
@@ -64,7 +69,8 @@ export default function TransactionsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
-  const [formData, setFormData] = useState({ date: '', description: '', amount: '' });
+  // Updated formData to include modeOfPayment
+  const [formData, setFormData] = useState({ date: '', description: '', amount: '', modeOfPayment: '' as ModeOfPayment | '' });
   const [isImporting, setIsImporting] = useState(false);
   const { toast } = useToast();
 
@@ -74,9 +80,10 @@ export default function TransactionsPage() {
   // CREATE
   const handleAddTransaction = (event: React.FormEvent) => {
     event.preventDefault();
-    const { date, description, amount } = formData;
+    // Include modeOfPayment in validation
+    const { date, description, amount, modeOfPayment } = formData;
 
-    if (!date || !description || !amount) {
+    if (!date || !description || !amount || !modeOfPayment) {
       toast({ title: 'Missing Information', description: 'Please fill out all fields.', variant: 'destructive' });
       return;
     }
@@ -91,10 +98,11 @@ export default function TransactionsPage() {
       date: new Date(date + 'T00:00:00'), // Ensure date parsing considers local time
       description: description,
       amount: parsedAmount,
+      modeOfPayment: modeOfPayment, // Add mode of payment
     };
 
     setTransactions(prev => [newTransaction, ...prev].sort((a, b) => b.date.getTime() - a.date.getTime()));
-    setFormData({ date: '', description: '', amount: '' });
+    setFormData({ date: '', description: '', amount: '', modeOfPayment: '' }); // Reset form
     setIsAddDialogOpen(false);
     toast({ title: 'Transaction Added', description: 'Successfully added.' });
   };
@@ -106,6 +114,7 @@ export default function TransactionsPage() {
       date: formatDateForInput(transaction.date),
       description: transaction.description,
       amount: transaction.amount.toString(),
+      modeOfPayment: transaction.modeOfPayment, // Set mode of payment in form
     });
     setIsEditDialogOpen(true);
   };
@@ -114,8 +123,8 @@ export default function TransactionsPage() {
     event.preventDefault();
     if (!editingTransaction) return;
 
-    const { date, description, amount } = formData;
-    if (!date || !description || !amount) {
+    const { date, description, amount, modeOfPayment } = formData; // Include modeOfPayment
+    if (!date || !description || !amount || !modeOfPayment) { // Include modeOfPayment in validation
       toast({ title: 'Missing Information', description: 'Please fill out all fields.', variant: 'destructive' });
       return;
     }
@@ -128,13 +137,13 @@ export default function TransactionsPage() {
     setTransactions(prev =>
       prev.map(tx =>
         tx.id === editingTransaction.id
-          ? { ...tx, date: new Date(date + 'T00:00:00'), description, amount: parsedAmount }
+          ? { ...tx, date: new Date(date + 'T00:00:00'), description, amount: parsedAmount, modeOfPayment } // Update modeOfPayment
           : tx
       ).sort((a, b) => b.date.getTime() - a.date.getTime())
     );
 
     setEditingTransaction(null);
-    setFormData({ date: '', description: '', amount: '' });
+    setFormData({ date: '', description: '', amount: '', modeOfPayment: '' }); // Reset form
     setIsEditDialogOpen(false);
     toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
   };
@@ -160,14 +169,21 @@ export default function TransactionsPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Handler for Select component
+  const handleSelectChange = (value: string) => {
+     setFormData(prev => ({ ...prev, modeOfPayment: value as ModeOfPayment }));
+  };
+
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setIsImporting(true);
     try {
+      // Placeholder for actual import logic
       await new Promise(resolve => setTimeout(resolve, 1500));
+      // When implementing actual import, ensure modeOfPayment is handled or set to a default/unknown
       const imported: TransactionWithId[] = [
-        { id: generateId(), date: new Date(), description: 'Imported from ' + file.name, amount: Math.random() > 0.5 ? 15000 : -5000 },
+        { id: generateId(), date: new Date(), description: 'Imported from ' + file.name, amount: Math.random() > 0.5 ? 15000 : -5000, modeOfPayment: 'Bank' }, // Example default
       ];
       setTransactions(prev => [...prev, ...imported].sort((a, b) => b.date.getTime() - a.date.getTime()));
       toast({ title: 'Import Successful', description: `${file.name} imported.`, variant: 'default' });
@@ -227,6 +243,20 @@ export default function TransactionsPage() {
                   <Label htmlFor="add-amount" className="text-right">Amount (KES)</Label>
                   <Input id="add-amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleInputChange} className="col-span-3" placeholder="e.g., -550 or 10000" required />
                 </div>
+                 {/* Mode of Payment Select */}
+                 <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="add-modeOfPayment" className="text-right">Payment Mode</Label>
+                  <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={handleSelectChange} required>
+                    <SelectTrigger id="add-modeOfPayment" className="col-span-3">
+                      <SelectValue placeholder="Select mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Bank">Bank</SelectItem>
+                      <SelectItem value="Mpesa">Mpesa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <DialogFooter>
                   <Button type="submit">Add Transaction</Button>
                 </DialogFooter>
@@ -257,6 +287,8 @@ export default function TransactionsPage() {
                   <TableRow>
                     <TableHead className="w-[120px]">Date</TableHead>
                     <TableHead>Description</TableHead>
+                    {/* Add Mode of Payment Header */}
+                    <TableHead className="w-[100px]">Mode</TableHead>
                     <TableHead className="text-right w-[150px]">Amount (KES)</TableHead>
                     <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
@@ -267,6 +299,8 @@ export default function TransactionsPage() {
                       <TableRow key={tx.id}>
                         <TableCell className="font-medium">{formatDate(tx.date)}</TableCell>
                         <TableCell>{tx.description}</TableCell>
+                        {/* Add Mode of Payment Cell */}
+                        <TableCell>{tx.modeOfPayment}</TableCell>
                         <TableCell className={`text-right font-mono ${tx.amount >= 0 ? 'text-accent' : 'text-destructive'}`}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
@@ -285,7 +319,7 @@ export default function TransactionsPage() {
                                   <span className="sr-only">Delete</span>
                                 </Button>
                               </AlertDialogTrigger>
-                             {/* Conditional rendering might be better if many rows cause perf issues */}
+                             {/* Keep dialog content simpler, manage open state */}
                              {transactionToDelete && transactionToDelete.id === tx.id && (
                                <AlertDialogContent>
                                  <AlertDialogHeader>
@@ -307,7 +341,8 @@ export default function TransactionsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                      {/* Adjust colspan for the new column */}
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
                     </TableRow>
@@ -339,6 +374,20 @@ export default function TransactionsPage() {
                <Label htmlFor="edit-amount" className="text-right">Amount (KES)</Label>
                <Input id="edit-amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleInputChange} className="col-span-3" required />
              </div>
+             {/* Mode of Payment Select for Edit */}
+             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-modeOfPayment" className="text-right">Payment Mode</Label>
+              <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={handleSelectChange} required>
+                <SelectTrigger id="edit-modeOfPayment" className="col-span-3">
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Bank">Bank</SelectItem>
+                  <SelectItem value="Mpesa">Mpesa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
              <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => { setIsEditDialogOpen(false); setEditingTransaction(null); }}>Cancel</Button>
                <Button type="submit">Save Changes</Button>
@@ -350,4 +399,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-
