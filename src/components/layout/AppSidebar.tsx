@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -18,20 +19,23 @@ import {
   ReceiptText,
   FileText,
   FileUp,
-  Coins, // Changed from CircleDollarSign for Debts
-  TrendingDown, // Icon for Expenses
+  Coins,
+  TrendingDown,
+  TrendingUp, // Icon for Income
   Menu,
   Settings,
-  Landmark, // Keep for App title
+  Landmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
+import { ThemeToggle } from '@/components/ui/ThemeToggle'; // Import ThemeToggle
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: ReceiptText, secondaryIcon: FileUp },
-  { href: '/expenses', label: 'Expenses', icon: TrendingDown }, // Added Expenses link
-  { href: '/debt', label: 'Debts', icon: Coins }, // Updated icon
+  { href: '/income', label: 'Income', icon: TrendingUp }, // Added Income link
+  { href: '/expenses', label: 'Expenses', icon: TrendingDown },
+  { href: '/debt', label: 'Debts', icon: Coins },
   { href: '/statements', label: 'Statements', icon: FileText },
 ];
 
@@ -63,15 +67,12 @@ export function AppSidebar() {
               <Link href={item.href} passHref legacyBehavior>
                 <SidebarMenuButton
                   asChild
-                   // Check if the current path starts with the item's href
-                   // This makes parent routes active when viewing sub-routes (like /transactions/import)
                   isActive={pathname.startsWith(item.href)}
                   tooltip={item.label}
                 >
                   <a>
                     <item.icon className="h-4 w-4" />
                     <span>{item.label}</span>
-                     {/* Render secondary icon if present */}
                      {item.secondaryIcon && (
                        <item.secondaryIcon className="ml-auto h-3 w-3 text-muted-foreground group-data-[state=collapsed]:hidden" />
                     )}
@@ -82,21 +83,9 @@ export function AppSidebar() {
           ))}
         </SidebarMenu>
       </SidebarContent>
-      {/* Optional Footer for settings or user profile */}
-      {/* <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <Link href="/settings" passHref legacyBehavior>
-              <SidebarMenuButton asChild tooltip="Settings">
-                <a>
-                  <Settings className="h-4 w-4" />
-                  <span>Settings</span>
-                </a>
-              </SidebarMenuButton>
-            </Link>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter> */}
+       <SidebarFooter className="p-2 mt-auto">
+          <ThemeToggle />
+      </SidebarFooter>
     </>
   );
 }

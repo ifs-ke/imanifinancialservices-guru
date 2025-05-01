@@ -5,7 +5,7 @@ import './globals.css';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
-import { TransactionsProvider } from '@/contexts/TransactionsContext'; // Import the provider
+import { ThemeProvider } from '@/components/providers/theme-provider'; // Import ThemeProvider
 
 // Initialize Inter font for sans-serif
 const inter = Inter({
@@ -30,9 +30,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // Add className="dark" here to force dark mode, or implement a theme switcher
-    // that dynamically adds/removes the class based on user preference or system settings.
-    // For now, we'll assume a theme switcher might handle this, or rely on OS preference.
     <html lang="en" suppressHydrationWarning>
       <body
         className={cn(
@@ -41,14 +38,17 @@ export default function RootLayout({
           roboto_mono.variable // Use Roboto Mono variable
         )}
       >
-        {/* Wrap with TransactionsProvider if needed globally,
-            otherwise keep it within (dashboard)/layout.tsx */}
-        {/* <TransactionsProvider> */}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           <SidebarProvider>
             {children}
             <Toaster />
           </SidebarProvider>
-        {/* </TransactionsProvider> */}
+        </ThemeProvider>
       </body>
     </html>
   );
