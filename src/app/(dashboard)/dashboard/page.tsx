@@ -4,19 +4,34 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle } from 'lucide-react';
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon } from 'lucide-react'; // Added LineChartIcon
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactions } from '@/contexts/TransactionsContext';
 import { useDebt } from '@/contexts/DebtContext';
 import { useStatement } from '@/contexts/StatementContext';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line, AreaChart, Area } from 'recharts'; // Added LineChart, Line, AreaChart, Area, CartesianGrid
+import { format } from 'date-fns'; // Import date-fns format
 
 // Calculation Functions (consider moving to utils)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
-const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
+const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0); // Corrected from item.principal
+
+// Formatting Functions
+const formatCurrency = (amount: number | undefined) => {
+   if (amount === undefined || isNaN(amount)) return 'N/A'; // Added NaN check
+  return new Intl.NumberFormat('en-KE', {
+    style: 'currency',
+    currency: 'KES', // Use KES
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+// Format date to 'MMM yyyy'
+const formatMonthYear = (date: Date) => format(date, 'MMM yyyy');
 
 export default function DashboardPage() {
   const { transactions } = useTransactions();
@@ -34,8 +49,7 @@ export default function DashboardPage() {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentTransactions = transactions.filter(tx => {
-        const txDate = typeof tx.date === 'string' ? new Date(tx.date) : tx.date;
-        // Check if txDate is a valid Date object before comparing
+        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
         return txDate instanceof Date && !isNaN(txDate.getTime()) && txDate >= thirtyDaysAgo;
     });
     const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
@@ -60,19 +74,10 @@ export default function DashboardPage() {
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
   const [formattedTotalIncomeRecent, setFormattedTotalIncomeRecent] = useState<string>('N/A');
   const [formattedTotalExpensesRecent, setFormattedTotalExpensesRecent] = useState<string>('N/A');
+  const [formattedOtherLiabilities, setFormattedOtherLiabilities] = useState<string>('N/A'); // Added state for other liabilities formatting
+
 
   useEffect(() => {
-    // Function to format currency
-    const formatCurrency = (amount: number | undefined) => {
-       if (amount === undefined) return 'N/A';
-      return new Intl.NumberFormat('en-KE', {
-        style: 'currency',
-        currency: 'KES',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(amount);
-    };
-
     // Format the values here to avoid server/client differences
     setFormattedNetWorth(formatCurrency(financialData.netWorth));
     setFormattedTotalAssets(formatCurrency(financialData.totalAssets));
@@ -80,11 +85,12 @@ export default function DashboardPage() {
     setFormattedCashFlow(formatCurrency(financialData.cashFlow));
     setFormattedTotalIncomeRecent(formatCurrency(financialData.totalIncomeRecent));
     setFormattedTotalExpensesRecent(formatCurrency(financialData.totalExpensesRecent));
+    setFormattedOtherLiabilities(formatCurrency(financialData.totalOtherLiabilities)); // Format other liabilities
   }, [financialData]);
 
   // --- Chart Data and Config ---
 
-  // 1. Income vs Expense Chart (Bar Chart)
+  // 1. Income vs Expense Chart (Bar Chart - Last 30 days)
   const cashFlowChartData = useMemo(() => [
     { name: 'Income', value: financialData.totalIncomeRecent, fill: "hsl(var(--chart-2))" },
     { name: 'Expenses', value: financialData.totalExpensesRecent, fill: "hsl(var(--destructive))" },
@@ -114,8 +120,52 @@ export default function DashboardPage() {
                color: item.fill // Use the same fill color assigned earlier
            };
        });
+       // Add a key for the value itself for the tooltip
+       config.value = { label: 'Amount (KES)' };
        return config;
    }, [assetChartData]);
+
+   // 3. Income/Expense Trend Chart (Line/Area Chart - All Time)
+   const trendChartData = useMemo(() => {
+        const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
+
+        // Sort transactions oldest to newest for chronological plotting
+        const sortedTransactions = [...transactions].sort((a, b) => {
+            const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+            const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+            if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0; // Handle invalid dates
+            return dateA.getTime() - dateB.getTime();
+        });
+
+        sortedTransactions.forEach(tx => {
+            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+            if (isNaN(txDate.getTime())) return; // Skip invalid dates
+
+            const monthKey = format(txDate, 'yyyy-MM'); // Group by year and month
+            if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = { month: format(txDate, 'MMM yyyy'), income: 0, expense: 0 };
+            }
+
+            if (tx.amount > 0) {
+                monthlyData[monthKey].income += tx.amount;
+            } else if (tx.amount < 0) {
+                monthlyData[monthKey].expense += Math.abs(tx.amount);
+            }
+        });
+
+        // Convert to array and sort chronologically
+        return Object.values(monthlyData).sort((a, b) => {
+            const dateA = new Date(a.month.replace(' ', ' 1, ')); // Convert 'MMM yyyy' back to Date for sorting
+            const dateB = new Date(b.month.replace(' ', ' 1, '));
+            return dateA.getTime() - dateB.getTime();
+        });
+    }, [transactions]);
+
+   const trendChartConfig = {
+        income: { label: "Income", color: "hsl(var(--chart-2))" },
+        expense: { label: "Expenses", color: "hsl(var(--destructive))" },
+        month: { label: "Month" },
+    } satisfies ChartConfig;
 
 
   return (
@@ -129,11 +179,11 @@ export default function DashboardPage() {
         </p>
       </header>
 
-      {/* Use grid layout for responsiveness */}
-      <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+      {/* Updated grid layout for better responsiveness and new charts */}
+      <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 
-        {/* Financial Metrics Cards - Span 2 cols on smaller grids, 1 on larger */}
-        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2">
+        {/* Financial Metrics Cards - Span 1 col each */}
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
             <Scale className="h-4 w-4 text-muted-foreground" />
@@ -143,11 +193,11 @@ export default function DashboardPage() {
               {formattedNetWorth}
             </div>
             <p className="text-xs text-muted-foreground">
-               Assets ({formattedTotalAssets}) - Liabilities ({formattedTotalLiabilities})
+               Assets ({formattedTotalAssets}) <br/> Liabilities ({formattedTotalLiabilities})
             </p>
           </CardContent>
         </Card>
-        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2">
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Cash Flow (Last 30d)</CardTitle>
             {financialData.cashFlow >= 0 ? (
@@ -165,120 +215,210 @@ export default function DashboardPage() {
               {formattedCashFlow}
             </div>
             <p className="text-xs text-muted-foreground">
-              Income ({formattedTotalIncomeRecent}) - Expenses ({formattedTotalExpensesRecent})
+              Income ({formattedTotalIncomeRecent}) <br/> Expenses ({formattedTotalExpensesRecent})
             </p>
           </CardContent>
         </Card>
-        <Card className="md:col-span-2 lg:col-span-2 xl:col-span-2"> {/* Span full width on md */}
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Debt</CardTitle>
              <Coins className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formattedTotalLiabilities}
+                {formatCurrency(financialData.totalDebt)} {/* Display only debt here */}
             </div>
              <p className="text-xs text-muted-foreground">
-              Debts: {formattedTotalLiabilities}. Other Liabilities: N/A
+                Excludes other liabilities
              </p>
-             <CardFooter>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-              <Link href="/debt">
-                Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
-              </Link>
+                <Link href="/debt">
+                    Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
              </Button>
-             </CardFooter>
           </CardContent>
         </Card>
-
-        {/* Chart Cards - Span 2 cols each */}
-        <Card className="md:col-span-2 lg:col-span-2 xl:col-span-3">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-                 <BarChart2 className="h-4 w-4" /> Cash Flow (Last 30d)
-            </CardTitle>
-            <CardDescription>Income vs. Expenses</CardDescription>
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Other Liabilities</CardTitle>
+            <MinusCircle className="h-4 w-4 text-muted-foreground" /> {/* Example Icon */}
           </CardHeader>
           <CardContent>
-             {financialData.totalIncomeRecent > 0 || financialData.totalExpensesRecent > 0 ? (
-                <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
-                  <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
-                     <XAxis type="number" hide />
-                     <YAxis
-                      dataKey="name"
-                      type="category"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={10}
-                      tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }}
+            <div className="text-2xl font-bold">
+                {formattedOtherLiabilities} {/* Display other liabilities */}
+            </div>
+             <p className="text-xs text-muted-foreground">
+                Items from Statements
+             </p>
+             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                <Link href="/statements">
+                    Manage Statements <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+             </Button>
+          </CardContent>
+        </Card>
+
+
+        {/* Chart Cards - Span full width on md, adjust for lg/xl */}
+        <Card className="md:col-span-2 lg:col-span-3 xl:col-span-4">
+           <CardHeader>
+             <CardTitle className="text-base flex items-center gap-2">
+                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (All Time)
+             </CardTitle>
+             <CardDescription>Monthly income vs. expenses over time.</CardDescription>
+           </CardHeader>
+           <CardContent>
+                {trendChartData.length > 1 ? ( // Need at least 2 points for a line chart
+                    <ChartContainer config={trendChartConfig} className="h-[250px] w-full">
+                        <AreaChart
+                            accessibilityLayer
+                            data={trendChartData}
+                            margin={{ left: -20, right: 10, top: 10, bottom: 0 }}
+                        >
+                            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                            <XAxis
+                                dataKey="month"
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={8}
+                                tickFormatter={(value) => value.slice(0, 3)} // Show only month abbreviation
+                                // Optionally adjust number of ticks for smaller screens
+                                // interval="preserveStartEnd" // Show start and end, adjust middle
+                                // minTickGap={20} // Minimum gap between ticks
+                            />
+                            <YAxis
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={8}
+                                tickFormatter={(value) => `KES ${value / 1000}k`} // Format as thousands
+                            />
+                            <ChartTooltip
+                                cursor={false}
+                                content={<ChartTooltipContent indicator="dot" />}
+                             />
+                             <defs>
+                                <linearGradient id="fillIncome" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.1}/>
+                                </linearGradient>
+                                <linearGradient id="fillExpense" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.1}/>
+                                </linearGradient>
+                             </defs>
+                             <Area
+                                dataKey="income"
+                                type="monotone"
+                                fill="url(#fillIncome)"
+                                stroke="hsl(var(--chart-2))"
+                                stackId="a"
+                             />
+                             <Area
+                                dataKey="expense"
+                                type="monotone"
+                                fill="url(#fillExpense)"
+                                stroke="hsl(var(--destructive))"
+                                stackId="a"
+                             />
+                        </AreaChart>
+                    </ChartContainer>
+                 ) : (
+                    <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
+                        Not enough data for trend analysis (need transactions spanning at least two months).
+                    </div>
+                 )}
+            </CardContent>
+         </Card>
+
+         {/* Existing Chart Cards */}
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-2"> {/* Adjust span */}
+           <CardHeader>
+             <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart2 className="h-4 w-4" /> Cash Flow (Last 30d)
+             </CardTitle>
+             <CardDescription>Income vs. Expenses</CardDescription>
+           </CardHeader>
+           <CardContent>
+              {financialData.totalIncomeRecent > 0 || financialData.totalExpensesRecent > 0 ? (
+                 <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
+                   <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
+                      <XAxis type="number" hide />
+                      <YAxis
+                       dataKey="name"
+                       type="category"
+                       tickLine={false}
+                       axisLine={false}
+                       tickMargin={10}
+                       tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }}
+                      />
+                     <ChartTooltip
+                       cursor={false}
+                       content={<ChartTooltipContent hideLabel />}
                      />
-                    <ChartTooltip
-                      cursor={false}
-                      content={<ChartTooltipContent hideLabel />}
-                    />
-                    <Bar dataKey="value" radius={5} />
-                  </BarChart>
-                </ChartContainer>
-             ) : (
-                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-                    No income or expense data for the last 30 days.
-                </div>
-             )}
-          </CardContent>
-        </Card>
+                     <Bar dataKey="value" radius={5} />
+                   </BarChart>
+                 </ChartContainer>
+              ) : (
+                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                     No income or expense data for the last 30 days.
+                 </div>
+              )}
+           </CardContent>
+         </Card>
 
-         <Card className="md:col-span-2 lg:col-span-2 xl:col-span-3">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-                <PieChart className="h-4 w-4"/> Asset Allocation
-            </CardTitle>
-            <CardDescription>Distribution of your assets</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center justify-center">
-             {assetChartData.length > 0 ? (
-                 <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
-                    <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                         <ChartTooltip content={<ChartTooltipContent nameKey="name" hideIndicator />} />
-                         <Pie
-                            data={assetChartData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={70}
-                            innerRadius={50}
-                            labelLine={false}
-                            paddingAngle={2}
-                         >
-                              {assetChartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                         </Pie>
-                        </PieChart>
-                    </ResponsiveContainer>
-                </ChartContainer>
-             ) : (
-                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
-                    No positive asset data available. Add assets in Statements.
-                </div>
-             )}
-          </CardContent>
-        </Card>
+         <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjust span */}
+           <CardHeader>
+             <CardTitle className="text-base flex items-center gap-2">
+                 <PieChart className="h-4 w-4"/> Asset Allocation
+             </CardTitle>
+             <CardDescription>Distribution of your assets</CardDescription>
+           </CardHeader>
+           <CardContent className="flex items-center justify-center">
+              {assetChartData.length > 0 ? (
+                  <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
+                     <ResponsiveContainer width="100%" height={200}>
+                         <PieChart>
+                          <ChartTooltip content={<ChartTooltipContent nameKey="name" hideIndicator />} />
+                          <Pie
+                             data={assetChartData}
+                             dataKey="value"
+                             nameKey="name"
+                             cx="50%"
+                             cy="50%"
+                             outerRadius={70}
+                             innerRadius={50}
+                             labelLine={false}
+                             paddingAngle={2}
+                          >
+                               {assetChartData.map((entry, index) => (
+                                 <Cell key={`cell-${index}`} fill={entry.fill} />
+                             ))}
+                          </Pie>
+                         </PieChart>
+                     </ResponsiveContainer>
+                 </ChartContainer>
+              ) : (
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
+                     No positive asset data available. Add assets in Statements.
+                 </div>
+              )}
+           </CardContent>
+         </Card>
 
-        {/* Action/Navigation Cards - Span 2 cols each */}
-        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2 flex flex-col">
+
+        {/* Action/Navigation Cards - Adjust spans */}
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
           <CardHeader>
             <CardTitle>Manage Transactions</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow">
              <Image
-              src="https://picsum.photos/400/200?random=1"
-              alt="Ledger book with calculator"
+              src="https://picsum.photos/400/200?random=4" // Changed random seed
+              alt="Ledger book with coins and pen"
               width={400}
               height={200}
               className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="finance transaction record ledger"
+              data-ai-hint="money ledger coins pen" // Updated hint
             />
             <p className="text-sm text-muted-foreground">
               Import, categorize, and manage your financial transactions.
@@ -293,18 +433,18 @@ export default function DashboardPage() {
           </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2 flex flex-col">
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
           <CardHeader>
             <CardTitle>View Income/Expenses</CardTitle>
           </CardHeader>
            <CardContent className="flex-grow">
              <Image
-              src="https://picsum.photos/400/200?random=2"
-              alt="Financial chart showing income and expenses"
+              src="https://picsum.photos/400/200?random=5" // Changed random seed
+              alt="Graph showing upward and downward financial trends"
               width={400}
               height={200}
               className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="money analysis report chart graph"
+              data-ai-hint="finance chart graph money trend" // Updated hint
             />
             <p className="text-sm text-muted-foreground">
               Analyze your income and expense patterns.
@@ -313,29 +453,55 @@ export default function DashboardPage() {
            <CardFooter className="flex flex-col sm:flex-row gap-2">
                 <Button asChild variant="secondary" className="flex-1">
                 <Link href="/income">
-                    Income Analysis <TrendingUp className="ml-2 h-4 w-4" />
+                    Income <TrendingUp className="ml-2 h-4 w-4" />
                 </Link>
                 </Button>
                  <Button asChild variant="secondary" className="flex-1">
                 <Link href="/expenses">
-                    Expense Analysis <TrendingDown className="ml-2 h-4 w-4" />
+                    Expenses <TrendingDown className="ml-2 h-4 w-4" />
                 </Link>
                 </Button>
              </CardFooter>
         </Card>
 
-        <Card className="md:col-span-2 lg:col-span-2 xl:col-span-2 flex flex-col"> {/* Span full width on md */}
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
+          <CardHeader>
+            <CardTitle>Manage Debts</CardTitle> {/* Changed Title */}
+          </CardHeader>
+          <CardContent className="flex-grow">
+            <Image
+              src="https://picsum.photos/400/200?random=6" // Changed random seed
+              alt="Stack of coins next to a calculator"
+              width={400}
+              height={200}
+              className="rounded-md object-cover mb-4 aspect-[2/1]"
+              data-ai-hint="coins calculator finance debt money" // Updated hint
+            />
+            <p className="text-sm text-muted-foreground">
+              Track and manage your outstanding debts. {/* Changed description */}
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Button asChild variant="secondary" className="w-full">
+              <Link href="/debt"> {/* Changed Link */}
+                Manage Debts <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
           <CardHeader>
             <CardTitle>View Statements</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow">
             <Image
-              src="https://picsum.photos/400/200?random=3"
-              alt="Formal financial statement document"
+              src="https://picsum.photos/400/200?random=7" // Changed random seed
+              alt="Formal financial statement document with pen"
               width={400}
               height={200}
               className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="documents report sheet balance statement"
+              data-ai-hint="documents report sheet balance statement pen" // Updated hint
             />
             <p className="text-sm text-muted-foreground">
               Check your cash flow and net worth statements.
