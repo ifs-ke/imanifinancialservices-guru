@@ -8,16 +8,33 @@ import type { TransactionWithId, ModeOfPayment, TransactionFrequency, Transactio
 // Generate unique IDs for mock data - consider moving to a utility file if needed elsewhere
 const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Mock initial transactions (values in KES) with IDs, modeOfPayment, and categorization
+// Enhanced Mock initial transactions (values in KES) with more variety
 const initialTransactionsData: TransactionWithId[] = [
-  { id: generateId(), date: new Date(2024, 5, 15), description: 'Salary Deposit', amount: 300000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
-  { id: generateId(), date: new Date(2024, 5, 16), description: 'Groceries - Naivas', amount: -8550, modeOfPayment: 'Mpesa', frequency: 'recurring', variability: 'variable' },
-  { id: generateId(), date: new Date(2024, 5, 17), description: 'Rent Payment', amount: -120000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
-  { id: generateId(), date: new Date(2024, 5, 18), description: 'Coffee Shop', amount: -525, modeOfPayment: 'Cash', frequency: 'one-time', variability: 'variable' },
+  // Recent Month (June 2024 examples)
+  { id: generateId(), date: new Date(2024, 5, 15), description: 'Salary Deposit - June', amount: 300000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
+  { id: generateId(), date: new Date(2024, 5, 16), description: 'Groceries - Naivas Westlands', amount: -8550, modeOfPayment: 'Mpesa', frequency: 'recurring', variability: 'variable' },
+  { id: generateId(), date: new Date(2024, 5, 17), description: 'Rent Payment - June', amount: -120000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
+  { id: generateId(), date: new Date(2024, 5, 18), description: 'Coffee - Java House', amount: -525, modeOfPayment: 'Cash', frequency: 'one-time', variability: 'variable' },
   { id: generateId(), date: new Date(2024, 5, 20), description: 'Utility Bill - KPLC', amount: -7500, modeOfPayment: 'Mpesa', frequency: 'recurring', variability: 'variable' },
   { id: generateId(), date: new Date(2024, 5, 22), description: 'Dinner Out - Artcaffe', amount: -6000, modeOfPayment: 'Mpesa', frequency: 'one-time', variability: 'variable' },
-  { id: generateId(), date: new Date(2024, 6, 1), description: 'Freelance Payment', amount: 50000, modeOfPayment: 'Mpesa', frequency: 'one-time', variability: 'variable' },
-].sort((a, b) => b.date.getTime() - a.date.getTime()); // Ensure initial sort
+  { id: generateId(), date: new Date(2024, 5, 25), description: 'Internet Bill - Zuku', amount: -5000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
+  { id: generateId(), date: new Date(2024, 5, 28), description: 'Transport - Uber', amount: -1200, modeOfPayment: 'Mpesa', frequency: 'one-time', variability: 'variable' },
+  { id: generateId(), date: new Date(2024, 5, 30), description: 'Consulting Gig Payment', amount: 75000, modeOfPayment: 'Bank', frequency: 'one-time', variability: 'variable' },
+
+  // Previous Month (May 2024 examples)
+  { id: generateId(), date: new Date(2024, 4, 15), description: 'Salary Deposit - May', amount: 300000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
+  { id: generateId(), date: new Date(2024, 4, 17), description: 'Rent Payment - May', amount: -120000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
+  { id: generateId(), date: new Date(2024, 4, 19), description: 'Shopping - Mall', amount: -15000, modeOfPayment: 'Mpesa', frequency: 'one-time', variability: 'variable' },
+  { id: generateId(), date: new Date(2024, 4, 21), description: 'Water Bill', amount: -2500, modeOfPayment: 'Mpesa', frequency: 'recurring', variability: 'variable' },
+  { id: generateId(), date: new Date(2024, 4, 24), description: 'Car Fuel', amount: -6000, modeOfPayment: 'Cash', frequency: 'recurring', variability: 'variable' },
+  { id: generateId(), date: new Date(2024, 4, 29), description: 'Movie Tickets', amount: -2000, modeOfPayment: 'Mpesa', frequency: 'one-time', variability: 'fixed' },
+
+  // Older example (April 2024)
+  { id: generateId(), date: new Date(2024, 3, 15), description: 'Salary Deposit - April', amount: 295000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' }, // Slightly different salary?
+  { id: generateId(), date: new Date(2024, 3, 17), description: 'Rent Payment - April', amount: -120000, modeOfPayment: 'Bank', frequency: 'recurring', variability: 'fixed' },
+  { id: generateId(), date: new Date(2024, 3, 25), description: 'Book Purchase', amount: -3500, modeOfPayment: 'Mpesa', frequency: 'one-time', variability: 'fixed' },
+
+].sort((a, b) => b.date.getTime() - a.date.getTime()); // Ensure initial sort by date descending
 
 interface TransactionsContextType {
   transactions: TransactionWithId[];
@@ -36,7 +53,17 @@ export const TransactionsProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   // Sort transactions whenever they are updated
   const sortTransactions = useCallback((txs: TransactionWithId[]) => {
-    return [...txs].sort((a, b) => b.date.getTime() - a.date.getTime());
+    return [...txs].sort((a, b) => {
+       // Primary sort by date descending
+      const dateDiff = b.date.getTime() - a.date.getTime();
+      if (dateDiff !== 0) return dateDiff;
+       // Secondary sort: Income before expenses on the same day
+       // Assuming positive amount = income, negative = expense
+       if (a.amount > 0 && b.amount < 0) return -1;
+       if (a.amount < 0 && b.amount > 0) return 1;
+       // Tertiary sort: Larger magnitude transactions first (absolute value)
+       return Math.abs(b.amount) - Math.abs(a.amount);
+    });
   }, []);
 
   // Add transaction now includes frequency and variability

@@ -8,11 +8,14 @@ import type { DebtItem } from '@/lib/types';
 // Generate unique IDs
 const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Mock initial debt data (values in KES) with term
+// Enhanced Mock initial debt data (values in KES) with term
 const initialDebtsData: DebtItem[] = [
-  { id: generateId(), description: 'Credit Card Debt', principal: 300000, interestRate: 18.5, minPayment: 15000, term: 'short' },
-  { id: generateId(), description: 'Student Loan', principal: 1500000, interestRate: 5.0, minPayment: 25000, term: 'long' },
-  { id: generateId(), description: 'Car Loan', principal: 700000, interestRate: 14.0, minPayment: 30000, term: 'long' },
+  { id: generateId(), description: 'Credit Card - Visa', principal: 150000, interestRate: 24.0, minPayment: 7500, term: 'short' }, // Higher interest CC
+  { id: generateId(), description: 'Personal Loan - Bank ABC', principal: 450000, interestRate: 16.5, minPayment: 20000, term: 'long' },
+  { id: generateId(), description: 'Student Loan - HELB', principal: 1500000, interestRate: 4.0, minPayment: 10000, term: 'long' }, // Lower rate govt loan
+  { id: generateId(), description: 'Car Loan - XYZ Finance', principal: 700000, interestRate: 14.0, minPayment: 30000, term: 'long' },
+  { id: generateId(), description: 'Appliance Purchase - Store Credit', principal: 45000, interestRate: 0.0, minPayment: 5000, term: 'short' }, // 0% short term
+  { id: generateId(), description: 'Overdraft Facility', principal: 25000, interestRate: 19.0, minPayment: 1000, term: 'short' },
 ];
 
 interface DebtContextType {
@@ -25,15 +28,26 @@ interface DebtContextType {
 const DebtContext = createContext<DebtContextType | undefined>(undefined);
 
 export const DebtProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [debts, setDebts] = useState<DebtItem[]>(initialDebtsData);
+  // Sort initial data before setting state
+  const sortedInitialDebts = useMemo(() => {
+      return [...initialDebtsData].sort((a, b) => {
+        if (a.term === 'short' && b.term === 'long') return -1;
+        if (a.term === 'long' && b.term === 'short') return 1;
+        // Secondary sort by principal descending within term
+        return b.principal - a.principal;
+    });
+  }, []);
 
-  // Sort debts whenever they are updated (e.g., alphabetically by description)
+  const [debts, setDebts] = useState<DebtItem[]>(sortedInitialDebts);
+
+
+  // Sort debts whenever they are updated
   const sortDebts = useCallback((debtList: DebtItem[]) => {
-    // Sort primarily by term ('short' first), then by description
     return [...debtList].sort((a, b) => {
         if (a.term === 'short' && b.term === 'long') return -1;
         if (a.term === 'long' && b.term === 'short') return 1;
-        return a.description.localeCompare(b.description);
+        // Secondary sort by principal descending within term
+        return b.principal - a.principal;
     });
   }, []);
 

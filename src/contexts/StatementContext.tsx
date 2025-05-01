@@ -8,18 +8,23 @@ import type { StatementItem, OtherLiabilityItem } from '@/lib/types';
 // Generate unique IDs
 const generateId = (prefix: 'asset' | 'lia'): string => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Initial Mock Data for Assets (values in KES) - Used if no localStorage data
+// Enhanced Mock Data for Assets (values in KES)
 const defaultAssets: StatementItem[] = [
-  { id: generateId('asset'), description: 'Checking Account', amount: 250000 },
-  { id: generateId('asset'), description: 'Savings Account', amount: 1000000 },
+  { id: generateId('asset'), description: 'Checking Account - Bank X', amount: 250000 },
+  { id: generateId('asset'), description: 'Savings Account - Bank Y', amount: 1000000 },
+  { id: generateId('asset'), description: 'Mpesa Balance', amount: 15000 },
+  { id: generateId('asset'), description: 'Investment Portfolio (Stocks)', amount: 750000 },
   { id: generateId('asset'), description: 'Car (Estimated Value)', amount: 800000 },
-  { id: generateId('asset'), description: 'Investments', amount: 500000 },
+  { id: generateId('asset'), description: 'Furniture & Electronics (Est.)', amount: 300000 },
+  { id: generateId('asset'), description: 'Emergency Fund (Cash)', amount: 50000 },
 ];
 
-// Initial Mock Data for Other Liabilities (values in KES) - Used if no localStorage data
+// Enhanced Mock Data for Other Liabilities (values in KES)
 const defaultOtherLiabilities: OtherLiabilityItem[] = [
-    { id: generateId('lia'), description: 'Unpaid Bill (Phone)', amount: 5000 },
-    { id: generateId('lia'), description: 'Personal Loan (Friend)', amount: 20000 },
+    { id: generateId('lia'), description: 'Unpaid Utility (Water)', amount: 2500 },
+    { id: generateId('lia'), description: 'Doctor Bill (Pending)', amount: 12000 },
+    { id: generateId('lia'), description: 'Personal Loan (Family)', amount: 50000 },
+    { id: generateId('lia'), description: 'Security Deposit (Rent)', amount: 120000 }, // Technically an asset if refundable, but often listed here for cash flow planning
 ];
 
 const ASSETS_STORAGE_KEY = 'debtConqueror_assets';
@@ -28,8 +33,8 @@ const OTHER_LIABILITIES_STORAGE_KEY = 'debtConqueror_otherLiabilities';
 interface StatementContextType {
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
-  setAssetItems: (items: StatementItem[]) => void; // Allow direct setting after edit
-  setOtherLiabilityItems: (items: OtherLiabilityItem[]) => void; // Allow direct setting after edit
+  setAssetItems: (items: StatementItem[]) => void;
+  setOtherLiabilityItems: (items: OtherLiabilityItem[]) => void;
   addAssetItem: (itemData: Omit<StatementItem, 'id'>) => void;
   addOtherLiabilityItem: (itemData: Omit<OtherLiabilityItem, 'id'>) => void;
   updateAssetItem: (updatedItem: StatementItem) => void;
@@ -40,32 +45,40 @@ interface StatementContextType {
 
 const StatementContext = createContext<StatementContextType | undefined>(undefined);
 
+// Helper to sort statement items alphabetically by description
+const sortItems = <T extends { description: string }>(items: T[]): T[] => {
+    return [...items].sort((a, b) => a.description.localeCompare(b.description));
+};
+
+
 export const StatementProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // State initialization with localStorage hydration
+  // State initialization with localStorage hydration and sorting
   const [assetItems, setAssetItemsState] = useState<StatementItem[]>(() => {
+      let items = defaultAssets;
       if (typeof window !== 'undefined') {
         const storedAssets = localStorage.getItem(ASSETS_STORAGE_KEY);
         try {
-          return storedAssets ? JSON.parse(storedAssets) : defaultAssets;
+          items = storedAssets ? JSON.parse(storedAssets) : defaultAssets;
         } catch (e) {
           console.error("Failed to parse assets from localStorage", e);
-          return defaultAssets;
+          items = defaultAssets;
         }
       }
-      return defaultAssets; // Default for server-side rendering or if window undefined
+      return sortItems(items); // Sort loaded/default items
   });
 
   const [otherLiabilityItems, setOtherLiabilityItemsState] = useState<OtherLiabilityItem[]>(() => {
+       let items = defaultOtherLiabilities;
        if (typeof window !== 'undefined') {
         const storedLiabilities = localStorage.getItem(OTHER_LIABILITIES_STORAGE_KEY);
          try {
-          return storedLiabilities ? JSON.parse(storedLiabilities) : defaultOtherLiabilities;
+          items = storedLiabilities ? JSON.parse(storedLiabilities) : defaultOtherLiabilities;
         } catch (e) {
           console.error("Failed to parse other liabilities from localStorage", e);
-          return defaultOtherLiabilities;
+          items = defaultOtherLiabilities;
         }
       }
-      return defaultOtherLiabilities;
+      return sortItems(items); // Sort loaded/default items
   });
 
   // --- Persistence Effects ---
@@ -82,40 +95,39 @@ export const StatementProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, [otherLiabilityItems]);
 
   // --- State Update Functions ---
-  // Direct setters are needed because the editing happens on a temporary state in the component
   const setAssetItems = useCallback((items: StatementItem[]) => {
-      setAssetItemsState(items);
+      setAssetItemsState(sortItems(items)); // Sort when setting directly
   }, []);
 
    const setOtherLiabilityItems = useCallback((items: OtherLiabilityItem[]) => {
-      setOtherLiabilityItemsState(items);
+      setOtherLiabilityItemsState(sortItems(items)); // Sort when setting directly
   }, []);
 
-  // Individual item operations (could be used if editing directly in context, but less practical with current setup)
+  // Individual item operations now also include sorting
   const addAssetItem = useCallback((itemData: Omit<StatementItem, 'id'>) => {
     const newItem: StatementItem = { id: generateId('asset'), ...itemData };
-    setAssetItemsState(prev => [...prev, newItem]);
+    setAssetItemsState(prev => sortItems([...prev, newItem]));
   }, []);
 
   const addOtherLiabilityItem = useCallback((itemData: Omit<OtherLiabilityItem, 'id'>) => {
     const newItem: OtherLiabilityItem = { id: generateId('lia'), ...itemData };
-    setOtherLiabilityItemsState(prev => [...prev, newItem]);
+    setOtherLiabilityItemsState(prev => sortItems([...prev, newItem]));
   }, []);
 
    const updateAssetItem = useCallback((updatedItem: StatementItem) => {
-        setAssetItemsState(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
+        setAssetItemsState(prev => sortItems(prev.map(item => item.id === updatedItem.id ? updatedItem : item)));
     }, []);
 
    const updateOtherLiabilityItem = useCallback((updatedItem: OtherLiabilityItem) => {
-        setOtherLiabilityItemsState(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
+        setOtherLiabilityItemsState(prev => sortItems(prev.map(item => item.id === updatedItem.id ? updatedItem : item)));
     }, []);
 
    const deleteAssetItem = useCallback((id: string) => {
-        setAssetItemsState(prev => prev.filter(item => item.id !== id));
+        setAssetItemsState(prev => sortItems(prev.filter(item => item.id !== id)));
     }, []);
 
    const deleteOtherLiabilityItem = useCallback((id: string) => {
-        setOtherLiabilityItemsState(prev => prev.filter(item => item.id !== id));
+        setOtherLiabilityItemsState(prev => sortItems(prev.filter(item => item.id !== id)));
     }, []);
 
 
@@ -124,13 +136,12 @@ export const StatementProvider: React.FC<{ children: ReactNode }> = ({ children 
     otherLiabilityItems,
     setAssetItems,
     setOtherLiabilityItems,
-    // Include individual CRUD if needed elsewhere, though Statements page uses direct setters now
-     addAssetItem,
-     addOtherLiabilityItem,
-     updateAssetItem,
-     updateOtherLiabilityItem,
-     deleteAssetItem,
-     deleteOtherLiabilityItem,
+    addAssetItem,
+    addOtherLiabilityItem,
+    updateAssetItem,
+    updateOtherLiabilityItem,
+    deleteAssetItem,
+    deleteOtherLiabilityItem,
   }), [
       assetItems, otherLiabilityItems,
       setAssetItems, setOtherLiabilityItems,
