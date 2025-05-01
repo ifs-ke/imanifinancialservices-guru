@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableFooter as UiTableFooter, TableHead, T
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, TrendingUp, TrendingDown, Scale, DollarSign, Landmark, PlusCircle, Save, XCircle, Info } from 'lucide-react';
+import { Trash2, TrendingUp, TrendingDown, Scale, DollarSign, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
 import type { StatementItem } from '@/lib/types'; // Import StatementItem type
 
@@ -53,6 +57,12 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+// Helper to format Date for display
+const formatDate = (date: Date | undefined) => {
+    return date ? format(date, "LLL dd, y") : <span>Pick a date</span>;
+};
+
+
 export default function StatementsPage() {
   // Get transactions from context
   const { transactions } = useTransactions();
@@ -64,6 +74,12 @@ export default function StatementsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ item: StatementItem; type: 'asset' | 'liability' } | null>(null);
 
+  // State for date range filtering
+  const defaultEndDate = endOfMonth(new Date());
+  const defaultStartDate = startOfMonth(defaultEndDate); // Start of the current month
+  const [startDate, setStartDate] = useState<Date | undefined>(defaultStartDate);
+  const [endDate, setEndDate] = useState<Date | undefined>(defaultEndDate);
+
   // Temporary state for edits (only Assets and Liabilities)
   const [editingAssets, setEditingAssets] = useState<StatementItem[]>([]);
   const [editingLiabilities, setEditingLiabilities] = useState<StatementItem[]>([]);
@@ -72,21 +88,33 @@ export default function StatementsPage() {
 
   // --- Derived Calculations ---
 
-  // Derive Income and Expense items from transactions
+  // Filter transactions based on the selected date range
+  const filteredTransactions = useMemo(() => {
+    const start = startDate ? startDate.getTime() : 0;
+    // Set end date to the end of the day
+    const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
+    return transactions.filter(tx => {
+        const txTime = tx.date.getTime();
+        return txTime >= start && txTime <= end;
+    });
+  }, [transactions, startDate, endDate]);
+
+
+  // Derive Income and Expense items from *filtered* transactions
   const derivedIncomeItems = useMemo(() =>
-    transactions
+    filteredTransactions
       .filter(tx => tx.amount > 0)
       .map(tx => ({ id: tx.id, description: tx.description, amount: tx.amount }))
       .sort((a, b) => b.amount - a.amount), // Optional: sort derived items
-    [transactions]
+    [filteredTransactions] // Depends on filtered transactions
   );
 
   const derivedExpenseItems = useMemo(() =>
-    transactions
+    filteredTransactions
       .filter(tx => tx.amount < 0)
       .map(tx => ({ id: tx.id, description: tx.description, amount: Math.abs(tx.amount) })) // Store as positive for display logic
       .sort((a, b) => b.amount - a.amount), // Optional: sort derived items
-    [transactions]
+    [filteredTransactions] // Depends on filtered transactions
   );
 
   const totalIncome = useMemo(() => calculateTotal(derivedIncomeItems), [derivedIncomeItems]);
@@ -269,12 +297,65 @@ export default function StatementsPage() {
         {/* Cash Flow Statement Card (Read-Only) */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}
-              Cash Flow Statement
-            </CardTitle>
-             <CardDescription className="flex items-center gap-1 text-xs">
-                <Info size={14} className="text-muted-foreground"/> Derived from Transactions page.
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <CardTitle className="flex items-center gap-2">
+                {cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}
+                Cash Flow Statement
+                </CardTitle>
+                {/* Date Range Pickers */}
+                <div className="flex flex-col sm:flex-row items-center gap-2 text-sm">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                            variant={"outline"}
+                            className={cn(
+                                "w-[180px] justify-start text-left font-normal h-8",
+                                !startDate && "text-muted-foreground"
+                            )}
+                            >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formatDate(startDate)}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                            mode="single"
+                            selected={startDate}
+                            onSelect={setStartDate}
+                            initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
+                    <span className="text-muted-foreground hidden sm:inline">-</span>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                            variant={"outline"}
+                            className={cn(
+                                "w-[180px] justify-start text-left font-normal h-8",
+                                !endDate && "text-muted-foreground"
+                            )}
+                            >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                             {formatDate(endDate)}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                            mode="single"
+                            selected={endDate}
+                            onSelect={setEndDate}
+                             disabled={(date) =>
+                                startDate ? date < startDate : false
+                             }
+                            initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
+                </div>
+            </div>
+             <CardDescription className="flex items-center gap-1 text-xs pt-2">
+                <Info size={14} className="text-muted-foreground"/> Derived from Transactions page within the selected date range.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -295,7 +376,7 @@ export default function StatementsPage() {
                 {derivedIncomeItems.length > 0 ? (
                   derivedIncomeItems.map(item => renderDerivedItemRow(item, 'income'))
                 ) : (
-                  <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No income transactions recorded.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No income in selected range.</TableCell></TableRow>
                 )}
                  <TableRow>
                     <TableCell className="font-medium pl-6">Total Income</TableCell>
@@ -310,7 +391,7 @@ export default function StatementsPage() {
                  {derivedExpenseItems.length > 0 ? (
                     derivedExpenseItems.map(item => renderDerivedItemRow(item, 'expense'))
                 ) : (
-                    <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No expense transactions recorded.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No expenses in selected range.</TableCell></TableRow>
                 )}
                  <TableRow>
                     <TableCell className="font-medium pl-6">Total Expenses</TableCell>

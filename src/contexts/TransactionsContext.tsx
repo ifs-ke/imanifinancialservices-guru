@@ -22,10 +22,12 @@ const initialTransactionsData: TransactionWithId[] = [
 
 interface TransactionsContextType {
   transactions: TransactionWithId[];
-  addTransaction: (transactionData: Omit<TransactionWithId, 'id'>) => void;
+  addTransaction: (transactionData: Omit<TransactionWithId, 'id'>) => TransactionWithId; // Return the added transaction with ID
   updateTransaction: (updatedTransaction: TransactionWithId) => void;
   deleteTransaction: (id: string) => void;
-  importTransactionsBatch: (newTransactions: TransactionWithId[]) => void; // For bulk import
+  importTransactionsBatch: (newTransactionsData: Omit<TransactionWithId, 'id'>[]) => TransactionWithId[]; // Return added transactions with IDs
+  // TODO: Implement batch delete if rollback is needed
+  // deleteTransactionsBatch: (ids: string[]) => void;
 }
 
 const TransactionsContext = createContext<TransactionsContextType | undefined>(undefined);
@@ -38,12 +40,13 @@ export const TransactionsProvider: React.FC<{ children: ReactNode }> = ({ childr
     return [...txs].sort((a, b) => b.date.getTime() - a.date.getTime());
   }, []);
 
-  const addTransaction = useCallback((transactionData: Omit<TransactionWithId, 'id'>) => {
+  const addTransaction = useCallback((transactionData: Omit<TransactionWithId, 'id'>): TransactionWithId => {
     const newTransaction: TransactionWithId = {
       id: generateId(),
       ...transactionData,
     };
     setTransactions(prev => sortTransactions([...prev, newTransaction]));
+    return newTransaction; // Return the transaction with its new ID
   }, [sortTransactions]);
 
   const updateTransaction = useCallback((updatedTransaction: TransactionWithId) => {
@@ -56,9 +59,24 @@ export const TransactionsProvider: React.FC<{ children: ReactNode }> = ({ childr
     setTransactions(prev => sortTransactions(prev.filter(tx => tx.id !== id)));
   }, [sortTransactions]);
 
-  const importTransactionsBatch = useCallback((newTransactions: TransactionWithId[]) => {
-     setTransactions(prev => sortTransactions([...prev, ...newTransactions]));
+  // Modified to return the newly added transactions with IDs
+  const importTransactionsBatch = useCallback((newTransactionsData: Omit<TransactionWithId, 'id'>[]): TransactionWithId[] => {
+     const newTransactionsWithIds = newTransactionsData.map(txData => ({
+       id: generateId(),
+       ...txData,
+     }));
+     setTransactions(prev => sortTransactions([...prev, ...newTransactionsWithIds]));
+     return newTransactionsWithIds; // Return the transactions with their new IDs
   }, [sortTransactions]);
+
+   // Placeholder for batch delete (needed for rollback)
+  // const deleteTransactionsBatch = useCallback((ids: string[]) => {
+  //   console.log("Attempting to delete transactions with IDs:", ids);
+  //   const idsSet = new Set(ids);
+  //   setTransactions(prev => sortTransactions(prev.filter(tx => !idsSet.has(tx.id))));
+  //   console.log("Transactions after attempted deletion:", transactions); // Log state *after* update attempt
+  // }, [sortTransactions, transactions]); // Include transactions in dependency array if logging state
+
 
   const contextValue = useMemo(() => ({
     transactions,
@@ -66,7 +84,8 @@ export const TransactionsProvider: React.FC<{ children: ReactNode }> = ({ childr
     updateTransaction,
     deleteTransaction,
     importTransactionsBatch,
-  }), [transactions, addTransaction, updateTransaction, deleteTransaction, importTransactionsBatch]);
+    // deleteTransactionsBatch, // Uncomment when implemented
+  }), [transactions, addTransaction, updateTransaction, deleteTransaction, importTransactionsBatch /*, deleteTransactionsBatch*/]);
 
   return (
     <TransactionsContext.Provider value={contextValue}>

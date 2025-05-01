@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Upload, Edit, Trash2 } from 'lucide-react';
+import { PlusCircle, Upload, Edit, Trash2, FileUp } from 'lucide-react'; // Added FileUp for import link
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
 import type { TransactionWithId, ModeOfPayment } from '@/lib/types'; // Import shared types
+import Link from 'next/link'; // Import Link
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
@@ -71,7 +72,8 @@ export default function TransactionsPage() {
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
   const [formData, setFormData] = useState(initialFormData);
-  const [isImporting, setIsImporting] = useState(false);
+  // Removed import specific state as it's moved to the import page
+  // const [isImporting, setIsImporting] = useState(false);
   const { toast } = useToast();
 
   // Reset form data when dialogs close
@@ -176,36 +178,12 @@ export default function TransactionsPage() {
    // Generate unique IDs for mock data - consider moving to a utility file if needed elsewhere
     const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-
+  // Removed handleFileChange as import is handled on a separate page
+  /*
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setIsImporting(true);
-    try {
-      // Placeholder for actual import logic - Should use a service function
-      // For now, simulate with mock data
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing
-
-      // TODO: Replace with actual file parsing logic (e.g., using a library like PapaParse for CSV)
-      // This mock import adds a few example transactions
-      const importedData: Omit<TransactionWithId, 'id'>[] = [
-        { date: new Date(2024, 6, 5), description: `Imported: ${file.name} Item 1`, amount: -1200.50, modeOfPayment: 'Mpesa' },
-        { date: new Date(2024, 6, 6), description: `Imported: ${file.name} Item 2`, amount: 50000, modeOfPayment: 'Bank' },
-      ];
-
-      const newTransactionsWithIds = importedData.map(tx => ({ id: generateId(), ...tx }));
-
-      importTransactionsBatch(newTransactionsWithIds); // Use context function for batch import
-
-      toast({ title: 'Import Successful', description: `${file.name} processed.`, variant: 'default' });
-    } catch (error) {
-      console.error('Import failed:', error);
-      toast({ title: 'Import Failed', description: 'Could not import file.', variant: 'destructive' });
-    } finally {
-      setIsImporting(false);
-      event.target.value = ''; // Clear the file input
-    }
+    // ... import logic removed ...
   };
+  */
 
   // --- Formatting ---
 
@@ -281,12 +259,16 @@ export default function TransactionsPage() {
             </DialogContent>
           </Dialog>
 
-           {/* Import Button */}
-           <Button asChild variant="default" disabled={isImporting}>
-             <Label htmlFor="file-upload" className="cursor-pointer flex items-center"> {/* Added flex items-center */}
+           {/* Import Button - Links to Import Page */}
+           <Button asChild variant="default">
+             <Link href="/transactions/import">
+               <FileUp className="mr-2 h-4 w-4" /> Import File
+             </Link>
+             {/* Removed file input logic */}
+             {/* <Label htmlFor="file-upload" className="cursor-pointer flex items-center">
                <Upload className="mr-2 h-4 w-4" /> {isImporting ? 'Importing...' : 'Import File'}
                <Input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept=".csv,.xlsx,.ofx,.qif" disabled={isImporting} />
-             </Label>
+             </Label> */}
            </Button>
          </div>
       </header>

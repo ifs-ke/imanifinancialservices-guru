@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -16,6 +17,7 @@ import {
   LayoutDashboard,
   ReceiptText,
   FileText, // Removed AreaChart
+  FileUp, // Added for import visual cue
   Landmark,
   Menu,
   Settings,
@@ -25,7 +27,7 @@ import { useSidebar } from '@/components/ui/sidebar';
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/transactions', label: 'Transactions', icon: ReceiptText },
+  { href: '/transactions', label: 'Transactions', icon: ReceiptText, secondaryIcon: FileUp }, // Added secondary icon
   // { href: '/analysis', label: 'Debt Analysis', icon: AreaChart }, // Removed
   { href: '/statements', label: 'Statements', icon: FileText },
 ];
@@ -58,12 +60,18 @@ export function AppSidebar() {
               <Link href={item.href} passHref legacyBehavior>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === item.href}
+                   // Check if the current path starts with the item's href
+                   // This makes parent routes active when viewing sub-routes (like /transactions/import)
+                  isActive={pathname.startsWith(item.href)}
                   tooltip={item.label}
                 >
                   <a>
                     <item.icon className="h-4 w-4" />
                     <span>{item.label}</span>
+                     {/* Render secondary icon if present */}
+                     {item.secondaryIcon && (
+                       <item.secondaryIcon className="ml-auto h-3 w-3 text-muted-foreground group-data-[state=collapsed]:hidden" />
+                    )}
                   </a>
                 </SidebarMenuButton>
               </Link>
