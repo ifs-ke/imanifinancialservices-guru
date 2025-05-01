@@ -94,6 +94,8 @@ export default function StatementsPage() {
     // Set end date to the end of the day
     const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
     return transactions.filter(tx => {
+        // Ensure transaction date is valid before comparing
+        if (!tx.date || isNaN(tx.date.getTime())) return false;
         const txTime = tx.date.getTime();
         return txTime >= start && txTime <= end;
     });
@@ -297,66 +299,64 @@ export default function StatementsPage() {
         {/* Cash Flow Statement Card (Read-Only) */}
         <Card>
           <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                <CardTitle className="flex items-center gap-2">
-                {cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}
-                Cash Flow Statement
-                </CardTitle>
-                {/* Date Range Pickers */}
-                <div className="flex flex-col sm:flex-row items-center gap-2 text-sm">
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                            variant={"outline"}
-                            className={cn(
-                                "w-[180px] justify-start text-left font-normal h-8",
-                                !startDate && "text-muted-foreground"
-                            )}
-                            >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formatDate(startDate)}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar
-                            mode="single"
-                            selected={startDate}
-                            onSelect={setStartDate}
-                            initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
-                    <span className="text-muted-foreground hidden sm:inline">-</span>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                            variant={"outline"}
-                            className={cn(
-                                "w-[180px] justify-start text-left font-normal h-8",
-                                !endDate && "text-muted-foreground"
-                            )}
-                            >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                             {formatDate(endDate)}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar
-                            mode="single"
-                            selected={endDate}
-                            onSelect={setEndDate}
-                             disabled={(date) =>
-                                startDate ? date < startDate : false
-                             }
-                            initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
-                </div>
-            </div>
+            <CardTitle className="flex items-center gap-2">
+            {cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}
+            Cash Flow Statement
+            </CardTitle>
              <CardDescription className="flex items-center gap-1 text-xs pt-2">
                 <Info size={14} className="text-muted-foreground"/> Derived from Transactions page within the selected date range.
             </CardDescription>
+             {/* Date Range Pickers moved below title and description */}
+             <div className="flex flex-col sm:flex-row items-center gap-2 text-sm pt-4">
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                        variant={"outline"}
+                        className={cn(
+                            "w-full sm:w-[180px] justify-start text-left font-normal h-8", // Full width on small screens
+                            !startDate && "text-muted-foreground"
+                        )}
+                        >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formatDate(startDate)}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                        <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={setStartDate}
+                        initialFocus
+                        />
+                    </PopoverContent>
+                </Popover>
+                <span className="text-muted-foreground hidden sm:inline">-</span>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                        variant={"outline"}
+                         className={cn(
+                            "w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0", // Full width on small screens, margin top
+                            !endDate && "text-muted-foreground"
+                        )}
+                        >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                         {formatDate(endDate)}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                        <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={setEndDate}
+                         disabled={(date) =>
+                            startDate ? date < startDate : false
+                         }
+                        initialFocus
+                        />
+                    </PopoverContent>
+                </Popover>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
