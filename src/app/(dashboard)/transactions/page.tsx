@@ -35,8 +35,9 @@ import { useTransactions } from '@/contexts/TransactionsContext'; // Import useT
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import shared types
 import Link from 'next/link'; // Import Link
 import { format } from 'date-fns'; // For date formatting
+import { cn } from '@/lib/utils'; // For conditional classes
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+// import 'jspdf-autotable';
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
@@ -499,4 +500,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-

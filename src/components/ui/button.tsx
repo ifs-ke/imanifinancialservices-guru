@@ -40,7 +40,7 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, children, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
     return (
       <Comp
@@ -48,12 +48,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         {...props}
       >
-        {/* Wrap children in a React.Fragment if Comp is Slot */}
-        {asChild ? (
-          <React.Fragment>{props.children}</React.Fragment>
-        ) : (
-          props.children
-        )}
+        {children}
       </Comp>
     )
   }
