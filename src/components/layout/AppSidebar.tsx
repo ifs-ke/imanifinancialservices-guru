@@ -19,6 +19,7 @@ import {
   FileText,
   FileUp,
   Coins, // Changed from CircleDollarSign for Debts
+  TrendingDown, // Icon for Expenses
   Menu,
   Settings,
   Landmark, // Keep for App title
@@ -29,6 +30,7 @@ import { useSidebar } from '@/components/ui/sidebar';
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: ReceiptText, secondaryIcon: FileUp },
+  { href: '/expenses', label: 'Expenses', icon: TrendingDown }, // Added Expenses link
   { href: '/debt', label: 'Debts', icon: Coins }, // Updated icon
   { href: '/statements', label: 'Statements', icon: FileText },
 ];

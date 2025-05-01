@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
-import type { TransactionWithId, ModeOfPayment } from '@/lib/types'; // Import shared types
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import shared types
 import Link from 'next/link'; // Import Link
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
@@ -54,17 +54,19 @@ const formatDateForInput = (date: Date | string): string => {
     return `${year}-${month}-${day}`;
 };
 
-// Initial form data structure
+// Initial form data structure including categorization fields
 const initialFormData = {
     date: formatDateForInput(new Date()), // Default to today
     description: '',
     amount: '',
-    modeOfPayment: '' as ModeOfPayment | ''
+    modeOfPayment: '' as ModeOfPayment | '',
+    frequency: '' as TransactionFrequency | '', // Add frequency
+    variability: '' as TransactionVariability | '', // Add variability
 };
 
 export default function TransactionsPage() {
   // Use context for transaction state management
-  const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactions(); // Removed importTransactionsBatch as it's not used directly here
+  const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
 
   // Local state for dialogs, editing, deleting, and form data
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -87,10 +89,11 @@ export default function TransactionsPage() {
   // CREATE
   const handleAddTransactionSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const { date, description, amount, modeOfPayment } = formData;
+    const { date, description, amount, modeOfPayment, frequency, variability } = formData;
 
-    if (!date || !description || !amount || !modeOfPayment) {
-      toast({ title: 'Missing Information', description: 'Please fill out all fields.', variant: 'destructive' });
+    // Add validation for new fields if they are mandatory
+    if (!date || !description || !amount || !modeOfPayment /* || !frequency || !variability */) {
+      toast({ title: 'Missing Information', description: 'Please fill out required fields (Date, Desc, Amount, Mode).', variant: 'destructive' });
       return;
     }
     const parsedAmount = parseFloat(amount);
@@ -104,6 +107,8 @@ export default function TransactionsPage() {
       description: description,
       amount: parsedAmount,
       modeOfPayment: modeOfPayment,
+      frequency: frequency || undefined, // Pass undefined if empty
+      variability: variability || undefined, // Pass undefined if empty
     });
 
     setIsAddDialogOpen(false); // Close dialog
@@ -118,6 +123,8 @@ export default function TransactionsPage() {
       description: transaction.description,
       amount: transaction.amount.toString(),
       modeOfPayment: transaction.modeOfPayment,
+      frequency: transaction.frequency || '', // Handle potentially undefined values
+      variability: transaction.variability || '', // Handle potentially undefined values
     });
     setIsEditDialogOpen(true);
   };
@@ -126,9 +133,10 @@ export default function TransactionsPage() {
     event.preventDefault();
     if (!editingTransaction) return;
 
-    const { date, description, amount, modeOfPayment } = formData;
-    if (!date || !description || !amount || !modeOfPayment) {
-      toast({ title: 'Missing Information', description: 'Please fill out all fields.', variant: 'destructive' });
+    const { date, description, amount, modeOfPayment, frequency, variability } = formData;
+    // Add validation for new fields if they are mandatory
+    if (!date || !description || !amount || !modeOfPayment /* || !frequency || !variability */) {
+      toast({ title: 'Missing Information', description: 'Please fill out required fields (Date, Desc, Amount, Mode).', variant: 'destructive' });
       return;
     }
     const parsedAmount = parseFloat(amount);
@@ -142,7 +150,9 @@ export default function TransactionsPage() {
         date: new Date(date + 'T00:00:00'),
         description,
         amount: parsedAmount,
-        modeOfPayment
+        modeOfPayment,
+        frequency: frequency || undefined, // Update with new value or undefined
+        variability: variability || undefined, // Update with new value or undefined
     });
 
     setIsEditDialogOpen(false); // Close dialog
@@ -169,19 +179,14 @@ export default function TransactionsPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (value: string) => {
-     setFormData(prev => ({ ...prev, modeOfPayment: value as ModeOfPayment }));
+  // Updated to handle all select changes
+  const handleSelectChange = (name: string, value: string) => {
+     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
    // Generate unique IDs for mock data - consider moving to a utility file if needed elsewhere
     const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  // Removed handleFileChange as import is handled on a separate page
-  /*
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    // ... import logic removed ...
-  };
-  */
 
   // --- Formatting ---
 
@@ -194,6 +199,13 @@ export default function TransactionsPage() {
       if (isNaN(dateObj.getTime())) return 'Invalid Date';
     return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
+
+  // Helper to format categorization labels nicely
+  const formatCategory = (value: string | undefined) => {
+      if (!value) return <span className="text-muted-foreground italic">N/A</span>;
+      // Capitalize first letter
+      return value.charAt(0).toUpperCase() + value.slice(1);
+  }
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
@@ -221,6 +233,7 @@ export default function TransactionsPage() {
               </DialogHeader>
               {/* Changed form onSubmit handler */}
               <form onSubmit={handleAddTransactionSubmit} className="grid gap-4 py-4">
+                {/* Input Fields */}
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-date" className="text-right">Date</Label>
                   <Input id="add-date" name="date" type="date" value={formData.date} onChange={handleInputChange} className="col-span-3" required />
@@ -235,7 +248,7 @@ export default function TransactionsPage() {
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-modeOfPayment" className="text-right">Payment Mode</Label>
-                  <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={handleSelectChange} required>
+                  <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={(value) => handleSelectChange('modeOfPayment', value)} required>
                     <SelectTrigger id="add-modeOfPayment" className="col-span-3">
                       <SelectValue placeholder="Select mode" />
                     </SelectTrigger>
@@ -243,6 +256,31 @@ export default function TransactionsPage() {
                       <SelectItem value="Cash">Cash</SelectItem>
                       <SelectItem value="Bank">Bank</SelectItem>
                       <SelectItem value="Mpesa">Mpesa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Categorization Selects */}
+                 <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="add-frequency" className="text-right">Frequency</Label>
+                   <Select name="frequency" value={formData.frequency} onValueChange={(value) => handleSelectChange('frequency', value)}>
+                    <SelectTrigger id="add-frequency" className="col-span-3">
+                      <SelectValue placeholder="Optional: Select frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="recurring">Recurring</SelectItem>
+                      <SelectItem value="one-time">One-time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                 <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="add-variability" className="text-right">Variability</Label>
+                   <Select name="variability" value={formData.variability} onValueChange={(value) => handleSelectChange('variability', value)}>
+                    <SelectTrigger id="add-variability" className="col-span-3">
+                      <SelectValue placeholder="Optional: Select variability" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">Fixed</SelectItem>
+                      <SelectItem value="variable">Variable</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -262,11 +300,6 @@ export default function TransactionsPage() {
              <Link href="/transactions/import">
                <FileUp className="mr-2 h-4 w-4" /> Import File
              </Link>
-             {/* Removed file input logic */}
-             {/* <Label htmlFor="file-upload" className="cursor-pointer flex items-center">
-               <Upload className="mr-2 h-4 w-4" /> {isImporting ? 'Importing...' : 'Import File'}
-               <Input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept=".csv,.xlsx,.ofx,.qif" disabled={isImporting} />
-             </Label> */}
            </Button>
          </div>
       </header>
@@ -282,10 +315,12 @@ export default function TransactionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[120px]">Date</TableHead>
+                    <TableHead className="w-[100px]">Date</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className="w-[100px]">Mode</TableHead>
-                    <TableHead className="text-right w-[150px]">Amount (KES)</TableHead>
+                    <TableHead className="w-[90px]">Mode</TableHead>
+                    <TableHead className="w-[90px]">Frequency</TableHead>
+                    <TableHead className="w-[90px]">Variability</TableHead>
+                    <TableHead className="text-right w-[140px]">Amount (KES)</TableHead>
                     <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -294,8 +329,10 @@ export default function TransactionsPage() {
                     transactions.map((tx) => (
                       <TableRow key={tx.id}>
                         <TableCell className="font-medium">{formatDate(tx.date)}</TableCell>
-                        <TableCell>{tx.description}</TableCell>
+                        <TableCell className="max-w-[250px] truncate" title={tx.description}>{tx.description}</TableCell>
                         <TableCell>{tx.modeOfPayment}</TableCell>
+                        <TableCell className="text-xs">{formatCategory(tx.frequency)}</TableCell>
+                        <TableCell className="text-xs">{formatCategory(tx.variability)}</TableCell>
                         <TableCell className={`text-right font-mono ${tx.amount >= 0 ? 'text-accent' : 'text-destructive'}`}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
@@ -332,7 +369,8 @@ export default function TransactionsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      {/* Adjust colspan */}
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
                     </TableRow>
@@ -354,6 +392,7 @@ export default function TransactionsPage() {
            </DialogHeader>
            {/* Changed form onSubmit handler */}
            <form onSubmit={handleUpdateTransactionSubmit} className="grid gap-4 py-4">
+            {/* Input Fields */}
              <div className="grid grid-cols-4 items-center gap-4">
                <Label htmlFor="edit-date" className="text-right">Date</Label>
                <Input id="edit-date" name="date" type="date" value={formData.date} onChange={handleInputChange} className="col-span-3" required />
@@ -368,7 +407,7 @@ export default function TransactionsPage() {
              </div>
              <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-modeOfPayment" className="text-right">Payment Mode</Label>
-              <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={handleSelectChange} required>
+              <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={(value) => handleSelectChange('modeOfPayment', value)} required>
                 <SelectTrigger id="edit-modeOfPayment" className="col-span-3">
                   <SelectValue placeholder="Select mode" />
                 </SelectTrigger>
@@ -376,6 +415,31 @@ export default function TransactionsPage() {
                   <SelectItem value="Cash">Cash</SelectItem>
                   <SelectItem value="Bank">Bank</SelectItem>
                   <SelectItem value="Mpesa">Mpesa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Categorization Selects */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-frequency" className="text-right">Frequency</Label>
+               <Select name="frequency" value={formData.frequency} onValueChange={(value) => handleSelectChange('frequency', value)}>
+                <SelectTrigger id="edit-frequency" className="col-span-3">
+                  <SelectValue placeholder="Optional: Select frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recurring">Recurring</SelectItem>
+                  <SelectItem value="one-time">One-time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-variability" className="text-right">Variability</Label>
+               <Select name="variability" value={formData.variability} onValueChange={(value) => handleSelectChange('variability', value)}>
+                <SelectTrigger id="edit-variability" className="col-span-3">
+                  <SelectValue placeholder="Optional: Select variability" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">Fixed</SelectItem>
+                  <SelectItem value="variable">Variable</SelectItem>
                 </SelectContent>
               </Select>
             </div>

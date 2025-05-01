@@ -7,8 +7,19 @@
 export type ModeOfPayment = 'Cash' | 'Bank' | 'Mpesa';
 
 /**
+ * Represents the frequency of a transaction (for recurring vs one-off).
+ */
+export type TransactionFrequency = 'recurring' | 'one-time';
+
+/**
+ * Represents the variability of a transaction's amount (fixed or variable).
+ */
+export type TransactionVariability = 'fixed' | 'variable';
+
+
+/**
  * Represents a financial transaction with a unique identifier and payment mode.
- * ModeOfPayment can be optional initially during import/parsing.
+ * Includes optional categorization fields.
  */
 export interface TransactionWithId {
   id: string; // Using string ID for flexibility
@@ -16,6 +27,8 @@ export interface TransactionWithId {
   description: string;
   amount: number; // Positive for income, negative for expense
   modeOfPayment: ModeOfPayment; // Make mandatory after import/creation
+  frequency?: TransactionFrequency; // Optional categorization
+  variability?: TransactionVariability; // Optional categorization
 }
 
 
@@ -50,4 +63,3 @@ export interface OtherLiabilityItem {
     description: string;
     amount: number;
 }
-

@@ -8,6 +8,8 @@ import {
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { TransactionsProvider } from '@/contexts/TransactionsContext';
 import { DebtProvider } from '@/contexts/DebtContext'; // Import the Debt provider
+import { StatementProvider } from '@/contexts/StatementContext'; // Import the Statement provider
+
 
 export default function DashboardLayout({
   children,
@@ -15,16 +17,18 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <TransactionsProvider>
-      <DebtProvider> {/* Wrap with DebtProvider */}
-        <>
-          <Sidebar side="left" variant="sidebar" collapsible="icon">
-            <AppSidebar />
-            <SidebarRail />
-          </Sidebar>
-          <SidebarInset>{children}</SidebarInset>
-        </>
-      </DebtProvider>
-    </TransactionsProvider>
+     <TransactionsProvider>
+       <DebtProvider>
+         <StatementProvider> {/* Wrap with StatementProvider */}
+           <>
+             <Sidebar side="left" variant="sidebar" collapsible="icon">
+               <AppSidebar />
+               <SidebarRail />
+             </Sidebar>
+             <SidebarInset>{children}</SidebarInset>
+           </>
+         </StatementProvider>
+       </DebtProvider>
+     </TransactionsProvider>
   );
 }
