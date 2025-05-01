@@ -47,10 +47,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         {...props}
-      />
+      >
+        {/* Wrap children in a React.Fragment if Comp is Slot */}
+        {asChild ? (
+          <React.Fragment>{props.children}</React.Fragment>
+        ) : (
+          props.children
+        )}
+      </Comp>
     )
   }
 )
 Button.displayName = "Button"
 
 export { Button, buttonVariants }
+    
+    

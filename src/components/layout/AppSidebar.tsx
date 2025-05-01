@@ -57,11 +57,11 @@ export function AppSidebar() {
         </Link>
         {/* Hamburger menu for mobile */}
         {isMobile && (
-          <Button variant="ghost" size="icon" asChild>
-            <SidebarTrigger>
-              <Menu className="h-5 w-5" />
-            </SidebarTrigger>
-          </Button>
+          <SidebarTrigger asChild>
+              <Button variant="ghost" size="icon">
+                  <Menu className="h-5 w-5" />
+              </Button>
+          </SidebarTrigger>
         )}
         {/* Desktop collapse trigger */}
         {!isMobile && (
@@ -105,3 +105,5 @@ export function AppSidebar() {
     </>
   );
 }
+
+    

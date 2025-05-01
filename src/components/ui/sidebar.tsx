@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -261,26 +262,32 @@ Sidebar.displayName = "Sidebar"
 
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button>
->(({ className, onClick, ...props }, ref) => {
+  React.ComponentProps<typeof Button> & { asChild?: boolean } // Add asChild here
+>(({ className, onClick, children, asChild, ...props }, ref) => {
   const { toggleSidebar } = useSidebar()
+  const Comp = asChild ? Slot : Button; // Use Slot if asChild is true
 
   return (
-    <Button
-      ref={ref}
-      data-sidebar="trigger"
-      variant="ghost"
-      size="icon"
-      className={cn("h-7 w-7", className)}
-      onClick={(event) => {
-        onClick?.(event)
-        toggleSidebar()
-      }}
-      {...props}
-    >
-      <PanelLeft />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+     <Comp
+        ref={ref}
+        data-sidebar="trigger"
+        variant="ghost"
+        size="icon"
+        className={cn("h-7 w-7", className)}
+        onClick={(event) => {
+            onClick?.(event)
+            toggleSidebar()
+        }}
+        {...props}
+     >
+        {/* Allow children override, default to PanelLeft */}
+        {children ?? (
+            <>
+                <PanelLeft />
+                <span className="sr-only">Toggle Sidebar</span>
+            </>
+        )}
+    </Comp>
   )
 })
 SidebarTrigger.displayName = "SidebarTrigger"
@@ -519,6 +526,9 @@ const sidebarMenuButtonVariants = cva(
         default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         outline:
           "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
+        secondary: // Added secondary variant
+          "bg-sidebar-accent text-sidebar-accent-foreground",
+        ghost: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
       },
       size: {
         default: "h-8 text-sm",
@@ -761,3 +771,5 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
+    
