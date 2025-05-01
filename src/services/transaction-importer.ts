@@ -1,49 +1,48 @@
-/**
- * Represents a financial transaction.
- */
-export interface Transaction {
-  /**
-   * The date of the transaction.
-   */
-  date: Date;
-  /**
-   * A description of the transaction.
-   */
-  description: string;
-  /**
-   * The amount of the transaction.  Positive numbers indicate income, negative indicate expenses.
-   */
-  amount: number;
-  /**
-   * The mode of payment used for the transaction.
-   * Optional for now, as the import logic needs to determine this.
-   */
-  modeOfPayment?: 'Cash' | 'Bank' | 'Mpesa';
-}
+
+// src/services/transaction-importer.ts
+import type { TransactionWithId } from '@/lib/types'; // Import the shared type
+
 
 /**
  * Asynchronously imports financial transactions from a file.
+ * This is a placeholder and needs actual implementation for parsing file types.
  *
- * @param file The file to import transactions from.
- * @returns A promise that resolves to an array of Transaction objects.
+ * @param file The file to import transactions from (e.g., CSV, OFX).
+ * @returns A promise that resolves to an array of Transaction objects (without IDs initially).
  */
-export async function importTransactions(file: File): Promise<Transaction[]> {
-  // TODO: Implement this by calling an API or parsing the file locally.
-  // This implementation should ideally parse the file content (CSV, XLSX, OFX, QIF)
-  // and map the columns to the Transaction interface fields, including attempting
-  // to infer the modeOfPayment if possible, or setting it to undefined/default.
+export async function importTransactionsFromFile(file: File): Promise<Omit<TransactionWithId, 'id'>[]> {
+  // TODO: Implement robust file parsing logic here.
+  // - Detect file type (CSV, OFX, QIF, XLSX).
+  // - Use appropriate libraries (e.g., PapaParse for CSV, sheetjs for XLSX).
+  // - Map columns/fields to the Transaction interface.
+  // - Handle potential errors during parsing.
+  // - Attempt to infer modeOfPayment if possible, otherwise set a default or leave undefined.
 
-  console.log(`Simulating import for file: ${file.name}`);
-  // Simulate network delay or processing time
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  console.log(`Simulating import for file: ${file.name}, Type: ${file.type}`);
+  await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing time
 
-  // Return example data for now. Replace with actual parsed data.
-  return [
+  // Return mock parsed data. Replace with actual data extraction.
+  // The ID will be added later when integrated into the context/state.
+  const mockParsedData: Omit<TransactionWithId, 'id'>[] = [
     {
-      date: new Date(),
-      description: 'Example Imported Transaction',
-      amount: -25.00,
-      modeOfPayment: 'Bank', // Example default for imported
+      date: new Date(2024, 6, 10), // Example dates
+      description: `Parsed from ${file.name}: Item A`,
+      amount: -550.75,
+      modeOfPayment: 'Mpesa', // Example inference or default
+    },
+    {
+      date: new Date(2024, 6, 11),
+      description: `Parsed from ${file.name}: Item B`,
+      amount: 12000.00,
+      modeOfPayment: 'Bank', // Example inference or default
     },
   ];
+
+  // Simulate potential parsing error for specific file names (for testing)
+  if (file.name.includes('error')) {
+      throw new Error("Simulated parsing error for file: " + file.name);
+  }
+
+
+  return mockParsedData;
 }

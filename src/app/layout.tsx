@@ -1,9 +1,11 @@
+
 import type { Metadata } from 'next';
 import { Inter, Roboto_Mono } from 'next/font/google';
 import './globals.css';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
+import { TransactionsProvider } from '@/contexts/TransactionsContext'; // Import the provider
 
 // Initialize Inter font for sans-serif
 const inter = Inter({
@@ -39,10 +41,14 @@ export default function RootLayout({
           roboto_mono.variable // Use Roboto Mono variable
         )}
       >
-        <SidebarProvider>
-          {children}
-          <Toaster />
-        </SidebarProvider>
+        {/* Wrap with TransactionsProvider if needed globally,
+            otherwise keep it within (dashboard)/layout.tsx */}
+        {/* <TransactionsProvider> */}
+          <SidebarProvider>
+            {children}
+            <Toaster />
+          </SidebarProvider>
+        {/* </TransactionsProvider> */}
       </body>
     </html>
   );

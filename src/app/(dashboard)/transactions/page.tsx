@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useState, type ChangeEvent } from 'react';
+import React, { useState, type ChangeEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import type { Transaction } from '@/services/transaction-importer';
 import { PlusCircle, Upload, Edit, Trash2 } from 'lucide-react';
 import {
   Dialog,
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose // Import DialogClose
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -30,57 +31,62 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
-
-// Define allowed modes of payment
-type ModeOfPayment = 'Cash' | 'Bank' | 'Mpesa';
-
-// Adding ID and modeOfPayment to transaction interface and mock data
-interface TransactionWithId extends Transaction {
-  id: string; // Using string ID for flexibility, could be number
-  modeOfPayment: ModeOfPayment;
-}
-
-// Generate unique IDs for mock data
-const generateId = () => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-// Mock initial transactions (values in KES) with IDs and modeOfPayment
-const initialTransactions: TransactionWithId[] = [
-  { id: generateId(), date: new Date(2024, 5, 15), description: 'Salary Deposit', amount: 300000, modeOfPayment: 'Bank' },
-  { id: generateId(), date: new Date(2024, 5, 16), description: 'Groceries - Naivas', amount: -8550, modeOfPayment: 'Mpesa' },
-  { id: generateId(), date: new Date(2024, 5, 17), description: 'Rent Payment', amount: -120000, modeOfPayment: 'Bank' },
-  { id: generateId(), date: new Date(2024, 5, 18), description: 'Coffee Shop', amount: -525, modeOfPayment: 'Cash' },
-  { id: generateId(), date: new Date(2024, 5, 20), description: 'Utility Bill - KPLC', amount: -7500, modeOfPayment: 'Mpesa' },
-  { id: generateId(), date: new Date(2024, 5, 22), description: 'Dinner Out - Artcaffe', amount: -6000, modeOfPayment: 'Mpesa' },
-];
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
+import type { TransactionWithId, ModeOfPayment } from '@/lib/types'; // Import shared types
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
-const formatDateForInput = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
+const formatDateForInput = (date: Date | string): string => {
+    // Handle potential string input from form state reset
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(dateObj.getTime())) {
+        // Return empty string or today's date if input is invalid
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        const day = today.getDate().toString().padStart(2, '0');
+        return `${year}-${month}-${day}`; // Default to today if invalid
+    }
+    const year = dateObj.getFullYear();
+    const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+    const day = dateObj.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
 
+// Initial form data structure
+const initialFormData = {
+    date: formatDateForInput(new Date()), // Default to today
+    description: '',
+    amount: '',
+    modeOfPayment: '' as ModeOfPayment | ''
+};
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<TransactionWithId[]>(initialTransactions);
+  // Use context for transaction state management
+  const { transactions, addTransaction, updateTransaction, deleteTransaction, importTransactionsBatch } = useTransactions();
+
+  // Local state for dialogs, editing, deleting, and form data
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
-  // Updated formData to include modeOfPayment
-  const [formData, setFormData] = useState({ date: '', description: '', amount: '', modeOfPayment: '' as ModeOfPayment | '' });
+  const [formData, setFormData] = useState(initialFormData);
   const [isImporting, setIsImporting] = useState(false);
   const { toast } = useToast();
 
+  // Reset form data when dialogs close
+  useEffect(() => {
+    if (!isAddDialogOpen && !isEditDialogOpen) {
+        setFormData(initialFormData);
+        setEditingTransaction(null); // Ensure editing state is also cleared
+    }
+  }, [isAddDialogOpen, isEditDialogOpen]);
 
-  // --- CRUD Operations ---
+  // --- CRUD Operations using Context ---
 
   // CREATE
-  const handleAddTransaction = (event: React.FormEvent) => {
+  const handleAddTransactionSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    // Include modeOfPayment in validation
     const { date, description, amount, modeOfPayment } = formData;
 
     if (!date || !description || !amount || !modeOfPayment) {
@@ -93,17 +99,14 @@ export default function TransactionsPage() {
       return;
     }
 
-    const newTransaction: TransactionWithId = {
-      id: generateId(),
-      date: new Date(date + 'T00:00:00'), // Ensure date parsing considers local time
+    addTransaction({
+      date: new Date(date + 'T00:00:00'), // Use local time
       description: description,
       amount: parsedAmount,
-      modeOfPayment: modeOfPayment, // Add mode of payment
-    };
+      modeOfPayment: modeOfPayment,
+    });
 
-    setTransactions(prev => [newTransaction, ...prev].sort((a, b) => b.date.getTime() - a.date.getTime()));
-    setFormData({ date: '', description: '', amount: '', modeOfPayment: '' }); // Reset form
-    setIsAddDialogOpen(false);
+    setIsAddDialogOpen(false); // Close dialog
     toast({ title: 'Transaction Added', description: 'Successfully added.' });
   };
 
@@ -114,17 +117,17 @@ export default function TransactionsPage() {
       date: formatDateForInput(transaction.date),
       description: transaction.description,
       amount: transaction.amount.toString(),
-      modeOfPayment: transaction.modeOfPayment, // Set mode of payment in form
+      modeOfPayment: transaction.modeOfPayment,
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateTransaction = (event: React.FormEvent) => {
+  const handleUpdateTransactionSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!editingTransaction) return;
 
-    const { date, description, amount, modeOfPayment } = formData; // Include modeOfPayment
-    if (!date || !description || !amount || !modeOfPayment) { // Include modeOfPayment in validation
+    const { date, description, amount, modeOfPayment } = formData;
+    if (!date || !description || !amount || !modeOfPayment) {
       toast({ title: 'Missing Information', description: 'Please fill out all fields.', variant: 'destructive' });
       return;
     }
@@ -134,31 +137,28 @@ export default function TransactionsPage() {
       return;
     }
 
-    setTransactions(prev =>
-      prev.map(tx =>
-        tx.id === editingTransaction.id
-          ? { ...tx, date: new Date(date + 'T00:00:00'), description, amount: parsedAmount, modeOfPayment } // Update modeOfPayment
-          : tx
-      ).sort((a, b) => b.date.getTime() - a.date.getTime())
-    );
+    updateTransaction({
+        ...editingTransaction, // Keep the original ID
+        date: new Date(date + 'T00:00:00'),
+        description,
+        amount: parsedAmount,
+        modeOfPayment
+    });
 
-    setEditingTransaction(null);
-    setFormData({ date: '', description: '', amount: '', modeOfPayment: '' }); // Reset form
-    setIsEditDialogOpen(false);
+    setIsEditDialogOpen(false); // Close dialog
     toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
   };
 
   // DELETE
   const handleDeleteClick = (transaction: TransactionWithId) => {
     setTransactionToDelete(transaction);
-    // The AlertDialogTrigger will open the confirmation dialog
+    // AlertDialogTrigger will open the confirmation dialog
   };
 
   const confirmDeleteTransaction = () => {
     if (!transactionToDelete) return;
-
-    setTransactions(prev => prev.filter(tx => tx.id !== transactionToDelete.id));
-    setTransactionToDelete(null); // Close the dialog implicitly by resetting the state
+    deleteTransaction(transactionToDelete.id);
+    setTransactionToDelete(null); // Close the dialog implicitly
     toast({ title: 'Transaction Deleted', description: 'Successfully removed.' });
   };
 
@@ -169,30 +169,41 @@ export default function TransactionsPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Handler for Select component
   const handleSelectChange = (value: string) => {
      setFormData(prev => ({ ...prev, modeOfPayment: value as ModeOfPayment }));
   };
+
+   // Generate unique IDs for mock data - consider moving to a utility file if needed elsewhere
+    const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setIsImporting(true);
     try {
-      // Placeholder for actual import logic
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      // When implementing actual import, ensure modeOfPayment is handled or set to a default/unknown
-      const imported: TransactionWithId[] = [
-        { id: generateId(), date: new Date(), description: 'Imported from ' + file.name, amount: Math.random() > 0.5 ? 15000 : -5000, modeOfPayment: 'Bank' }, // Example default
+      // Placeholder for actual import logic - Should use a service function
+      // For now, simulate with mock data
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing
+
+      // TODO: Replace with actual file parsing logic (e.g., using a library like PapaParse for CSV)
+      // This mock import adds a few example transactions
+      const importedData: Omit<TransactionWithId, 'id'>[] = [
+        { date: new Date(2024, 6, 5), description: `Imported: ${file.name} Item 1`, amount: -1200.50, modeOfPayment: 'Mpesa' },
+        { date: new Date(2024, 6, 6), description: `Imported: ${file.name} Item 2`, amount: 50000, modeOfPayment: 'Bank' },
       ];
-      setTransactions(prev => [...prev, ...imported].sort((a, b) => b.date.getTime() - a.date.getTime()));
-      toast({ title: 'Import Successful', description: `${file.name} imported.`, variant: 'default' });
+
+      const newTransactionsWithIds = importedData.map(tx => ({ id: generateId(), ...tx }));
+
+      importTransactionsBatch(newTransactionsWithIds); // Use context function for batch import
+
+      toast({ title: 'Import Successful', description: `${file.name} processed.`, variant: 'default' });
     } catch (error) {
       console.error('Import failed:', error);
       toast({ title: 'Import Failed', description: 'Could not import file.', variant: 'destructive' });
     } finally {
       setIsImporting(false);
-      event.target.value = '';
+      event.target.value = ''; // Clear the file input
     }
   };
 
@@ -202,8 +213,10 @@ export default function TransactionsPage() {
     return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const formatDate = (date: Date | string) => {
+     const dateObj = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(dateObj.getTime())) return 'Invalid Date';
+    return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   return (
@@ -230,7 +243,8 @@ export default function TransactionsPage() {
                 <DialogTitle>Add New Transaction</DialogTitle>
                 <DialogDescription>Manually enter details below.</DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleAddTransaction} className="grid gap-4 py-4">
+              {/* Changed form onSubmit handler */}
+              <form onSubmit={handleAddTransactionSubmit} className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-date" className="text-right">Date</Label>
                   <Input id="add-date" name="date" type="date" value={formData.date} onChange={handleInputChange} className="col-span-3" required />
@@ -243,7 +257,6 @@ export default function TransactionsPage() {
                   <Label htmlFor="add-amount" className="text-right">Amount (KES)</Label>
                   <Input id="add-amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleInputChange} className="col-span-3" placeholder="e.g., -550 or 10000" required />
                 </div>
-                 {/* Mode of Payment Select */}
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-modeOfPayment" className="text-right">Payment Mode</Label>
                   <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={handleSelectChange} required>
@@ -258,6 +271,10 @@ export default function TransactionsPage() {
                   </Select>
                 </div>
                 <DialogFooter>
+                    {/* Use DialogClose for cancellation */}
+                   <DialogClose asChild>
+                        <Button type="button" variant="outline">Cancel</Button>
+                   </DialogClose>
                   <Button type="submit">Add Transaction</Button>
                 </DialogFooter>
               </form>
@@ -266,7 +283,7 @@ export default function TransactionsPage() {
 
            {/* Import Button */}
            <Button asChild variant="default" disabled={isImporting}>
-             <Label htmlFor="file-upload" className="cursor-pointer">
+             <Label htmlFor="file-upload" className="cursor-pointer flex items-center"> {/* Added flex items-center */}
                <Upload className="mr-2 h-4 w-4" /> {isImporting ? 'Importing...' : 'Import File'}
                <Input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept=".csv,.xlsx,.ofx,.qif" disabled={isImporting} />
              </Label>
@@ -287,7 +304,6 @@ export default function TransactionsPage() {
                   <TableRow>
                     <TableHead className="w-[120px]">Date</TableHead>
                     <TableHead>Description</TableHead>
-                    {/* Add Mode of Payment Header */}
                     <TableHead className="w-[100px]">Mode</TableHead>
                     <TableHead className="text-right w-[150px]">Amount (KES)</TableHead>
                     <TableHead className="text-right w-[100px]">Actions</TableHead>
@@ -299,29 +315,27 @@ export default function TransactionsPage() {
                       <TableRow key={tx.id}>
                         <TableCell className="font-medium">{formatDate(tx.date)}</TableCell>
                         <TableCell>{tx.description}</TableCell>
-                        {/* Add Mode of Payment Cell */}
                         <TableCell>{tx.modeOfPayment}</TableCell>
                         <TableCell className={`text-right font-mono ${tx.amount >= 0 ? 'text-accent' : 'text-destructive'}`}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
                         <TableCell className="text-right">
-                           {/* Edit Button */}
+                           {/* Edit Button - Opens Edit Dialog */}
                            <Button variant="ghost" size="icon" className="mr-1 h-7 w-7" onClick={() => handleEditClick(tx)}>
                              <Edit className="h-4 w-4" />
                              <span className="sr-only">Edit</span>
                            </Button>
 
                            {/* Delete Button & Confirmation Dialog */}
-                           <AlertDialog>
+                           {/* Manage AlertDialog open state externally */}
+                           <AlertDialog open={transactionToDelete?.id === tx.id} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
                               <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(tx)}>
                                   <Trash2 className="h-4 w-4" />
                                   <span className="sr-only">Delete</span>
                                 </Button>
                               </AlertDialogTrigger>
-                             {/* Keep dialog content simpler, manage open state */}
-                             {transactionToDelete && transactionToDelete.id === tx.id && (
-                               <AlertDialogContent>
+                             <AlertDialogContent>
                                  <AlertDialogHeader>
                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                    <AlertDialogDescription>
@@ -331,17 +345,15 @@ export default function TransactionsPage() {
                                  </AlertDialogHeader>
                                  <AlertDialogFooter>
                                    <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
-                                   <AlertDialogAction onClick={() => confirmDeleteTransaction()}>Delete</AlertDialogAction>
+                                   <AlertDialogAction onClick={confirmDeleteTransaction}>Delete</AlertDialogAction>
                                  </AlertDialogFooter>
                                </AlertDialogContent>
-                             )}
                            </AlertDialog>
                          </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      {/* Adjust colspan for the new column */}
                       <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
@@ -355,13 +367,15 @@ export default function TransactionsPage() {
       </main>
 
       {/* Edit Transaction Dialog */}
+      {/* Use controlled Dialog component */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
          <DialogContent className="sm:max-w-[425px]">
            <DialogHeader>
              <DialogTitle>Edit Transaction</DialogTitle>
              <DialogDescription>Update the details below.</DialogDescription>
            </DialogHeader>
-           <form onSubmit={handleUpdateTransaction} className="grid gap-4 py-4">
+           {/* Changed form onSubmit handler */}
+           <form onSubmit={handleUpdateTransactionSubmit} className="grid gap-4 py-4">
              <div className="grid grid-cols-4 items-center gap-4">
                <Label htmlFor="edit-date" className="text-right">Date</Label>
                <Input id="edit-date" name="date" type="date" value={formData.date} onChange={handleInputChange} className="col-span-3" required />
@@ -374,7 +388,6 @@ export default function TransactionsPage() {
                <Label htmlFor="edit-amount" className="text-right">Amount (KES)</Label>
                <Input id="edit-amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleInputChange} className="col-span-3" required />
              </div>
-             {/* Mode of Payment Select for Edit */}
              <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="edit-modeOfPayment" className="text-right">Payment Mode</Label>
               <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={handleSelectChange} required>
@@ -389,7 +402,10 @@ export default function TransactionsPage() {
               </Select>
             </div>
              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { setIsEditDialogOpen(false); setEditingTransaction(null); }}>Cancel</Button>
+                {/* Use DialogClose for cancellation */}
+                <DialogClose asChild>
+                    <Button type="button" variant="outline">Cancel</Button>
+                </DialogClose>
                <Button type="submit">Save Changes</Button>
              </DialogFooter>
            </form>

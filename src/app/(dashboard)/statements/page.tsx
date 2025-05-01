@@ -1,13 +1,14 @@
+
 // src/app/(dashboard)/statements/page.tsx
 'use client';
 
-import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import React, { useState, useEffect, ChangeEvent, useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter as UiTableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, TrendingUp, TrendingDown, Scale, DollarSign, Landmark, PlusCircle, Save, XCircle } from 'lucide-react';
+import { Trash2, TrendingUp, TrendingDown, Scale, DollarSign, Landmark, PlusCircle, Save, XCircle, Info } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,32 +20,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-// Interface for statement items
-interface StatementItem {
-  id: string;
-  description: string;
-  amount: number;
-}
+import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
+import type { StatementItem } from '@/lib/types'; // Import StatementItem type
 
 // Generate unique IDs
 const generateId = () => `item_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Initial Mock Data (values in KES)
-const initialIncome: StatementItem[] = [
-  { id: generateId(), description: 'Salary', amount: 300000 },
-  { id: generateId(), description: 'Freelance Work', amount: 50000 },
-];
-
-const initialExpenses: StatementItem[] = [
-  { id: generateId(), description: 'Rent', amount: 120000 },
-  { id: generateId(), description: 'Groceries', amount: 35000 },
-  { id: generateId(), description: 'Utilities', amount: 15000 },
-  { id: generateId(), description: 'Transportation', amount: 10000 },
-  { id: generateId(), description: 'Debt Payments', amount: 60000 },
-  { id: generateId(), description: 'Entertainment', amount: 20000 },
-];
-
+// Initial Mock Data for Assets and Liabilities (values in KES) - Income/Expenses are derived now
 const initialAssets: StatementItem[] = [
   { id: generateId(), description: 'Checking Account', amount: 250000 },
   { id: generateId(), description: 'Savings Account', amount: 1000000 },
@@ -66,41 +48,61 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-KE', {
     style: 'currency',
     currency: 'KES',
+    // minimumFractionDigits: 2, // Optional: Keep if cents are needed
+    // maximumFractionDigits: 2,
   }).format(amount);
 };
 
 export default function StatementsPage() {
-  const [incomeItems, setIncomeItems] = useState<StatementItem[]>(initialIncome);
-  const [expenseItems, setExpenseItems] = useState<StatementItem[]>(initialExpenses);
+  // Get transactions from context
+  const { transactions } = useTransactions();
+
+  // State for Assets and Liabilities (still managed locally)
   const [assetItems, setAssetItems] = useState<StatementItem[]>(initialAssets);
   const [liabilityItems, setLiabilityItems] = useState<StatementItem[]>(initialLiabilities);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ item: StatementItem; type: 'income' | 'expense' | 'asset' | 'liability' } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ item: StatementItem; type: 'asset' | 'liability' } | null>(null);
 
-  // Temporary state for edits
-  const [editingIncome, setEditingIncome] = useState<StatementItem[]>([]);
-  const [editingExpenses, setEditingExpenses] = useState<StatementItem[]>([]);
+  // Temporary state for edits (only Assets and Liabilities)
   const [editingAssets, setEditingAssets] = useState<StatementItem[]>([]);
   const [editingLiabilities, setEditingLiabilities] = useState<StatementItem[]>([]);
 
   const { toast } = useToast();
 
-  // Derived Calculations - Recalculate whenever items change
-  const totalIncome = calculateTotal(isEditing ? editingIncome : incomeItems);
-  const totalExpenses = calculateTotal(isEditing ? editingExpenses : expenseItems);
+  // --- Derived Calculations ---
+
+  // Derive Income and Expense items from transactions
+  const derivedIncomeItems = useMemo(() =>
+    transactions
+      .filter(tx => tx.amount > 0)
+      .map(tx => ({ id: tx.id, description: tx.description, amount: tx.amount }))
+      .sort((a, b) => b.amount - a.amount), // Optional: sort derived items
+    [transactions]
+  );
+
+  const derivedExpenseItems = useMemo(() =>
+    transactions
+      .filter(tx => tx.amount < 0)
+      .map(tx => ({ id: tx.id, description: tx.description, amount: Math.abs(tx.amount) })) // Store as positive for display logic
+      .sort((a, b) => b.amount - a.amount), // Optional: sort derived items
+    [transactions]
+  );
+
+  const totalIncome = useMemo(() => calculateTotal(derivedIncomeItems), [derivedIncomeItems]);
+  const totalExpenses = useMemo(() => calculateTotal(derivedExpenseItems), [derivedExpenseItems]);
   const cashFlow = totalIncome - totalExpenses;
 
-  const totalAssets = calculateTotal(isEditing ? editingAssets : assetItems);
-  const totalLiabilities = calculateTotal(isEditing ? editingLiabilities : liabilityItems);
+  // Asset and Liability totals (use editing state if active)
+  const totalAssets = useMemo(() => calculateTotal(isEditing ? editingAssets : assetItems), [isEditing, editingAssets, assetItems]);
+  const totalLiabilities = useMemo(() => calculateTotal(isEditing ? editingLiabilities : liabilityItems), [isEditing, editingLiabilities, liabilityItems]);
   const netWorth = totalAssets - totalLiabilities;
 
-  // Handlers
+  // --- Handlers ---
+
   const handleEditToggle = () => {
     if (!isEditing) {
-      // Entering edit mode: copy current state to editing state
-      setEditingIncome([...incomeItems.map(item => ({ ...item }))]);
-      setEditingExpenses([...expenseItems.map(item => ({ ...item }))]);
+      // Entering edit mode: copy current state to editing state (only Assets/Liabilities)
       setEditingAssets([...assetItems.map(item => ({ ...item }))]);
       setEditingLiabilities([...liabilityItems.map(item => ({ ...item }))]);
     }
@@ -108,64 +110,59 @@ export default function StatementsPage() {
   };
 
   const handleSaveChanges = () => {
-    // Save changes from editing state to main state
-    setIncomeItems(editingIncome);
-    setExpenseItems(editingExpenses);
+    // Save changes from editing state to main state (only Assets/Liabilities)
     setAssetItems(editingAssets);
     setLiabilityItems(editingLiabilities);
     setIsEditing(false);
-    toast({ title: 'Changes Saved', description: 'Your statements have been updated.' });
+    toast({ title: 'Changes Saved', description: 'Your Assets & Liabilities have been updated.' });
   };
 
   const handleCancelEdit = () => {
     // Discard changes and exit edit mode
     setIsEditing(false);
-    // No need to reset editing state here as it's re-initialized on next edit
     toast({ title: 'Edit Cancelled', description: 'No changes were saved.', variant: 'default' });
   };
 
+  // Updated handler for Asset/Liability item changes
   const handleItemChange = (
     e: ChangeEvent<HTMLInputElement>,
     id: string,
-    type: 'income' | 'expense' | 'asset' | 'liability',
+    type: 'asset' | 'liability',
     field: 'description' | 'amount'
   ) => {
     const value = field === 'amount' ? parseFloat(e.target.value) || 0 : e.target.value;
-    const setState = type === 'income' ? setEditingIncome :
-                     type === 'expense' ? setEditingExpenses :
-                     type === 'asset' ? setEditingAssets :
-                     setEditingLiabilities;
+    const setState = type === 'asset' ? setEditingAssets : setEditingLiabilities;
 
     setState(prev => prev.map(item => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
-  const handleAddItem = (type: 'income' | 'expense' | 'asset' | 'liability') => {
+  // Updated handler for adding Asset/Liability items
+  const handleAddItem = (type: 'asset' | 'liability') => {
     const newItem: StatementItem = { id: generateId(), description: '', amount: 0 };
-    const setState = type === 'income' ? setEditingIncome :
-                     type === 'expense' ? setEditingExpenses :
-                     type === 'asset' ? setEditingAssets :
-                     setEditingLiabilities;
+    const setState = type === 'asset' ? setEditingAssets : setEditingLiabilities;
     setState(prev => [...prev, newItem]);
   };
 
-  const handleDeleteClick = (item: StatementItem, type: 'income' | 'expense' | 'asset' | 'liability') => {
-    setItemToDelete({ item, type });
+  // Updated handler for delete click (only Assets/Liabilities)
+  const handleDeleteClick = (item: StatementItem, type: 'asset' | 'liability') => {
+     // This now just sets the item to be deleted, confirmation handles the rest
+     setItemToDelete({ item, type });
   };
 
   const confirmDeleteItem = () => {
     if (!itemToDelete) return;
     const { item: itemToRemove, type } = itemToDelete;
-    const setState = type === 'income' ? setEditingIncome :
-                     type === 'expense' ? setEditingExpenses :
-                     type === 'asset' ? setEditingAssets :
-                     setEditingLiabilities;
+    const setState = type === 'asset' ? setEditingAssets : setEditingLiabilities;
 
     setState(prev => prev.filter(item => item.id !== itemToRemove.id));
-    setItemToDelete(null);
+    setItemToDelete(null); // Reset delete confirmation state
     toast({ title: 'Item Deleted', description: 'Successfully removed.' });
   };
 
-  const renderItemRow = (item: StatementItem, type: 'income' | 'expense' | 'asset' | 'liability') => (
+  // --- Render Functions ---
+
+  // Updated render function for Asset/Liability items
+  const renderEditableItemRow = (item: StatementItem, type: 'asset' | 'liability') => (
     <TableRow key={item.id}>
       <TableCell className="pl-6">
         {isEditing ? (
@@ -184,53 +181,60 @@ export default function StatementsPage() {
         {isEditing ? (
           <Input
             type="number"
-            step="0.01"
-            value={item.amount}
+            step="0.01" // Keep precision for currency
+            value={item.amount.toString()} // Ensure value is string for input
             onChange={(e) => handleItemChange(e, item.id, type, 'amount')}
             placeholder="Amount"
             className="h-8 text-right"
           />
         ) : (
-          type === 'income' || type === 'asset' ? formatCurrency(item.amount) : `(${formatCurrency(item.amount)})`
+           // Display liabilities as positive in the list, negative in total
+           formatCurrency(item.amount)
         )}
       </TableCell>
       {isEditing && (
          <TableCell className="w-[50px] pr-2">
-           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive hover:text-destructive h-7 w-7"
-                // Remove the onClick handler from here to prevent premature state update
-                // onClick={() => handleDeleteClick(item, type)} // Pass type here
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </AlertDialogTrigger>
-            {/* Conditionally render content based on the item to delete */}
-            {/* This approach is less efficient. Better to keep the dialog content outside the map */}
-            {/* Consider moving AlertDialog outside the map and controlling its open state */}
-             {/* Update: Moved onClick to trigger, simplified dialog logic */}
+           <AlertDialog open={itemToDelete?.item.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
+             <AlertDialogTrigger asChild>
+               <Button
+                 variant="ghost"
+                 size="icon"
+                 className="text-destructive hover:text-destructive h-7 w-7"
+                 onClick={() => handleDeleteClick(item, type)} // Set the item to delete on click
+               >
+                 <Trash2 className="h-4 w-4" />
+                 <span className="sr-only">Delete Item</span>
+               </Button>
+             </AlertDialogTrigger>
              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete the item: <br/>
-                    <strong>{item.description || '(No description)'} ({formatCurrency(item.amount)})</strong>
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
-                  {/* Ensure confirmDeleteItem uses the correct item state */}
-                  <AlertDialogAction onClick={() => { handleDeleteClick(item, type); confirmDeleteItem(); }}>Delete</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
+               <AlertDialogHeader>
+                 <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                 <AlertDialogDescription>
+                   This action cannot be undone. This will permanently delete the item: <br/>
+                   <strong>{item.description || '(No description)'} ({formatCurrency(item.amount)})</strong>
+                 </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                 <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+                 <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
+               </AlertDialogFooter>
+             </AlertDialogContent>
            </AlertDialog>
          </TableCell>
       )}
     </TableRow>
   );
+
+    // Render function for derived Income/Expense items (read-only)
+    const renderDerivedItemRow = (item: StatementItem, type: 'income' | 'expense') => (
+        <TableRow key={item.id}>
+        <TableCell className="pl-6">{item.description}</TableCell>
+        <TableCell className="text-right font-mono">
+            {type === 'income' ? formatCurrency(item.amount) : `(${formatCurrency(item.amount)})`}
+        </TableCell>
+        </TableRow>
+    );
+
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
@@ -240,36 +244,38 @@ export default function StatementsPage() {
             Financial Statements
             </h1>
             <p className="text-muted-foreground">
-            Review and manage your cash flow and net worth.
+             Cash flow derived from transactions. Edit Assets & Liabilities.
             </p>
         </div>
          <div className="flex gap-2">
           {isEditing ? (
             <>
               <Button variant="outline" onClick={handleCancelEdit}>
-                <XCircle className="mr-2 h-4 w-4" /> Cancel
+                <XCircle className="mr-2 h-4 w-4" /> Cancel Edit
               </Button>
               <Button onClick={handleSaveChanges}>
-                <Save className="mr-2 h-4 w-4" /> Save Changes
+                <Save className="mr-2 h-4 w-4" /> Save A & L
               </Button>
             </>
           ) : (
             <Button onClick={handleEditToggle}>
-              Edit Statements
+              Edit Assets & Liabilities
             </Button>
           )}
         </div>
       </header>
 
       <main className="flex-1 grid gap-6 md:grid-cols-2">
-        {/* Cash Flow Statement Card */}
+        {/* Cash Flow Statement Card (Read-Only) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               {cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}
               Cash Flow Statement
             </CardTitle>
-            <CardDescription>Income vs. Expenses {isEditing ? '(Editing)' : ''}</CardDescription>
+             <CardDescription className="flex items-center gap-1 text-xs">
+                <Info size={14} className="text-muted-foreground"/> Derived from Transactions page.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -277,50 +283,38 @@ export default function StatementsPage() {
                 <TableRow>
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  {isEditing && <TableHead className="w-[50px]"></TableHead>}
+                  {/* No edit column for cash flow */}
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {/* Income Section (Derived) */}
                 <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                   <TableCell>Income</TableCell>
                   <TableCell></TableCell>
-                   {isEditing && <TableCell></TableCell>}
                 </TableRow>
-                {(isEditing ? editingIncome : incomeItems).map(item => renderItemRow(item, 'income'))}
-                 {isEditing && (
-                    <TableRow>
-                        <TableCell colSpan={3} className="text-center py-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleAddItem('income')}>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Add Income Item
-                            </Button>
-                        </TableCell>
-                    </TableRow>
-                 )}
+                {derivedIncomeItems.length > 0 ? (
+                  derivedIncomeItems.map(item => renderDerivedItemRow(item, 'income'))
+                ) : (
+                  <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No income transactions recorded.</TableCell></TableRow>
+                )}
                  <TableRow>
                     <TableCell className="font-medium pl-6">Total Income</TableCell>
                     <TableCell className="text-right font-semibold font-mono">{formatCurrency(totalIncome)}</TableCell>
-                    {isEditing && <TableCell></TableCell>}
                   </TableRow>
 
+                 {/* Expenses Section (Derived) */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                   <TableCell>Expenses</TableCell>
                   <TableCell></TableCell>
-                  {isEditing && <TableCell></TableCell>}
                 </TableRow>
-                {(isEditing ? editingExpenses : expenseItems).map(item => renderItemRow(item, 'expense'))}
-                 {isEditing && (
-                    <TableRow>
-                        <TableCell colSpan={3} className="text-center py-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleAddItem('expense')}>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Add Expense Item
-                            </Button>
-                        </TableCell>
-                    </TableRow>
-                 )}
+                 {derivedExpenseItems.length > 0 ? (
+                    derivedExpenseItems.map(item => renderDerivedItemRow(item, 'expense'))
+                ) : (
+                    <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No expense transactions recorded.</TableCell></TableRow>
+                )}
                  <TableRow>
                     <TableCell className="font-medium pl-6">Total Expenses</TableCell>
                     <TableCell className="text-right font-semibold font-mono">({formatCurrency(totalExpenses)})</TableCell>
-                    {isEditing && <TableCell></TableCell>}
                   </TableRow>
               </TableBody>
               <UiTableFooter>
@@ -330,18 +324,16 @@ export default function StatementsPage() {
                     className={`text-right font-bold font-mono ${
                       cashFlow >= 0 ? 'text-accent' : 'text-destructive'
                     }`}
-                    colSpan={isEditing ? 2 : 1} // Adjust colspan when editing
                   >
                     {formatCurrency(cashFlow)}
                   </TableHead>
-                   {isEditing && <TableHead></TableHead>}
                 </TableRow>
               </UiTableFooter>
             </Table>
           </CardContent>
         </Card>
 
-        {/* Net Worth Statement Card */}
+        {/* Net Worth Statement Card (Editable Assets/Liabilities) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -356,16 +348,17 @@ export default function StatementsPage() {
                  <TableRow>
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                   {isEditing && <TableHead className="w-[50px]"></TableHead>}
+                   {isEditing && <TableHead className="w-[50px]">Action</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
+                 {/* Assets Section (Editable) */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                    <TableCell className="flex items-center gap-2"><Landmark className="h-4 w-4"/>Assets</TableCell>
                   <TableCell></TableCell>
                   {isEditing && <TableCell></TableCell>}
                 </TableRow>
-                {(isEditing ? editingAssets : assetItems).map(item => renderItemRow(item, 'asset'))}
+                {(isEditing ? editingAssets : assetItems).map(item => renderEditableItemRow(item, 'asset'))}
                  {isEditing && (
                     <TableRow>
                         <TableCell colSpan={3} className="text-center py-2">
@@ -381,12 +374,13 @@ export default function StatementsPage() {
                     {isEditing && <TableCell></TableCell>}
                   </TableRow>
 
+                 {/* Liabilities Section (Editable) */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                    <TableCell className="flex items-center gap-2"><DollarSign className="h-4 w-4"/>Liabilities</TableCell>
                    <TableCell></TableCell>
                    {isEditing && <TableCell></TableCell>}
                 </TableRow>
-                {(isEditing ? editingLiabilities : liabilityItems).map(item => renderItemRow(item, 'liability'))}
+                {(isEditing ? editingLiabilities : liabilityItems).map(item => renderEditableItemRow(item, 'liability'))}
                  {isEditing && (
                     <TableRow>
                         <TableCell colSpan={3} className="text-center py-2">
@@ -398,6 +392,7 @@ export default function StatementsPage() {
                  )}
                  <TableRow>
                     <TableCell className="font-medium pl-6">Total Liabilities</TableCell>
+                    {/* Display total liabilities as negative */}
                     <TableCell className="text-right font-semibold font-mono">({formatCurrency(totalLiabilities)})</TableCell>
                     {isEditing && <TableCell></TableCell>}
                   </TableRow>
