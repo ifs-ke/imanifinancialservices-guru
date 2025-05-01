@@ -5,34 +5,39 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2 } from 'lucide-react'; // Added chart icons
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle } from 'lucide-react'; // Added chart icons and MinusCircle
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactions } from '@/contexts/TransactionsContext';
 import { useDebt } from '@/contexts/DebtContext';
-import { useStatement } from '@/contexts/StatementContext'; // Import statement context for assets
+import { useStatement } from '@/contexts/StatementContext'; // Import statement context for assets and liabilities
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"; // Import Chart components
 import { Bar, BarChart, Pie, PieSector, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip } from 'recharts'; // Import specific Recharts components
 
 // Calculation Functions (consider moving to utils)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
+const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 
 export default function DashboardPage() {
   const { transactions } = useTransactions();
   const { debts } = useDebt();
-  const { assetItems } = useStatement(); // Get asset items
+  const { assetItems, otherLiabilityItems } = useStatement(); // Get asset and other liability items
 
   // Calculate financial metrics based on context data
   const financialData = useMemo(() => {
-    const totalAssets = calculateTotal(assetItems); // Calculate total assets from context
+    const totalAssets = calculateTotal(assetItems);
     const totalDebt = calculateDebtTotal(debts);
-    const netWorth = totalAssets - totalDebt;
+    const totalOtherLiabilities = calculateOtherLiabilityTotal(otherLiabilityItems); // Calculate this
+    const netWorth = totalAssets - (totalDebt + totalOtherLiabilities); // Update net worth calc
 
     // Calculate cash flow for the last 30 days (example)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentTransactions = transactions.filter(tx => tx.date >= thirtyDaysAgo);
+    const recentTransactions = transactions.filter(tx => {
+        // Ensure date is valid before comparison
+        return tx.date instanceof Date && !isNaN(tx.date.getTime()) && tx.date >= thirtyDaysAgo;
+    });
     const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
     const totalExpensesRecent = Math.abs(calculateTotal(recentTransactions.filter(tx => tx.amount < 0)));
     const cashFlowRecent = totalIncomeRecent - totalExpensesRecent;
@@ -44,8 +49,9 @@ export default function DashboardPage() {
       totalAssets,
       totalIncomeRecent,
       totalExpensesRecent,
+      totalOtherLiabilities, // Return this too
     };
-  }, [transactions, debts, assetItems]); // Added assetItems dependency
+  }, [transactions, debts, assetItems, otherLiabilityItems]); // Added assetItems and otherLiabilityItems dependency
 
   const formatCurrency = (amount: number | undefined) => {
      if (amount === undefined) return 'N/A'; // Handle undefined case
@@ -73,10 +79,10 @@ export default function DashboardPage() {
 
   // 2. Asset Allocation Chart (Pie Chart)
   const assetChartData = useMemo(() =>
-    assetItems.map(item => ({
+    assetItems.map((item, index) => ({
       name: item.description,
       value: item.amount,
-      fill: `hsl(var(--chart-${(assetItems.indexOf(item) % 5) + 1}))` // Cycle through chart colors
+      fill: `hsl(var(--chart-${(index % 5) + 1}))` // Cycle through chart colors
     })), [assetItems]);
 
   const assetChartConfig = useMemo(() => {
@@ -114,7 +120,7 @@ export default function DashboardPage() {
               {formatCurrency(financialData.netWorth)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Total Assets ({formatCurrency(financialData.totalAssets)}) minus Total Liabilities ({formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities)})
+               Total Assets ({formatCurrency(financialData.totalAssets)}) minus Total Liabilities ({formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities)})
             </p>
           </CardContent>
         </Card>
@@ -149,9 +155,9 @@ export default function DashboardPage() {
             <div className="text-2xl font-bold">
               {formatCurrency(financialData.totalDebt)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Sum of liabilities from Debts page
-            </p>
+             <p className="text-xs text-muted-foreground">
+              Structured debts. Other liabilities: {formatCurrency(financialData.totalOtherLiabilities)}
+             </p>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
               <Link href="/debt">
                 Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
@@ -218,7 +224,7 @@ export default function DashboardPage() {
                             outerRadius={60}
                             innerRadius={40} // Make it a donut chart
                             labelLine={false}
-                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`} // Optional: show percentage on slice
+                            // label={({ percent }) => `${(percent * 100).toFixed(0)}%`} // Optional: show percentage on slice
                             paddingAngle={2}
                          >
                               {assetChartData.map((entry, index) => (
@@ -319,72 +325,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-// Helper to calculate Total Other Liabilities (assuming useStatement context provides it)
-const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
-
-// Updated financialData calculation including Other Liabilities
-const calculateFinancialData = (transactions: any[], debts: any[], assetItems: any[], otherLiabilityItems: any[]) => {
-    const totalAssets = calculateTotal(assetItems);
-    const totalDebt = calculateDebtTotal(debts);
-    const totalOtherLiabilities = calculateOtherLiabilityTotal(otherLiabilityItems); // Calculate this
-    const netWorth = totalAssets - (totalDebt + totalOtherLiabilities); // Update net worth calc
-
-    // Calculate cash flow for the last 30 days (example)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentTransactions = transactions.filter(tx => tx.date >= thirtyDaysAgo);
-    const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
-    const totalExpensesRecent = Math.abs(calculateTotal(recentTransactions.filter(tx => tx.amount < 0)));
-    const cashFlowRecent = totalIncomeRecent - totalExpensesRecent;
-
-    return {
-      netWorth,
-      cashFlow: cashFlowRecent,
-      totalDebt,
-      totalAssets,
-      totalIncomeRecent,
-      totalExpensesRecent,
-      totalOtherLiabilities, // Return this too
-    };
-};
-
-// Example usage in the component:
-// const { otherLiabilityItems } = useStatement();
-// const financialData = useMemo(() => calculateFinancialData(transactions, debts, assetItems, otherLiabilityItems), [transactions, debts, assetItems, otherLiabilityItems]);
-// Make sure to import useStatement and get otherLiabilityItems
-
-// In the Net Worth Card Content:
-// <p className="text-xs text-muted-foreground">
-//  Total Assets ({formatCurrency(financialData.totalAssets)}) minus Total Liabilities ({formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities)})
-// </p>
-
-// In the Debt Card Content: (Maybe add Other Liabilities here or a separate card)
-// Option 1: Update Debt Card description
-// <p className="text-xs text-muted-foreground">
-//  Sum of structured debts. Other liabilities: {formatCurrency(financialData.totalOtherLiabilities)}
-// </p>
-// Option 2: Add a new Card for Other Liabilities
-/*
-<Card>
-  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-    <CardTitle className="text-sm font-medium">Other Liabilities</CardTitle>
-    <MinusCircle className="h-4 w-4 text-muted-foreground" /> {/* Example Icon */}
-  //</CardHeader>
-  //<CardContent>
-  //  <div className="text-2xl font-bold">
-  //    {formatCurrency(financialData.totalOtherLiabilities)}
-  //  </div>
-  //  <p className="text-xs text-muted-foreground">
-  //    From Net Worth Statement edits
-  //  </p>
-     {/* Optional link */}
-//     <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-//       <Link href="/statements">
-//         Manage Other Liabilities <ArrowRight className="ml-1 h-3 w-3" />
-//       </Link>
-//      </Button>
-//   </CardContent>
-// </Card>
-//*/
