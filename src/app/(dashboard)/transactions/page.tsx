@@ -20,14 +20,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-// Mock initial transactions
+// Mock initial transactions (values in KES)
 const initialTransactions: Transaction[] = [
-  { date: new Date(2024, 5, 15), description: 'Salary Deposit', amount: 3000 },
-  { date: new Date(2024, 5, 16), description: 'Groceries - SuperMart', amount: -85.50 },
-  { date: new Date(2024, 5, 17), description: 'Rent Payment', amount: -1200 },
-  { date: new Date(2024, 5, 18), description: 'Coffee Shop', amount: -5.25 },
-  { date: new Date(2024, 5, 20), description: 'Utility Bill - Electricity', amount: -75.00 },
-  { date: new Date(2024, 5, 22), description: 'Dinner Out', amount: -60.00 },
+  { date: new Date(2024, 5, 15), description: 'Salary Deposit', amount: 300000 },
+  { date: new Date(2024, 5, 16), description: 'Groceries - Naivas', amount: -8550 },
+  { date: new Date(2024, 5, 17), description: 'Rent Payment', amount: -120000 },
+  { date: new Date(2024, 5, 18), description: 'Coffee Shop', amount: -525 },
+  { date: new Date(2024, 5, 20), description: 'Utility Bill - KPLC', amount: -7500 },
+  { date: new Date(2024, 5, 22), description: 'Dinner Out - Artcaffe', amount: -6000 },
 ];
 
 export default function TransactionsPage() {
@@ -51,7 +51,8 @@ export default function TransactionsPage() {
       // Simulate import success with placeholder data
       await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
        const imported = [
-         { date: new Date(), description: `Imported from ${file.name}`, amount: Math.random() > 0.5 ? 150 : -50 },
+         // Replaced template literal with string concatenation to fix parsing error
+         { date: new Date(), description: 'Imported from ' + file.name, amount: Math.random() > 0.5 ? 15000 : -5000 }, // Example amounts in KES
        ];
        setTransactions(prev => [...prev, ...imported].sort((a, b) => b.date.getTime() - a.date.getTime()));
 
@@ -121,14 +122,14 @@ export default function TransactionsPage() {
 
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-KE', { // Changed locale to en-KE
       style: 'currency',
-      currency: 'USD', // Adjust currency as needed
+      currency: 'KES', // Changed currency to KES
     }).format(amount);
   };
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-US', { // Keep date format consistent or change as needed (e.g., en-GB)
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -191,7 +192,7 @@ export default function TransactionsPage() {
                  </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                    <Label htmlFor="amount" className="text-right">
-                     Amount
+                     Amount (KES)
                    </Label>
                    <Input
                      id="amount"
@@ -201,7 +202,7 @@ export default function TransactionsPage() {
                      value={newTransaction.amount}
                      onChange={handleInputChange}
                      className="col-span-3"
-                     placeholder="e.g., -5.50 or 100"
+                     placeholder="e.g., -550.00 or 10000"
                      required
                    />
                  </div>
@@ -243,14 +244,14 @@ export default function TransactionsPage() {
                   <TableRow>
                     <TableHead className="w-[120px]">Date</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className="text-right w-[120px]">Amount</TableHead>
+                    <TableHead className="text-right w-[150px]">Amount (KES)</TableHead> {/* Increased width */}
                     {/* Add Categorization column later */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {transactions.length > 0 ? (
                     transactions.map((tx, index) => (
-                      <TableRow key={`${tx.date.toISOString()}-${index}`}> {/* Ensure unique key */}
+                      <TableRow key={`${tx.date.toISOString()}-${index}-${tx.description}`}> {/* Ensure unique key */}
                         <TableCell className="font-medium">{formatDate(tx.date)}</TableCell>
                         <TableCell>{tx.description}</TableCell>
                         <TableCell

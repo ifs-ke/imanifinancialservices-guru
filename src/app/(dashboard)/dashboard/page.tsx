@@ -7,16 +7,16 @@ import Image from 'next/image';
 
 // Mock data for demonstration
 const mockData = {
-  netWorth: 50000,
-  cashFlow: 1500,
-  totalDebt: 25000,
+  netWorth: 5000000, // Example values in KES
+  cashFlow: 150000, // Example values in KES
+  totalDebt: 2500000, // Example values in KES
 };
 
 export default function DashboardPage() {
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-KE', { // Changed locale to en-KE
       style: 'currency',
-      currency: 'USD', // Adjust currency as needed
+      currency: 'KES', // Changed currency to KES
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);

@@ -43,10 +43,11 @@ body {
     --sidebar-border: 0 0% 85%;
     --sidebar-ring: 198 77% 53%;
   }
+
   .dark {
-    /* Adding basic dark mode, can be refined */
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    /* Dark mode theme variables */
+    --background: 240 10% 3.9%; /* Dark blue/gray background */
+    --foreground: 0 0% 98%; /* Light gray text */
     --card: 240 4% 10%; /* Darker card background */
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 3.9%;
@@ -59,24 +60,25 @@ body {
     --muted-foreground: 0 0% 63.9%;
     --accent: 120 60% 40%; /* Slightly brighter green */
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 30.6%; /* Darker red */
     --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 198 77% 53%;
+    --border: 240 4% 16%; /* Dark border */
+    --input: 240 4% 16%; /* Dark input background */
+    --ring: 198 77% 53%; /* Keep ring color */
     --chart-1: 198 77% 53%;
     --chart-2: 120 60% 40%;
-    --chart-3: 210 30% 15%;
-    --chart-4: 43 74% 46%;
-    --chart-5: 27 87% 47%;
+    --chart-3: 210 30% 15%; /* Darker chart color */
+    --chart-4: 43 74% 46%; /* Darker chart color */
+    --chart-5: 27 87% 47%; /* Darker chart color */
+    --radius: 0.5rem;
     /* Sidebar specific theme */
-    --sidebar-background: 240 6% 10%;
-    --sidebar-foreground: 0 0% 98%;
+    --sidebar-background: 240 6% 10%; /* Dark sidebar background */
+    --sidebar-foreground: 0 0% 98%; /* Light sidebar text */
     --sidebar-primary: 198 77% 53%; /* Primary blue */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 4% 16%;
+    --sidebar-accent: 240 4% 16%; /* Dark sidebar accent */
     --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 240 4% 16%;
+    --sidebar-border: 240 4% 16%; /* Dark sidebar border */
     --sidebar-ring: 198 77% 53%;
   }
 }
