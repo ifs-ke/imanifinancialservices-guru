@@ -41,17 +41,21 @@ const menuItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { isMobile } = useSidebar();
+  const { isMobile, state } = useSidebar(); // Get sidebar state
 
   return (
     <>
       <SidebarHeader className="flex items-center justify-between p-2">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Landmark className="w-6 h-6 text-primary" />
-          <span className="font-semibold text-lg text-foreground">
-            Debt Conqueror
-          </span>
+          {/* Conditionally render text based on sidebar state */}
+          {state === 'expanded' && (
+            <span className="font-semibold text-lg text-foreground">
+              Debt Conqueror
+            </span>
+          )}
         </Link>
+        {/* Hamburger menu for mobile */}
         {isMobile && (
           <Button variant="ghost" size="icon" asChild>
             <SidebarTrigger>
@@ -59,28 +63,40 @@ export function AppSidebar() {
             </SidebarTrigger>
           </Button>
         )}
+        {/* Desktop collapse trigger */}
+        {!isMobile && (
+           <SidebarTrigger asChild>
+               <Button variant="ghost" size="icon" className="ml-auto">
+                   <Menu className="h-5 w-5" />
+               </Button>
+           </SidebarTrigger>
+        )}
       </SidebarHeader>
       <SidebarContent className="flex-1 overflow-y-auto p-2">
         <SidebarMenu>
-          {menuItems.map((item) => (
-            <SidebarMenuItem key={item.href}>
-              <Link href={item.href} passHref legacyBehavior>
+          {menuItems.map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+             return (
+                <SidebarMenuItem key={item.href}>
+                {/* Use asChild on SidebarMenuButton, wrap content with Link */}
                 <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith(item.href)}
-                  tooltip={item.label}
+                    asChild
+                    isActive={isActive}
+                    tooltip={item.label}
+                    variant={isActive ? "secondary" : "ghost"} // Use secondary variant when active
                 >
-                  <a>
+                    <Link href={item.href}>
                     <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                     {item.secondaryIcon && (
-                       <item.secondaryIcon className="ml-auto h-3 w-3 text-muted-foreground group-data-[state=collapsed]:hidden" />
+                    {/* Content inside the Link */}
+                     <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
+                    {item.secondaryIcon && (
+                        <item.secondaryIcon className="ml-auto h-3 w-3 text-muted-foreground group-data-[state=collapsed]:hidden" />
                     )}
-                  </a>
+                    </Link>
                 </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-          ))}
+                </SidebarMenuItem>
+            );
+         })}
         </SidebarMenu>
       </SidebarContent>
        <SidebarFooter className="p-2 mt-auto">

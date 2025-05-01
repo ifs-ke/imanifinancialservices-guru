@@ -12,7 +12,7 @@ import { useTransactions } from '@/contexts/TransactionsContext';
 import { useDebt } from '@/contexts/DebtContext';
 import { useStatement } from '@/contexts/StatementContext';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, Pie, PieSector, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip } from 'recharts'; // Renamed import to avoid conflict
+import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
 // Calculation Functions (consider moving to utils)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
@@ -36,6 +36,7 @@ export default function DashboardPage() {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentTransactions = transactions.filter(tx => {
         const txDate = typeof tx.date === 'string' ? new Date(tx.date) : tx.date;
+        // Check if txDate is a valid Date object before comparing
         return txDate instanceof Date && !isNaN(txDate.getTime()) && txDate >= thirtyDaysAgo;
     });
     const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
@@ -80,11 +81,11 @@ export default function DashboardPage() {
   // 2. Asset Allocation Chart (Pie Chart)
    const assetChartData = useMemo(() =>
     assetItems
-      .filter(item => item.amount > 0)
+      .filter(item => item.amount > 0) // Only include positive assets
       .map((item, index) => ({
         name: item.description,
         value: item.amount,
-        fill: `hsl(var(--chart-${(index % 5) + 1}))`
+        fill: `hsl(var(--chart-${(index % 5) + 1}))` // Cycle through chart colors
     })), [assetItems]);
 
    const assetChartConfig = useMemo(() => {
@@ -92,7 +93,7 @@ export default function DashboardPage() {
        assetChartData.forEach((item) => {
            config[item.name] = {
                label: item.name,
-               color: item.fill
+               color: item.fill // Use the same fill color assigned earlier
            };
        });
        return config;
@@ -180,7 +181,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
              {financialData.totalIncomeRecent > 0 || financialData.totalExpensesRecent > 0 ? (
-                <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full"> {/* Increased height */}
+                <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
                   <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
                      <XAxis type="number" hide />
                      <YAxis
@@ -199,7 +200,7 @@ export default function DashboardPage() {
                   </BarChart>
                 </ChartContainer>
              ) : (
-                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm"> {/* Increased height */}
+                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
                     No income or expense data for the last 30 days.
                 </div>
              )}
@@ -215,8 +216,8 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex items-center justify-center">
              {assetChartData.length > 0 ? (
-                 <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]"> {/* Increased height and width */}
-                    <ResponsiveContainer width="100%" height={200}> {/* Increased height */}
+                 <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
+                    <ResponsiveContainer width="100%" height={200}>
                         <PieChart>
                          <ChartTooltip content={<ChartTooltipContent nameKey="name" hideIndicator />} />
                          <Pie
@@ -225,7 +226,7 @@ export default function DashboardPage() {
                             nameKey="name"
                             cx="50%"
                             cy="50%"
-                            outerRadius={70} // Slightly larger radius
+                            outerRadius={70}
                             innerRadius={50}
                             labelLine={false}
                             paddingAngle={2}
@@ -238,7 +239,7 @@ export default function DashboardPage() {
                     </ResponsiveContainer>
                 </ChartContainer>
              ) : (
-                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4"> {/* Increased height */}
+                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
                     No positive asset data available. Add assets in Statements.
                 </div>
              )}
@@ -250,19 +251,19 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Manage Transactions</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-4 h-full"> {/* Ensure full height for flex */}
              <Image
-              src="https://picsum.photos/400/200?random=1" // Added random query param for unique images
-              alt="Transactions illustration"
+              src="https://picsum.photos/400/200?random=1"
+              alt="Ledger book with calculator"
               width={400}
               height={200}
-              className="rounded-md object-cover mb-4 aspect-[2/1]" // Maintain aspect ratio
-              data-ai-hint="finance transaction record"
+              className="rounded-md object-cover mb-4 aspect-[2/1]"
+              data-ai-hint="finance transaction record ledger"
             />
-            <p className="text-sm text-muted-foreground flex-grow"> {/* Added flex-grow */}
+            <p className="text-sm text-muted-foreground flex-grow"> {/* Use flex-grow */}
               Import, categorize, and manage your financial transactions.
             </p>
-            <Button asChild variant="outline" className="mt-auto">
+            <Button asChild variant="outline" className="mt-auto"> {/* Use mt-auto */}
               <Link href="/transactions">
                 Go to Transactions <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -274,19 +275,20 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>View Income/Expenses</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+           <CardContent className="flex flex-col gap-4 h-full"> {/* Ensure full height */}
              <Image
               src="https://picsum.photos/400/200?random=2"
-              alt="Income/Expense illustration"
+              alt="Financial chart showing income and expenses"
               width={400}
               height={200}
               className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="money analysis report chart"
+              data-ai-hint="money analysis report chart graph"
             />
-            <p className="text-sm text-muted-foreground flex-grow">
+            <p className="text-sm text-muted-foreground flex-grow"> {/* Use flex-grow */}
               Analyze your income and expense patterns.
             </p>
-             <div className="flex flex-col sm:flex-row gap-2 mt-auto"> {/* Stack vertically on small screens */}
+             {/* Updated button container for mobile responsiveness */}
+             <div className="flex flex-col sm:flex-row gap-2 mt-auto"> {/* Use mt-auto */}
                 <Button asChild variant="secondary" className="flex-1">
                 <Link href="/income">
                     Income Analysis <TrendingUp className="ml-2 h-4 w-4" />
@@ -305,19 +307,19 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>View Statements</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-4 h-full"> {/* Ensure full height */}
             <Image
               src="https://picsum.photos/400/200?random=3"
-              alt="Financial statements illustration"
+              alt="Formal financial statement document"
               width={400}
               height={200}
               className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="documents report sheet balance"
+              data-ai-hint="documents report sheet balance statement"
             />
-            <p className="text-sm text-muted-foreground flex-grow">
+            <p className="text-sm text-muted-foreground flex-grow"> {/* Use flex-grow */}
               Check your cash flow and net worth statements.
             </p>
-            <Button asChild variant="secondary" className="mt-auto">
+            <Button asChild variant="secondary" className="mt-auto"> {/* Use mt-auto */}
               <Link href="/statements">
                 View Statements <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
