@@ -1,7 +1,7 @@
-
+// src/app/(dashboard)/transactions/page.tsx
 'use client';
 
-import React, { useState, type ChangeEvent, useEffect } from 'react';
+import React, { useState, type ChangeEvent, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Upload, Edit, Trash2, FileUp } from 'lucide-react'; // Added FileUp for import link
+import { PlusCircle, Upload, Edit, Trash2, FileUp, FileDown } from 'lucide-react'; // Added FileDown for export
 import {
   Dialog,
   DialogContent,
@@ -29,12 +29,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import shared types
 import Link from 'next/link'; // Import Link
+import { format } from 'date-fns'; // For date formatting
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
@@ -78,7 +80,7 @@ export default function TransactionsPage() {
 
   // Reset form data when dialogs close
   useEffect(() => {
-    if (!isAddDialogOpen && !isEditDialogOpen) {
+    if (!isAddDialogOpen && isEditDialogOpen) {
         setFormData(initialFormData);
         setEditingTransaction(null); // Ensure editing state is also cleared
     }
@@ -151,8 +153,8 @@ export default function TransactionsPage() {
         description,
         amount: parsedAmount,
         modeOfPayment,
-        frequency: frequency || undefined, // Update with new value or undefined
-        variability: variability || undefined, // Update with new value or undefined
+        frequency: frequency || undefined, // Update frequency
+        variability: variability || undefined, // Update variability
     });
 
     setIsEditDialogOpen(false); // Close dialog
@@ -206,6 +208,43 @@ export default function TransactionsPage() {
       // Capitalize first letter
       return value.charAt(0).toUpperCase() + value.slice(1);
   }
+
+  // --- Export Functionality ---
+  const handleExportCsv = useCallback(() => {
+    if (transactions.length === 0) {
+      toast({ title: "No data to export", description: "Add transactions to export a CSV file.", variant: "warning" });
+      return;
+    }
+
+    const csvRows = [];
+    const headers = Object.keys(transactions[0]).join(',');
+    csvRows.push(headers);
+
+    for (const tx of transactions) {
+      const values = [
+        formatDate(tx.date), // Format the date
+        tx.description,
+        tx.amount,
+        tx.modeOfPayment,
+        tx.frequency || '', // Handle undefined
+        tx.variability || '' // Handle undefined
+      ].join(',');
+      csvRows.push(values);
+    }
+
+    const csvData = csvRows.join('\n');
+    const blob = new Blob([csvData], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'transactions.csv';
+    document.body.appendChild(link); // Needed for Firefox
+    link.click();
+    document.body.removeChild(link);
+
+    toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
+  }, [transactions, toast, formatDate]);
+
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
@@ -301,6 +340,9 @@ export default function TransactionsPage() {
                <FileUp className="mr-2 h-4 w-4" /> Import File
              </Link>
            </Button>
+            <Button variant="secondary" onClick={handleExportCsv}>
+              <FileDown className="mr-2 h-4 w-4" /> Export CSV
+            </Button>
          </div>
       </header>
 
@@ -457,3 +499,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+

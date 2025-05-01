@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
@@ -17,7 +16,7 @@ import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis } from 'rec
 // Calculation Functions (consider moving to utils)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
-const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
+const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
 
 export default function DashboardPage() {
   const { transactions } = useTransactions();
@@ -247,11 +246,11 @@ export default function DashboardPage() {
         </Card>
 
         {/* Action/Navigation Cards - Span 2 cols each */}
-        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2">
+        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2 flex flex-col">
           <CardHeader>
             <CardTitle>Manage Transactions</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4 h-full"> {/* Ensure full height for flex */}
+          <CardContent className="flex-grow">
              <Image
               src="https://picsum.photos/400/200?random=1"
               alt="Ledger book with calculator"
@@ -260,22 +259,24 @@ export default function DashboardPage() {
               className="rounded-md object-cover mb-4 aspect-[2/1]"
               data-ai-hint="finance transaction record ledger"
             />
-            <p className="text-sm text-muted-foreground flex-grow"> {/* Use flex-grow */}
+            <p className="text-sm text-muted-foreground">
               Import, categorize, and manage your financial transactions.
             </p>
-            <Button asChild variant="outline" className="mt-auto"> {/* Use mt-auto */}
+          </CardContent>
+          <CardFooter>
+             <Button asChild variant="outline" className="w-full">
               <Link href="/transactions">
                 Go to Transactions <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-          </CardContent>
+          </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2">
+        <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2 flex flex-col">
           <CardHeader>
             <CardTitle>View Income/Expenses</CardTitle>
           </CardHeader>
-           <CardContent className="flex flex-col gap-4 h-full"> {/* Ensure full height */}
+           <CardContent className="flex-grow">
              <Image
               src="https://picsum.photos/400/200?random=2"
               alt="Financial chart showing income and expenses"
@@ -284,11 +285,11 @@ export default function DashboardPage() {
               className="rounded-md object-cover mb-4 aspect-[2/1]"
               data-ai-hint="money analysis report chart graph"
             />
-            <p className="text-sm text-muted-foreground flex-grow"> {/* Use flex-grow */}
+            <p className="text-sm text-muted-foreground">
               Analyze your income and expense patterns.
             </p>
-             {/* Updated button container for mobile responsiveness */}
-             <div className="flex flex-col sm:flex-row gap-2 mt-auto"> {/* Use mt-auto */}
+          </CardContent>
+           <CardFooter className="flex flex-col sm:flex-row gap-2">
                 <Button asChild variant="secondary" className="flex-1">
                 <Link href="/income">
                     Income Analysis <TrendingUp className="ml-2 h-4 w-4" />
@@ -299,15 +300,14 @@ export default function DashboardPage() {
                     Expense Analysis <TrendingDown className="ml-2 h-4 w-4" />
                 </Link>
                 </Button>
-             </div>
-          </CardContent>
+             </CardFooter>
         </Card>
 
-        <Card className="md:col-span-2 lg:col-span-2 xl:col-span-2"> {/* Span full width on md */}
+        <Card className="md:col-span-2 lg:col-span-2 xl:col-span-2 flex flex-col"> {/* Span full width on md */}
           <CardHeader>
             <CardTitle>View Statements</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4 h-full"> {/* Ensure full height */}
+          <CardContent className="flex-grow">
             <Image
               src="https://picsum.photos/400/200?random=3"
               alt="Formal financial statement document"
@@ -316,15 +316,17 @@ export default function DashboardPage() {
               className="rounded-md object-cover mb-4 aspect-[2/1]"
               data-ai-hint="documents report sheet balance statement"
             />
-            <p className="text-sm text-muted-foreground flex-grow"> {/* Use flex-grow */}
+            <p className="text-sm text-muted-foreground">
               Check your cash flow and net worth statements.
             </p>
-            <Button asChild variant="secondary" className="mt-auto"> {/* Use mt-auto */}
+          </CardContent>
+          <CardFooter>
+            <Button asChild variant="secondary" className="w-full">
               <Link href="/statements">
                 View Statements <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-          </CardContent>
+          </CardFooter>
         </Card>
       </main>
     </div>
