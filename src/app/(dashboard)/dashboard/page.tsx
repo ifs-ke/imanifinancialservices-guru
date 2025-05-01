@@ -11,7 +11,7 @@ import { useTransactions } from '@/contexts/TransactionsContext';
 import { useDebt } from '@/contexts/DebtContext';
 import { useStatement } from '@/contexts/StatementContext';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line, AreaChart, Area } from 'recharts'; // Added LineChart, Line, AreaChart, Area, CartesianGrid
+import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
 import { format } from 'date-fns'; // Import date-fns format
 
 // Calculation Functions (consider moving to utils)
@@ -125,7 +125,7 @@ export default function DashboardPage() {
        return config;
    }, [assetChartData]);
 
-   // 3. Income/Expense Trend Chart (Line/Area Chart - All Time)
+   // 3. Income/Expense Trend Chart (Line Chart - All Time)
    const trendChartData = useMemo(() => {
         const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
 
@@ -149,7 +149,7 @@ export default function DashboardPage() {
             if (tx.amount > 0) {
                 monthlyData[monthKey].income += tx.amount;
             } else if (tx.amount < 0) {
-                monthlyData[monthKey].expense += Math.abs(tx.amount);
+                monthlyData[monthKey].expense += Math.abs(tx.amount); // Store expense as positive value for plotting
             }
         });
 
@@ -270,7 +270,8 @@ export default function DashboardPage() {
            <CardContent>
                 {trendChartData.length > 1 ? ( // Need at least 2 points for a line chart
                     <ChartContainer config={trendChartConfig} className="h-[250px] w-full">
-                        <AreaChart
+                        {/* Changed to LineChart */}
+                        <LineChart
                             accessibilityLayer
                             data={trendChartData}
                             margin={{ left: -20, right: 10, top: 10, bottom: 0 }}
@@ -293,34 +294,25 @@ export default function DashboardPage() {
                                 tickFormatter={(value) => `KES ${value / 1000}k`} // Format as thousands
                             />
                             <ChartTooltip
-                                cursor={false}
-                                content={<ChartTooltipContent indicator="dot" />}
+                                cursor={true} // Show cursor for LineChart
+                                content={<ChartTooltipContent indicator="line" />} // Use line indicator
                              />
-                             <defs>
-                                <linearGradient id="fillIncome" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.1}/>
-                                </linearGradient>
-                                <linearGradient id="fillExpense" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.1}/>
-                                </linearGradient>
-                             </defs>
-                             <Area
+                             {/* Removed defs for gradients */}
+                             <Line
                                 dataKey="income"
                                 type="monotone"
-                                fill="url(#fillIncome)"
                                 stroke="hsl(var(--chart-2))"
-                                stackId="a"
+                                strokeWidth={2}
+                                dot={false} // Optionally hide dots for cleaner look
                              />
-                             <Area
+                             <Line
                                 dataKey="expense"
                                 type="monotone"
-                                fill="url(#fillExpense)"
                                 stroke="hsl(var(--destructive))"
-                                stackId="a"
+                                strokeWidth={2}
+                                dot={false} // Optionally hide dots for cleaner look
                              />
-                        </AreaChart>
+                        </LineChart>
                     </ChartContainer>
                  ) : (
                     <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
@@ -519,3 +511,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
