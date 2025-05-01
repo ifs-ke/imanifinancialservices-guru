@@ -5,7 +5,7 @@
 import React from 'react'; // Removed { useState, useEffect } as they are not needed directly here
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Landmark, CircleDollarSign } from 'lucide-react'; // Changed Landmark to CircleDollarSign for Total Debt
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins } from 'lucide-react'; // Changed Landmark/CircleDollarSign to Coins for Total Debt
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactions } from '@/contexts/TransactionsContext'; // Import transaction context
@@ -46,7 +46,7 @@ export default function DashboardPage() {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', {
       style: 'currency',
-      currency: 'KES',
+      currency: 'KES', // Use KES
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
@@ -104,14 +104,14 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Debt</CardTitle>
-             <CircleDollarSign className="h-4 w-4 text-muted-foreground" /> {/* Changed icon */}
+             <Coins className="h-4 w-4 text-muted-foreground" /> {/* Changed icon */}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {formatCurrency(financialData.totalDebt)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Total outstanding liabilities
+              Total outstanding liabilities (from Debts page)
             </p>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
               <Link href="/debt">

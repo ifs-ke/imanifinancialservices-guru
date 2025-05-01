@@ -20,8 +20,9 @@ export interface TransactionWithId {
 
 
 /**
- * Represents an item in the financial statements (Asset, Liability).
+ * Represents an item in the financial statements (Asset).
  * Note: Income/Expense items are derived from transactions on the Statements page.
+ * Liabilities are split into DebtItems and OtherLiabilityItems.
  */
 export interface StatementItem {
   id: string;
@@ -30,7 +31,7 @@ export interface StatementItem {
 }
 
 /**
- * Represents a single debt item.
+ * Represents a single debt item, categorized by term.
  */
 export interface DebtItem {
     id: string;
@@ -38,4 +39,15 @@ export interface DebtItem {
     principal: number; // Current outstanding principal balance
     interestRate: number; // Annual interest rate (e.g., 12.5 for 12.5%)
     minPayment: number; // Minimum monthly payment
+    term: 'long' | 'short'; // Categorize debt term
 }
+
+/**
+ * Represents other liability items not captured in the structured Debt module.
+ */
+export interface OtherLiabilityItem {
+    id: string;
+    description: string;
+    amount: number;
+}
+

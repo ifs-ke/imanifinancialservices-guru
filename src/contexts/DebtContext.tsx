@@ -8,11 +8,11 @@ import type { DebtItem } from '@/lib/types';
 // Generate unique IDs
 const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Mock initial debt data (values in KES)
+// Mock initial debt data (values in KES) with term
 const initialDebtsData: DebtItem[] = [
-  { id: generateId(), description: 'Credit Card Debt', principal: 300000, interestRate: 18.5, minPayment: 15000 },
-  { id: generateId(), description: 'Student Loan', principal: 1500000, interestRate: 5.0, minPayment: 25000 },
-  { id: generateId(), description: 'Car Loan', principal: 700000, interestRate: 14.0, minPayment: 30000 },
+  { id: generateId(), description: 'Credit Card Debt', principal: 300000, interestRate: 18.5, minPayment: 15000, term: 'short' },
+  { id: generateId(), description: 'Student Loan', principal: 1500000, interestRate: 5.0, minPayment: 25000, term: 'long' },
+  { id: generateId(), description: 'Car Loan', principal: 700000, interestRate: 14.0, minPayment: 30000, term: 'long' },
 ];
 
 interface DebtContextType {
@@ -29,7 +29,12 @@ export const DebtProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Sort debts whenever they are updated (e.g., alphabetically by description)
   const sortDebts = useCallback((debtList: DebtItem[]) => {
-    return [...debtList].sort((a, b) => a.description.localeCompare(b.description));
+    // Sort primarily by term ('short' first), then by description
+    return [...debtList].sort((a, b) => {
+        if (a.term === 'short' && b.term === 'long') return -1;
+        if (a.term === 'long' && b.term === 'short') return 1;
+        return a.description.localeCompare(b.description);
+    });
   }, []);
 
   const addDebt = useCallback((debtData: Omit<DebtItem, 'id'>): DebtItem => {

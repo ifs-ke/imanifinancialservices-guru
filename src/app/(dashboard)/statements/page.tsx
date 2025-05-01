@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableFooter as UiTableFooter, TableHead, T
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, TrendingUp, TrendingDown, Scale, DollarSign, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, CircleDollarSign } from 'lucide-react'; // Added CircleDollarSign
+import { Trash2, TrendingUp, TrendingDown, Scale, DollarSign, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle } from 'lucide-react'; // Added Coins, MinusCircle
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,14 +24,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
-import { useDebt } from '@/contexts/DebtContext'; // Import useDebt hook
-import type { StatementItem, DebtItem } from '@/lib/types'; // Import StatementItem and DebtItem types
+import { useTransactions } from '@/contexts/TransactionsContext';
+import { useDebt } from '@/contexts/DebtContext';
+import type { StatementItem, DebtItem, OtherLiabilityItem } from '@/lib/types'; // Import all needed types
 
 // Generate unique IDs
 const generateId = () => `item_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Initial Mock Data for Assets (values in KES) - Liabilities are now derived from DebtContext
+// Initial Mock Data for Assets (values in KES)
 const initialAssets: StatementItem[] = [
   { id: generateId(), description: 'Checking Account', amount: 250000 },
   { id: generateId(), description: 'Savings Account', amount: 1000000 },
@@ -39,8 +39,14 @@ const initialAssets: StatementItem[] = [
   { id: generateId(), description: 'Investments', amount: 500000 },
 ];
 
+// Initial Mock Data for Other Liabilities (values in KES)
+const initialOtherLiabilities: OtherLiabilityItem[] = [
+    { id: generateId(), description: 'Unpaid Bill (Phone)', amount: 5000 },
+    { id: generateId(), description: 'Personal Loan (Friend)', amount: 20000 },
+];
+
 // Calculation Function
-const calculateTotal = (items: StatementItem[]) => items.reduce((sum, item) => sum + item.amount, 0);
+const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: DebtItem[]) => items.reduce((sum, item) => sum + item.principal, 0);
 
 
@@ -48,8 +54,8 @@ const calculateDebtTotal = (items: DebtItem[]) => items.reduce((sum, item) => su
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-KE', {
     style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0, // Adjust as needed, set to 0 for no decimals
+    currency: 'KES', // Use KES
+    minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
 };
@@ -61,37 +67,35 @@ const formatDate = (date: Date | undefined) => {
 
 
 export default function StatementsPage() {
-  // Get transactions from context
+  // Context hooks
   const { transactions } = useTransactions();
-  // Get debts from context
   const { debts } = useDebt();
 
-  // State for Assets (still managed locally, but liabilities are derived)
+  // State for editable items
   const [assetItems, setAssetItems] = useState<StatementItem[]>(initialAssets);
+  const [otherLiabilityItems, setOtherLiabilityItems] = useState<OtherLiabilityItem[]>(initialOtherLiabilities);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ item: StatementItem; type: 'asset' } | null>(null); // Only assets are deletable here
+  const [itemToDelete, setItemToDelete] = useState<{ item: StatementItem | OtherLiabilityItem; type: 'asset' | 'otherLiability' } | null>(null);
 
   // State for date range filtering
   const defaultEndDate = endOfMonth(new Date());
-  const defaultStartDate = startOfMonth(defaultEndDate); // Start of the current month
+  const defaultStartDate = startOfMonth(defaultEndDate);
   const [startDate, setStartDate] = useState<Date | undefined>(defaultStartDate);
   const [endDate, setEndDate] = useState<Date | undefined>(defaultEndDate);
 
-  // Temporary state for edits (only Assets)
+  // Temporary state for edits
   const [editingAssets, setEditingAssets] = useState<StatementItem[]>([]);
+  const [editingOtherLiabilities, setEditingOtherLiabilities] = useState<OtherLiabilityItem[]>([]);
 
   const { toast } = useToast();
 
   // --- Derived Calculations ---
 
-  // Filter transactions based on the selected date range
   const filteredTransactions = useMemo(() => {
     const start = startDate ? startDate.getTime() : 0;
-    // Set end date to the end of the day
     const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
     return transactions.filter(tx => {
-        // Ensure transaction date is valid before comparing
         if (!tx.date || isNaN(tx.date.getTime())) return false;
         const txTime = tx.date.getTime();
         return txTime >= start && txTime <= end;
@@ -99,7 +103,6 @@ export default function StatementsPage() {
   }, [transactions, startDate, endDate]);
 
 
-  // Derive Income and Expense items from *filtered* transactions
   const derivedIncomeItems = useMemo(() =>
     filteredTransactions
       .filter(tx => tx.amount > 0)
@@ -111,7 +114,7 @@ export default function StatementsPage() {
   const derivedExpenseItems = useMemo(() =>
     filteredTransactions
       .filter(tx => tx.amount < 0)
-      .map(tx => ({ id: tx.id, description: tx.description, amount: Math.abs(tx.amount) })) // Store as positive for display logic
+      .map(tx => ({ id: tx.id, description: tx.description, amount: Math.abs(tx.amount) }))
       .sort((a, b) => b.amount - a.amount),
     [filteredTransactions]
   );
@@ -120,37 +123,38 @@ export default function StatementsPage() {
   const totalExpenses = useMemo(() => calculateTotal(derivedExpenseItems), [derivedExpenseItems]);
   const cashFlow = totalIncome - totalExpenses;
 
-  // Derive Liability items from DebtContext
-  const derivedLiabilityItems = useMemo(() =>
-    debts.map(debt => ({
-      id: debt.id,
-      description: debt.description,
-      amount: debt.principal, // Use principal as the amount for the liability statement
-    })).sort((a, b) => b.amount - a.amount), // Optional: sort derived liabilities
-    [debts] // Depends on debts from context
-  );
+  // Separate debts by term
+   const shortTermDebts = useMemo(() => debts.filter(debt => debt.term === 'short'), [debts]);
+   const longTermDebts = useMemo(() => debts.filter(debt => debt.term === 'long'), [debts]);
+
+   const totalShortTermDebt = useMemo(() => calculateDebtTotal(shortTermDebts), [shortTermDebts]);
+   const totalLongTermDebt = useMemo(() => calculateDebtTotal(longTermDebts), [longTermDebts]);
 
   // Asset total (use editing state if active)
   const totalAssets = useMemo(() => calculateTotal(isEditing ? editingAssets : assetItems), [isEditing, editingAssets, assetItems]);
-  // Liability total (always derived from context)
-  const totalLiabilities = useMemo(() => calculateDebtTotal(debts), [debts]); // Directly use debts context
+  // Other Liability total (use editing state if active)
+   const totalOtherLiabilities = useMemo(() => calculateTotal(isEditing ? editingOtherLiabilities : otherLiabilityItems), [isEditing, editingOtherLiabilities, otherLiabilityItems]);
+  // Total Liability calculation
+  const totalLiabilities = totalShortTermDebt + totalLongTermDebt + totalOtherLiabilities;
   const netWorth = totalAssets - totalLiabilities;
 
   // --- Handlers ---
 
   const handleEditToggle = () => {
     if (!isEditing) {
-      // Entering edit mode: copy current asset state to editing state
+      // Entering edit mode: copy current states to editing states
       setEditingAssets([...assetItems.map(item => ({ ...item }))]);
+      setEditingOtherLiabilities([...otherLiabilityItems.map(item => ({ ...item }))]);
     }
     setIsEditing(!isEditing);
   };
 
   const handleSaveChanges = () => {
-    // Save changes from editing state to main state (only Assets)
+    // Save changes from editing states to main states
     setAssetItems(editingAssets);
+    setOtherLiabilityItems(editingOtherLiabilities);
     setIsEditing(false);
-    toast({ title: 'Changes Saved', description: 'Your Assets have been updated.' });
+    toast({ title: 'Changes Saved', description: 'Assets and Other Liabilities have been updated.' });
   };
 
   const handleCancelEdit = () => {
@@ -159,52 +163,52 @@ export default function StatementsPage() {
     toast({ title: 'Edit Cancelled', description: 'No changes were saved.', variant: 'default' });
   };
 
-  // Updated handler for Asset item changes
+  // Generic handler for item changes (Assets or Other Liabilities)
   const handleItemChange = (
     e: ChangeEvent<HTMLInputElement>,
     id: string,
-    // type: 'asset', // Only handle assets now
+    type: 'asset' | 'otherLiability',
     field: 'description' | 'amount'
   ) => {
     const value = field === 'amount' ? parseFloat(e.target.value) || 0 : e.target.value;
-    // const setState = setEditingAssets; // Only assets are editable here
+    const setState = type === 'asset' ? setEditingAssets : setEditingOtherLiabilities;
 
-    setEditingAssets(prev => prev.map(item => (item.id === id ? { ...item, [field]: value } : item)));
+    setState(prev => prev.map(item => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
-  // Updated handler for adding Asset items
-  const handleAddItem = (/* type: 'asset' */) => {
-    const newItem: StatementItem = { id: generateId(), description: '', amount: 0 };
-    // const setState = setEditingAssets; // Only add assets
-    setEditingAssets(prev => [...prev, newItem]);
+  // Generic handler for adding items
+  const handleAddItem = (type: 'asset' | 'otherLiability') => {
+    const newItem: StatementItem | OtherLiabilityItem = { id: generateId(), description: '', amount: 0 };
+    const setState = type === 'asset' ? setEditingAssets : setEditingOtherLiabilities;
+    setState(prev => [...prev, newItem]);
   };
 
-  // Updated handler for delete click (only Assets)
-  const handleDeleteClick = (item: StatementItem /*, type: 'asset' */) => {
-     setItemToDelete({ item, type: 'asset' });
+  // Generic handler for delete click
+  const handleDeleteClick = (item: StatementItem | OtherLiabilityItem, type: 'asset' | 'otherLiability') => {
+     setItemToDelete({ item, type });
   };
 
   const confirmDeleteItem = () => {
-    if (!itemToDelete || itemToDelete.type !== 'asset') return; // Ensure it's an asset
-    const { item: itemToRemove } = itemToDelete;
-    // const setState = setEditingAssets; // Only delete assets
+    if (!itemToDelete) return;
+    const { item: itemToRemove, type } = itemToDelete;
+    const setState = type === 'asset' ? setEditingAssets : setEditingOtherLiabilities;
 
-    setEditingAssets(prev => prev.filter(item => item.id !== itemToRemove.id));
+    setState(prev => prev.filter(item => item.id !== itemToRemove.id));
     setItemToDelete(null);
-    toast({ title: 'Asset Item Deleted', description: 'Successfully removed.' });
+    toast({ title: `${type === 'asset' ? 'Asset' : 'Liability'} Item Deleted`, description: 'Successfully removed.' });
   };
 
   // --- Render Functions ---
 
-  // Updated render function for Asset items (editable)
-  const renderEditableAssetRow = (item: StatementItem) => (
+  // Updated render function for editable rows (Assets or Other Liabilities)
+  const renderEditableRow = (item: StatementItem | OtherLiabilityItem, type: 'asset' | 'otherLiability') => (
     <TableRow key={item.id}>
       <TableCell className="pl-6">
         {isEditing ? (
           <Input
             type="text"
             value={item.description}
-            onChange={(e) => handleItemChange(e, item.id, 'description')}
+            onChange={(e) => handleItemChange(e, item.id, type, 'description')}
             placeholder="Description"
             className="h-8"
           />
@@ -218,7 +222,7 @@ export default function StatementsPage() {
             type="number"
             step="0.01"
             value={item.amount.toString()}
-            onChange={(e) => handleItemChange(e, item.id, 'amount')}
+            onChange={(e) => handleItemChange(e, item.id, type, 'amount')}
             placeholder="Amount"
             className="h-8 text-right"
           />
@@ -234,7 +238,7 @@ export default function StatementsPage() {
                  variant="ghost"
                  size="icon"
                  className="text-destructive hover:text-destructive h-7 w-7"
-                 onClick={() => handleDeleteClick(item)} // Pass only item
+                 onClick={() => handleDeleteClick(item, type)}
                >
                  <Trash2 className="h-4 w-4" />
                  <span className="sr-only">Delete Item</span>
@@ -244,7 +248,7 @@ export default function StatementsPage() {
                <AlertDialogHeader>
                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                  <AlertDialogDescription>
-                   This action cannot be undone. This will permanently delete the asset: <br/>
+                   This action cannot be undone. This will permanently delete the {type === 'asset' ? 'asset' : 'liability'}: <br/>
                    <strong>{item.description || '(No description)'} ({formatCurrency(item.amount)})</strong>
                  </AlertDialogDescription>
                </AlertDialogHeader>
@@ -269,14 +273,12 @@ export default function StatementsPage() {
       </TableRow>
   );
 
-   // Render function for derived Liability items (read-only in this view)
-   const renderDerivedLiabilityRow = (item: StatementItem) => (
-    <TableRow key={item.id}>
-        <TableCell className="pl-6">{item.description}</TableCell>
-        {/* Display liabilities as positive in the list, negative in total */}
-        <TableCell className="text-right font-mono">{formatCurrency(item.amount)}</TableCell>
-        {/* No edit/delete actions for derived liabilities here */}
-        {isEditing && <TableCell></TableCell>}
+   // Render function for derived Debt items (read-only in this view)
+   const renderDerivedDebtRow = (debt: DebtItem) => (
+    <TableRow key={debt.id}>
+        <TableCell className="pl-6">{debt.description}</TableCell>
+        <TableCell className="text-right font-mono">{formatCurrency(debt.principal)}</TableCell>
+        {isEditing && <TableCell></TableCell>} {/* Keep alignment */}
     </TableRow>
     );
 
@@ -289,7 +291,7 @@ export default function StatementsPage() {
             Financial Statements
             </h1>
             <p className="text-muted-foreground">
-             Cash flow derived from transactions. Liabilities derived from Debts page. Edit Assets only.
+             Cash flow & Debts are derived. Edit Assets and Other Liabilities only.
             </p>
         </div>
          <div className="flex gap-2">
@@ -299,19 +301,19 @@ export default function StatementsPage() {
                 <XCircle className="mr-2 h-4 w-4" /> Cancel Edit
               </Button>
               <Button onClick={handleSaveChanges}>
-                <Save className="mr-2 h-4 w-4" /> Save Assets
+                <Save className="mr-2 h-4 w-4" /> Save Changes
               </Button>
             </>
           ) : (
             <Button onClick={handleEditToggle}>
-              Edit Assets
+              Edit Assets/Liabilities
             </Button>
           )}
         </div>
       </header>
 
       <main className="flex-1 grid gap-6 md:grid-cols-2">
-        {/* Cash Flow Statement Card (Read-Only) */}
+        {/* Cash Flow Statement Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -319,59 +321,60 @@ export default function StatementsPage() {
             Cash Flow Statement
             </CardTitle>
              <CardDescription className="flex items-center gap-1 text-xs pt-2">
-                <Info size={14} className="text-muted-foreground"/> Derived from Transactions page within the selected date range.
+                <Info size={14} className="text-muted-foreground"/> Derived from Transactions within the selected date range.
             </CardDescription>
-             {/* Date Range Pickers moved below title and description */}
+             {/* Date Range Pickers */}
              <div className="flex flex-col sm:flex-row items-center gap-2 text-sm pt-4">
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                        variant={"outline"}
-                        className={cn(
-                            "w-full sm:w-[180px] justify-start text-left font-normal h-8", // Full width on small screens
-                            !startDate && "text-muted-foreground"
-                        )}
-                        >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatDate(startDate)}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                        <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={setStartDate}
-                        initialFocus
-                        />
-                    </PopoverContent>
-                </Popover>
-                <span className="text-muted-foreground hidden sm:inline">-</span>
+                 {/* Improved responsiveness: Popovers take full width on small screens */}
                  <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                        variant={"outline"}
+                     <PopoverTrigger asChild>
+                         <Button
+                         variant={"outline"}
                          className={cn(
-                            "w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0", // Full width on small screens, margin top
-                            !endDate && "text-muted-foreground"
-                        )}
-                        >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                         {formatDate(endDate)}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                        <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={setEndDate}
-                         disabled={(date) =>
-                            startDate ? date < startDate : false
-                         }
-                        initialFocus
-                        />
-                    </PopoverContent>
-                </Popover>
-            </div>
+                             "w-full sm:w-[180px] justify-start text-left font-normal h-8",
+                             !startDate && "text-muted-foreground"
+                         )}
+                         >
+                         <CalendarIcon className="mr-2 h-4 w-4" />
+                         {formatDate(startDate)}
+                         </Button>
+                     </PopoverTrigger>
+                     <PopoverContent className="w-auto p-0" align="start">
+                         <Calendar
+                         mode="single"
+                         selected={startDate}
+                         onSelect={setStartDate}
+                         initialFocus
+                         />
+                     </PopoverContent>
+                 </Popover>
+                 <span className="text-muted-foreground hidden sm:inline">-</span>
+                  <Popover>
+                     <PopoverTrigger asChild>
+                         <Button
+                         variant={"outline"}
+                          className={cn(
+                             "w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0",
+                             !endDate && "text-muted-foreground"
+                         )}
+                         >
+                         <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formatDate(endDate)}
+                         </Button>
+                     </PopoverTrigger>
+                     <PopoverContent className="w-auto p-0" align="start">
+                         <Calendar
+                         mode="single"
+                         selected={endDate}
+                         onSelect={setEndDate}
+                          disabled={(date) =>
+                             startDate ? date < startDate : false
+                          }
+                         initialFocus
+                         />
+                     </PopoverContent>
+                 </Popover>
+             </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -379,11 +382,10 @@ export default function StatementsPage() {
                 <TableRow>
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  {/* No edit column for cash flow */}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Income Section (Derived) */}
+                {/* Income Section */}
                 <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                   <TableCell>Income</TableCell>
                   <TableCell></TableCell>
@@ -398,7 +400,7 @@ export default function StatementsPage() {
                     <TableCell className="text-right font-semibold font-mono">{formatCurrency(totalIncome)}</TableCell>
                   </TableRow>
 
-                 {/* Expenses Section (Derived) */}
+                 {/* Expenses Section */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                   <TableCell>Expenses</TableCell>
                   <TableCell></TableCell>
@@ -436,7 +438,7 @@ export default function StatementsPage() {
               <Scale className="text-primary" />
               Net Worth Statement
             </CardTitle>
-             <CardDescription>Assets vs. Liabilities {isEditing ? '(Editing Assets)' : ''}</CardDescription>
+             <CardDescription>Assets vs. Liabilities {isEditing ? '(Editing Assets & Other Liabilities)' : ''}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -454,11 +456,11 @@ export default function StatementsPage() {
                   <TableCell></TableCell>
                   {isEditing && <TableCell></TableCell>}
                 </TableRow>
-                {(isEditing ? editingAssets : assetItems).map(item => renderEditableAssetRow(item))}
+                {(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}
                  {isEditing && (
                     <TableRow>
                         <TableCell colSpan={3} className="text-center py-2">
-                            <Button variant="ghost" size="sm" onClick={handleAddItem}>
+                            <Button variant="ghost" size="sm" onClick={() => handleAddItem('asset')}>
                             <PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item
                             </Button>
                         </TableCell>
@@ -470,21 +472,55 @@ export default function StatementsPage() {
                     {isEditing && <TableCell></TableCell>}
                   </TableRow>
 
-                 {/* Liabilities Section (Derived from Debt Context) */}
+                 {/* Liabilities Section (Grouped) */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
-                   <TableCell className="flex items-center gap-2"><CircleDollarSign className="h-4 w-4"/>Liabilities (from Debts)</TableCell>
+                   <TableCell className="flex items-center gap-2"><Coins className="h-4 w-4"/>Liabilities</TableCell>
                    <TableCell></TableCell>
-                   {isEditing && <TableCell></TableCell>} {/* Keep column alignment */}
+                   {isEditing && <TableCell></TableCell>}
                 </TableRow>
-                 {derivedLiabilityItems.length > 0 ? (
-                    derivedLiabilityItems.map(item => renderDerivedLiabilityRow(item))
-                 ) : (
-                     <TableRow><TableCell colSpan={isEditing ? 3 : 2} className="text-center text-muted-foreground h-16">No debts recorded. Add them on the Debts page.</TableCell></TableRow>
+                {/* Short-Term Debts (Derived) */}
+                {shortTermDebts.length > 0 && (
+                    <TableRow className="font-medium text-muted-foreground">
+                        <TableCell className="pl-6">Short-Term Debts (from Debts)</TableCell>
+                        <TableCell></TableCell>
+                        {isEditing && <TableCell></TableCell>}
+                    </TableRow>
+                )}
+                {shortTermDebts.map(debt => renderDerivedDebtRow(debt))}
+
+                 {/* Long-Term Debts (Derived) */}
+                 {longTermDebts.length > 0 && (
+                    <TableRow className="font-medium text-muted-foreground">
+                        <TableCell className="pl-6">Long-Term Debts (from Debts)</TableCell>
+                        <TableCell></TableCell>
+                        {isEditing && <TableCell></TableCell>}
+                    </TableRow>
                  )}
-                 {/* Add Liability Item button removed - managed on Debt page */}
+                 {longTermDebts.map(debt => renderDerivedDebtRow(debt))}
+
+                 {/* Other Liabilities (Editable) */}
+                  <TableRow className="font-medium text-muted-foreground">
+                        <TableCell className="pl-6">Other Liabilities</TableCell>
+                        <TableCell></TableCell>
+                        {isEditing && <TableCell></TableCell>}
+                    </TableRow>
+                  {(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}
+                  {isEditing && (
+                    <TableRow>
+                        <TableCell colSpan={3} className="text-center py-2">
+                            <Button variant="ghost" size="sm" onClick={() => handleAddItem('otherLiability')}>
+                            <MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability
+                            </Button>
+                        </TableCell>
+                    </TableRow>
+                 )}
+
+                 {(shortTermDebts.length === 0 && longTermDebts.length === 0 && (isEditing ? editingOtherLiabilities : otherLiabilityItems).length === 0) && (
+                     <TableRow><TableCell colSpan={isEditing ? 3 : 2} className="text-center text-muted-foreground h-16">No liabilities recorded.</TableCell></TableRow>
+                 )}
+
                  <TableRow>
                     <TableCell className="font-medium pl-6">Total Liabilities</TableCell>
-                    {/* Display total liabilities as negative */}
                     <TableCell className="text-right font-semibold font-mono">({formatCurrency(totalLiabilities)})</TableCell>
                     {isEditing && <TableCell></TableCell>}
                   </TableRow>
@@ -496,7 +532,7 @@ export default function StatementsPage() {
                     className={`text-right font-bold font-mono ${
                       netWorth >= 0 ? 'text-primary' : 'text-destructive'
                     }`}
-                     colSpan={isEditing ? 2 : 1} // Adjust colspan when editing
+                     colSpan={isEditing ? 2 : 1}
                   >
                     {formatCurrency(netWorth)}
                   </TableHead>

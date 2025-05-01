@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Coins } from 'lucide-react'; // Changed icon
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select
 import { useDebt } from '@/contexts/DebtContext'; // Import useDebt hook
 import type { DebtItem } from '@/lib/types'; // Import DebtItem type
 
@@ -39,9 +40,9 @@ import type { DebtItem } from '@/lib/types'; // Import DebtItem type
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-KE', {
     style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    currency: 'KES', // Changed to KES
+    minimumFractionDigits: 0, // No decimals for KES typically
+    maximumFractionDigits: 0,
   }).format(amount);
 };
 
@@ -49,12 +50,13 @@ const formatPercentage = (rate: number) => {
     return `${rate.toFixed(2)}%`;
 };
 
-// Initial form data structure
+// Initial form data structure including term
 const initialFormData: Omit<DebtItem, 'id'> = {
     description: '',
     principal: 0,
     interestRate: 0,
-    minPayment: 0
+    minPayment: 0,
+    term: 'long' // Default to long term
 };
 
 export default function DebtPage() {
@@ -85,11 +87,15 @@ export default function DebtPage() {
     }));
   };
 
+   const handleSelectChange = (value: 'long' | 'short') => {
+     setFormData(prev => ({ ...prev, term: value }));
+   };
+
   // CREATE
   const handleAddDebtSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!formData.description || formData.principal < 0 || formData.interestRate < 0 || formData.minPayment < 0) {
-      toast({ title: 'Invalid Input', description: 'Please fill out all fields with valid, non-negative numbers.', variant: 'destructive' });
+    if (!formData.description || formData.principal < 0 || formData.interestRate < 0 || formData.minPayment < 0 || !formData.term) {
+      toast({ title: 'Invalid Input', description: 'Please fill out all fields, including Term, with valid values.', variant: 'destructive' });
       return;
     }
     addDebt(formData);
@@ -105,6 +111,7 @@ export default function DebtPage() {
       principal: debt.principal,
       interestRate: debt.interestRate,
       minPayment: debt.minPayment,
+      term: debt.term, // Set term for editing
     });
     setIsEditDialogOpen(true);
   };
@@ -112,8 +119,8 @@ export default function DebtPage() {
   const handleUpdateDebtSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!editingDebt) return;
-     if (!formData.description || formData.principal < 0 || formData.interestRate < 0 || formData.minPayment < 0) {
-      toast({ title: 'Invalid Input', description: 'Please fill out all fields with valid, non-negative numbers.', variant: 'destructive' });
+     if (!formData.description || formData.principal < 0 || formData.interestRate < 0 || formData.minPayment < 0 || !formData.term) {
+      toast({ title: 'Invalid Input', description: 'Please fill out all fields, including Term, with valid values.', variant: 'destructive' });
       return;
     }
     updateDebt({
@@ -140,8 +147,8 @@ export default function DebtPage() {
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
       <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Manage Debts
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Coins className="h-6 w-6 text-primary"/> Manage Debts {/* Changed icon */}
           </h1>
           <p className="text-muted-foreground">
             Track your outstanding debts, interest rates, and payments.
@@ -177,6 +184,19 @@ export default function DebtPage() {
                   <Label htmlFor="add-minPayment" className="text-right">Min Payment (KES)</Label>
                   <Input id="add-minPayment" name="minPayment" type="number" step="0.01" min="0" value={formData.minPayment} onChange={handleInputChange} className="col-span-3" required />
                 </div>
+                {/* Term Selection */}
+                 <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="add-term" className="text-right">Term</Label>
+                    <Select name="term" value={formData.term} onValueChange={handleSelectChange} required>
+                        <SelectTrigger id="add-term" className="col-span-3">
+                        <SelectValue placeholder="Select term" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        <SelectItem value="short">Short Term</SelectItem>
+                        <SelectItem value="long">Long Term</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
                 <DialogFooter>
                   <DialogClose asChild>
                     <Button type="button" variant="outline">Cancel</Button>
@@ -201,6 +221,7 @@ export default function DebtPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Description</TableHead>
+                    <TableHead className="text-center">Term</TableHead> {/* Added Term column */}
                     <TableHead className="text-right">Principal Balance</TableHead>
                     <TableHead className="text-right">Interest Rate</TableHead>
                     <TableHead className="text-right">Min. Payment</TableHead>
@@ -212,6 +233,7 @@ export default function DebtPage() {
                     debts.map((debt) => (
                       <TableRow key={debt.id}>
                         <TableCell className="font-medium">{debt.description}</TableCell>
+                        <TableCell className="text-center text-xs capitalize text-muted-foreground">{debt.term}</TableCell> {/* Display Term */}
                         <TableCell className="text-right font-mono">{formatCurrency(debt.principal)}</TableCell>
                         <TableCell className="text-right font-mono">{formatPercentage(debt.interestRate)}</TableCell>
                         <TableCell className="text-right font-mono">{formatCurrency(debt.minPayment)}</TableCell>
@@ -249,7 +271,7 @@ export default function DebtPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground"> {/* Increased colspan */}
                         No debts recorded yet. Add one to get started.
                       </TableCell>
                     </TableRow>
@@ -284,6 +306,19 @@ export default function DebtPage() {
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="edit-minPayment" className="text-right">Min Payment (KES)</Label>
                   <Input id="edit-minPayment" name="minPayment" type="number" step="0.01" min="0" value={formData.minPayment} onChange={handleInputChange} className="col-span-3" required />
+                </div>
+                 {/* Term Selection */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="edit-term" className="text-right">Term</Label>
+                    <Select name="term" value={formData.term} onValueChange={handleSelectChange} required>
+                        <SelectTrigger id="edit-term" className="col-span-3">
+                            <SelectValue placeholder="Select term" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="short">Short Term</SelectItem>
+                            <SelectItem value="long">Long Term</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
             <DialogFooter>
               <DialogClose asChild>

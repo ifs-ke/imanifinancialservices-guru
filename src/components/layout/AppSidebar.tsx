@@ -18,7 +18,7 @@ import {
   ReceiptText,
   FileText,
   FileUp,
-  CircleDollarSign, // Changed from Landmark for Debts
+  Coins, // Changed from CircleDollarSign for Debts
   Menu,
   Settings,
   Landmark, // Keep for App title
@@ -29,7 +29,7 @@ import { useSidebar } from '@/components/ui/sidebar';
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: ReceiptText, secondaryIcon: FileUp },
-  { href: '/debt', label: 'Debts', icon: CircleDollarSign }, // Added Debts link
+  { href: '/debt', label: 'Debts', icon: Coins }, // Updated icon
   { href: '/statements', label: 'Statements', icon: FileText },
 ];
 
