@@ -1,22 +1,52 @@
-import React from 'react';
+
+// src/app/(dashboard)/dashboard/page.tsx
+'use client'; // Add this directive because we now use hooks
+
+import React from 'react'; // Removed { useState, useEffect } as they are not needed directly here
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Landmark } from 'lucide-react';
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Landmark, CircleDollarSign } from 'lucide-react'; // Changed Landmark to CircleDollarSign for Total Debt
 import Link from 'next/link';
 import Image from 'next/image';
+import { useTransactions } from '@/contexts/TransactionsContext'; // Import transaction context
+import { useDebt } from '@/contexts/DebtContext'; // Import debt context
+import { useMemo } from 'react'; // Import useMemo for calculations
 
-// Mock data for demonstration
-const mockData = {
-  netWorth: 5000000, // Example values in KES
-  cashFlow: 150000, // Example values in KES
-  totalDebt: 2500000, // Example values in KES
-};
+// Function to calculate total (can be moved to utils if needed elsewhere)
+const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
+const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
 
 export default function DashboardPage() {
+  const { transactions } = useTransactions();
+  const { debts } = useDebt();
+
+  // Calculate financial metrics based on context data
+  const financialData = useMemo(() => {
+    // Simple Net Worth: Assuming Assets = 5,000,000 KES for now (needs real asset tracking)
+    // A more robust solution would involve an Assets context similar to Debts/Transactions
+    const mockTotalAssets = 5000000; // Replace with actual asset calculation later
+    const totalDebt = calculateDebtTotal(debts);
+    const netWorth = mockTotalAssets - totalDebt;
+
+    // Calculate cash flow for the last 30 days (example)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentTransactions = transactions.filter(tx => tx.date >= thirtyDaysAgo);
+    const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
+    const totalExpensesRecent = Math.abs(calculateTotal(recentTransactions.filter(tx => tx.amount < 0)));
+    const cashFlowRecent = totalIncomeRecent - totalExpensesRecent;
+
+    return {
+      netWorth,
+      cashFlow: cashFlowRecent, // Use calculated cash flow
+      totalDebt,
+    };
+  }, [transactions, debts]); // Recalculate when transactions or debts change
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-KE', { // Changed locale to en-KE
+    return new Intl.NumberFormat('en-KE', {
       style: 'currency',
-      currency: 'KES', // Changed currency to KES
+      currency: 'KES',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
@@ -37,22 +67,22 @@ export default function DashboardPage() {
         {/* Financial Metrics Cards */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
+            <CardTitle className="text-sm font-medium">Net Worth (Est.)</CardTitle>
             <Scale className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(mockData.netWorth)}
+              {formatCurrency(financialData.netWorth)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Assets minus liabilities
+              Estimated Assets minus Liabilities
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cash Flow</CardTitle>
-            {mockData.cashFlow >= 0 ? (
+            <CardTitle className="text-sm font-medium">Cash Flow (Last 30d)</CardTitle>
+            {financialData.cashFlow >= 0 ? (
               <TrendingUp className="h-4 w-4 text-accent" />
             ) : (
               <TrendingDown className="h-4 w-4 text-destructive" />
@@ -61,29 +91,33 @@ export default function DashboardPage() {
           <CardContent>
             <div
               className={`text-2xl font-bold ${
-                mockData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'
+                financialData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'
               }`}
             >
-              {formatCurrency(mockData.cashFlow)}
+              {formatCurrency(financialData.cashFlow)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Monthly income vs expenses
+              Income vs expenses in last 30 days
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Debt</CardTitle>
-             {/* Using Landmark icon as a placeholder for debt */}
-             <Landmark className="h-4 w-4 text-muted-foreground" />
+             <CircleDollarSign className="h-4 w-4 text-muted-foreground" /> {/* Changed icon */}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(mockData.totalDebt)}
+              {formatCurrency(financialData.totalDebt)}
             </div>
             <p className="text-xs text-muted-foreground">
               Total outstanding liabilities
             </p>
+             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+              <Link href="/debt">
+                Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
+              </Link>
+             </Button>
           </CardContent>
         </Card>
 
@@ -111,8 +145,6 @@ export default function DashboardPage() {
             </Button>
           </CardContent>
         </Card>
-
-        {/* Removed Debt Analysis Card */}
 
         <Card className="md:col-span-2 lg:col-span-2"> {/* Adjusted span */}
           <CardHeader>

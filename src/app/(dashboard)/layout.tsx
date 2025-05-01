@@ -6,7 +6,8 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { TransactionsProvider } from '@/contexts/TransactionsContext'; // Import the provider
+import { TransactionsProvider } from '@/contexts/TransactionsContext';
+import { DebtProvider } from '@/contexts/DebtContext'; // Import the Debt provider
 
 export default function DashboardLayout({
   children,
@@ -14,14 +15,16 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <TransactionsProvider> {/* Wrap the layout content with the provider */}
-      <>
-        <Sidebar side="left" variant="sidebar" collapsible="icon">
-          <AppSidebar />
-          <SidebarRail />
-        </Sidebar>
-        <SidebarInset>{children}</SidebarInset>
-      </>
+    <TransactionsProvider>
+      <DebtProvider> {/* Wrap with DebtProvider */}
+        <>
+          <Sidebar side="left" variant="sidebar" collapsible="icon">
+            <AppSidebar />
+            <SidebarRail />
+          </Sidebar>
+          <SidebarInset>{children}</SidebarInset>
+        </>
+      </DebtProvider>
     </TransactionsProvider>
   );
 }

@@ -20,10 +20,22 @@ export interface TransactionWithId {
 
 
 /**
- * Represents an item in the financial statements (Asset, Liability, Income, Expense).
+ * Represents an item in the financial statements (Asset, Liability).
+ * Note: Income/Expense items are derived from transactions on the Statements page.
  */
 export interface StatementItem {
   id: string;
   description: string;
   amount: number;
+}
+
+/**
+ * Represents a single debt item.
+ */
+export interface DebtItem {
+    id: string;
+    description: string; // e.g., "Car Loan", "Student Loan - Gov", "Credit Card XYZ"
+    principal: number; // Current outstanding principal balance
+    interestRate: number; // Annual interest rate (e.g., 12.5 for 12.5%)
+    minPayment: number; // Minimum monthly payment
 }

@@ -16,19 +16,20 @@ import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
   ReceiptText,
-  FileText, // Removed AreaChart
-  FileUp, // Added for import visual cue
-  Landmark,
+  FileText,
+  FileUp,
+  CircleDollarSign, // Changed from Landmark for Debts
   Menu,
   Settings,
+  Landmark, // Keep for App title
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/transactions', label: 'Transactions', icon: ReceiptText, secondaryIcon: FileUp }, // Added secondary icon
-  // { href: '/analysis', label: 'Debt Analysis', icon: AreaChart }, // Removed
+  { href: '/transactions', label: 'Transactions', icon: ReceiptText, secondaryIcon: FileUp },
+  { href: '/debt', label: 'Debts', icon: CircleDollarSign }, // Added Debts link
   { href: '/statements', label: 'Statements', icon: FileText },
 ];
 
