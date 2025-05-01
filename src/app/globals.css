@@ -10,7 +10,7 @@ body {
   :root {
     --background: 0 0% 100%; /* White background */
     --foreground: 240 10% 3.9%; /* Dark gray text */
-    --card: 0 0% 96.1%; /* Neutral gray for cards */
+    --card: 0 0% 100%; /* Slightly whiter cards */
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
@@ -34,13 +34,13 @@ body {
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
     /* Sidebar specific theme using primary/secondary/accent logic */
-    --sidebar-background: 0 0% 98%; /* Slightly off-white */
+    --sidebar-background: 0 0% 98%; /* Slightly off-white for better separation */
     --sidebar-foreground: 240 10% 3.9%;
     --sidebar-primary: 198 77% 53%; /* Primary blue */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 90%; /* Lighter gray accent for sidebar */
+    --sidebar-accent: 0 0% 92%; /* Slightly darker gray accent for sidebar hover */
     --sidebar-accent-foreground: 240 10% 3.9%;
-    --sidebar-border: 0 0% 85%;
+    --sidebar-border: 0 0% 88%; /* Slightly darker border */
     --sidebar-ring: 198 77% 53%;
   }
 
@@ -72,13 +72,13 @@ body {
     --chart-5: 27 87% 47%; /* Darker chart color */
     --radius: 0.5rem;
     /* Sidebar specific theme */
-    --sidebar-background: 240 6% 10%; /* Dark sidebar background */
+    --sidebar-background: 240 6% 8%; /* Slightly darker sidebar background */
     --sidebar-foreground: 0 0% 98%; /* Light sidebar text */
     --sidebar-primary: 198 77% 53%; /* Primary blue */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 4% 16%; /* Dark sidebar accent */
+    --sidebar-accent: 240 4% 20%; /* Slightly lighter dark sidebar accent */
     --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 240 4% 16%; /* Dark sidebar border */
+    --sidebar-border: 240 4% 14%; /* Slightly darker border */
     --sidebar-ring: 198 77% 53%;
   }
 }
