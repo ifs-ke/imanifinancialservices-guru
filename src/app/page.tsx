@@ -1,3 +1,6 @@
+import { redirect } from 'next/navigation';
+
 export default function Home() {
-  return <></>;
+  // Redirect root to the dashboard immediately
+  redirect('/dashboard');
 }
