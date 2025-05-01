@@ -8,15 +8,8 @@ import type { DebtItem } from '@/lib/types';
 // Generate unique IDs
 const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Enhanced Mock initial debt data (values in KES) with term
-const initialDebtsData: DebtItem[] = [
-  { id: generateId(), description: 'Credit Card - Visa', principal: 150000, interestRate: 24.0, minPayment: 7500, term: 'short' }, // Higher interest CC
-  { id: generateId(), description: 'Personal Loan - Bank ABC', principal: 450000, interestRate: 16.5, minPayment: 20000, term: 'long' },
-  { id: generateId(), description: 'Student Loan - HELB', principal: 1500000, interestRate: 4.0, minPayment: 10000, term: 'long' }, // Lower rate govt loan
-  { id: generateId(), description: 'Car Loan - XYZ Finance', principal: 700000, interestRate: 14.0, minPayment: 30000, term: 'long' },
-  { id: generateId(), description: 'Appliance Purchase - Store Credit', principal: 45000, interestRate: 0.0, minPayment: 5000, term: 'short' }, // 0% short term
-  { id: generateId(), description: 'Overdraft Facility', principal: 25000, interestRate: 19.0, minPayment: 1000, term: 'short' },
-];
+// Removed sample data, start with an empty array
+const initialDebtsData: DebtItem[] = [];
 
 interface DebtContextType {
   debts: DebtItem[];

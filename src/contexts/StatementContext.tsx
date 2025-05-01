@@ -8,24 +8,9 @@ import type { StatementItem, OtherLiabilityItem } from '@/lib/types';
 // Generate unique IDs
 const generateId = (prefix: 'asset' | 'lia'): string => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Enhanced Mock Data for Assets (values in KES)
-const defaultAssets: StatementItem[] = [
-  { id: generateId('asset'), description: 'Checking Account - Bank X', amount: 250000 },
-  { id: generateId('asset'), description: 'Savings Account - Bank Y', amount: 1000000 },
-  { id: generateId('asset'), description: 'Mpesa Balance', amount: 15000 },
-  { id: generateId('asset'), description: 'Investment Portfolio (Stocks)', amount: 750000 },
-  { id: generateId('asset'), description: 'Car (Estimated Value)', amount: 800000 },
-  { id: generateId('asset'), description: 'Furniture & Electronics (Est.)', amount: 300000 },
-  { id: generateId('asset'), description: 'Emergency Fund (Cash)', amount: 50000 },
-];
-
-// Enhanced Mock Data for Other Liabilities (values in KES)
-const defaultOtherLiabilities: OtherLiabilityItem[] = [
-    { id: generateId('lia'), description: 'Unpaid Utility (Water)', amount: 2500 },
-    { id: generateId('lia'), description: 'Doctor Bill (Pending)', amount: 12000 },
-    { id: generateId('lia'), description: 'Personal Loan (Family)', amount: 50000 },
-    { id: generateId('lia'), description: 'Security Deposit (Rent)', amount: 120000 }, // Technically an asset if refundable, but often listed here for cash flow planning
-];
+// Removed default sample data, will initialize with empty arrays or localStorage
+const defaultAssets: StatementItem[] = [];
+const defaultOtherLiabilities: OtherLiabilityItem[] = [];
 
 const ASSETS_STORAGE_KEY = 'debtConqueror_assets';
 const OTHER_LIABILITIES_STORAGE_KEY = 'debtConqueror_otherLiabilities';
@@ -54,13 +39,15 @@ const sortItems = <T extends { description: string }>(items: T[]): T[] => {
 export const StatementProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // State initialization with localStorage hydration and sorting
   const [assetItems, setAssetItemsState] = useState<StatementItem[]>(() => {
-      let items = defaultAssets;
+      let items = defaultAssets; // Start with empty default
       if (typeof window !== 'undefined') {
         const storedAssets = localStorage.getItem(ASSETS_STORAGE_KEY);
         try {
+          // Parse only if storedAssets is not null or undefined
           items = storedAssets ? JSON.parse(storedAssets) : defaultAssets;
         } catch (e) {
           console.error("Failed to parse assets from localStorage", e);
+          // Fallback to empty default if parsing fails
           items = defaultAssets;
         }
       }
@@ -68,13 +55,15 @@ export const StatementProvider: React.FC<{ children: ReactNode }> = ({ children 
   });
 
   const [otherLiabilityItems, setOtherLiabilityItemsState] = useState<OtherLiabilityItem[]>(() => {
-       let items = defaultOtherLiabilities;
+       let items = defaultOtherLiabilities; // Start with empty default
        if (typeof window !== 'undefined') {
         const storedLiabilities = localStorage.getItem(OTHER_LIABILITIES_STORAGE_KEY);
          try {
+           // Parse only if storedLiabilities is not null or undefined
           items = storedLiabilities ? JSON.parse(storedLiabilities) : defaultOtherLiabilities;
         } catch (e) {
           console.error("Failed to parse other liabilities from localStorage", e);
+           // Fallback to empty default if parsing fails
           items = defaultOtherLiabilities;
         }
       }
