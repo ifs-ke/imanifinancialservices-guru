@@ -242,9 +242,7 @@ export default function DebtPage() {
                           <Button variant="ghost" size="icon" className="mr-1 h-7 w-7" onClick={() => handleEditClick(debt)}>
                             <Edit className="h-4 w-4" />
                             <span className="sr-only">Edit</span>
-                          </Button>
-
-                          {/* Delete Button & Confirmation */}
+                          </Button>{/* Delete Button & Confirmation */}
                           <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>

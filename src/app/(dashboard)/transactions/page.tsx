@@ -64,7 +64,7 @@ const initialFormData = {
 
 export default function TransactionsPage() {
   // Use context for transaction state management
-  const { transactions, addTransaction, updateTransaction, deleteTransaction, importTransactionsBatch } = useTransactions();
+  const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactions(); // Removed importTransactionsBatch as it's not used directly here
 
   // Local state for dialogs, editing, deleting, and form data
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -72,8 +72,6 @@ export default function TransactionsPage() {
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
   const [formData, setFormData] = useState(initialFormData);
-  // Removed import specific state as it's moved to the import page
-  // const [isImporting, setIsImporting] = useState(false);
   const { toast } = useToast();
 
   // Reset form data when dialogs close
@@ -306,9 +304,7 @@ export default function TransactionsPage() {
                            <Button variant="ghost" size="icon" className="mr-1 h-7 w-7" onClick={() => handleEditClick(tx)}>
                              <Edit className="h-4 w-4" />
                              <span className="sr-only">Edit</span>
-                           </Button>
-
-                           {/* Delete Button & Confirmation Dialog */}
+                           </Button>{/* Delete Button & Confirmation Dialog */}
                            {/* Manage AlertDialog open state externally */}
                            <AlertDialog open={transactionToDelete?.id === tx.id} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
                               <AlertDialogTrigger asChild>

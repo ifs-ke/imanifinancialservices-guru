@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableFooter as UiTableFooter, TableHead, T
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, TrendingUp, TrendingDown, Scale, DollarSign, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle } from 'lucide-react'; // Added Coins, MinusCircle
+import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle } from 'lucide-react'; // Added Coins, MinusCircle
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useTransactions } from '@/contexts/TransactionsContext';
 import { useDebt } from '@/contexts/DebtContext';
@@ -266,10 +266,10 @@ export default function StatementsPage() {
   // Render function for derived Income/Expense items (read-only)
   const renderDerivedItemRow = (item: StatementItem, type: 'income' | 'expense') => (
       <TableRow key={item.id}>
-      <TableCell className="pl-6">{item.description}</TableCell>
-      <TableCell className="text-right font-mono">
-          {type === 'income' ? formatCurrency(item.amount) : `(${formatCurrency(item.amount)})`}
-      </TableCell>
+        <TableCell className="pl-6">{item.description}</TableCell>
+        <TableCell className="text-right font-mono">
+            {type === 'income' ? formatCurrency(item.amount) : `(${formatCurrency(item.amount)})`}
+        </TableCell>
       </TableRow>
   );
 
@@ -388,7 +388,7 @@ export default function StatementsPage() {
                 {/* Income Section */}
                 <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                   <TableCell>Income</TableCell>
-                  <TableCell></TableCell>
+                  <TableCell></TableCell>{/* Empty cell for alignment */}
                 </TableRow>
                 {derivedIncomeItems.length > 0 ? (
                   derivedIncomeItems.map(item => renderDerivedItemRow(item, 'income'))
@@ -403,7 +403,7 @@ export default function StatementsPage() {
                  {/* Expenses Section */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                   <TableCell>Expenses</TableCell>
-                  <TableCell></TableCell>
+                  <TableCell></TableCell>{/* Empty cell for alignment */}
                 </TableRow>
                  {derivedExpenseItems.length > 0 ? (
                     derivedExpenseItems.map(item => renderDerivedItemRow(item, 'expense'))
@@ -453,7 +453,7 @@ export default function StatementsPage() {
                  {/* Assets Section (Editable) */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                    <TableCell className="flex items-center gap-2"><Landmark className="h-4 w-4"/>Assets</TableCell>
-                  <TableCell></TableCell>
+                  <TableCell></TableCell>{/* Empty cell for alignment */}
                   {isEditing && <TableCell></TableCell>}
                 </TableRow>
                 {(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}
@@ -475,14 +475,14 @@ export default function StatementsPage() {
                  {/* Liabilities Section (Grouped) */}
                  <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
                    <TableCell className="flex items-center gap-2"><Coins className="h-4 w-4"/>Liabilities</TableCell>
-                   <TableCell></TableCell>
+                   <TableCell></TableCell>{/* Empty cell for alignment */}
                    {isEditing && <TableCell></TableCell>}
                 </TableRow>
                 {/* Short-Term Debts (Derived) */}
                 {shortTermDebts.length > 0 && (
                     <TableRow className="font-medium text-muted-foreground">
                         <TableCell className="pl-6">Short-Term Debts (from Debts)</TableCell>
-                        <TableCell></TableCell>
+                        <TableCell></TableCell>{/* Empty cell for alignment */}
                         {isEditing && <TableCell></TableCell>}
                     </TableRow>
                 )}
@@ -492,7 +492,7 @@ export default function StatementsPage() {
                  {longTermDebts.length > 0 && (
                     <TableRow className="font-medium text-muted-foreground">
                         <TableCell className="pl-6">Long-Term Debts (from Debts)</TableCell>
-                        <TableCell></TableCell>
+                        <TableCell></TableCell>{/* Empty cell for alignment */}
                         {isEditing && <TableCell></TableCell>}
                     </TableRow>
                  )}
@@ -501,7 +501,7 @@ export default function StatementsPage() {
                  {/* Other Liabilities (Editable) */}
                   <TableRow className="font-medium text-muted-foreground">
                         <TableCell className="pl-6">Other Liabilities</TableCell>
-                        <TableCell></TableCell>
+                        <TableCell></TableCell>{/* Empty cell for alignment */}
                         {isEditing && <TableCell></TableCell>}
                     </TableRow>
                   {(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}
