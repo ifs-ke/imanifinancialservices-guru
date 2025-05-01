@@ -1,7 +1,7 @@
 // src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle } from 'lucide-react';
@@ -53,15 +53,34 @@ export default function DashboardPage() {
     };
   }, [transactions, debts, assetItems, otherLiabilityItems]);
 
-  const formatCurrency = (amount: number | undefined) => {
-     if (amount === undefined) return 'N/A';
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  // State for formatted currency values to avoid hydration issues
+  const [formattedNetWorth, setFormattedNetWorth] = useState<string>('N/A');
+  const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
+  const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
+  const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
+  const [formattedTotalIncomeRecent, setFormattedTotalIncomeRecent] = useState<string>('N/A');
+  const [formattedTotalExpensesRecent, setFormattedTotalExpensesRecent] = useState<string>('N/A');
+
+  useEffect(() => {
+    // Function to format currency
+    const formatCurrency = (amount: number | undefined) => {
+       if (amount === undefined) return 'N/A';
+      return new Intl.NumberFormat('en-KE', {
+        style: 'currency',
+        currency: 'KES',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    };
+
+    // Format the values here to avoid server/client differences
+    setFormattedNetWorth(formatCurrency(financialData.netWorth));
+    setFormattedTotalAssets(formatCurrency(financialData.totalAssets));
+    setFormattedTotalLiabilities(formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities));
+    setFormattedCashFlow(formatCurrency(financialData.cashFlow));
+    setFormattedTotalIncomeRecent(formatCurrency(financialData.totalIncomeRecent));
+    setFormattedTotalExpensesRecent(formatCurrency(financialData.totalExpensesRecent));
+  }, [financialData]);
 
   // --- Chart Data and Config ---
 
@@ -121,10 +140,10 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(financialData.netWorth)}
+              {formattedNetWorth}
             </div>
             <p className="text-xs text-muted-foreground">
-               Assets ({formatCurrency(financialData.totalAssets)}) - Liabilities ({formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities)})
+               Assets ({formattedTotalAssets}) - Liabilities ({formattedTotalLiabilities})
             </p>
           </CardContent>
         </Card>
@@ -143,10 +162,10 @@ export default function DashboardPage() {
                 financialData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'
               }`}
             >
-              {formatCurrency(financialData.cashFlow)}
+              {formattedCashFlow}
             </div>
             <p className="text-xs text-muted-foreground">
-              Income ({formatCurrency(financialData.totalIncomeRecent)}) - Expenses ({formatCurrency(financialData.totalExpensesRecent)})
+              Income ({formattedTotalIncomeRecent}) - Expenses ({formattedTotalExpensesRecent})
             </p>
           </CardContent>
         </Card>
@@ -157,10 +176,10 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(financialData.totalDebt)}
+              {formattedTotalLiabilities}
             </div>
              <p className="text-xs text-muted-foreground">
-              Debts: {formatCurrency(financialData.totalDebt)}. Other Liabilities: {formatCurrency(financialData.totalOtherLiabilities)}
+              Debts: {formattedTotalLiabilities}. Other Liabilities: N/A
              </p>
              <CardFooter>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
