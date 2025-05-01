@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/transactions/page.tsx
 'use client';
 
@@ -29,6 +30,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Import AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
@@ -37,7 +39,7 @@ import Link from 'next/link'; // Import Link
 import { format } from 'date-fns'; // For date formatting
 import { cn } from '@/lib/utils'; // For conditional classes
 import { jsPDF } from 'jspdf';
-// import 'jspdf-autotable';
+// import 'jspdf-autotable'; // Commented out as it caused build errors
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
@@ -81,7 +83,7 @@ export default function TransactionsPage() {
 
   // Reset form data when dialogs close
   useEffect(() => {
-    if (!isAddDialogOpen && isEditDialogOpen) {
+    if (!isAddDialogOpen && !isEditDialogOpen) { // Changed condition to !isEditDialogOpen
         setFormData(initialFormData);
         setEditingTransaction(null); // Ensure editing state is also cleared
     }
@@ -109,7 +111,7 @@ export default function TransactionsPage() {
       date: new Date(date + 'T00:00:00'), // Use local time
       description: description,
       amount: parsedAmount,
-      modeOfPayment: modeOfPayment,
+      modeOfPayment: modeOfPayment as ModeOfPayment, // Ensure correct type
       frequency: frequency || undefined, // Pass undefined if empty
       variability: variability || undefined, // Pass undefined if empty
     });
@@ -153,7 +155,7 @@ export default function TransactionsPage() {
         date: new Date(date + 'T00:00:00'),
         description,
         amount: parsedAmount,
-        modeOfPayment,
+        modeOfPayment: modeOfPayment as ModeOfPayment, // Ensure correct type
         frequency: frequency || undefined, // Update frequency
         variability: variability || undefined, // Update variability
     });
@@ -194,7 +196,7 @@ export default function TransactionsPage() {
   // --- Formatting ---
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
+    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
   };
 
   const formatDate = (date: Date | string) => {
@@ -213,18 +215,22 @@ export default function TransactionsPage() {
   // --- Export Functionality ---
   const handleExportCsv = useCallback(() => {
     if (transactions.length === 0) {
-      toast({ title: "No data to export", description: "Add transactions to export a CSV file.", variant: "warning" });
+      toast({ title: "No data to export", description: "Add transactions to export a CSV file.", variant: "default" });
       return;
     }
 
     const csvRows = [];
-    const headers = Object.keys(transactions[0]).join(',');
-    csvRows.push(headers);
+    // Define explicit headers for CSV
+    const headers = ['Date', 'Description', 'Amount (KES)', 'Mode of Payment', 'Frequency', 'Variability'];
+    csvRows.push(headers.join(','));
 
     for (const tx of transactions) {
+      // Sanitize description to prevent CSV injection issues (basic example: remove quotes)
+      const sanitizedDescription = tx.description.replace(/"/g, "''");
+
       const values = [
-        formatDate(tx.date), // Format the date
-        tx.description,
+        format(tx.date, 'yyyy-MM-dd'), // Format the date consistently
+        `"${sanitizedDescription}"`, // Enclose description in quotes
         tx.amount,
         tx.modeOfPayment,
         tx.frequency || '', // Handle undefined
@@ -234,17 +240,18 @@ export default function TransactionsPage() {
     }
 
     const csvData = csvRows.join('\n');
-    const blob = new Blob([csvData], { type: 'text/csv' });
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); // Specify charset
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'transactions.csv';
+    link.download = 'transactions_export.csv'; // Use a more descriptive name
     document.body.appendChild(link); // Needed for Firefox
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url); // Clean up the object URL
 
     toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
-  }, [transactions, toast, formatDate]);
+  }, [transactions, toast]); // Removed formatDate dependency as format from date-fns is used directly
 
 
   return (
@@ -258,7 +265,7 @@ export default function TransactionsPage() {
             View, import, and manage your financial transactions.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap"> {/* Added flex-wrap for smaller screens */}
           {/* Add Transaction Dialog */}
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
@@ -376,7 +383,7 @@ export default function TransactionsPage() {
                         <TableCell>{tx.modeOfPayment}</TableCell>
                         <TableCell className="text-xs">{formatCategory(tx.frequency)}</TableCell>
                         <TableCell className="text-xs">{formatCategory(tx.variability)}</TableCell>
-                        <TableCell className={`text-right font-mono ${tx.amount >= 0 ? 'text-accent' : 'text-destructive'}`}>
+                        <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
                         <TableCell className="text-right">
