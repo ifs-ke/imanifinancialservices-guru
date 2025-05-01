@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -162,11 +162,13 @@ export default function DashboardPage() {
              <p className="text-xs text-muted-foreground">
               Debts: {formatCurrency(financialData.totalDebt)}. Other Liabilities: {formatCurrency(financialData.totalOtherLiabilities)}
              </p>
+             <CardFooter>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
               <Link href="/debt">
                 Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
               </Link>
              </Button>
+             </CardFooter>
           </CardContent>
         </Card>
 
@@ -263,7 +265,7 @@ export default function DashboardPage() {
               Import, categorize, and manage your financial transactions.
             </p>
           </CardContent>
-          <CardFooter>
+           <CardFooter>
              <Button asChild variant="outline" className="w-full">
               <Link href="/transactions">
                 Go to Transactions <ArrowRight className="ml-2 h-4 w-4" />
