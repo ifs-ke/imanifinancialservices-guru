@@ -84,7 +84,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarContent>
        <SidebarFooter className="p-2 mt-auto">
-          <ThemeToggle />
+          <ThemeToggle /> {/* Add ThemeToggle here */}
       </SidebarFooter>
     </>
   );

@@ -36,7 +36,9 @@ export default function DashboardPage() {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentTransactions = transactions.filter(tx => {
         // Ensure date is valid before comparison
-        return tx.date instanceof Date && !isNaN(tx.date.getTime()) && tx.date >= thirtyDaysAgo;
+        // Handle cases where date might be stored as string initially from context/storage
+        const txDate = typeof tx.date === 'string' ? new Date(tx.date) : tx.date;
+        return txDate instanceof Date && !isNaN(txDate.getTime()) && txDate >= thirtyDaysAgo;
     });
     const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
     const totalExpensesRecent = Math.abs(calculateTotal(recentTransactions.filter(tx => tx.amount < 0)));
@@ -78,23 +80,27 @@ export default function DashboardPage() {
   } satisfies ChartConfig;
 
   // 2. Asset Allocation Chart (Pie Chart)
-  const assetChartData = useMemo(() =>
-    assetItems.map((item, index) => ({
-      name: item.description,
-      value: item.amount,
-      fill: `hsl(var(--chart-${(index % 5) + 1}))` // Cycle through chart colors
+  // Ensure data has positive values for pie chart
+   const assetChartData = useMemo(() =>
+    assetItems
+      .filter(item => item.amount > 0) // Filter out zero or negative assets for chart
+      .map((item, index) => ({
+        name: item.description,
+        value: item.amount,
+        fill: `hsl(var(--chart-${(index % 5) + 1}))` // Cycle through chart colors
     })), [assetItems]);
 
-  const assetChartConfig = useMemo(() => {
-     const config: ChartConfig = {};
-     assetItems.forEach((item, index) => {
-         config[item.description] = {
-             label: item.description,
-             color: `hsl(var(--chart-${(index % 5) + 1}))`
-         }
-     });
-     return config;
-  }, [assetItems]);
+   // Generate chart config dynamically based on filtered data
+   const assetChartConfig = useMemo(() => {
+       const config: ChartConfig = {};
+       assetChartData.forEach((item) => { // Use assetChartData which is already filtered
+           config[item.name] = { // Use item.name (description) as the key
+               label: item.name,
+               color: item.fill // Use the fill color assigned in assetChartData
+           };
+       });
+       return config;
+   }, [assetChartData]); // Depend on the filtered chart data
 
 
   return (
@@ -210,21 +216,20 @@ export default function DashboardPage() {
             <CardDescription>Distribution of your assets</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-center">
-             {assetItems.length > 0 ? (
+             {assetChartData.length > 0 ? ( // Check if there's data to display
                  <ChartContainer config={assetChartConfig} className="h-[150px] w-full max-w-[250px]">
                     <ResponsiveContainer width="100%" height={150}>
                         <PieChart>
                          <ChartTooltip content={<ChartTooltipContent nameKey="name" hideIndicator />} />
-                        <Pie
+                         <Pie
                             data={assetChartData}
-                            dataKey="value"
-                            nameKey="name"
+                            dataKey="value" // Use the value field
+                            nameKey="name"   // Use the name field
                             cx="50%"
                             cy="50%"
                             outerRadius={60}
                             innerRadius={40} // Make it a donut chart
                             labelLine={false}
-                            // label={({ percent }) => `${(percent * 100).toFixed(0)}%`} // Optional: show percentage on slice
                             paddingAngle={2}
                          >
                               {assetChartData.map((entry, index) => (
@@ -235,8 +240,8 @@ export default function DashboardPage() {
                     </ResponsiveContainer>
                 </ChartContainer>
              ) : (
-                 <div className="h-[150px] flex items-center justify-center text-muted-foreground text-sm">
-                    No assets recorded yet. Add them in Statements.
+                 <div className="h-[150px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
+                    No positive asset data available for chart. Add assets in Statements.
                 </div>
              )}
           </CardContent>
