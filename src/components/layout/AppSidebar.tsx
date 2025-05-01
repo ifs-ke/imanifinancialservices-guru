@@ -15,8 +15,7 @@ import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
   ReceiptText,
-  AreaChart,
-  FileText,
+  FileText, // Removed AreaChart
   Landmark,
   Menu,
   Settings,
@@ -27,7 +26,7 @@ import { useSidebar } from '@/components/ui/sidebar';
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: ReceiptText },
-  { href: '/analysis', label: 'Debt Analysis', icon: AreaChart },
+  // { href: '/analysis', label: 'Debt Analysis', icon: AreaChart }, // Removed
   { href: '/statements', label: 'Statements', icon: FileText },
 ];
 

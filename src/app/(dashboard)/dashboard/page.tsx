@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale } from 'lucide-react';
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Landmark } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -74,8 +74,8 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Debt</CardTitle>
-            {/* Placeholder for debt icon */}
-             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10H3"/><path d="M21 14H3"/><path d="M12 18V6"/><path d="M12 6L9 9"/><path d="M12 6L15 9"/></svg>
+             {/* Using Landmark icon as a placeholder for debt */}
+             <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -102,7 +102,7 @@ export default function DashboardPage() {
               data-ai-hint="finance transaction"
             />
             <p className="text-sm text-muted-foreground">
-              Import, categorize, and manually add your financial transactions.
+              Import, categorize, and manage your financial transactions.
             </p>
             <Button asChild variant="outline" className="mt-auto">
               <Link href="/transactions">
@@ -112,31 +112,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Debt Analysis & Strategy</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-             <Image
-              src="https://picsum.photos/400/200"
-              alt="Debt analysis illustration"
-              width={400}
-              height={200}
-              className="rounded-md object-cover mb-4"
-              data-ai-hint="finance chart graph"
-            />
-            <p className="text-sm text-muted-foreground">
-              Get AI-powered insights and a personalized debt repayment plan.
-            </p>
-            <Button asChild variant="default" className="mt-auto bg-primary hover:bg-primary/90">
-              <Link href="/analysis">
-                Analyze Debt <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Removed Debt Analysis Card */}
 
-        <Card className="md:col-span-1">
+        <Card className="md:col-span-2 lg:col-span-2"> {/* Adjusted span */}
           <CardHeader>
             <CardTitle>View Statements</CardTitle>
           </CardHeader>
