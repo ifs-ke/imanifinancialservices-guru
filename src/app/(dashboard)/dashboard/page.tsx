@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
@@ -371,432 +372,418 @@ export default function DashboardPage() {
          </p>
       </header>
 
-      {/* Updated grid layout for better responsiveness and new charts */}
-       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"> {/* Adjusted for 5 columns on XL */}
-
-        {/* Financial Metrics Cards - Span 1 col each */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
-            <Scale className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formattedNetWorth}
-            </div>
-            <p className="text-xs text-muted-foreground">
-               Assets ({formattedTotalAssets}) - Liabilities ({formattedTotalLiabilities})
-            </p>
-             {/* Link to Statements */}
-            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                <Link href="/statements">
-                    View Statement <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
+      {/* Metrics Grid (Top Section) */}
+       <div className="grid gap-4 sm:gap-6 mb-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
          <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
-            <Landmark className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formattedTotalAssets}
-            </div>
-            <p className="text-xs text-muted-foreground">
-               Combined value of your assets
-            </p>
-            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                <Link href="/statements">
-                    Manage Assets <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-         <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>
-            <Coins className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-                {formattedTotalLiabilities}
-            </div>
-            <p className="text-xs text-muted-foreground">
-               Debts ({formatCurrency(financialData.totalDebt)}) + Other Liabilities ({formatCurrency(financialData.totalOtherLiabilities)})
-            </p>
-            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                <Link href="/debt">
-                    Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
-            </Button>
-             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs ml-2">
-                <Link href="/statements">
-                    Manage Other <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+             <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
+             <Scale className="h-4 w-4 text-muted-foreground" />
+           </CardHeader>
+           <CardContent>
+             <div className="text-2xl font-bold">
+               {formattedNetWorth}
+             </div>
+             <p className="text-xs text-muted-foreground">
+                Assets ({formattedTotalAssets}) - Liabilities ({formattedTotalLiabilities})
+             </p>
+              {/* Link to Statements */}
+             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                 <Link href="/statements">
+                     View Statement <ArrowRight className="ml-1 h-3 w-3" />
+                 </Link>
              </Button>
-          </CardContent>
-        </Card>
-
-         <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle>
-            {financialData.cashFlow >= 0 ? (
-              <TrendingUp className="h-4 w-4 text-accent" />
-            ) : (
-              <TrendingDown className="h-4 w-4 text-destructive" />
-            )}
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${
-                financialData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'
-              }`}
-            >
-              {formattedCashFlow}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Income ({formattedTotalIncome}) - Expenses ({formattedTotalExpenses})
-            </p>
-            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                <Link href="/transactions">
-                    View Transactions <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-         {/* Budget Variance Card - Updated status description */}
-         <Card className="lg:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
-                 {/* Icon based on status */}
-                 {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
-                 {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
-                 {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />}
-                 {budgetStatus === 'over-budget' && <AlertTriangle className="h-4 w-4 text-destructive" />}
-            </CardHeader>
-             <CardContent>
-                 <div className={cn("text-2xl font-bold",
-                     budgetStatus === 'no-data' && 'text-muted-foreground',
-                     (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent',
-                     budgetStatus === 'over-budget' && 'text-destructive'
-                 )}>
-                     {budgetStatus !== 'no-data' ? `${budgetVariance.value! >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
-                 </div>
-                  <p className={cn("text-xs",
-                     budgetStatus === 'no-data' && 'text-muted-foreground',
-                     (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent', // Favorable text color
-                     budgetStatus === 'over-budget' && 'text-destructive' // Unfavorable text color
-                 )}>
-                     {budgetStatus === 'no-data' && 'No Budget/Actuals Data'}
-                      {budgetStatus === 'on-track' && 'On Track (Actual matches Budget)'}
-                      {budgetStatus === 'under-budget' && 'Favorable (Under Budget / Over Income)'}
-                      {budgetStatus === 'over-budget' && 'Unfavorable (Over Budget / Under Income)'}
-                  </p>
-                 <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                     <Link href="/statements">
-                         View Report <ArrowRight className="ml-1 h-3 w-3" />
-                     </Link>
-                 </Button>
-             </CardContent>
-         </Card>
-
-
-
-        {/* Chart Cards - Adjust spans */}
-        <Card className="md:col-span-2 lg:col-span-3 xl:col-span-3"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle className="text-base flex items-center gap-2">
-                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
-             </CardTitle>
-             <CardDescription>Monthly income vs. expenses over the entire transaction history.</CardDescription>
-           </CardHeader>
-           <CardContent>
-                {trendChartData.length > 1 ? ( // Need at least 2 points for a line chart
-                    <ChartContainer config={trendChartConfig} className="h-[250px] w-full">
-                        {/* Changed to LineChart */}
-                        <LineChart
-                            accessibilityLayer
-                            data={trendChartData}
-                            margin={{ left: -20, right: 10, top: 10, bottom: 0 }}
-                        >
-                            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" /> {/* Use theme border color */}
-                            <XAxis
-                                dataKey="month"
-                                tickLine={false}
-                                axisLine={false}
-                                tickMargin={8}
-                                tickFormatter={(value) => value.slice(0, 3)} // Show only month abbreviation
-                                stroke="hsl(var(--foreground))" // Use theme text color
-                            />
-                            <YAxis
-                                tickLine={false}
-                                axisLine={false}
-                                tickMargin={8}
-                                tickFormatter={(value) => `KES ${value / 1000}k`} // Format as thousands
-                                stroke="hsl(var(--foreground))" // Use theme text color
-                            />
-                            <ChartTooltip
-                                cursor={true} // Show cursor for LineChart
-                                content={<ChartTooltipContent indicator="line" />} // Use line indicator
-                             />
-                             <Line
-                                dataKey="income"
-                                type="monotone"
-                                stroke="hsl(var(--accent))" // Use theme accent
-                                strokeWidth={2}
-                                dot={false} // Optionally hide dots for cleaner look
-                             />
-                             <Line
-                                dataKey="expense"
-                                type="monotone"
-                                stroke="hsl(var(--destructive))" // Use theme destructive
-                                strokeWidth={2}
-                                dot={false} // Optionally hide dots for cleaner look
-                             />
-                        </LineChart>
-                    </ChartContainer>
-                 ) : (
-                    <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
-                        Not enough data for trend analysis (need transactions spanning at least two months).
-                    </div>
-                 )}
-            </CardContent>
-         </Card>
-
-         {/* Existing Chart Cards */}
-         <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall) {/* Updated title */}
-             </CardTitle>
-             <CardDescription>Total Income vs. Total Expenses</CardDescription>
-           </CardHeader>
-           <CardContent>
-              {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? ( // Use all-time data check
-                 <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
-                   <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
-                        <XAxis type="number" hide />
-                         <YAxis
-                           dataKey="name"
-                           type="category"
-                           tickLine={false}
-                           axisLine={false}
-                           tickMargin={10}
-                           tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} // Use theme foreground
-                           width={60} // Give slightly more space for labels
-                         />
-                         <CartesianGrid horizontal={false} stroke="hsl(var(--border))" /> {/* Use theme border */}
-                         <ChartTooltip
-                           cursor={false}
-                           content={<ChartTooltipContent hideLabel />}
-                         />
-                         <Bar dataKey="value" radius={5} />
-                     </BarChart>
-                 </ChartContainer>
-              ) : (
-                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-                     No income or expense data available.
-                 </div>
-              )}
            </CardContent>
          </Card>
 
-         <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle className="text-base flex items-center gap-2">
-                 <PieChart className="h-4 w-4"/> Asset Allocation
-             </CardTitle>
-             <CardDescription>Distribution of your assets by value</CardDescription>
+          <Card className="lg:col-span-1">
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+             <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
+             <Landmark className="h-4 w-4 text-muted-foreground" />
            </CardHeader>
-           <CardContent className="flex items-center justify-center">
-             {assetChartData.length > 0 ? (
-                 <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
-                     <ResponsiveContainer width="100%" height={200}>
-                         <PieChart>
-                             <ChartTooltip
-                                 cursor={false}
-                                 content={<ChartTooltipContent indicator="line" nameKey="name" hideLabel />}
-                             />
-                             <Pie
-                                data={assetChartData}
-                                dataKey="value"
-                                nameKey="name" // Ensure this matches the 'name' field in assetChartData
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={80} // Slightly larger radius
-                                innerRadius={50} // Create a donut chart effect
-                                labelLine={false}
-                                // Removed label prop for cleaner look
-                                // label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
-                                //     const RADIAN = Math.PI / 180;
-                                //     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                                //     const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                                //     const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                                //     // Only show label if percentage is significant
-                                //     return percent > 0.05 ? (
-                                //         <text x={x} y={y} fill="hsl(var(--card-foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10}>
-                                //             {`${(percent * 100).toFixed(0)}%`}
-                                //         </text>
-                                //     ) : null;
-                                // }}
-                             >
-                                {assetChartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                                ))}
-                            </Pie>
-                         </PieChart>
-                     </ResponsiveContainer>
-                 </ChartContainer>
-              ) : (
-                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
-                     No positive asset data available. Add assets in Statements.
-                 </div>
+           <CardContent>
+             <div className="text-2xl font-bold">
+               {formattedTotalAssets}
+             </div>
+             <p className="text-xs text-muted-foreground">
+                Combined value of your assets
+             </p>
+             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                 <Link href="/statements">
+                     Manage Assets <ArrowRight className="ml-1 h-3 w-3" />
+                 </Link>
+             </Button>
+           </CardContent>
+         </Card>
+
+          <Card className="lg:col-span-1">
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+             <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>
+             <Coins className="h-4 w-4 text-muted-foreground" />
+           </CardHeader>
+           <CardContent>
+             <div className="text-2xl font-bold">
+                 {formattedTotalLiabilities}
+             </div>
+             <p className="text-xs text-muted-foreground">
+                Debts ({formatCurrency(financialData.totalDebt)}) + Other Liabilities ({formatCurrency(financialData.totalOtherLiabilities)})
+             </p>
+             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                 <Link href="/debt">
+                     Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
+                 </Link>
+             </Button>
+              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs ml-2">
+                 <Link href="/statements">
+                     Manage Other <ArrowRight className="ml-1 h-3 w-3" />
+                 </Link>
+              </Button>
+           </CardContent>
+         </Card>
+
+          <Card className="lg:col-span-1">
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+             <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle>
+             {financialData.cashFlow >= 0 ? (
+               <TrendingUp className="h-4 w-4 text-accent" />
+             ) : (
+               <TrendingDown className="h-4 w-4 text-destructive" />
              )}
+           </CardHeader>
+           <CardContent>
+             <div
+               className={`text-2xl font-bold ${
+                 financialData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'
+               }`}
+             >
+               {formattedCashFlow}
+             </div>
+             <p className="text-xs text-muted-foreground">
+               Income ({formattedTotalIncome}) - Expenses ({formattedTotalExpenses})
+             </p>
+             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                 <Link href="/transactions">
+                     View Transactions <ArrowRight className="ml-1 h-3 w-3" />
+                 </Link>
+             </Button>
            </CardContent>
          </Card>
 
+          {/* Budget Variance Card - Updated status description */}
+          <Card className="lg:col-span-1">
+             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
+                  {/* Icon based on status */}
+                  {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
+                  {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
+                  {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />}
+                  {budgetStatus === 'over-budget' && <AlertTriangle className="h-4 w-4 text-destructive" />}
+             </CardHeader>
+              <CardContent>
+                  <div className={cn("text-2xl font-bold",
+                      budgetStatus === 'no-data' && 'text-muted-foreground',
+                      (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent',
+                      budgetStatus === 'over-budget' && 'text-destructive'
+                  )}>
+                      {budgetStatus !== 'no-data' ? `${budgetVariance.value! >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
+                  </div>
+                   <p className={cn("text-xs",
+                      budgetStatus === 'no-data' && 'text-muted-foreground',
+                      (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent', // Favorable text color
+                      budgetStatus === 'over-budget' && 'text-destructive' // Unfavorable text color
+                  )}>
+                      {budgetStatus === 'no-data' && 'No Budget/Actuals Data'}
+                       {budgetStatus === 'on-track' && 'On Track (Actual matches Budget)'}
+                       {budgetStatus === 'under-budget' && 'Favorable (Under Budget / Over Income)'}
+                       {budgetStatus === 'over-budget' && 'Unfavorable (Over Budget / Under Income)'}
+                   </p>
+                  <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                      <Link href="/statements">
+                          View Report <ArrowRight className="ml-1 h-3 w-3" />
+                      </Link>
+                  </Button>
+              </CardContent>
+          </Card>
+       </div>
 
-        {/* Action/Navigation Cards - Adjust spans */}
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
-          <CardHeader>
-            <CardTitle>Manage Transactions</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-grow">
-             <Image
-              src="https://picsum.photos/400/200"
-              alt="Ledger book with coins and pen"
-              width={400}
-              height={200}
-              className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="money ledger coins pen" // Updated hint
-            />
-            <p className="text-sm text-muted-foreground">
-              Import, categorize, and manage your financial transactions.
-            </p>
-          </CardContent>
-           <CardFooter>
-             <Button asChild variant="outline" className="w-full">
-              <Link href="/transactions">
-                Go to Transactions <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
+       {/* Charts and Navigation Grid (Bottom Section) */}
+       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+         {/* Chart Cards */}
+         <Card className="md:col-span-2 lg:col-span-3 xl:col-span-3"> {/* Adjusted span */}
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                 <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
+              </CardTitle>
+              <CardDescription>Monthly income vs. expenses over the entire transaction history.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 {trendChartData.length > 1 ? ( // Need at least 2 points for a line chart
+                     <ChartContainer config={trendChartConfig} className="h-[250px] w-full">
+                         {/* Changed to LineChart */}
+                         <LineChart
+                             accessibilityLayer
+                             data={trendChartData}
+                             margin={{ left: -20, right: 10, top: 10, bottom: 0 }}
+                         >
+                             <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" /> {/* Use theme border color */}
+                             <XAxis
+                                 dataKey="month"
+                                 tickLine={false}
+                                 axisLine={false}
+                                 tickMargin={8}
+                                 tickFormatter={(value) => value.slice(0, 3)} // Show only month abbreviation
+                                 stroke="hsl(var(--foreground))" // Use theme text color
+                             />
+                             <YAxis
+                                 tickLine={false}
+                                 axisLine={false}
+                                 tickMargin={8}
+                                 tickFormatter={(value) => `KES ${value / 1000}k`} // Format as thousands
+                                 stroke="hsl(var(--foreground))" // Use theme text color
+                             />
+                             <ChartTooltip
+                                 cursor={true} // Show cursor for LineChart
+                                 content={<ChartTooltipContent indicator="line" />} // Use line indicator
+                              />
+                              <Line
+                                 dataKey="income"
+                                 type="monotone"
+                                 stroke="hsl(var(--accent))" // Use theme accent
+                                 strokeWidth={2}
+                                 dot={false} // Optionally hide dots for cleaner look
+                              />
+                              <Line
+                                 dataKey="expense"
+                                 type="monotone"
+                                 stroke="hsl(var(--destructive))" // Use theme destructive
+                                 strokeWidth={2}
+                                 dot={false} // Optionally hide dots for cleaner look
+                              />
+                         </LineChart>
+                     </ChartContainer>
+                  ) : (
+                     <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
+                         Not enough data for trend analysis (need transactions spanning at least two months).
+                     </div>
+                  )}
+             </CardContent>
+          </Card>
 
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
-          <CardHeader>
-            <CardTitle>Analyze Income & Expenses</CardTitle>
-          </CardHeader>
+          {/* Existing Chart Cards */}
+          <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                   <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall) {/* Updated title */}
+              </CardTitle>
+              <CardDescription>Total Income vs. Total Expenses</CardDescription>
+            </CardHeader>
+            <CardContent>
+               {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? ( // Use all-time data check
+                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
+                    <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
+                         <XAxis type="number" hide />
+                          <YAxis
+                            dataKey="name"
+                            type="category"
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={10}
+                            tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} // Use theme foreground
+                            width={60} // Give slightly more space for labels
+                          />
+                          <CartesianGrid horizontal={false} stroke="hsl(var(--border))" /> {/* Use theme border */}
+                          <ChartTooltip
+                            cursor={false}
+                            content={<ChartTooltipContent hideLabel />}
+                          />
+                          <Bar dataKey="value" radius={5} />
+                      </BarChart>
+                  </ChartContainer>
+               ) : (
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                      No income or expense data available.
+                  </div>
+               )}
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                  <PieChart className="h-4 w-4"/> Asset Allocation
+              </CardTitle>
+              <CardDescription>Distribution of your assets by value</CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-center">
+              {assetChartData.length > 0 ? (
+                  <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
+                      <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                              <ChartTooltip
+                                  cursor={false}
+                                  content={<ChartTooltipContent indicator="line" nameKey="name" hideLabel />}
+                              />
+                              <Pie
+                                 data={assetChartData}
+                                 dataKey="value"
+                                 nameKey="name" // Ensure this matches the 'name' field in assetChartData
+                                 cx="50%"
+                                 cy="50%"
+                                 outerRadius={80} // Slightly larger radius
+                                 innerRadius={50} // Create a donut chart effect
+                                 labelLine={false}
+                              >
+                                 {assetChartData.map((entry, index) => (
+                                     <Cell key={`cell-${index}`} fill={entry.fill} />
+                                 ))}
+                             </Pie>
+                          </PieChart>
+                      </ResponsiveContainer>
+                  </ChartContainer>
+               ) : (
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
+                      No positive asset data available. Add assets in Statements.
+                  </div>
+              )}
+            </CardContent>
+          </Card>
+
+
+         {/* Action/Navigation Cards - Make these span 1 column each for consistency */}
+          <Card className="flex flex-col"> {/* Adjusted span */}
+           <CardHeader>
+             <CardTitle>Manage Transactions</CardTitle>
+           </CardHeader>
+           <CardContent className="flex-grow">
+              <Image
+               src="https://picsum.photos/400/200"
+               alt="Ledger book with coins and pen"
+               width={400}
+               height={200}
+               className="rounded-md object-cover mb-4 aspect-[2/1]"
+               data-ai-hint="money ledger coins pen" // Updated hint
+             />
+             <p className="text-sm text-muted-foreground">
+               Import, categorize, and manage your financial transactions.
+             </p>
+           </CardContent>
+            <CardFooter>
+              <Button asChild variant="outline" className="w-full">
+               <Link href="/transactions">
+                 Go to Transactions <ArrowRight className="ml-2 h-4 w-4" />
+               </Link>
+             </Button>
+           </CardFooter>
+         </Card>
+
+          <Card className="flex flex-col"> {/* Adjusted span */}
+           <CardHeader>
+             <CardTitle>Analyze Income & Expenses</CardTitle>
+           </CardHeader>
+            <CardContent className="flex-grow">
+              <Image
+               src="https://picsum.photos/400/200"
+               alt="Graph showing upward and downward financial trends"
+               width={400}
+               height={200}
+               className="rounded-md object-cover mb-4 aspect-[2/1]"
+               data-ai-hint="finance chart graph money trend" // Updated hint
+             />
+             <p className="text-sm text-muted-foreground">
+               Detailed breakdown of your income and expense patterns.
+             </p>
+           </CardContent>
+            <CardFooter className="flex flex-col sm:flex-row gap-2">
+                 <Button asChild variant="secondary" className="flex-1">
+                 <Link href="/income-expenses">
+                     View Analysis <TrendingUp className="ml-2 h-4 w-4" />
+                 </Link>
+                 </Button>
+              </CardFooter>
+         </Card>
+
+          <Card className="flex flex-col"> {/* Adjusted span */}
+           <CardHeader>
+             <CardTitle>Manage Debts</CardTitle>
+           </CardHeader>
            <CardContent className="flex-grow">
              <Image
-              src="https://picsum.photos/400/200"
-              alt="Graph showing upward and downward financial trends"
-              width={400}
-              height={200}
-              className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="finance chart graph money trend" // Updated hint
-            />
-            <p className="text-sm text-muted-foreground">
-              Detailed breakdown of your income and expense patterns.
-            </p>
-          </CardContent>
-           <CardFooter className="flex flex-col sm:flex-row gap-2">
-                <Button asChild variant="secondary" className="flex-1">
-                <Link href="/income-expenses">
-                    View Analysis <TrendingUp className="ml-2 h-4 w-4" />
-                </Link>
-                </Button>
-             </CardFooter>
-        </Card>
+               src="https://picsum.photos/400/200"
+               alt="Stack of coins next to a calculator"
+               width={400}
+               height={200}
+               className="rounded-md object-cover mb-4 aspect-[2/1]"
+               data-ai-hint="coins calculator finance debt money"
+             />
+             <p className="text-sm text-muted-foreground">
+               Track and manage your outstanding debts and view amortization.
+             </p>
+              {/* Debt Payoff Timeline */}
+             <div className="mt-3 pt-3 border-t border-border"> {/* Use theme border */}
+                 <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><CalendarClock size={12}/> Est. Debt Payoff Timeline</p>
+                  <p className="font-semibold text-primary">{debtPayoffTimeline}</p>
+              </div>
+           </CardContent>
+           <CardFooter>
+             <Button asChild variant="secondary" className="w-full">
+               <Link href="/debt">
+                 Manage Debts <ArrowRight className="ml-2 h-4 w-4" />
+               </Link>
+             </Button>
+           </CardFooter>
+         </Card>
 
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
-          <CardHeader>
-            <CardTitle>Manage Debts</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-grow">
-            <Image
-              src="https://picsum.photos/400/200"
-              alt="Stack of coins next to a calculator"
-              width={400}
-              height={200}
-              className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="coins calculator finance debt money"
-            />
-            <p className="text-sm text-muted-foreground">
-              Track and manage your outstanding debts and view amortization.
-            </p>
-             {/* Debt Payoff Timeline */}
-            <div className="mt-3 pt-3 border-t border-border"> {/* Use theme border */}
-                <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><CalendarClock size={12}/> Est. Debt Payoff Timeline</p>
-                 <p className="font-semibold text-primary">{debtPayoffTimeline}</p>
-             </div>
-          </CardContent>
-          <CardFooter>
-            <Button asChild variant="secondary" className="w-full">
-              <Link href="/debt">
-                Manage Debts <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
-
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
-          <CardHeader>
-            <CardTitle>View Statements</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-grow">
-            <Image
-              src="https://picsum.photos/400/200"
-              alt="Formal financial statement document with pen"
-              width={400}
-              height={200}
-              className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="documents report sheet balance statement pen"
-            />
-            <p className="text-sm text-muted-foreground">
-              Review Net Worth, Cash Flow, and Budget Variance Reports.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild variant="secondary" className="w-full">
-              <Link href="/statements">
-                View Statements <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
-
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
-          <CardHeader>
-            <CardTitle>Plan Your Budget</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-grow">
+          <Card className="flex flex-col"> {/* Adjusted span */}
+           <CardHeader>
+             <CardTitle>View Statements</CardTitle>
+           </CardHeader>
+           <CardContent className="flex-grow">
              <Image
-              src="https://picsum.photos/400/200"
-              alt="Piggy bank with coins and a plant"
-              width={400}
-              height={200}
-              className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="budget planning piggy bank coins"
-            />
-            <p className="text-sm text-muted-foreground">
-              Set your income, expenses, and savings goals.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild variant="secondary" className="w-full">
-              <Link href="/budget">
-                Go to Budget <PieChart className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardFooter>
-        </Card>
-      </main>
-    </div>
+               src="https://picsum.photos/400/200"
+               alt="Formal financial statement document with pen"
+               width={400}
+               height={200}
+               className="rounded-md object-cover mb-4 aspect-[2/1]"
+               data-ai-hint="documents report sheet balance statement pen"
+             />
+             <p className="text-sm text-muted-foreground">
+               Review Net Worth, Cash Flow, and Budget Variance Reports.
+             </p>
+           </CardContent>
+           <CardFooter>
+             <Button asChild variant="secondary" className="w-full">
+               <Link href="/statements">
+                 View Statements <ArrowRight className="ml-2 h-4 w-4" />
+               </Link>
+             </Button>
+           </CardFooter>
+         </Card>
+
+          <Card className="flex flex-col"> {/* Adjusted span */}
+           <CardHeader>
+             <CardTitle>Plan Your Budget</CardTitle>
+           </CardHeader>
+           <CardContent className="flex-grow">
+              <Image
+               src="https://picsum.photos/400/200"
+               alt="Piggy bank with coins and a plant"
+               width={400}
+               height={200}
+               className="rounded-md object-cover mb-4 aspect-[2/1]"
+               data-ai-hint="budget planning piggy bank coins"
+             />
+             <p className="text-sm text-muted-foreground">
+               Set your income, expenses, and savings goals.
+             </p>
+           </CardContent>
+           <CardFooter>
+             <Button asChild variant="secondary" className="w-full">
+               <Link href="/budget">
+                 Go to Budget <PieChart className="ml-2 h-4 w-4" />
+               </Link>
+             </Button>
+           </CardFooter>
+         </Card>
+       </main>
+     </div>
   );
 }
