@@ -3,8 +3,8 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // Added CardFooter
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'; // Removed TableFooter
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Removed CardFooter import
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import type { TransactionWithId } from '@/lib/types';
@@ -110,7 +110,7 @@ export default function IncomeExpensesPage() {
     </TableRow>
   );
 
-  // Render function for category sections - Updated to move total to CardFooter
+  // Render function for category sections - Moved total to CardContent
   const renderCategorySection = (
     title: string,
     description: string,
@@ -118,12 +118,21 @@ export default function IncomeExpensesPage() {
     total: number,
     isExpense = false
   ) => (
-    <Card className="flex flex-col"> {/* Added flex-col */}
+    <Card className="flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base"><Tag className="h-4 w-4"/>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="flex-grow p-0"> {/* Allow content to grow, remove padding */}
+        {/* Moved total display here */}
+        {transactions.length > 0 && (
+            <div className="px-6 pb-3 text-sm border-b"> {/* Add padding and border */}
+                <div className="flex justify-between w-full">
+                <span className="font-semibold">Total {title}</span>
+                <span className="font-bold font-mono">{formatCurrency(total)}</span>
+                </div>
+            </div>
+        )}
         <ScrollArea className="h-[300px] w-full">
           <Table>
             <TableHeader>
@@ -141,19 +150,10 @@ export default function IncomeExpensesPage() {
                 <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No transactions in this category.</TableCell></TableRow>
               )}
             </TableBody>
-             {/* Removed TableFooter */}
           </Table>
         </ScrollArea>
       </CardContent>
-       {/* Moved total display to CardFooter */}
-       {transactions.length > 0 && (
-          <CardFooter className="p-3 border-t bg-muted/50 text-sm">
-            <div className="flex justify-between w-full">
-              <span className="font-semibold">Total {title}</span>
-              <span className="font-bold font-mono">{formatCurrency(total)}</span>
-            </div>
-          </CardFooter>
-        )}
+       {/* Removed CardFooter */}
     </Card>
   );
 
@@ -232,3 +232,4 @@ export default function IncomeExpensesPage() {
     </div>
   );
 }
+
