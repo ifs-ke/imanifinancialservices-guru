@@ -20,7 +20,6 @@ import {
   FileText,
   FileUp,
   Coins,
-  TrendingDown,
   TrendingUp, // Icon for Income/Expenses combined view
   Menu,
   Settings,
@@ -29,7 +28,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
-import { ThemeToggle } from '@/components/ui/ThemeToggle'; // Import ThemeToggle
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { UserButton } from '@clerk/nextjs'; // Import UserButton
+import { Separator } from '../ui/separator';
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -95,7 +96,17 @@ export function AppSidebar() {
          })}
         </SidebarMenu>
       </SidebarContent>
-       <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border">
+       <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
+          {/* User Button */}
+          <div className={cn("flex items-center", state === 'collapsed' ? 'justify-center' : 'justify-between')}>
+            <div className={cn(state === 'collapsed' ? 'scale-0' : 'scale-100', 'transition-transform duration-200 ease-in-out')}>
+                <UserButton afterSignOutUrl="/sign-in" />
+            </div>
+             {state === 'expanded' && (
+                 <span className="text-xs text-muted-foreground ml-2">Account</span>
+             )}
+         </div>
+          <Separator className="my-1"/>
           <ThemeToggle />
       </SidebarFooter>
     </>
