@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
@@ -69,7 +68,7 @@ export default function DebtPage() {
   // DELETE
   const handleDeleteClick = (debt: DebtItem) => {
     setDebtToDelete(debt);
-    // AlertDialogTrigger will open the confirmation dialog
+    // AlertDialogTrigger below will open the confirmation dialog
   };
 
   const confirmDeleteDebt = () => {
@@ -249,28 +248,14 @@ export default function DebtPage() {
                                 </Button>
                             </DebtAmortizationSheet>
 
-                          {/* Delete Button & Confirmation Dialog */}
-                          <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
-                            <AlertDialogTrigger asChild>
+                          {/* Delete Button Trigger */}
+                          {/* This button now only sets the debtToDelete state */}
+                           <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
                                 <Trash2 className="h-4 w-4" />
                                 <span className="sr-only">Delete</span>
                               </Button>
                             </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This action cannot be undone. This will permanently delete the debt: <br />
-                                  <strong>{debt.description} ({formatCurrency(debt.principal)})</strong>
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={confirmDeleteDebt}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))
@@ -304,10 +289,31 @@ export default function DebtPage() {
              formatCurrency={formatCurrency}
          />
 
+         {/* Delete Confirmation Dialog (Placed once outside the map) */}
+         <AlertDialog open={!!debtToDelete} onOpenChange={(open) => !open && setDebtToDelete(null)}>
+            <AlertDialogContent>
+                {debtToDelete && ( // Render content only when debtToDelete is set
+                    <>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the debt: <br />
+                                <strong>{debtToDelete.description} ({formatCurrency(debtToDelete.principal)})</strong>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={confirmDeleteDebt}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </>
+                )}
+            </AlertDialogContent>
+         </AlertDialog>
+
+
       </main>
     </div>
   );
 }
-
  
       

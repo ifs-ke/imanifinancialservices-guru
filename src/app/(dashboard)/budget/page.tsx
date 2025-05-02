@@ -72,7 +72,7 @@ export default function BudgetPage() {
 
   const handleDeleteClick = (item: BudgetItem) => {
       setItemToDelete(item);
-      // AlertDialogTrigger will open the confirmation dialog
+      // AlertDialogTrigger below will open the confirmation dialog
   };
 
   const confirmDeleteItem = () => {
@@ -191,14 +191,14 @@ export default function BudgetPage() {
                                                      <Edit className="h-3 w-3" />
                                                      <span className="sr-only">Edit</span>
                                                  </Button>
-                                                 {/* Delete Button */}
-                                                 {/* Keep AlertDialog outside the TableRow for better DOM structure */}
+                                                 {/* Delete Button Trigger */}
+                                                 {/* This button now only sets the itemToDelete state */}
                                                  <AlertDialogTrigger asChild>
                                                       <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
                                                           <Trash2 className="h-3 w-3" />
                                                           <span className="sr-only">Delete</span>
                                                       </Button>
-                                                  </AlertDialogTrigger>
+                                                 </AlertDialogTrigger>
                                              </TableCell>
                                          </TableRow>
                                      ))
@@ -225,24 +225,27 @@ export default function BudgetPage() {
              </Card>
          ))}
 
-          {/* Alert Dialog for Delete Confirmation (Placed once outside the map) */}
-          {itemToDelete && (
-              <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
-                   <AlertDialogContent>
-                       <AlertDialogHeader>
-                           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                           <AlertDialogDescription>
-                               This action cannot be undone. This will permanently delete the budget item: <br />
-                               <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
-                           </AlertDialogDescription>
-                       </AlertDialogHeader>
-                       <AlertDialogFooter>
-                           <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
-                           <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
-                       </AlertDialogFooter>
-                   </AlertDialogContent>
-               </AlertDialog>
-           )}
+         {/* Alert Dialog for Delete Confirmation (Placed once outside the map) */}
+         {/* This AlertDialog now controls the visibility based on itemToDelete */}
+          <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+            <AlertDialogContent>
+                {itemToDelete && ( // Conditionally render content only if itemToDelete exists
+                    <>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the budget item: <br />
+                                <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </>
+                )}
+            </AlertDialogContent>
+        </AlertDialog>
 
 
           {/* Budget Item Form Sheet (for Add/Edit) */}
@@ -257,5 +260,4 @@ export default function BudgetPage() {
     </div>
   );
 }
-
     
