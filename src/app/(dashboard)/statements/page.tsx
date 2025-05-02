@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight, AlertTriangle, PieChart as PieChartIcon } from 'lucide-react'; // Added icons
+import { Label } from '@/components/ui/label'; // Import Label component
 import {
   AlertDialog,
   AlertDialogAction,
@@ -786,3 +787,4 @@ export default function StatementsPage() {
     </div>
   );
 }
+
