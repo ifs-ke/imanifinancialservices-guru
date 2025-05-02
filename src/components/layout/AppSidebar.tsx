@@ -48,22 +48,28 @@ export function AppSidebar() {
   return (
     <>
       <SidebarHeader className="flex items-center justify-between p-2 border-b border-sidebar-border">
-        <Link href="/dashboard" className="flex items-center gap-2 flex-shrink-0">
-          <Landmark className="w-6 h-6 text-primary" />
-          {state === 'expanded' && (
-            <span className="font-semibold text-lg text-sidebar-foreground whitespace-nowrap">
-              Imani Financial Consultancies - Guru
-            </span>
-          )}
-        </Link>
+         {/* Wrap Link and span for better control */}
+        <div className={cn("flex items-center gap-2 flex-shrink-0 overflow-hidden", state === 'collapsed' && 'justify-center w-full')}>
+            <Link href="/dashboard" className="flex items-center gap-2 flex-shrink-0">
+              <Landmark className="w-6 h-6 text-primary flex-shrink-0" />
+               {/* Conditionally render text based on state */}
+               <span className={cn(
+                   "font-semibold text-lg text-sidebar-foreground whitespace-nowrap",
+                   state === 'collapsed' && "hidden" // Hide text when collapsed
+               )}>
+                  IFC - Guru
+              </span>
+            </Link>
+         </div>
+
         {/* Hamburger menu trigger */}
          <SidebarTrigger asChild>
-             <Button variant="ghost" size="icon" className="md:hidden"> {/* Show only on mobile */}
+             <Button variant="ghost" size="icon" className={cn("h-7 w-7", state === 'expanded' ? 'md:hidden' : 'hidden')}> {/* Show only on mobile when expanded */}
                  <Menu className="h-5 w-5" />
              </Button>
          </SidebarTrigger>
          <SidebarTrigger asChild>
-              <Button variant="ghost" size="icon" className="hidden md:flex ml-auto"> {/* Show only on desktop */}
+              <Button variant="ghost" size="icon" className={cn("h-7 w-7 hidden", state === 'expanded' ? 'md:flex ml-auto' : 'md:hidden')}> {/* Show only on desktop when expanded */}
                   <Menu className="h-5 w-5" />
               </Button>
          </SidebarTrigger>
