@@ -56,20 +56,17 @@ export function AppSidebar() {
             </span>
           )}
         </Link>
-        {isMobile && (
-          <SidebarTrigger asChild>
-              <Button variant="ghost" size="icon">
+        {/* Hamburger menu trigger */}
+         <SidebarTrigger asChild>
+             <Button variant="ghost" size="icon" className="md:hidden"> {/* Show only on mobile */}
+                 <Menu className="h-5 w-5" />
+             </Button>
+         </SidebarTrigger>
+         <SidebarTrigger asChild>
+              <Button variant="ghost" size="icon" className="hidden md:flex ml-auto"> {/* Show only on desktop */}
                   <Menu className="h-5 w-5" />
               </Button>
-          </SidebarTrigger>
-        )}
-        {!isMobile && (
-           <SidebarTrigger asChild>
-               <Button variant="ghost" size="icon" className="ml-auto">
-                   <Menu className="h-5 w-5" />
-               </Button>
-           </SidebarTrigger>
-        )}
+         </SidebarTrigger>
       </SidebarHeader>
       <SidebarContent className="flex-1 overflow-y-auto p-2">
         <SidebarMenu>
@@ -98,10 +95,15 @@ export function AppSidebar() {
       </SidebarContent>
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
           {/* User Button */}
-          <div className={cn("flex items-center", state === 'collapsed' ? 'justify-center' : 'justify-between')}>
-            <div className={cn(state === 'collapsed' ? 'scale-0' : 'scale-100', 'transition-transform duration-200 ease-in-out')}>
-                <UserButton afterSignOutUrl="/sign-in" />
-            </div>
+          <div className={cn(
+               "flex items-center w-full",
+               state === 'collapsed' ? 'justify-center' : 'justify-start pl-1' // Adjust justification and padding
+             )}>
+             <UserButton afterSignOutUrl="/sign-in" appearance={{
+                 elements: {
+                    userButtonAvatarBox: "w-7 h-7", // Adjust size if needed
+                 }
+             }} />
              {state === 'expanded' && (
                  <span className="text-xs text-muted-foreground ml-2">Account</span>
              )}
