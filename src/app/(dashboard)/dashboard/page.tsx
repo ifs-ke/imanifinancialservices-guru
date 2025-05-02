@@ -5,7 +5,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle } from 'lucide-react'; // Added Target, CheckCircle, AlertTriangle
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle, Banknote, Landmark } from 'lucide-react'; // Added Banknote, Landmark
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactionsStore } from '@/store/transactionsStore'; // Import transactions store
@@ -60,7 +60,8 @@ export default function DashboardPage() {
     const totalAssets = calculateTotal(assetItems);
     const totalDebt = calculateDebtTotal(debts);
     const totalOtherLiabilities = calculateOtherLiabilityTotal(otherLiabilityItems);
-    const netWorth = totalAssets - (totalDebt + totalOtherLiabilities);
+    const totalLiabilities = totalDebt + totalOtherLiabilities;
+    const netWorth = totalAssets - totalLiabilities;
 
     // Use ALL transactions for overall cash flow calculation
     const totalIncomeAllTime = calculateTotal(allTransactions.filter(tx => tx.amount > 0));
@@ -72,6 +73,7 @@ export default function DashboardPage() {
       cashFlow: netActualAllTime, // Use all-time net actual
       totalDebt,
       totalAssets,
+      totalLiabilities, // Add combined liabilities
       totalIncome: totalIncomeAllTime, // Use all-time income
       totalExpenses: totalExpensesAllTime, // Use all-time expenses
       totalOtherLiabilities,
@@ -87,24 +89,24 @@ export default function DashboardPage() {
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
   const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A'); // Renamed state variable
   const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
-  const [formattedOtherLiabilities, setFormattedOtherLiabilities] = useState<string>('N/A'); // Added state for other liabilities formatting
-  // Removed budget status and variance state as the variance card is removed
+  // Removed other liabilities state as it's now part of totalLiabilities
+
 
   useEffect(() => {
     // Format the values here to avoid server/client differences
     setFormattedNetWorth(formatCurrency(financialData.netWorth));
     setFormattedTotalAssets(formatCurrency(financialData.totalAssets));
-    setFormattedTotalLiabilities(formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities));
+    setFormattedTotalLiabilities(formatCurrency(financialData.totalLiabilities)); // Use combined liabilities
     setFormattedCashFlow(formatCurrency(financialData.cashFlow));
     setFormattedTotalIncome(formatCurrency(financialData.totalIncome)); // Use all-time income data
     setFormattedTotalExpenses(formatCurrency(financialData.totalExpenses)); // Use all-time expense data
-    setFormattedOtherLiabilities(formatCurrency(financialData.totalOtherLiabilities)); // Format other liabilities
+
 
     // Removed budget status/variance calculation from useEffect
 
   }, [financialData]);
 
-  // --- Debt Payoff Timeline Calculation (Refactored for Accuracy) ---
+  // --- Debt Payoff Timeline Calculation (Kept for potential use elsewhere, not main metrics) ---
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
 
   useEffect(() => {
@@ -281,18 +283,18 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 bg-background">
       <header className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Dashboard
+          Executive Summary
         </h1>
         <p className="text-muted-foreground">
-           Overall financial overview. Date range for some details set in Statements: {startDate ? format(startDate, 'PP') : '...'} to {endDate ? format(endDate, 'PP') : '...'}.
+           High-level overview of your current financial position.
         </p>
       </header>
 
       {/* Updated grid layout for better responsiveness and new charts */}
-      <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4">
 
         {/* Financial Metrics Cards - Span 1 col each */}
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
+        <Card className="md:col-span-1 lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
             <Scale className="h-4 w-4 text-muted-foreground" />
@@ -312,9 +314,55 @@ export default function DashboardPage() {
             </Button>
           </CardContent>
         </Card>
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
+
+         <Card className="md:col-span-1 lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle> {/* Updated title */}
+            <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
+            <Landmark className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formattedTotalAssets}
+            </div>
+            <p className="text-xs text-muted-foreground">
+               Combined value of your assets
+            </p>
+            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                <Link href="/statements">
+                    Manage Assets <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+         <Card className="md:col-span-1 lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>
+            <Coins className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+                {formattedTotalLiabilities}
+            </div>
+            <p className="text-xs text-muted-foreground">
+               Debts ({formatCurrency(financialData.totalDebt)}) + Other Liabilities ({formatCurrency(financialData.totalOtherLiabilities)})
+            </p>
+            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                <Link href="/debt">
+                    Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+            </Button>
+             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs ml-2">
+                <Link href="/statements">
+                    Manage Other <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+             </Button>
+          </CardContent>
+        </Card>
+
+         <Card className="md:col-span-1 lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle>
             {financialData.cashFlow >= 0 ? (
               <TrendingUp className="h-4 w-4 text-accent" />
             ) : (
@@ -330,63 +378,25 @@ export default function DashboardPage() {
               {formattedCashFlow}
             </div>
             <p className="text-xs text-muted-foreground">
-              Income ({formattedTotalIncome}) - Expenses ({formattedTotalExpenses}) {/* Use all-time formatted values */}
+              Income ({formattedTotalIncome}) - Expenses ({formattedTotalExpenses})
             </p>
-             {/* Link to Statements */}
             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                <Link href="/statements">
-                    View Details <ArrowRight className="ml-1 h-3 w-3" />
+                <Link href="/transactions">
+                    View Transactions <ArrowRight className="ml-1 h-3 w-3" />
                 </Link>
             </Button>
           </CardContent>
         </Card>
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Debt</CardTitle>
-             <Coins className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-                {formatCurrency(financialData.totalDebt)} {/* Display only debt here */}
-            </div>
-             <p className="text-xs text-muted-foreground">
-                Excludes other liabilities
-             </p>
-             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                <Link href="/debt">
-                    Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
-             </Button>
-          </CardContent>
-        </Card>
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Other Liabilities</CardTitle>
-            <MinusCircle className="h-4 w-4 text-muted-foreground" /> {/* Example Icon */}
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-                {formattedOtherLiabilities} {/* Display other liabilities */}
-            </div>
-             <p className="text-xs text-muted-foreground">
-                Items from Statements
-             </p>
-             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                <Link href="/statements">
-                    Manage Statements <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
-             </Button>
-          </CardContent>
-        </Card>
 
-         {/* Debt Payoff Timeline Card */}
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
+
+         {/* Debt Payoff Timeline Card - Can be moved or kept based on importance */}
+        {/* <Card className="md:col-span-1 lg:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Debt Payoff Timeline</CardTitle>
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                <div className="text-lg font-bold"> {/* Slightly smaller font */}
+                <div className="text-lg font-bold">
                     {debtPayoffTimeline}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -398,17 +408,15 @@ export default function DashboardPage() {
                     </Link>
                  </Button>
             </CardContent>
-        </Card>
+        </Card> */}
 
-         {/* Budget Variance Card - REMOVED */}
-         {/* Comparison is less meaningful without a defined period matching the budget */}
 
 
         {/* Chart Cards - Span full width on md, adjust for lg/xl */}
-        <Card className="md:col-span-2 lg:col-span-3 xl:col-span-4">
+        <Card className="md:col-span-2 lg:col-span-4">
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
-                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall) {/* Updated title */}
+                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
              </CardTitle>
              <CardDescription>Monthly income vs. expenses over the entire transaction history.</CardDescription>
            </CardHeader>
@@ -468,12 +476,12 @@ export default function DashboardPage() {
          </Card>
 
          {/* Existing Chart Cards */}
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-2"> {/* Adjust span */}
+         <Card className="md:col-span-1 lg:col-span-2"> {/* Adjust span */}
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4" /> Cash Flow (Overall) {/* Updated title */}
+                  <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall) {/* Updated title */}
              </CardTitle>
-             <CardDescription>Overall Income vs. Expenses</CardDescription>
+             <CardDescription>Total Income vs. Total Expenses</CardDescription>
            </CardHeader>
            <CardContent>
               {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? ( // Use all-time data check
@@ -503,12 +511,12 @@ export default function DashboardPage() {
            </CardContent>
          </Card>
 
-         <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjust span */}
+         <Card className="md:col-span-1 lg:col-span-2"> {/* Adjust span */}
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
                  <PieChart className="h-4 w-4"/> Asset Allocation
              </CardTitle>
-             <CardDescription>Distribution of your assets</CardDescription>
+             <CardDescription>Distribution of your assets by value</CardDescription>
            </CardHeader>
            <CardContent className="flex items-center justify-center">
               {assetChartData.length > 0 ? (
@@ -544,7 +552,7 @@ export default function DashboardPage() {
 
 
         {/* Action/Navigation Cards - Adjust spans */}
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
+        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
           <CardHeader>
             <CardTitle>Manage Transactions</CardTitle>
           </CardHeader>
@@ -570,9 +578,9 @@ export default function DashboardPage() {
           </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
+        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
           <CardHeader>
-            <CardTitle>View Income/Expenses</CardTitle>
+            <CardTitle>Analyze Income & Expenses</CardTitle>
           </CardHeader>
            <CardContent className="flex-grow">
              <Image
@@ -584,21 +592,21 @@ export default function DashboardPage() {
               data-ai-hint="finance chart graph money trend" // Updated hint
             />
             <p className="text-sm text-muted-foreground">
-              Analyze your income and expense patterns.
+              Detailed breakdown of your income and expense patterns.
             </p>
           </CardContent>
            <CardFooter className="flex flex-col sm:flex-row gap-2">
                 <Button asChild variant="secondary" className="flex-1">
-                <Link href="/income-expenses"> {/* Updated link */}
-                    Analysis <TrendingUp className="ml-2 h-4 w-4" />
+                <Link href="/income-expenses">
+                    View Analysis <TrendingUp className="ml-2 h-4 w-4" />
                 </Link>
                 </Button>
              </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
+        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
           <CardHeader>
-            <CardTitle>Manage Debts</CardTitle> {/* Changed Title */}
+            <CardTitle>Manage Debts</CardTitle>
           </CardHeader>
           <CardContent className="flex-grow">
             <Image
@@ -607,22 +615,22 @@ export default function DashboardPage() {
               width={400}
               height={200}
               className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="coins calculator finance debt money" // Updated hint
+              data-ai-hint="coins calculator finance debt money"
             />
             <p className="text-sm text-muted-foreground">
-              Track and manage your outstanding debts. {/* Changed description */}
+              Track and manage your outstanding debts and view amortization.
             </p>
           </CardContent>
           <CardFooter>
             <Button asChild variant="secondary" className="w-full">
-              <Link href="/debt"> {/* Changed Link */}
+              <Link href="/debt">
                 Manage Debts <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
           </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col">
+        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
           <CardHeader>
             <CardTitle>View Statements</CardTitle>
           </CardHeader>
@@ -633,10 +641,10 @@ export default function DashboardPage() {
               width={400}
               height={200}
               className="rounded-md object-cover mb-4 aspect-[2/1]"
-              data-ai-hint="documents report sheet balance statement pen" // Updated hint
+              data-ai-hint="documents report sheet balance statement pen"
             />
             <p className="text-sm text-muted-foreground">
-              Check your cash flow and net worth statements.
+              Review Net Worth, Cash Flow, and Budget Variance Reports.
             </p>
           </CardContent>
           <CardFooter>
