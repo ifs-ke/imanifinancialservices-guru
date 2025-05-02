@@ -1,3 +1,4 @@
+
 import React from 'react';
 import {
   Sidebar,
@@ -43,4 +44,3 @@ export default function DashboardLayout({
      </TransactionsProvider>
   );
 }
-```
