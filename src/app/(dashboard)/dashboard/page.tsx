@@ -39,13 +39,13 @@ const formatMonthYear = (date: Date) => format(date, 'MMM yyyy');
 
 export default function DashboardPage() {
   // Use Zustand store hooks directly
-  const transactions = useTransactionsStore(state => state.transactions);
+  const allTransactions = useTransactionsStore(state => state.transactions); // Get ALL transactions
   const debts = useDebtStore(state => state.debts);
   // Get statement items and date range from statementStore
   const assetItems = useStatementStore(state => state.assetItems);
   const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
-  const startDate = useStatementStore(state => state.startDate);
-  const endDate = useStatementStore(state => state.endDate);
+  const startDate = useStatementStore(state => state.startDate); // Keep for header display
+  const endDate = useStatementStore(state => state.endDate);     // Keep for header display
   // Use budget store selectors
   const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
@@ -54,46 +54,30 @@ export default function DashboardPage() {
   const netBudgetedMonthly = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
   const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
 
-  // Filter transactions based on the global date range
-   const filteredTransactions = useMemo(() => {
-      const start = startDate ? startDate.getTime() : 0;
-      const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
-      return transactions.filter(tx => {
-          const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
-          if (isNaN(txDate.getTime())) return false;
-          const txTime = txDate.getTime();
-          return txTime >= start && txTime <= end;
-      });
-  }, [transactions, startDate, endDate]); // Depend on global dates
 
-  // Calculate financial metrics based on filtered transactions and other context data
+  // Calculate financial metrics based on ALL transactions and other context data
   const financialData = useMemo(() => {
     const totalAssets = calculateTotal(assetItems);
     const totalDebt = calculateDebtTotal(debts);
     const totalOtherLiabilities = calculateOtherLiabilityTotal(otherLiabilityItems);
     const netWorth = totalAssets - (totalDebt + totalOtherLiabilities);
 
-    // Use filteredTransactions for cash flow calculation
-    const totalIncomeFiltered = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
-    const totalExpensesFiltered = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
-    const netActualFiltered = totalIncomeFiltered - totalExpensesFiltered; // Actual net for selected date range
-
-    // Budget Variance Calculation (comparing filtered actual net vs monthly budgeted net)
-    // Note: This comparison might be less meaningful if the date range isn't a full month.
-    // A dedicated variance report page (like in Statements) is better for detailed analysis.
-    const budgetVariance = netActualFiltered - netBudgetedMonthly; // Keep the basic comparison for the dashboard card
+    // Use ALL transactions for overall cash flow calculation
+    const totalIncomeAllTime = calculateTotal(allTransactions.filter(tx => tx.amount > 0));
+    const totalExpensesAllTime = Math.abs(calculateTotal(allTransactions.filter(tx => tx.amount < 0)));
+    const netActualAllTime = totalIncomeAllTime - totalExpensesAllTime; // Actual net for ALL transactions
 
     return {
       netWorth,
-      cashFlow: netActualFiltered, // Use filtered net actual
+      cashFlow: netActualAllTime, // Use all-time net actual
       totalDebt,
       totalAssets,
-      totalIncomeFiltered, // Use filtered income
-      totalExpensesFiltered, // Use filtered expenses
+      totalIncome: totalIncomeAllTime, // Use all-time income
+      totalExpenses: totalExpensesAllTime, // Use all-time expenses
       totalOtherLiabilities,
-      budgetVariance, // Add variance to the data object
     };
-  }, [filteredTransactions, debts, assetItems, otherLiabilityItems, netBudgetedMonthly]); // Depend on filteredTransactions
+    // Dependencies updated to use allTransactions instead of filteredTransactions
+  }, [allTransactions, debts, assetItems, otherLiabilityItems]);
 
 
   // State for formatted currency values to avoid hydration issues
@@ -101,11 +85,10 @@ export default function DashboardPage() {
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
   const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
-  const [formattedTotalIncomeFiltered, setFormattedTotalIncomeFiltered] = useState<string>('N/A'); // Renamed state variable
-  const [formattedTotalExpensesFiltered, setFormattedTotalExpensesFiltered] = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
   const [formattedOtherLiabilities, setFormattedOtherLiabilities] = useState<string>('N/A'); // Added state for other liabilities formatting
-  const [budgetStatus, setBudgetStatus] = useState<string>('N/A'); // State for budget status
-  const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A'); // State for formatted variance
+  // Removed budget status and variance state as the variance card is removed
 
   useEffect(() => {
     // Format the values here to avoid server/client differences
@@ -113,17 +96,11 @@ export default function DashboardPage() {
     setFormattedTotalAssets(formatCurrency(financialData.totalAssets));
     setFormattedTotalLiabilities(formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities));
     setFormattedCashFlow(formatCurrency(financialData.cashFlow));
-    setFormattedTotalIncomeFiltered(formatCurrency(financialData.totalIncomeFiltered)); // Use filtered income data
-    setFormattedTotalExpensesFiltered(formatCurrency(financialData.totalExpensesFiltered)); // Use filtered expense data
+    setFormattedTotalIncome(formatCurrency(financialData.totalIncome)); // Use all-time income data
+    setFormattedTotalExpenses(formatCurrency(financialData.totalExpenses)); // Use all-time expense data
     setFormattedOtherLiabilities(formatCurrency(financialData.totalOtherLiabilities)); // Format other liabilities
 
-    // Determine budget status and format variance based on filtered data
-     if (financialData.budgetVariance >= 0) {
-         setBudgetStatus("On Track");
-     } else {
-         setBudgetStatus("Off Track");
-     }
-    setFormattedBudgetVariance(formatCurrency(financialData.budgetVariance));
+    // Removed budget status/variance calculation from useEffect
 
   }, [financialData]);
 
@@ -223,11 +200,11 @@ export default function DashboardPage() {
 
   // --- Chart Data and Config ---
 
-  // 1. Income vs Expense Chart (Bar Chart - Based on filtered date range)
+  // 1. Income vs Expense Chart (Bar Chart - Based on ALL transactions)
   const cashFlowChartData = useMemo(() => [
-    { name: 'Income', value: financialData.totalIncomeFiltered, fill: "hsl(var(--chart-2))" }, // Use filtered income
-    { name: 'Expenses', value: financialData.totalExpensesFiltered, fill: "hsl(var(--destructive))" }, // Use filtered expenses
-  ], [financialData.totalIncomeFiltered, financialData.totalExpensesFiltered]);
+    { name: 'Income', value: financialData.totalIncome, fill: "hsl(var(--chart-2))" }, // Use all-time income
+    { name: 'Expenses', value: financialData.totalExpenses, fill: "hsl(var(--destructive))" }, // Use all-time expenses
+  ], [financialData.totalIncome, financialData.totalExpenses]); // Depend on all-time data
 
   const cashFlowChartConfig = {
     value: { label: 'Amount (KES)' },
@@ -258,19 +235,19 @@ export default function DashboardPage() {
        return config;
    }, [assetChartData]);
 
-   // 3. Income/Expense Trend Chart (Line Chart - Based on filtered date range)
+   // 3. Income/Expense Trend Chart (Line Chart - Based on ALL transactions)
    const trendChartData = useMemo(() => {
         const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
 
-        // Use filtered transactions for trend analysis
-        const sortedFilteredTransactions = [...filteredTransactions].sort((a, b) => {
+        // Use ALL transactions for trend analysis
+        const sortedAllTransactions = [...allTransactions].sort((a, b) => { // Use allTransactions
             const dateA = a.date instanceof Date ? a.date : new Date(a.date);
             const dateB = b.date instanceof Date ? b.date : new Date(b.date);
             if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
             return dateA.getTime() - dateB.getTime();
         });
 
-        sortedFilteredTransactions.forEach(tx => {
+        sortedAllTransactions.forEach(tx => {
             const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
             if (isNaN(txDate.getTime())) return;
 
@@ -291,7 +268,7 @@ export default function DashboardPage() {
             const dateB = new Date(b.month.replace(' ', ' 1, '));
             return dateA.getTime() - dateB.getTime();
         });
-    }, [filteredTransactions]); // Depend on filteredTransactions
+    }, [allTransactions]); // Depend on allTransactions
 
    const trendChartConfig = {
         income: { label: "Income", color: "hsl(var(--chart-2))" },
@@ -307,7 +284,7 @@ export default function DashboardPage() {
           Dashboard
         </h1>
         <p className="text-muted-foreground">
-           Financial overview for {startDate ? format(startDate, 'PP') : '...'} to {endDate ? format(endDate, 'PP') : '...'}. Update range in Statements.
+           Overall financial overview. Date range for some details set in Statements: {startDate ? format(startDate, 'PP') : '...'} to {endDate ? format(endDate, 'PP') : '...'}.
         </p>
       </header>
 
@@ -337,7 +314,7 @@ export default function DashboardPage() {
         </Card>
         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cash Flow (Filtered)</CardTitle> {/* Updated title */}
+            <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle> {/* Updated title */}
             {financialData.cashFlow >= 0 ? (
               <TrendingUp className="h-4 w-4 text-accent" />
             ) : (
@@ -353,12 +330,12 @@ export default function DashboardPage() {
               {formattedCashFlow}
             </div>
             <p className="text-xs text-muted-foreground">
-              Income ({formattedTotalIncomeFiltered}) - Expenses ({formattedTotalExpensesFiltered}) {/* Use filtered formatted values */}
+              Income ({formattedTotalIncome}) - Expenses ({formattedTotalExpenses}) {/* Use all-time formatted values */}
             </p>
              {/* Link to Statements */}
             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                 <Link href="/statements">
-                    View Statement <ArrowRight className="ml-1 h-3 w-3" />
+                    View Details <ArrowRight className="ml-1 h-3 w-3" />
                 </Link>
             </Button>
           </CardContent>
@@ -423,42 +400,17 @@ export default function DashboardPage() {
             </CardContent>
         </Card>
 
-         {/* Budget Variance Card */}
-         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
-             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                 <CardTitle className="text-sm font-medium">Budget Variance (Filtered)</CardTitle> {/* Updated title */}
-                  {financialData.budgetVariance >= 0 ? (
-                     <CheckCircle className="h-4 w-4 text-accent" />
-                 ) : (
-                     <AlertTriangle className="h-4 w-4 text-destructive" />
-                 )}
-             </CardHeader>
-             <CardContent>
-                 <div className={cn(
-                    "text-lg font-bold",
-                    financialData.budgetVariance >= 0 ? 'text-accent' : 'text-destructive'
-                 )}>
-                     {budgetStatus}
-                 </div>
-                 <p className="text-xs text-muted-foreground">
-                     {formattedBudgetVariance} {financialData.budgetVariance >= 0 ? 'Surplus' : 'Shortfall'} vs Budgeted Net (monthly)
-                 </p>
-                 <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                     <Link href="/statements">
-                         View Variance Report <ArrowRight className="ml-1 h-3 w-3" />
-                     </Link>
-                 </Button>
-             </CardContent>
-         </Card>
+         {/* Budget Variance Card - REMOVED */}
+         {/* Comparison is less meaningful without a defined period matching the budget */}
 
 
         {/* Chart Cards - Span full width on md, adjust for lg/xl */}
         <Card className="md:col-span-2 lg:col-span-3 xl:col-span-4">
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
-                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Filtered) {/* Updated title */}
+                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall) {/* Updated title */}
              </CardTitle>
-             <CardDescription>Monthly income vs. expenses over the selected date range.</CardDescription>
+             <CardDescription>Monthly income vs. expenses over the entire transaction history.</CardDescription>
            </CardHeader>
            <CardContent>
                 {trendChartData.length > 1 ? ( // Need at least 2 points for a line chart
@@ -509,7 +461,7 @@ export default function DashboardPage() {
                     </ChartContainer>
                  ) : (
                     <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
-                        Not enough data in the selected range for trend analysis (need data spanning at least two months).
+                        Not enough data for trend analysis (need transactions spanning at least two months).
                     </div>
                  )}
             </CardContent>
@@ -519,12 +471,12 @@ export default function DashboardPage() {
          <Card className="md:col-span-1 lg:col-span-1 xl:col-span-2"> {/* Adjust span */}
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4" /> Cash Flow (Filtered) {/* Updated title */}
+                  <BarChart2 className="h-4 w-4" /> Cash Flow (Overall) {/* Updated title */}
              </CardTitle>
-             <CardDescription>Income vs. Expenses in selected range</CardDescription>
+             <CardDescription>Overall Income vs. Expenses</CardDescription>
            </CardHeader>
            <CardContent>
-              {financialData.totalIncomeFiltered > 0 || financialData.totalExpensesFiltered > 0 ? ( // Use filtered data check
+              {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? ( // Use all-time data check
                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
                    <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
                       <XAxis type="number" hide />
@@ -545,7 +497,7 @@ export default function DashboardPage() {
                  </ChartContainer>
               ) : (
                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-                     No income or expense data for the selected date range.
+                     No income or expense data available.
                  </div>
               )}
            </CardContent>
