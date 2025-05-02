@@ -331,11 +331,13 @@ export default function ImportDebtsPage() {
         const debtsToImport = mappedDebts
             .filter(debt => debt.__toBeImported && !debt.__parseError);
 
+        const currentSkippedCount = mappedDebts.length - debtsToImport.length;
+        setSkippedCount(currentSkippedCount); // Set skipped count before potential errors
+
         if (debtsToImport.length === 0) {
             setImportedCount(0);
-            setSkippedCount(mappedDebts.length);
             setStage('complete');
-            toast({ title: "Import Complete", description: "No new debts were marked for import.", variant: "default" });
+            toast({ title: "Import Complete", description: `No new debts were imported. ${currentSkippedCount} rows skipped.`, variant: "default" });
             return;
         }
 
@@ -350,9 +352,10 @@ export default function ImportDebtsPage() {
 
         // Use a batch import function (ideal) or loop through addDebt
         try {
+            let addedDebtsWithIds: DebtItem[] = [];
             // Assuming importDebtsBatch exists in context (preferable)
              if (importDebtsBatch) {
-                 const addedDebtsWithIds = importDebtsBatch(newDebtData);
+                 addedDebtsWithIds = importDebtsBatch(newDebtData);
                  setImportedCount(addedDebtsWithIds.length);
                  setLastImportedIds(addedDebtsWithIds.map(d => d.id));
              } else {
@@ -362,14 +365,21 @@ export default function ImportDebtsPage() {
                     const addedDebt = addDebt(debtData); // Use existing addDebt
                     addedIds.push(addedDebt.id);
                 });
+                // Fetch the added items again to ensure we have the complete objects with IDs
+                 // This step might be inefficient or complex depending on the addDebt implementation
+                 // It's better to ensure addDebt returns the full item or have a dedicated batch function
+                 addedDebtsWithIds = debts.filter(d => addedIds.includes(d.id)); // Example: Filter existing debts (might not be reliable)
                  setImportedCount(addedIds.length);
                  setLastImportedIds(addedIds);
                  console.warn("DebtContext does not have importDebtsBatch, importing one by one.");
              }
 
-            setSkippedCount(mappedDebts.length - importedCount); // Calculate skipped count after import
             setStage('complete');
-            toast({ title: "Import Successful", description: `${importedCount} debts imported.`, variant: "default" });
+            toast({
+                title: "Import Successful",
+                description: `${importedCount} debts imported. ${skippedCount} rows skipped.`, // Updated toast message
+                variant: "default"
+            });
 
         } catch (error: any) {
             console.error("Import Failed:", error);
@@ -663,5 +673,3 @@ export default function ImportDebtsPage() {
         </div>
     );
 }
-
-  
