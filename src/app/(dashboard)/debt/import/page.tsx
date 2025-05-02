@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/debt/import/page.tsx
 'use client';
 
@@ -11,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileCheck, RotateCcw, CheckCircle, AlertTriangle, XCircle, ArrowLeft, Loader2, ListChecks, Coins } from 'lucide-react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useDebt } from '@/contexts/DebtContext'; // Import useDebt hook
+import { useDebtStore } from '@/store/debtStore'; // Import useDebtStore hook
 import type { DebtItem } from '@/lib/types'; // Import DebtItem type
 import Papa, { type ParseResult } from 'papaparse'; // CSV parsing library
 import Link from 'next/link'; // For back button
@@ -73,9 +74,11 @@ const formatTerm = (value: string | undefined) => {
 }
 
 export default function ImportDebtsPage() {
-    const { debts: existingDebts, addDebt, importDebtsBatch } = useDebt(); // Using addDebt for simplicity, ideally create importDebtsBatch
+    // Use Zustand store hook for debt state management
+    const { debts: existingDebts, addDebt, importDebtsBatch } = useDebtStore();
     const { toast } = useToast();
 
+    // Local state remains the same
     const [stage, setStage] = useState<ImportStage>('upload');
     const [file, setFile] = useState<File | null>(null);
     const [fileName, setFileName] = useState<string>('');
@@ -89,7 +92,7 @@ export default function ImportDebtsPage() {
     const [skippedCount, setSkippedCount] = useState(0);
     const [lastImportedIds, setLastImportedIds] = useState<string[]>([]); // For potential rollback (if implemented)
 
-    // --- Stage 1: Upload ---
+    // --- Stage 1: Upload (remains the same) ---
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
@@ -150,7 +153,7 @@ export default function ImportDebtsPage() {
         });
     };
 
-    // --- Stage 2: Mapping ---
+    // --- Stage 2: Mapping (remains the same) ---
 
     const autoMapColumns = (headers: string[]) => {
         const initialMapping: Record<string, keyof DebtItem | 'ignore'> = {};
@@ -289,7 +292,7 @@ export default function ImportDebtsPage() {
     };
 
 
-    // --- Stage 3: Preview & Reconciliation ---
+    // --- Stage 3: Preview & Reconciliation (remains the same) ---
 
      // Simple duplicate check based on description (case-insensitive)
      const findPotentialDuplicate = useCallback((incoming: MappedDebtItem): DebtItem | undefined => {
@@ -332,7 +335,7 @@ export default function ImportDebtsPage() {
             .filter(debt => debt.__toBeImported && !debt.__parseError);
 
         const currentSkippedCount = mappedDebts.length - debtsToImport.length;
-        setSkippedCount(currentSkippedCount); // Set skipped count before potential errors
+        setSkippedCount(currentSkippedCount); // Set skipped count immediately
 
         if (debtsToImport.length === 0) {
             setImportedCount(0);
@@ -341,7 +344,7 @@ export default function ImportDebtsPage() {
             return;
         }
 
-        // Prepare data for the context function
+        // Prepare data for the store function
         const newDebtData: Omit<DebtItem, 'id'>[] = debtsToImport.map(debt => ({
             description: debt.description!,
             principal: debt.principal!,
@@ -350,34 +353,20 @@ export default function ImportDebtsPage() {
             term: debt.term!,
         }));
 
-        // Use a batch import function (ideal) or loop through addDebt
         try {
-            let addedDebtsWithIds: DebtItem[] = [];
-            // Assuming importDebtsBatch exists in context (preferable)
-             if (importDebtsBatch) {
-                 addedDebtsWithIds = importDebtsBatch(newDebtData);
-                 setImportedCount(addedDebtsWithIds.length);
-                 setLastImportedIds(addedDebtsWithIds.map(d => d.id));
-             } else {
-                // Fallback to adding one by one if batch function doesn't exist
-                const addedIds: string[] = [];
-                newDebtData.forEach(debtData => {
-                    const addedDebt = addDebt(debtData); // Use existing addDebt
-                    addedIds.push(addedDebt.id);
-                });
-                // Fetch the added items again to ensure we have the complete objects with IDs
-                 // This step might be inefficient or complex depending on the addDebt implementation
-                 // It's better to ensure addDebt returns the full item or have a dedicated batch function
-                 addedDebtsWithIds = debts.filter(d => addedIds.includes(d.id)); // Example: Filter existing debts (might not be reliable)
-                 setImportedCount(addedIds.length);
-                 setLastImportedIds(addedIds);
-                 console.warn("DebtContext does not have importDebtsBatch, importing one by one.");
-             }
+            // Use the Zustand store's batch import function
+             const addedDebtsWithIds = importDebtsBatch(newDebtData);
+
+             // Use the actual length of the returned array for imported count
+             const actualImportedCount = addedDebtsWithIds.length;
+             setImportedCount(actualImportedCount);
+             setLastImportedIds(addedDebtsWithIds.map(d => d.id));
 
             setStage('complete');
             toast({
                 title: "Import Successful",
-                description: `${importedCount} debts imported. ${skippedCount} rows skipped.`, // Updated toast message
+                // Use the calculated counts in the toast message
+                description: `${actualImportedCount} debts imported. ${currentSkippedCount} rows skipped.`,
                 variant: "default"
             });
 
@@ -390,15 +379,15 @@ export default function ImportDebtsPage() {
         }
     };
 
-    // --- Stage 5: Complete & Rollback ---
+    // --- Stage 5: Complete & Rollback (remains the same, rollback not implemented) ---
 
     const handleRollback = () => {
         // Rollback logic requires a batch delete function in the context
-        console.warn("Rollback requested for IDs:", lastImportedIds, " - Not implemented in Debt context yet.");
-        toast({ title: "Rollback Not Implemented", description: "Functionality to undo the last import requires context support.", variant:"destructive" });
+        console.warn("Rollback requested for IDs:", lastImportedIds, " - Not implemented in Debt store yet.");
+        toast({ title: "Rollback Not Implemented", description: "Functionality to undo the last import requires store support.", variant:"destructive" });
     };
 
-    // --- Reset ---
+    // --- Reset (remains the same) ---
 
     const resetState = () => {
         setStage('upload');
@@ -425,7 +414,7 @@ export default function ImportDebtsPage() {
     };
 
 
-    // --- Render Logic ---
+    // --- Render Logic (remains the same structure) ---
 
     const renderUploadStage = () => (
         <Card>

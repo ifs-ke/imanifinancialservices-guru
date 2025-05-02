@@ -33,13 +33,12 @@ import {
   AlertDialogTrigger, // Import AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTransactions } from '@/contexts/TransactionsContext'; // Import useTransactions hook
+import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import shared types
 import Link from 'next/link'; // Import Link
 import { format } from 'date-fns'; // For date formatting
 import { cn } from '@/lib/utils'; // For conditional classes
-import { jsPDF } from 'jspdf';
-// import 'jspdf-autotable'; // Commented out as it caused build errors
+
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
@@ -70,10 +69,10 @@ const initialFormData = {
 };
 
 export default function TransactionsPage() {
-  // Use context for transaction state management
-  const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
+  // Use Zustand store hook for transaction state management
+  const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactionsStore();
 
-  // Local state for dialogs, editing, deleting, and form data
+  // Local state for dialogs, editing, deleting, and form data remains the same
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
@@ -89,7 +88,7 @@ export default function TransactionsPage() {
     }
   }, [isAddDialogOpen, isEditDialogOpen]);
 
-  // --- CRUD Operations using Context ---
+  // --- CRUD Operations using Zustand Store ---
 
   // CREATE
   const handleAddTransactionSubmit = (event: React.FormEvent) => {
@@ -107,6 +106,7 @@ export default function TransactionsPage() {
       return;
     }
 
+    // Use addTransaction action from Zustand store
     addTransaction({
       date: new Date(date + 'T00:00:00'), // Use local time
       description: description,
@@ -150,6 +150,7 @@ export default function TransactionsPage() {
       return;
     }
 
+    // Use updateTransaction action from Zustand store
     updateTransaction({
         ...editingTransaction, // Keep the original ID
         date: new Date(date + 'T00:00:00'),
@@ -172,12 +173,13 @@ export default function TransactionsPage() {
 
   const confirmDeleteTransaction = () => {
     if (!transactionToDelete) return;
+    // Use deleteTransaction action from Zustand store
     deleteTransaction(transactionToDelete.id);
     setTransactionToDelete(null); // Close the dialog implicitly
     toast({ title: 'Transaction Deleted', description: 'Successfully removed.' });
   };
 
-  // --- Other Handlers ---
+  // --- Other Handlers (remain the same) ---
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
@@ -189,11 +191,7 @@ export default function TransactionsPage() {
      setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-   // Generate unique IDs for mock data - consider moving to a utility file if needed elsewhere
-    const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-
-  // --- Formatting ---
+   // --- Formatting (remain the same) ---
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
@@ -212,7 +210,7 @@ export default function TransactionsPage() {
       return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
-  // --- Export Functionality ---
+  // --- Export Functionality (remain the same) ---
   const handleExportCsv = useCallback(() => {
     if (transactions.length === 0) {
       toast({ title: "No data to export", description: "Add transactions to export a CSV file.", variant: "default" });
@@ -227,9 +225,10 @@ export default function TransactionsPage() {
     for (const tx of transactions) {
       // Sanitize description to prevent CSV injection issues (basic example: remove quotes)
       const sanitizedDescription = tx.description.replace(/"/g, "''");
+       const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date); // Ensure Date object
 
       const values = [
-        format(tx.date, 'yyyy-MM-dd'), // Format the date consistently
+        isNaN(dateObj.getTime()) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'), // Format the date consistently
         `"${sanitizedDescription}"`, // Enclose description in quotes
         tx.amount,
         tx.modeOfPayment,
@@ -251,7 +250,7 @@ export default function TransactionsPage() {
     URL.revokeObjectURL(url); // Clean up the object URL
 
     toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
-  }, [transactions, toast]); // Removed formatDate dependency as format from date-fns is used directly
+  }, [transactions, toast]);
 
 
   return (
@@ -391,7 +390,8 @@ export default function TransactionsPage() {
                            <Button variant="ghost" size="icon" className="mr-1 h-7 w-7" onClick={() => handleEditClick(tx)}>
                              <Edit className="h-4 w-4" />
                              <span className="sr-only">Edit</span>
-                           </Button>{/* Delete Button & Confirmation Dialog */}
+                           </Button>
+                           {/* Delete Button & Confirmation Dialog */}
                            {/* Manage AlertDialog open state externally */}
                            <AlertDialog open={transactionToDelete?.id === tx.id} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
                               <AlertDialogTrigger asChild>

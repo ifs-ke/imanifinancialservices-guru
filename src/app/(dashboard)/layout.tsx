@@ -6,11 +6,8 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { TransactionsProvider } from '@/contexts/TransactionsContext';
-import { DebtProvider } from '@/contexts/DebtContext';
-import { StatementProvider } from '@/contexts/StatementContext';
 import { ThemeToggle } from '@/components/ui/ThemeToggle'; // Import ThemeToggle
-import { BudgetProvider } from '@/contexts/BudgetContext'; // Import BudgetProvider
+
 
 export default function DashboardLayout({
   children,
@@ -18,29 +15,22 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-     <TransactionsProvider>
-       <DebtProvider>
-         <StatementProvider>
-            <BudgetProvider> {/* Wrap with BudgetProvider */}
-             <>
-               <Sidebar side="left" variant="sidebar" collapsible="icon">
-                 <AppSidebar />
-                 <SidebarRail />
-               </Sidebar>
-               <SidebarInset>
-                  {/* Optionally add a header within the inset area */}
-                 {/* <header className="sticky top-0 z-10 flex h-[57px] items-center gap-1 border-b bg-background px-4">
-                   <h1 className="text-xl font-semibold">Debt Conqueror</h1>
-                   <div className="ml-auto">
-                     <ThemeToggle /> {/* Example: Add ThemeToggle here too/instead */}
-                   {/* </div>
-                 </header> */}
-                 {children}
-                </SidebarInset>
-             </>
-            </BudgetProvider>
-         </StatementProvider>
-       </DebtProvider>
-     </TransactionsProvider>
+    // Remove Context Providers - Zustand stores are accessed directly via hooks
+    <>
+      <Sidebar side="left" variant="sidebar" collapsible="icon">
+        <AppSidebar />
+        <SidebarRail />
+      </Sidebar>
+      <SidebarInset>
+        {/* Optionally add a header within the inset area */}
+        {/* <header className="sticky top-0 z-10 flex h-[57px] items-center gap-1 border-b bg-background px-4">
+          <h1 className="text-xl font-semibold">Debt Conqueror</h1>
+          <div className="ml-auto">
+            <ThemeToggle /> {/* Example: Add ThemeToggle here too/instead */}
+          {/* </div>
+        </header> */}
+        {children}
+      </SidebarInset>
+    </>
   );
 }

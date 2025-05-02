@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/statements/page.tsx
 'use client';
 
@@ -25,20 +26,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useTransactions } from '@/contexts/TransactionsContext';
-import { useDebt } from '@/contexts/DebtContext';
-import { useStatement } from '@/contexts/StatementContext'; // Import Statement context
-import { useBudget } from '@/contexts/BudgetContext'; // Import Budget context
+import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
+import { useDebtStore } from '@/store/debtStore'; // Import Zustand store hook
+import { useStatementStore } from '@/store/statementStore'; // Import Zustand store hook
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import Zustand store hook and selectors
 import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId, BudgetItem, BudgetItemCategory } from '@/lib/types'; // Import all needed types
 import { Badge } from '@/components/ui/badge'; // Import Badge
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
 
 
-// Generate unique IDs
-const generateId = (prefix: 'asset' | 'lia'): string => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+// Generate unique IDs (moved to store)
 
-
-// Calculation Function
+// Calculation Function (totals are now derived from stores or selectors)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: DebtItem[]) => items.reduce((sum, item) => sum + item.principal, 0);
 
@@ -103,12 +102,11 @@ AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 
 
 export default function StatementsPage() {
-  // Context hooks
-  const { transactions } = useTransactions();
-  const { debts } = useDebt();
-  const { assetItems, otherLiabilityItems, setAssetItems, setOtherLiabilityItems } = useStatement();
-   // Use BudgetContext for *itemized* budget data and *summary* totals
-   const { budgetItems /* removed totalIncome, totalExpenses as they are recalculated in varianceTotals */ } = useBudget();
+  // Zustand store hooks
+  const transactions = useTransactionsStore(state => state.transactions);
+  const debts = useDebtStore(state => state.debts);
+  const { assetItems, otherLiabilityItems, setAssetItems, setOtherLiabilityItems, deleteAssetItem, deleteOtherLiabilityItem, updateAssetItem, updateOtherLiabilityItem, addAssetItem, addOtherLiabilityItem } = useStatementStore();
+  const budgetItems = useBudgetStore(state => state.budgetItems);
 
 
   // State for edit mode and temporary edits
@@ -182,13 +180,13 @@ export default function StatementsPage() {
    const totalShortTermDebt = useMemo(() => calculateDebtTotal(shortTermDebts), [shortTermDebts]);
    const totalLongTermDebt = useMemo(() => calculateDebtTotal(longTermDebts), [longTermDebts]);
 
-  // Totals now use the editing state if active, otherwise the context state
+  // Totals now use the editing state if active, otherwise the store state
   const totalAssets = useMemo(() => calculateTotal(isEditing ? editingAssets : assetItems), [isEditing, editingAssets, assetItems]);
   const totalOtherLiabilities = useMemo(() => calculateTotal(isEditing ? editingOtherLiabilities : otherLiabilityItems), [isEditing, editingOtherLiabilities, otherLiabilityItems]);
   const totalLiabilities = totalShortTermDebt + totalLongTermDebt + totalOtherLiabilities;
   const netWorth = totalAssets - totalLiabilities;
 
-  // --- Budget Variance Calculation Refactor ---
+  // --- Budget Variance Calculation Refactor (using data from stores) ---
   // Group actual transactions by description for comparison with budget items
     const actualSpendingByCategory = useMemo(() => {
         const actuals: Record<BudgetItemCategory, { [description: string]: { amount: number, count: number } }> = {
@@ -228,7 +226,7 @@ export default function StatementsPage() {
         };
         const actualsTracked: Set<string> = new Set(); // Keep track of actuals already listed
 
-        // 1. Iterate through budgeted items
+        // 1. Iterate through budgeted items (from budgetStore)
         budgetItems.forEach(item => {
             const descKey = item.description.toLowerCase();
             const actualGroup = actualSpendingByCategory[item.category]?.[descKey];
@@ -320,7 +318,7 @@ export default function StatementsPage() {
 
   const handleEditToggle = () => {
     if (!isEditing) {
-      // Entering edit mode: copy current context states to temporary editing states
+      // Entering edit mode: copy current store states to temporary editing states
       setEditingAssets([...assetItems.map(item => ({ ...item }))]); // Deep copy needed
       setEditingOtherLiabilities([...otherLiabilityItems.map(item => ({ ...item }))]); // Deep copy needed
     }
@@ -328,7 +326,7 @@ export default function StatementsPage() {
   };
 
   const handleSaveChanges = () => {
-    // Save changes from temporary editing states back to context states (persistence handled by context)
+    // Save changes from temporary editing states back to Zustand store
     setAssetItems(editingAssets);
     setOtherLiabilityItems(editingOtherLiabilities);
     setIsEditing(false);
@@ -336,7 +334,7 @@ export default function StatementsPage() {
   };
 
   const handleCancelEdit = () => {
-    // Discard changes and exit edit mode - no need to reset context states
+    // Discard changes and exit edit mode - no need to reset store states
     setIsEditing(false);
     toast({ title: 'Edit Cancelled', description: 'No changes were saved.', variant: 'default' });
   };
@@ -355,8 +353,8 @@ export default function StatementsPage() {
   };
 
   // Generic handler for adding items (adds to temporary editing state)
-  const handleAddItem = (type: 'asset' | 'otherLiability') => {
-    const newItem: StatementItem | OtherLiabilityItem = { id: generateId(type === 'asset' ? 'asset' : 'lia'), description: '', amount: 0 };
+  const handleAddItemClick = (type: 'asset' | 'otherLiability') => {
+    const newItem: StatementItem | OtherLiabilityItem = { id: `temp_${type}_${Date.now()}`, description: '', amount: 0 }; // Use temp ID
     const setState = type === 'asset' ? setEditingAssets : setEditingOtherLiabilities;
     setState(prev => [...prev, newItem]);
   };
@@ -374,8 +372,8 @@ export default function StatementsPage() {
 
     setState(prev => prev.filter(item => item.id !== itemToRemove.id));
     setItemToDelete(null);
-    toast({ title: `${type === 'asset' ? 'Asset' : 'Liability'} Item Deleted`, description: 'Successfully removed from edit view.' });
-    // Note: Changes are only saved to context/localStorage on 'Save Changes'
+    toast({ title: `${type === 'asset' ? 'Asset' : 'Liability'} Item Removed`, description: 'Successfully removed from edit view. Save changes to persist.' });
+    // Note: Changes are only saved to store on 'Save Changes'
   };
 
   // --- Render Functions ---
@@ -407,7 +405,7 @@ export default function StatementsPage() {
             className="h-8 text-right w-32" // Fixed width
           />
         ) : (
-           formatCurrency(item.amount) // Display context state value when not editing
+           formatCurrency(item.amount) // Display store state value when not editing
         )}
       </TableCell>
       {isEditing && (
@@ -693,14 +691,14 @@ export default function StatementsPage() {
                          <ScrollArea className="h-[200px] w-full pr-3">
                              <Table>
                                <TableBody>
-                                 {/* Render rows based on editingAssets if editing, else assetItems */}
+                                 {/* Render rows based on editingAssets if editing, else assetItems from store */}
                                  {(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}
                                </TableBody>
                              </Table>
                          </ScrollArea>
                           {isEditing && (
                              <div className="text-center py-2 border-t border-dashed mt-2">
-                                 <Button variant="ghost" size="sm" onClick={() => handleAddItem('asset')}>
+                                 <Button variant="ghost" size="sm" onClick={() => handleAddItemClick('asset')}>
                                  <PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item
                                  </Button>
                              </div>
@@ -761,13 +759,13 @@ export default function StatementsPage() {
                                     <AccordionContent className="pb-2">
                                         <Table>
                                             <TableBody>
-                                            {/* Render rows based on editingOtherLiabilities if editing, else otherLiabilityItems */}
+                                            {/* Render rows based on editingOtherLiabilities if editing, else otherLiabilityItems from store */}
                                             {(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}
                                             </TableBody>
                                         </Table>
                                         {isEditing && (
                                             <div className="text-center py-2 border-t border-dashed mt-2">
-                                                <Button variant="ghost" size="sm" onClick={() => handleAddItem('otherLiability')}>
+                                                <Button variant="ghost" size="sm" onClick={() => handleAddItemClick('otherLiability')}>
                                                 <MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability
                                                 </Button>
                                             </div>
@@ -813,7 +811,7 @@ export default function StatementsPage() {
                              label="Income"
                              sum={varianceTotalsByCategory.income.actual}
                              budgetedSum={varianceTotalsByCategory.income.budgeted}
-                             variance={varianceTotalsByCategory.income.actual - varianceTotalsByCategory.income.budgeted}
+                             variance={varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.totalBudgetedIncome}
                              className="hover:no-underline text-accent"
                          />
                           <AccordionContent>
@@ -911,7 +909,7 @@ export default function StatementsPage() {
                  <div className="mt-6 pt-4 border-t border-border">
                      <Table>
                          <TableFooter>
-                             <TableRow className="bg-primary/10 font-bold text-lg">
+                             <TableRow className="bg-muted/30 font-bold text-lg">
                                  <TableCell>Net Totals (Income - Expenses - Goals)</TableCell>
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell>
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netActual)}</TableCell>
@@ -930,5 +928,3 @@ export default function StatementsPage() {
     </div>
   );
 }
-
-    

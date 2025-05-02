@@ -1,3 +1,4 @@
+
 // src/components/budget/BudgetItemFormSheet.tsx
 'use client';
 
@@ -8,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from '@/hooks/use-toast';
-import { useBudget } from '@/contexts/BudgetContext';
+import { useBudgetStore } from '@/store/budgetStore'; // Import Zustand store hook
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
 
 interface BudgetItemFormSheetProps {
@@ -31,7 +32,8 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
   item,
   initialCategory = 'recurring-expense' // Default if not provided
 }) => {
-  const { addBudgetItem, updateBudgetItem } = useBudget();
+  // Use Zustand store hook for budget state management
+  const { addBudgetItem, updateBudgetItem } = useBudgetStore();
   const { toast } = useToast();
   const [formData, setFormData] = useState<Omit<BudgetItem, 'id'>>(initialFormData);
 
@@ -73,11 +75,11 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
 
     try {
         if (item) {
-            // Update existing item
+            // Update existing item using Zustand action
             updateBudgetItem({ ...item, ...formData });
             toast({ title: 'Budget Item Updated', description: 'Successfully updated.' });
         } else {
-            // Add new item
+            // Add new item using Zustand action
             addBudgetItem(formData);
             toast({ title: 'Budget Item Added', description: 'Successfully added.' });
         }

@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/budget/page.tsx
 'use client';
 
@@ -8,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle } from 'lucide-react'; // Added more icons
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useBudget } from '@/contexts/BudgetContext';
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import Zustand store hook and selectors
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -34,19 +35,17 @@ const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.Ele
 
 export default function BudgetPage() {
   const { toast } = useToast();
-  const {
-      budgetItems,
-      // addBudgetItem, // No direct add here, handled by sheet
-      // updateBudgetItem, // No direct update here, handled by sheet
-      deleteBudgetItem,
-      totalIncome,
-      totalRecurringExpenses,
-      totalOneTimeExpenses,
-      totalGoals,
-      totalExpenses,
-      netBudgeted,
-  } = useBudget();
+  // Use Zustand store hook for budget state management
+  const { budgetItems, deleteBudgetItem } = useBudgetStore();
+  // Use selectors for calculated summary values
+  const totalIncome = useBudgetStore(selectTotalBudgetedIncome);
+  const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
+  const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
+  const totalGoals = useBudgetStore(selectTotalGoals);
+  const totalExpenses = useBudgetStore(selectTotalBudgetedExpenses);
+  const netBudgeted = useBudgetStore(selectNetBudgeted);
 
+  // Local state remains the same
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<BudgetItem | null>(null);
@@ -77,6 +76,7 @@ export default function BudgetPage() {
 
   const confirmDeleteItem = () => {
       if (!itemToDelete) return;
+      // Use deleteBudgetItem action from Zustand store
       deleteBudgetItem(itemToDelete.id);
       setItemToDelete(null);
       toast({ title: 'Budget Item Deleted', description: 'Successfully removed item.' });
@@ -191,11 +191,32 @@ export default function BudgetPage() {
                                                      <Edit className="h-3 w-3" />
                                                      <span className="sr-only">Edit</span>
                                                  </Button>
-                                                 {/* Delete Button - Simply triggers the state change */}
-                                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
-                                                      <Trash2 className="h-3 w-3" />
-                                                      <span className="sr-only">Delete</span>
-                                                  </Button>
+                                                 {/* Delete Button - Triggers AlertDialog */}
+                                                 <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                                                    <AlertDialogTrigger asChild>
+                                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
+                                                            <Trash2 className="h-3 w-3" />
+                                                            <span className="sr-only">Delete</span>
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                     <AlertDialogContent>
+                                                         {itemToDelete && ( // Render content only when itemToDelete is set
+                                                             <>
+                                                                 <AlertDialogHeader>
+                                                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                     <AlertDialogDescription>
+                                                                         This action cannot be undone. This will permanently delete the budget item: <br />
+                                                                         <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
+                                                                     </AlertDialogDescription>
+                                                                 </AlertDialogHeader>
+                                                                 <AlertDialogFooter>
+                                                                     <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+                                                                     <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
+                                                                 </AlertDialogFooter>
+                                                             </>
+                                                         )}
+                                                     </AlertDialogContent>
+                                                 </AlertDialog>
                                              </TableCell>
                                          </TableRow>
                                      ))
@@ -222,29 +243,6 @@ export default function BudgetPage() {
              </Card>
          ))}
 
-         {/* Alert Dialog for Delete Confirmation (Placed once outside the map) */}
-         {/* This AlertDialog now controls the visibility based on itemToDelete */}
-          <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
-            {/* Removed AlertDialogTrigger from here */}
-            <AlertDialogContent>
-                {itemToDelete && ( // Conditionally render content only if itemToDelete exists
-                    <>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the budget item: <br />
-                                <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </>
-                )}
-            </AlertDialogContent>
-        </AlertDialog>
-
 
           {/* Budget Item Form Sheet (for Add/Edit) */}
          <BudgetItemFormSheet
@@ -258,4 +256,3 @@ export default function BudgetPage() {
     </div>
   );
 }
-    

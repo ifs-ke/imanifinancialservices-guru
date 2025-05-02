@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from '@/hooks/use-toast';
-import { useDebt } from '@/contexts/DebtContext';
+import { useDebtStore } from '@/store/debtStore'; // Import Zustand store hook
 import type { DebtItem } from '@/lib/types';
 
 interface DebtFormSheetProps {
@@ -26,7 +26,8 @@ const initialFormData: Omit<DebtItem, 'id'> = {
 };
 
 const DebtFormSheet: React.FC<DebtFormSheetProps> = ({ isOpen, onClose, debt }) => {
-  const { addDebt, updateDebt } = useDebt();
+  // Use Zustand store hook for debt state management
+  const { addDebt, updateDebt } = useDebtStore();
   const { toast } = useToast();
   const [formData, setFormData] = useState<Omit<DebtItem, 'id'>>(initialFormData);
 
@@ -68,11 +69,11 @@ const DebtFormSheet: React.FC<DebtFormSheetProps> = ({ isOpen, onClose, debt }) 
 
     try {
         if (debt) {
-            // Update existing debt
+            // Update existing debt using Zustand action
             updateDebt({ ...debt, ...formData });
             toast({ title: 'Debt Updated', description: 'Successfully updated debt item.' });
         } else {
-            // Add new debt
+            // Add new debt using Zustand action
             addDebt(formData);
             toast({ title: 'Debt Added', description: 'Successfully added new debt item.' });
         }

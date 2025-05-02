@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileCheck, RotateCcw, CheckCircle, AlertTriangle, XCircle, ArrowLeft, Loader2, ListChecks } from 'lucide-react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTransactions } from '@/contexts/TransactionsContext';
+import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import new types
 import Papa, { type ParseResult } from 'papaparse'; // CSV parsing library
 import Link from 'next/link'; // For back button
@@ -78,9 +78,11 @@ const formatCategory = (value: string | undefined) => {
 }
 
 export default function ImportTransactionsPage() {
-    const { transactions: existingTransactions, importTransactionsBatch } = useTransactions();
+    // Use Zustand store hook for transaction state management
+    const { transactions: existingTransactions, importTransactionsBatch } = useTransactionsStore();
     const { toast } = useToast();
 
+    // Local state remains the same
     const [stage, setStage] = useState<ImportStage>('upload');
     const [file, setFile] = useState<File | null>(null);
     const [fileName, setFileName] = useState<string>('');
@@ -94,7 +96,7 @@ export default function ImportTransactionsPage() {
     const [skippedCount, setSkippedCount] = useState(0);
     const [lastImportedIds, setLastImportedIds] = useState<string[]>([]); // For potential rollback
 
-    // --- Stage 1: Upload ---
+    // --- Stage 1: Upload (remains the same) ---
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
@@ -156,7 +158,7 @@ export default function ImportTransactionsPage() {
         });
     };
 
-    // --- Stage 2: Mapping ---
+    // --- Stage 2: Mapping (remains the same) ---
 
     const autoMapColumns = (headers: string[]) => {
         const initialMapping: Record<string, keyof TransactionWithId | 'ignore'> = {};
@@ -336,7 +338,7 @@ export default function ImportTransactionsPage() {
     };
 
 
-    // --- Stage 3: Preview & Reconciliation ---
+    // --- Stage 3: Preview & Reconciliation (remains the same) ---
 
      // Simple check for potential duplicates (can be enhanced)
      const findPotentialDuplicate = useCallback((incoming: MappedTransaction): TransactionWithId | undefined => {
@@ -350,9 +352,10 @@ export default function ImportTransactionsPage() {
         const oneDay = 24 * 60 * 60 * 1000;
 
         return existingTransactions.find(existing => {
-             if (!existing.date || isNaN(existing.date.getTime())) return false; // Skip existing transactions with invalid dates
+             const existingDate = existing.date instanceof Date ? existing.date : new Date(existing.date);
+             if (isNaN(existingDate.getTime())) return false; // Skip existing transactions with invalid dates
 
-            const timeDiff = Math.abs(existing.date.getTime() - incomingTime);
+            const timeDiff = Math.abs(existingDate.getTime() - incomingTime);
             const amountMatch = existing.amount === amount;
              // Simple description check (first 15 chars, case-insensitive)
              const descMatch = description && existing.description.toLowerCase().startsWith(description.substring(0, 15));
@@ -398,9 +401,11 @@ export default function ImportTransactionsPage() {
         const transactionsToImport = mappedTransactions
             .filter(tx => tx.__toBeImported && !tx.__parseError);
 
+        const currentSkippedCount = mappedTransactions.length - transactionsToImport.length;
+        setSkippedCount(currentSkippedCount); // Set skipped count before import
+
         if (transactionsToImport.length === 0) {
             setImportedCount(0);
-            setSkippedCount(mappedTransactions.length);
             setStage('complete');
             toast({ title: "Import Complete", description: "No new transactions were marked for import.", variant: "default" });
             return;
@@ -417,18 +422,15 @@ export default function ImportTransactionsPage() {
         }));
 
 
-        // Simulate API call or batch processing
-        // In a real app, this would likely be an async function
         try {
-             // Using the context's batch import function which handles ID generation and state update
-             // This returns the newly added transactions WITH IDs
+            // Use the Zustand store's batch import function
             const addedTransactionsWithIds = importTransactionsBatch(newTransactions);
 
             setImportedCount(addedTransactionsWithIds.length);
-            setSkippedCount(mappedTransactions.length - addedTransactionsWithIds.length);
-            setLastImportedIds(addedTransactionsWithIds.map(tx => tx.id)); // Store IDs for rollback
+            // skippedCount is already set above
+            setLastImportedIds(addedTransactionsWithIds.map(tx => tx.id)); // Store IDs for potential rollback
             setStage('complete');
-            toast({ title: "Import Successful", description: `${addedTransactionsWithIds.length} transactions imported.`, variant: "default" });
+            toast({ title: "Import Successful", description: `${addedTransactionsWithIds.length} transactions imported. ${skippedCount} rows skipped.`, variant: "default" }); // Use calculated counts in toast
 
         } catch (error: any) {
             console.error("Import Failed:", error);
@@ -439,7 +441,7 @@ export default function ImportTransactionsPage() {
         }
     };
 
-    // --- Stage 5: Complete & Rollback ---
+    // --- Stage 5: Complete & Rollback (remains the same, rollback not implemented) ---
 
     const handleRollback = () => {
         if (lastImportedIds.length === 0) return;
@@ -447,20 +449,12 @@ export default function ImportTransactionsPage() {
         // TODO: Implement rollback logic using context if available
         // Example: deleteTransactionsBatch(lastImportedIds);
         // For now, just show a message and potentially revert state visually if needed
-        console.warn("Rollback requested for IDs:", lastImportedIds, " - Not implemented in context yet.");
-        toast({ title: "Rollback Not Implemented", description: "Functionality to undo the last import requires context support.", variant:"destructive" });
+        console.warn("Rollback requested for IDs:", lastImportedIds, " - Not implemented in store yet.");
+        toast({ title: "Rollback Not Implemented", description: "Functionality to undo the last import requires store support.", variant:"destructive" });
 
-        // // Potential visual rollback (go back to preview with previous state)
-        // // This doesn't actually delete from context/DB but resets the UI
-        // setStage('preview');
-        // setImportedCount(0);
-        // setSkippedCount(0);
-        // setLastImportedIds([]);
-        // // Need to restore mappedTransactions to the state before 'handleConfirmImport' was called.
-        // // This might require storing the pre-import state temporarily.
     };
 
-    // --- Reset ---
+    // --- Reset (remains the same) ---
 
     const resetState = () => {
         setStage('upload');
@@ -488,7 +482,7 @@ export default function ImportTransactionsPage() {
     };
 
 
-    // --- Render Logic ---
+    // --- Render Logic (remains the same structure) ---
 
     const renderUploadStage = () => (
         <Card>

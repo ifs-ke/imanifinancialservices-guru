@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
@@ -8,9 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle } from 'lucide-react'; // Added BrainCircuit, Loader2, AlertTriangle
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { useDebt } from '@/contexts/DebtContext';
-import { useBudget } from '@/contexts/BudgetContext'; // Import useBudget
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { useDebtStore } from '@/store/debtStore'; // Import Zustand store hook
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses } from '@/store/budgetStore'; // Import budget store hook and selectors
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -34,10 +35,14 @@ const formatPercentage = (rate: number) => {
 };
 
 export default function DebtPage() {
-  const { debts, deleteDebt } = useDebt();
-  const { totalBudgetedIncome, totalBudgetedExpenses } = useBudget(); // Get budget data
+  // Use Zustand store hook for debt state management
+  const { debts, deleteDebt } = useDebtStore();
+  // Use Zustand store hook for budget data (using selectors)
+  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
+  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
   const { toast } = useToast();
 
+  // Local state remains the same
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DebtItem | null>(null);
   const [debtToDelete, setDebtToDelete] = useState<DebtItem | null>(null);
@@ -73,6 +78,7 @@ export default function DebtPage() {
 
   const confirmDeleteDebt = () => {
     if (!debtToDelete) return;
+    // Use deleteDebt action from Zustand store
     deleteDebt(debtToDelete.id);
     setDebtToDelete(null);
     toast({ title: 'Debt Deleted', description: 'Successfully removed debt item.' });
@@ -92,9 +98,9 @@ export default function DebtPage() {
       }
 
       const analysisInput: DebtAnalysisInput = {
-          debts: debts,
-          totalBudgetedIncome: totalBudgetedIncome,
-          totalBudgetedExpenses: totalBudgetedExpenses,
+          debts: debts, // Use debts from Zustand store
+          totalBudgetedIncome: totalBudgetedIncome, // Use income from budget store
+          totalBudgetedExpenses: totalBudgetedExpenses, // Use expenses from budget store
           // desiredPayoffTimeline: "within 5 years" // Example: Could add a field for this later
       };
 
@@ -122,7 +128,7 @@ export default function DebtPage() {
   };
 
 
-  // --- Export Functionality ---
+  // --- Export Functionality (remains the same) ---
   const handleExportCsv = useCallback(() => {
       if (debts.length === 0) {
       toast({ title: "No data to export", description: "Add debts to export a CSV file.", variant: "default" });
@@ -248,11 +254,32 @@ export default function DebtPage() {
                                 </Button>
                             </DebtAmortizationSheet>
 
-                          {/* Delete Button - Sets state to open dialog */}
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Delete</span>
-                          </Button>
+                          {/* Delete Button & Confirmation Dialog */}
+                          <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Delete</span>
+                                </Button>
+                              </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                {debtToDelete && ( // Render content only when debtToDelete is set
+                                    <>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This action cannot be undone. This will permanently delete the debt: <br />
+                                                <strong>{debtToDelete.description} ({formatCurrency(debtToDelete.principal)})</strong>
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction onClick={confirmDeleteDebt}>Delete</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </>
+                                )}
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))
@@ -285,28 +312,6 @@ export default function DebtPage() {
              error={analysisError}
              formatCurrency={formatCurrency}
          />
-
-         {/* Delete Confirmation Dialog (Placed once outside the map) */}
-         <AlertDialog open={!!debtToDelete} onOpenChange={(open) => !open && setDebtToDelete(null)}>
-            <AlertDialogContent>
-                {debtToDelete && ( // Render content only when debtToDelete is set
-                    <>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the debt: <br />
-                                <strong>{debtToDelete.description} ({formatCurrency(debtToDelete.principal)})</strong>
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={confirmDeleteDebt}>Delete</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </>
-                )}
-            </AlertDialogContent>
-         </AlertDialog>
-
 
       </main>
     </div>
