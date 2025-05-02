@@ -13,7 +13,7 @@ import { useDebtStore } from '@/store/debtStore'; // Import debt store
 import { useStatementStore } from '@/store/statementStore'; // Import statement store for items and dates
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import budget store hook and selectors
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
+import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
 import { format, startOfMonth, endOfMonth } from 'date-fns'; // Import date-fns format
 import { cn } from '@/lib/utils'; // Import cn utility
 import type { BudgetItemCategory } from '@/lib/types'; // Import BudgetItemCategory
@@ -283,31 +283,6 @@ export default function DashboardPage() {
      Expenses: { label: 'Expenses', color: "hsl(var(--destructive))" }, // Use destructive HSL
    } satisfies ChartConfig;
 
-   // 2. Asset Allocation Chart (Pie Chart) - Use theme variables for colors
-    const assetChartData = useMemo(() => {
-         // Ensure items have a numeric amount and positive value
-        const validAssets = assetItems.filter(item => typeof item.amount === 'number' && item.amount > 0);
-        return validAssets.map((item, index) => ({
-             name: item.description,
-             value: item.amount,
-             fill: `hsl(var(--chart-${(index % 5) + 1}))` // Use theme chart colors
-         }));
-    }, [assetItems]);
-
-    const assetChartConfig = useMemo(() => {
-        const config: ChartConfig = {};
-         assetChartData.forEach((item) => {
-            // Generate a unique key for the config, handle potential duplicate names
-             const configKey = `${item.name.replace(/\s+/g, '_')}_${item.fill}`;
-             config[configKey] = {
-                label: item.name,
-                color: item.fill // Use the same theme fill color assigned earlier
-            };
-        });
-        // Add a key for the value itself for the tooltip
-         config.value = { label: 'Amount (KES)' };
-         return config;
-    }, [assetChartData]);
 
 
     // 3. Income/Expense Trend Chart (Line Chart - Based on ALL transactions)
@@ -605,48 +580,6 @@ export default function DashboardPage() {
                )}
             </CardContent>
           </Card>
-
-          <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                  <PieChart className="h-4 w-4"/> Asset Allocation
-              </CardTitle>
-              <CardDescription>Distribution of your assets by value</CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center justify-center">
-              {assetChartData.length > 0 ? (
-                  <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
-                      <ResponsiveContainer width="100%" height={200}>
-                          <PieChart>
-                              <ChartTooltip
-                                  cursor={false}
-                                  content={<ChartTooltipContent indicator="line" nameKey="name" hideLabel />}
-                              />
-                              <Pie
-                                 data={assetChartData}
-                                 dataKey="value"
-                                 nameKey="name" // Ensure this matches the 'name' field in assetChartData
-                                 cx="50%"
-                                 cy="50%"
-                                 outerRadius={80} // Slightly larger radius
-                                 innerRadius={50} // Create a donut chart effect
-                                 labelLine={false}
-                              >
-                                 {assetChartData.map((entry, index) => (
-                                     <Cell key={`cell-${index}`} fill={entry.fill} />
-                                 ))}
-                             </Pie>
-                          </PieChart>
-                      </ResponsiveContainer>
-                  </ChartContainer>
-               ) : (
-                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
-                      No positive asset data available. Add assets in Statements.
-                  </div>
-              )}
-            </CardContent>
-          </Card>
-
 
          {/* Action/Navigation Cards - Make these span 1 column each for consistency */}
           <Card className="flex flex-col"> {/* Adjusted span */}
