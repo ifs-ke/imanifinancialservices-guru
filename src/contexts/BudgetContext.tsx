@@ -1,10 +1,11 @@
+
 // src/contexts/BudgetContext.tsx
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useCallback, useEffect } from 'react';
 
 // Define the structure for budget items
-interface BudgetItems {
+export interface BudgetItems { // Export the interface
   recurringFixedIncome: number;
   recurringVariableIncome: number;
   oneTimeIncome: number;
