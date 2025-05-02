@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
@@ -9,7 +10,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactionsStore } from '@/store/transactionsStore'; // Import transactions store
 import { useDebtStore } from '@/store/debtStore'; // Import debt store
-import { useStatementStore } from '@/store/statementStore'; // Import statement store
+import { useStatementStore } from '@/store/statementStore'; // Import statement store for items and dates
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import budget store hook and selectors
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
@@ -40,8 +41,11 @@ export default function DashboardPage() {
   // Use Zustand store hooks directly
   const transactions = useTransactionsStore(state => state.transactions);
   const debts = useDebtStore(state => state.debts);
+  // Get statement items and date range from statementStore
   const assetItems = useStatementStore(state => state.assetItems);
   const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
+  const startDate = useStatementStore(state => state.startDate);
+  const endDate = useStatementStore(state => state.endDate);
   // Use budget store selectors
   const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
@@ -50,47 +54,55 @@ export default function DashboardPage() {
   const netBudgetedMonthly = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
   const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
 
+  // Filter transactions based on the global date range
+   const filteredTransactions = useMemo(() => {
+      const start = startDate ? startDate.getTime() : 0;
+      const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
+      return transactions.filter(tx => {
+          const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+          if (isNaN(txDate.getTime())) return false;
+          const txTime = txDate.getTime();
+          return txTime >= start && txTime <= end;
+      });
+  }, [transactions, startDate, endDate]); // Depend on global dates
 
-  // Calculate financial metrics based on context data
+  // Calculate financial metrics based on filtered transactions and other context data
   const financialData = useMemo(() => {
     const totalAssets = calculateTotal(assetItems);
     const totalDebt = calculateDebtTotal(debts);
     const totalOtherLiabilities = calculateOtherLiabilityTotal(otherLiabilityItems);
     const netWorth = totalAssets - (totalDebt + totalOtherLiabilities);
 
-    // Calculate cash flow for the last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentTransactions = transactions.filter(tx => {
-        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
-        return txDate instanceof Date && !isNaN(txDate.getTime()) && txDate >= thirtyDaysAgo;
-    });
-    const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
-    const totalExpensesRecent = Math.abs(calculateTotal(recentTransactions.filter(tx => tx.amount < 0)));
-    const netActualRecent = totalIncomeRecent - totalExpensesRecent; // Actual net for last 30 days
+    // Use filteredTransactions for cash flow calculation
+    const totalIncomeFiltered = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
+    const totalExpensesFiltered = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
+    const netActualFiltered = totalIncomeFiltered - totalExpensesFiltered; // Actual net for selected date range
 
-    // Budget Variance Calculation (comparing 30-day actual net vs monthly budgeted net)
-    const budgetVariance = netActualRecent - netBudgetedMonthly;
+    // Budget Variance Calculation (comparing filtered actual net vs monthly budgeted net)
+    // Note: This comparison might be less meaningful if the date range isn't a full month.
+    // A dedicated variance report page (like in Statements) is better for detailed analysis.
+    const budgetVariance = netActualFiltered - netBudgetedMonthly; // Keep the basic comparison for the dashboard card
 
     return {
       netWorth,
-      cashFlow: netActualRecent, // Use calculated net actual
+      cashFlow: netActualFiltered, // Use filtered net actual
       totalDebt,
       totalAssets,
-      totalIncomeRecent,
-      totalExpensesRecent,
+      totalIncomeFiltered, // Use filtered income
+      totalExpensesFiltered, // Use filtered expenses
       totalOtherLiabilities,
       budgetVariance, // Add variance to the data object
     };
-  }, [transactions, debts, assetItems, otherLiabilityItems, netBudgetedMonthly]);
+  }, [filteredTransactions, debts, assetItems, otherLiabilityItems, netBudgetedMonthly]); // Depend on filteredTransactions
+
 
   // State for formatted currency values to avoid hydration issues
   const [formattedNetWorth, setFormattedNetWorth] = useState<string>('N/A');
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
   const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
-  const [formattedTotalIncomeRecent, setFormattedTotalIncomeRecent] = useState<string>('N/A');
-  const [formattedTotalExpensesRecent, setFormattedTotalExpensesRecent] = useState<string>('N/A');
+  const [formattedTotalIncomeFiltered, setFormattedTotalIncomeFiltered] = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalExpensesFiltered, setFormattedTotalExpensesFiltered] = useState<string>('N/A'); // Renamed state variable
   const [formattedOtherLiabilities, setFormattedOtherLiabilities] = useState<string>('N/A'); // Added state for other liabilities formatting
   const [budgetStatus, setBudgetStatus] = useState<string>('N/A'); // State for budget status
   const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A'); // State for formatted variance
@@ -101,11 +113,11 @@ export default function DashboardPage() {
     setFormattedTotalAssets(formatCurrency(financialData.totalAssets));
     setFormattedTotalLiabilities(formatCurrency(financialData.totalDebt + financialData.totalOtherLiabilities));
     setFormattedCashFlow(formatCurrency(financialData.cashFlow));
-    setFormattedTotalIncomeRecent(formatCurrency(financialData.totalIncomeRecent));
-    setFormattedTotalExpensesRecent(formatCurrency(financialData.totalExpensesRecent));
+    setFormattedTotalIncomeFiltered(formatCurrency(financialData.totalIncomeFiltered)); // Use filtered income data
+    setFormattedTotalExpensesFiltered(formatCurrency(financialData.totalExpensesFiltered)); // Use filtered expense data
     setFormattedOtherLiabilities(formatCurrency(financialData.totalOtherLiabilities)); // Format other liabilities
 
-    // Determine budget status and format variance
+    // Determine budget status and format variance based on filtered data
      if (financialData.budgetVariance >= 0) {
          setBudgetStatus("On Track");
      } else {
@@ -119,8 +131,7 @@ export default function DashboardPage() {
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
 
   useEffect(() => {
-    // Calculate funds available specifically for debt repayment
-    // Assumes totalBudgetedExpenses correctly represents living expenses *excluding* debt minimums
+    // Calculation logic remains the same, based on total debt and budget figures
     const fundsForDebtPayment = totalBudgetedIncome - totalBudgetedExpenses;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
@@ -136,7 +147,6 @@ export default function DashboardPage() {
 
     const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
 
-    // Initial check if minimum payments might not cover interest
     let interestWarning = false;
     debts.forEach(debt => {
         const monthlyInterest = debt.principal * (debt.interestRate / 100 / 12);
@@ -147,26 +157,23 @@ export default function DashboardPage() {
 
     if (fundsForDebtPayment < totalMinPayments) {
         setDebtPayoffTimeline(interestWarning ? "Warning: Min payments may not cover interest." : "Warning: Funds less than min payments.");
-        return; // Can't simulate accelerated payoff if funds don't even cover minimums
+        return;
     }
 
-    // --- Simulation Start ---
-    let currentDebts = debts.map(d => ({ ...d, principal: d.principal })); // Deep clone debts for simulation
+    let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
-    const MAX_MONTHS = 720; // 60 years limit for safety
+    const MAX_MONTHS = 720;
 
     while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
         months++;
         let availablePayment = fundsForDebtPayment;
 
-        // 1. Calculate interest for the month and add to principal
         currentDebts.forEach(debt => {
             if (debt.principal > 0) {
                 debt.principal += debt.principal * (debt.interestRate / 100 / 12);
             }
         });
 
-        // 2. Pay minimums on all debts
         currentDebts.forEach(debt => {
             if (debt.principal > 0) {
                 const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
@@ -175,9 +182,7 @@ export default function DashboardPage() {
             }
         });
 
-        // 3. Apply remaining funds to highest interest rate debt (Avalanche)
         if (availablePayment > 0) {
-            // Sort by highest interest rate, then highest balance as tie-breaker
             currentDebts.sort((a, b) => {
                  const rateDiff = b.interestRate - a.interestRate;
                  if (rateDiff !== 0) return rateDiff;
@@ -190,14 +195,12 @@ export default function DashboardPage() {
                      debt.principal -= payment;
                      availablePayment -= payment;
                  }
-                 if(availablePayment <= 0) break; // No more funds left
+                 if(availablePayment <= 0) break;
             }
         }
 
-         // Remove paid-off debts (clean principal slightly below zero due to floating point)
          currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
     }
-    // --- Simulation End ---
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
        setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
@@ -220,11 +223,11 @@ export default function DashboardPage() {
 
   // --- Chart Data and Config ---
 
-  // 1. Income vs Expense Chart (Bar Chart - Last 30 days)
+  // 1. Income vs Expense Chart (Bar Chart - Based on filtered date range)
   const cashFlowChartData = useMemo(() => [
-    { name: 'Income', value: financialData.totalIncomeRecent, fill: "hsl(var(--chart-2))" },
-    { name: 'Expenses', value: financialData.totalExpensesRecent, fill: "hsl(var(--destructive))" },
-  ], [financialData.totalIncomeRecent, financialData.totalExpensesRecent]);
+    { name: 'Income', value: financialData.totalIncomeFiltered, fill: "hsl(var(--chart-2))" }, // Use filtered income
+    { name: 'Expenses', value: financialData.totalExpensesFiltered, fill: "hsl(var(--destructive))" }, // Use filtered expenses
+  ], [financialData.totalIncomeFiltered, financialData.totalExpensesFiltered]);
 
   const cashFlowChartConfig = {
     value: { label: 'Amount (KES)' },
@@ -232,7 +235,7 @@ export default function DashboardPage() {
     Expenses: { label: 'Expenses', color: "hsl(var(--destructive))" },
   } satisfies ChartConfig;
 
-  // 2. Asset Allocation Chart (Pie Chart)
+  // 2. Asset Allocation Chart (Pie Chart) - Remains the same, not date-dependent
    const assetChartData = useMemo(() =>
     assetItems
       .filter(item => item.amount > 0) // Only include positive assets
@@ -255,23 +258,23 @@ export default function DashboardPage() {
        return config;
    }, [assetChartData]);
 
-   // 3. Income/Expense Trend Chart (Line Chart - All Time)
+   // 3. Income/Expense Trend Chart (Line Chart - Based on filtered date range)
    const trendChartData = useMemo(() => {
         const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
 
-        // Sort transactions oldest to newest for chronological plotting
-        const sortedTransactions = [...transactions].sort((a, b) => {
+        // Use filtered transactions for trend analysis
+        const sortedFilteredTransactions = [...filteredTransactions].sort((a, b) => {
             const dateA = a.date instanceof Date ? a.date : new Date(a.date);
             const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-            if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0; // Handle invalid dates
+            if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
             return dateA.getTime() - dateB.getTime();
         });
 
-        sortedTransactions.forEach(tx => {
+        sortedFilteredTransactions.forEach(tx => {
             const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
-            if (isNaN(txDate.getTime())) return; // Skip invalid dates
+            if (isNaN(txDate.getTime())) return;
 
-            const monthKey = format(txDate, 'yyyy-MM'); // Group by year and month
+            const monthKey = format(txDate, 'yyyy-MM');
             if (!monthlyData[monthKey]) {
                 monthlyData[monthKey] = { month: format(txDate, 'MMM yyyy'), income: 0, expense: 0 };
             }
@@ -279,17 +282,16 @@ export default function DashboardPage() {
             if (tx.amount > 0) {
                 monthlyData[monthKey].income += tx.amount;
             } else if (tx.amount < 0) {
-                monthlyData[monthKey].expense += Math.abs(tx.amount); // Store expense as positive value for plotting
+                monthlyData[monthKey].expense += Math.abs(tx.amount);
             }
         });
 
-        // Convert to array and sort chronologically
         return Object.values(monthlyData).sort((a, b) => {
-            const dateA = new Date(a.month.replace(' ', ' 1, ')); // Convert 'MMM yyyy' back to Date for sorting
+            const dateA = new Date(a.month.replace(' ', ' 1, '));
             const dateB = new Date(b.month.replace(' ', ' 1, '));
             return dateA.getTime() - dateB.getTime();
         });
-    }, [transactions]);
+    }, [filteredTransactions]); // Depend on filteredTransactions
 
    const trendChartConfig = {
         income: { label: "Income", color: "hsl(var(--chart-2))" },
@@ -305,7 +307,7 @@ export default function DashboardPage() {
           Dashboard
         </h1>
         <p className="text-muted-foreground">
-          Your financial overview and progress.
+           Financial overview for {startDate ? format(startDate, 'PP') : '...'} to {endDate ? format(endDate, 'PP') : '...'}. Update range in Statements.
         </p>
       </header>
 
@@ -335,7 +337,7 @@ export default function DashboardPage() {
         </Card>
         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cash Flow (Last 30d)</CardTitle>
+            <CardTitle className="text-sm font-medium">Cash Flow (Filtered)</CardTitle> {/* Updated title */}
             {financialData.cashFlow >= 0 ? (
               <TrendingUp className="h-4 w-4 text-accent" />
             ) : (
@@ -351,7 +353,7 @@ export default function DashboardPage() {
               {formattedCashFlow}
             </div>
             <p className="text-xs text-muted-foreground">
-              Income ({formattedTotalIncomeRecent}) - Expenses ({formattedTotalExpensesRecent})
+              Income ({formattedTotalIncomeFiltered}) - Expenses ({formattedTotalExpensesFiltered}) {/* Use filtered formatted values */}
             </p>
              {/* Link to Statements */}
             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
@@ -424,7 +426,7 @@ export default function DashboardPage() {
          {/* Budget Variance Card */}
          <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                 <CardTitle className="text-sm font-medium">Budget Variance (30d)</CardTitle>
+                 <CardTitle className="text-sm font-medium">Budget Variance (Filtered)</CardTitle> {/* Updated title */}
                   {financialData.budgetVariance >= 0 ? (
                      <CheckCircle className="h-4 w-4 text-accent" />
                  ) : (
@@ -439,7 +441,7 @@ export default function DashboardPage() {
                      {budgetStatus}
                  </div>
                  <p className="text-xs text-muted-foreground">
-                     {formattedBudgetVariance} {financialData.budgetVariance >= 0 ? 'Surplus' : 'Shortfall'} vs Budgeted Net
+                     {formattedBudgetVariance} {financialData.budgetVariance >= 0 ? 'Surplus' : 'Shortfall'} vs Budgeted Net (monthly)
                  </p>
                  <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                      <Link href="/statements">
@@ -454,9 +456,9 @@ export default function DashboardPage() {
         <Card className="md:col-span-2 lg:col-span-3 xl:col-span-4">
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
-                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (All Time)
+                <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Filtered) {/* Updated title */}
              </CardTitle>
-             <CardDescription>Monthly income vs. expenses over time.</CardDescription>
+             <CardDescription>Monthly income vs. expenses over the selected date range.</CardDescription>
            </CardHeader>
            <CardContent>
                 {trendChartData.length > 1 ? ( // Need at least 2 points for a line chart
@@ -507,7 +509,7 @@ export default function DashboardPage() {
                     </ChartContainer>
                  ) : (
                     <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
-                        Not enough data for trend analysis (need transactions spanning at least two months).
+                        Not enough data in the selected range for trend analysis (need data spanning at least two months).
                     </div>
                  )}
             </CardContent>
@@ -517,12 +519,12 @@ export default function DashboardPage() {
          <Card className="md:col-span-1 lg:col-span-1 xl:col-span-2"> {/* Adjust span */}
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4" /> Cash Flow (Last 30d)
+                  <BarChart2 className="h-4 w-4" /> Cash Flow (Filtered) {/* Updated title */}
              </CardTitle>
-             <CardDescription>Income vs. Expenses</CardDescription>
+             <CardDescription>Income vs. Expenses in selected range</CardDescription>
            </CardHeader>
            <CardContent>
-              {financialData.totalIncomeRecent > 0 || financialData.totalExpensesRecent > 0 ? (
+              {financialData.totalIncomeFiltered > 0 || financialData.totalExpensesFiltered > 0 ? ( // Use filtered data check
                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
                    <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
                       <XAxis type="number" hide />
@@ -543,7 +545,7 @@ export default function DashboardPage() {
                  </ChartContainer>
               ) : (
                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-                     No income or expense data for the last 30 days.
+                     No income or expense data for the selected date range.
                  </div>
               )}
            </CardContent>
@@ -697,3 +699,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

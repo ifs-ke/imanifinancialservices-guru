@@ -28,7 +28,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
 import { useDebtStore } from '@/store/debtStore'; // Import Zustand store hook
-import { useStatementStore } from '@/store/statementStore'; // Import Zustand store hook
+import { useStatementStore } from '@/store/statementStore'; // Import Zustand store hook for items and dates
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import Zustand store hook and selectors
 import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId, BudgetItem, BudgetItemCategory } from '@/lib/types'; // Import all needed types
 import { Badge } from '@/components/ui/badge'; // Import Badge
@@ -75,7 +75,7 @@ const AccordionTriggerWithSum = React.forwardRef<
     if (hasVariance && variance < 0) varianceColor = 'text-destructive';
 
   return (
-      <AccordionTrigger ref={ref} {...props}>
+      <AccordionTrigger ref={ref} {...props} className='hover:no-underline'>
         <div className="flex justify-between items-center w-full pr-2">
             <span className="flex items-center gap-1 text-base font-semibold">
               {label}
@@ -92,7 +92,7 @@ const AccordionTriggerWithSum = React.forwardRef<
                 <span className="font-semibold font-mono">{formatCurrency(sum)}</span>
             </div>
         </div>
-        {children}
+        {/* Removed redundant ChevronDown icon here */}
       </AccordionTrigger>
   );
 });
@@ -103,7 +103,23 @@ export default function StatementsPage() {
   // Zustand store hooks
   const transactions = useTransactionsStore(state => state.transactions);
   const debts = useDebtStore(state => state.debts);
-  const { assetItems, otherLiabilityItems, setAssetItems, setOtherLiabilityItems, deleteAssetItem, deleteOtherLiabilityItem, updateAssetItem, updateOtherLiabilityItem, addAssetItem, addOtherLiabilityItem } = useStatementStore();
+  // Get items AND date range state/setters from statementStore
+  const {
+      assetItems,
+      otherLiabilityItems,
+      setAssetItems,
+      setOtherLiabilityItems,
+      deleteAssetItem,
+      deleteOtherLiabilityItem,
+      updateAssetItem,
+      updateOtherLiabilityItem,
+      addAssetItem,
+      addOtherLiabilityItem,
+      startDate, // Get startDate from store
+      endDate,   // Get endDate from store
+      setStartDate, // Get setStartDate from store
+      setEndDate    // Get setEndDate from store
+  } = useStatementStore();
   const budgetItems = useBudgetStore(state => state.budgetItems);
 
 
@@ -114,17 +130,13 @@ export default function StatementsPage() {
   const [editingAssets, setEditingAssets] = useState<StatementItem[]>([]);
   const [editingOtherLiabilities, setEditingOtherLiabilities] = useState<OtherLiabilityItem[]>([]);
 
-  // State for date range filtering
-  const defaultEndDate = endOfMonth(new Date());
-  const defaultStartDate = startOfMonth(defaultEndDate);
-  const [startDate, setStartDate] = useState<Date | undefined>(defaultStartDate);
-  const [endDate, setEndDate] = useState<Date | undefined>(defaultEndDate);
-
+  // State for date range filtering is now removed, using store state
 
   const { toast } = useToast();
 
   // --- Derived Calculations ---
 
+  // Filter transactions based on the global startDate and endDate from the store
   const filteredTransactions = useMemo(() => {
     const start = startDate ? startDate.getTime() : 0;
     // Set end date to the very end of the selected day
@@ -135,7 +147,7 @@ export default function StatementsPage() {
         const txTime = txDate.getTime();
         return txTime >= start && txTime <= end;
     });
-  }, [transactions, startDate, endDate]);
+  }, [transactions, startDate, endDate]); // Depend on store dates
 
 
   // Include frequency/variability in derived items
@@ -555,7 +567,7 @@ export default function StatementsPage() {
         </div>
       </header>
 
-       {/* Date Range Pickers */}
+       {/* Date Range Pickers using global state */}
       <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 border rounded-lg bg-card">
           <Label className="font-semibold">Select Date Range:</Label>
            <Popover>
@@ -575,7 +587,7 @@ export default function StatementsPage() {
                    <Calendar
                        mode="single"
                        selected={startDate}
-                       onSelect={setStartDate}
+                       onSelect={setStartDate} // Update store state
                        initialFocus
                    />
                </PopoverContent>
@@ -598,7 +610,7 @@ export default function StatementsPage() {
                    <Calendar
                        mode="single"
                        selected={endDate}
-                       onSelect={setEndDate}
+                       onSelect={setEndDate} // Update store state
                        disabled={(date) =>
                            startDate ? date < startDate : false
                        }
@@ -625,7 +637,7 @@ export default function StatementsPage() {
              <Accordion type="multiple" className="w-full"> {/* Removed defaultValue */}
                  {/* Income Accordion */}
                 <AccordionItem value="income">
-                     <AccordionTriggerWithSum label="Income" sum={totalActualIncome} budgetedSum={varianceTotalsByCategory.totalBudgetedIncome} variance={varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.totalBudgetedIncome} className="hover:no-underline" />
+                     <AccordionTriggerWithSum label="Income" sum={totalActualIncome} budgetedSum={varianceTotalsByCategory.totalBudgetedIncome} variance={varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.totalBudgetedIncome} />
                      <AccordionContent>
                          {derivedIncomeItems.length > 0 ? (
                            <ScrollArea className="h-[200px] w-full pr-3">
@@ -643,7 +655,7 @@ export default function StatementsPage() {
 
                  {/* Expenses Accordion */}
                  <AccordionItem value="expenses" className="border-b-0">
-                      <AccordionTriggerWithSum label="Expenses" sum={totalActualExpenses} budgetedSum={varianceTotalsByCategory.totalBudgetedExpenses} variance={varianceTotalsByCategory.totalBudgetedExpenses - varianceTotalsByCategory.totalActualExpenses} className="hover:no-underline" />
+                      <AccordionTriggerWithSum label="Expenses" sum={totalActualExpenses} budgetedSum={varianceTotalsByCategory.totalBudgetedExpenses} variance={varianceTotalsByCategory.totalBudgetedExpenses - varianceTotalsByCategory.totalActualExpenses} />
                      <AccordionContent>
                          {derivedExpenseItems.length > 0 ? (
                             <ScrollArea className="h-[200px] w-full pr-3">
@@ -688,7 +700,7 @@ export default function StatementsPage() {
              <Accordion type="multiple" className="w-full"> {/* Removed defaultValue */}
                  {/* Assets Accordion */}
                  <AccordionItem value="assets">
-                    <AccordionTriggerWithSum label="Assets" sum={totalAssets} className="hover:no-underline" />
+                    <AccordionTriggerWithSum label="Assets" sum={totalAssets} />
                      <AccordionContent>
                          <ScrollArea className="h-[200px] w-full pr-3">
                              <Table>
@@ -814,7 +826,7 @@ export default function StatementsPage() {
                              sum={varianceTotalsByCategory.income.actual}
                              budgetedSum={varianceTotalsByCategory.income.budgeted}
                              variance={varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.totalBudgetedIncome}
-                             className="hover:no-underline text-accent"
+                             className="text-accent"
                          />
                           <AccordionContent>
                               {varianceDataByCategory.income.length > 0 ? (
@@ -846,7 +858,7 @@ export default function StatementsPage() {
                              sum={varianceTotalsByCategory.totalActualExpenses}
                              budgetedSum={varianceTotalsByCategory.totalBudgetedExpenses}
                              variance={varianceTotalsByCategory.totalBudgetedExpenses - varianceTotalsByCategory.totalActualExpenses} // Favorable is positive
-                             className="hover:no-underline text-destructive"
+                             className="text-destructive"
                          />
                           <AccordionContent>
                              {(varianceDataByCategory['recurring-expense'].length > 0 || varianceDataByCategory['one-time-expense'].length > 0) ? (
@@ -881,7 +893,7 @@ export default function StatementsPage() {
                              sum={varianceTotalsByCategory.goal.actual} // Actual might be 0
                              budgetedSum={varianceTotalsByCategory.goal.budgeted}
                              variance={varianceTotalsByCategory.goal.budgeted - varianceTotalsByCategory.goal.actual} // Favorable is positive
-                             className="hover:no-underline text-primary"
+                             className="text-primary"
                          />
                           <AccordionContent>
                               {varianceDataByCategory.goal.length > 0 ? (
