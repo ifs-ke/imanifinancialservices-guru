@@ -1,4 +1,3 @@
-
 // src/lib/types.ts
 
 /**
@@ -62,4 +61,20 @@ export interface OtherLiabilityItem {
     id: string;
     description: string;
     amount: number;
+}
+
+/**
+ * Represents the categories for individual budget items.
+ */
+export type BudgetItemCategory = 'income' | 'recurring-expense' | 'one-time-expense' | 'goal';
+
+
+/**
+ * Represents a single, itemized budget entry.
+ */
+export interface BudgetItem {
+    id: string;
+    description: string;
+    amount: number;
+    category: BudgetItemCategory;
 }

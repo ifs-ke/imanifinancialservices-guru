@@ -1,99 +1,120 @@
-
 // src/contexts/BudgetContext.tsx
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useMemo, useCallback, useEffect } from 'react';
+import type { BudgetItem, BudgetItemCategory } from '@/lib/types'; // Import new types
 
-// Define the structure for budget items
-export interface BudgetItems { // Export the interface
-  recurringFixedIncome: number;
-  recurringVariableIncome: number;
-  oneTimeIncome: number;
-  recurringFixedExpenses: number;
-  recurringVariableExpenses: number;
-  oneTimeFixedExpenses: number;
-  oneTimeVariableExpenses: number;
-  savingsGoal: number; // Added savings goal
-  extraDebtPayment: number; // Added extra debt payment goal
-}
+// Generate unique IDs
+const generateId = (): string => `budget_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Initial empty state for the budget
-const initialBudget: BudgetItems = {
-  recurringFixedIncome: 0,
-  recurringVariableIncome: 0,
-  oneTimeIncome: 0,
-  recurringFixedExpenses: 0,
-  recurringVariableExpenses: 0,
-  oneTimeFixedExpenses: 0,
-  oneTimeVariableExpenses: 0,
-  savingsGoal: 0,
-  extraDebtPayment: 0,
-};
-
-const BUDGET_STORAGE_KEY = 'debtConqueror_budget';
+const BUDGET_ITEMS_STORAGE_KEY = 'debtConqueror_budgetItems';
 
 interface BudgetContextType {
-  budget: BudgetItems;
-  setBudget: (newBudget: BudgetItems) => void;
-  // Convenience getters for totals
-  totalBudgetedIncome: number;
-  totalBudgetedExpenses: number;
-  totalBudgetedNet: number;
+  budgetItems: BudgetItem[];
+  addBudgetItem: (itemData: Omit<BudgetItem, 'id'>) => BudgetItem;
+  updateBudgetItem: (updatedItem: BudgetItem) => void;
+  deleteBudgetItem: (id: string) => void;
+  // Calculated summary values
+  totalIncome: number;
+  totalRecurringExpenses: number;
+  totalOneTimeExpenses: number;
+  totalGoals: number;
+  totalExpenses: number;
+  netBudgeted: number; // Income - Expenses - Goals
 }
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
+// Helper to filter and sum items by category
+const sumByCategory = (items: BudgetItem[], category: BudgetItemCategory): number => {
+    return items.filter(item => item.category === category).reduce((sum, item) => sum + item.amount, 0);
+};
+
+// Helper to sort budget items: Income first, then expenses, then goals. Alphabetical within category.
+const sortBudgetItems = (items: BudgetItem[]): BudgetItem[] => {
+    const categoryOrder: Record<BudgetItemCategory, number> = {
+        'income': 1,
+        'recurring-expense': 2,
+        'one-time-expense': 3,
+        'goal': 4,
+    };
+    return [...items].sort((a, b) => {
+        const categoryDiff = categoryOrder[a.category] - categoryOrder[b.category];
+        if (categoryDiff !== 0) return categoryDiff;
+        return a.description.localeCompare(b.description);
+    });
+}
+
 export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [budget, setBudgetInternal] = useState<BudgetItems>(() => {
-        let initialData = initialBudget;
+    const [budgetItems, setBudgetItemsInternal] = useState<BudgetItem[]>(() => {
+        let initialData: BudgetItem[] = [];
         if (typeof window !== 'undefined') {
-            const storedBudget = localStorage.getItem(BUDGET_STORAGE_KEY);
+            const storedBudgetItems = localStorage.getItem(BUDGET_ITEMS_STORAGE_KEY);
             try {
-                initialData = storedBudget ? JSON.parse(storedBudget) : initialBudget;
-                // Ensure all keys exist, merging with initialBudget for safety
-                initialData = { ...initialBudget, ...initialData };
+                initialData = storedBudgetItems ? JSON.parse(storedBudgetItems) : [];
             } catch (e) {
-                console.error("Failed to parse budget from localStorage", e);
-                initialData = initialBudget; // Fallback to default on error
+                console.error("Failed to parse budget items from localStorage", e);
+                initialData = []; // Fallback to empty array on error
             }
         }
-        return initialData;
+        return sortBudgetItems(initialData); // Sort initial load
     });
 
     // Persist budget changes to localStorage
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budget));
+            localStorage.setItem(BUDGET_ITEMS_STORAGE_KEY, JSON.stringify(budgetItems));
         }
-    }, [budget]);
+    }, [budgetItems]);
 
-    const setBudget = useCallback((newBudget: BudgetItems) => {
-        setBudgetInternal(newBudget);
+    // --- CRUD Operations ---
+    const addBudgetItem = useCallback((itemData: Omit<BudgetItem, 'id'>): BudgetItem => {
+        const newItem: BudgetItem = {
+            id: generateId(),
+            ...itemData,
+        };
+        setBudgetItemsInternal(prev => sortBudgetItems([...prev, newItem]));
+        return newItem;
     }, []);
 
-    // Calculate totals using useMemo
-    const totalBudgetedIncome = useMemo(() =>
-        budget.recurringFixedIncome + budget.recurringVariableIncome + budget.oneTimeIncome,
-        [budget.recurringFixedIncome, budget.recurringVariableIncome, budget.oneTimeIncome]
-    );
+    const updateBudgetItem = useCallback((updatedItem: BudgetItem) => {
+        setBudgetItemsInternal(prev => sortBudgetItems(
+            prev.map(item => (item.id === updatedItem.id ? updatedItem : item))
+        ));
+    }, []);
 
-    const totalBudgetedExpenses = useMemo(() =>
-        budget.recurringFixedExpenses + budget.recurringVariableExpenses + budget.oneTimeFixedExpenses + budget.oneTimeVariableExpenses,
-        [budget.recurringFixedExpenses, budget.recurringVariableExpenses, budget.oneTimeFixedExpenses, budget.oneTimeVariableExpenses]
-    );
+    const deleteBudgetItem = useCallback((id: string) => {
+        setBudgetItemsInternal(prev => sortBudgetItems(
+            prev.filter(item => item.id !== id)
+        ));
+    }, []);
 
-     const totalBudgetedNet = useMemo(() =>
-        totalBudgetedIncome - totalBudgetedExpenses,
-        [totalBudgetedIncome, totalBudgetedExpenses]
-    );
+    // --- Calculate Summary Totals using useMemo ---
+    const totalIncome = useMemo(() => sumByCategory(budgetItems, 'income'), [budgetItems]);
+    const totalRecurringExpenses = useMemo(() => sumByCategory(budgetItems, 'recurring-expense'), [budgetItems]);
+    const totalOneTimeExpenses = useMemo(() => sumByCategory(budgetItems, 'one-time-expense'), [budgetItems]);
+    const totalGoals = useMemo(() => sumByCategory(budgetItems, 'goal'), [budgetItems]);
+
+    const totalExpenses = useMemo(() => totalRecurringExpenses + totalOneTimeExpenses, [totalRecurringExpenses, totalOneTimeExpenses]);
+
+    const netBudgeted = useMemo(() => totalIncome - totalExpenses - totalGoals, [totalIncome, totalExpenses, totalGoals]);
+
 
     const contextValue = useMemo(() => ({
-        budget,
-        setBudget,
-        totalBudgetedIncome,
-        totalBudgetedExpenses,
-        totalBudgetedNet,
-    }), [budget, setBudget, totalBudgetedIncome, totalBudgetedExpenses, totalBudgetedNet]);
+        budgetItems,
+        addBudgetItem,
+        updateBudgetItem,
+        deleteBudgetItem,
+        totalIncome,
+        totalRecurringExpenses,
+        totalOneTimeExpenses,
+        totalGoals,
+        totalExpenses,
+        netBudgeted,
+    }), [
+        budgetItems, addBudgetItem, updateBudgetItem, deleteBudgetItem,
+        totalIncome, totalRecurringExpenses, totalOneTimeExpenses, totalGoals, totalExpenses, netBudgeted
+    ]);
 
     return (
         <BudgetContext.Provider value={contextValue}>

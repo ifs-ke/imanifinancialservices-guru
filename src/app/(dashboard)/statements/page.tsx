@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/statements/page.tsx
 'use client';
 
@@ -30,7 +29,7 @@ import { useTransactions } from '@/contexts/TransactionsContext';
 import { useDebt } from '@/contexts/DebtContext';
 import { useStatement } from '@/contexts/StatementContext'; // Import Statement context
 import { useBudget } from '@/contexts/BudgetContext'; // Import Budget context
-import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId } from '@/lib/types'; // Import all needed types
+import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId, BudgetItem, BudgetItemCategory } from '@/lib/types'; // Import all needed types
 import { Badge } from '@/components/ui/badge'; // Import Badge
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
 
@@ -70,13 +69,13 @@ const formatCategoryBadge = (value: string | undefined) => {
 // Accordion Trigger Component with Sum
 const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; budgetedSum?: number }
+  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; budgetedSum?: number | null } // Allow null budgetedSum
 >(({ label, sum, budgetedSum, children, ...props }, ref) => (
   <AccordionTrigger ref={ref} {...props}>
     <div className="flex justify-between items-center w-full pr-2">
       <span className="flex items-center gap-1">
           {label}
-           {budgetedSum !== undefined && (
+           {budgetedSum !== undefined && budgetedSum !== null && ( // Check for null too
                 <span className="text-xs text-muted-foreground">(Budget: {formatCurrency(budgetedSum)})</span>
            )}
       </span>
@@ -92,10 +91,10 @@ export default function StatementsPage() {
   // Context hooks
   const { transactions } = useTransactions();
   const { debts } = useDebt();
-  // Use StatementContext for assets and other liabilities
   const { assetItems, otherLiabilityItems, setAssetItems, setOtherLiabilityItems } = useStatement();
-  // Use BudgetContext for budget data
-  const { budget: contextBudget, totalBudgetedIncome, totalBudgetedExpenses } = useBudget();
+   // Use BudgetContext for *itemized* budget data and *summary* totals
+   const { budgetItems, totalIncome: totalBudgetedIncome, totalExpenses: totalBudgetedExpenses } = useBudget();
+
 
   // State for edit mode and temporary edits
   const [isEditing, setIsEditing] = useState(false);
@@ -157,9 +156,9 @@ export default function StatementsPage() {
     [filteredTransactions]
   );
 
-  const totalIncome = useMemo(() => calculateTotal(derivedIncomeItems), [derivedIncomeItems]);
-  const totalExpenses = useMemo(() => calculateTotal(derivedExpenseItems), [derivedExpenseItems]);
-  const cashFlow = totalIncome - totalExpenses;
+  const totalActualIncome = useMemo(() => calculateTotal(derivedIncomeItems), [derivedIncomeItems]);
+  const totalActualExpenses = useMemo(() => calculateTotal(derivedExpenseItems), [derivedExpenseItems]);
+  const cashFlow = totalActualIncome - totalActualExpenses;
 
   // Separate debts by term
    const shortTermDebts = useMemo(() => debts.filter(debt => debt.term === 'short'), [debts]);
@@ -174,63 +173,126 @@ export default function StatementsPage() {
   const totalLiabilities = totalShortTermDebt + totalLongTermDebt + totalOtherLiabilities;
   const netWorth = totalAssets - totalLiabilities;
 
-  // --- Budget Variance Calculations ---
-  const categorizedActualTransactions = useMemo(() => {
-    const categories = {
-      recurringFixedIncome: [] as TransactionWithId[],
-      recurringVariableIncome: [] as TransactionWithId[],
-      oneTimeIncome: [] as TransactionWithId[],
-      uncategorizedIncome: [] as TransactionWithId[],
-      recurringFixedExpenses: [] as TransactionWithId[],
-      recurringVariableExpenses: [] as TransactionWithId[],
-      oneTimeFixedExpenses: [] as TransactionWithId[],
-      oneTimeVariableExpenses: [] as TransactionWithId[],
-      uncategorizedExpenses: [] as TransactionWithId[],
-    };
+  // --- Budget Variance Calculation Refactor ---
+  // Group actual transactions by description for comparison with budget items
+    const actualSpendingByCategory = useMemo(() => {
+        const actuals: Record<BudgetItemCategory, { [description: string]: { amount: number, count: number } }> = {
+            income: {},
+            'recurring-expense': {},
+            'one-time-expense': {},
+            goal: {}, // Goals might not have direct transactions, depending on implementation
+        };
 
-    filteredTransactions.forEach(tx => { // Use filtered transactions
-      if (tx.amount > 0) { // Income
-        if (tx.frequency === 'recurring' && tx.variability === 'fixed') categories.recurringFixedIncome.push(tx);
-        else if (tx.frequency === 'recurring' && tx.variability === 'variable') categories.recurringVariableIncome.push(tx);
-        else if (tx.frequency === 'one-time') categories.oneTimeIncome.push(tx); // Group all one-time
-        else categories.uncategorizedIncome.push(tx);
-      } else if (tx.amount < 0) { // Expense
-        if (tx.frequency === 'recurring' && tx.variability === 'fixed') categories.recurringFixedExpenses.push(tx);
-        else if (tx.frequency === 'recurring' && tx.variability === 'variable') categories.recurringVariableExpenses.push(tx);
-        else if (tx.frequency === 'one-time' && tx.variability === 'fixed') categories.oneTimeFixedExpenses.push(tx);
-        else if (tx.frequency === 'one-time' && tx.variability === 'variable') categories.oneTimeVariableExpenses.push(tx);
-        else categories.uncategorizedExpenses.push(tx);
-      }
-    });
-     Object.values(categories).forEach(category => category.sort((a, b) => b.date.getTime() - a.date.getTime()));
-    return categories;
-  }, [filteredTransactions]);
+        filteredTransactions.forEach(tx => {
+            const category: BudgetItemCategory | null =
+                tx.amount > 0 ? 'income' :
+                tx.frequency === 'recurring' ? 'recurring-expense' :
+                tx.frequency === 'one-time' ? 'one-time-expense' : null; // Map transaction properties to budget categories
 
-  const calculateActualTotal = (items: TransactionWithId[], type: 'income' | 'expense') =>
-      items.reduce((sum, item) => sum + (type === 'income' ? item.amount : Math.abs(item.amount)), 0);
+            if (category) {
+                const descKey = tx.description.toLowerCase(); // Use lowercase description for grouping
+                const amount = Math.abs(tx.amount);
 
-   const actualTotals = useMemo(() => ({
-        recurringFixedIncome: calculateActualTotal(categorizedActualTransactions.recurringFixedIncome, 'income'),
-        recurringVariableIncome: calculateActualTotal(categorizedActualTransactions.recurringVariableIncome, 'income'),
-        oneTimeIncome: calculateActualTotal(categorizedActualTransactions.oneTimeIncome, 'income'),
-        uncategorizedIncome: calculateActualTotal(categorizedActualTransactions.uncategorizedIncome, 'income'),
-        recurringFixedExpenses: calculateActualTotal(categorizedActualTransactions.recurringFixedExpenses, 'expense'),
-        recurringVariableExpenses: calculateActualTotal(categorizedActualTransactions.recurringVariableExpenses, 'expense'),
-        oneTimeFixedExpenses: calculateActualTotal(categorizedActualTransactions.oneTimeFixedExpenses, 'expense'),
-        oneTimeVariableExpenses: calculateActualTotal(categorizedActualTransactions.oneTimeVariableExpenses, 'expense'),
-        uncategorizedExpenses: calculateActualTotal(categorizedActualTransactions.uncategorizedExpenses, 'expense'),
-   }), [categorizedActualTransactions]);
+                if (!actuals[category][descKey]) {
+                    actuals[category][descKey] = { amount: 0, count: 0 };
+                }
+                actuals[category][descKey].amount += amount;
+                actuals[category][descKey].count += 1;
+            }
+        });
+        return actuals;
+    }, [filteredTransactions]);
 
-   const totalActualIncome = useMemo(() =>
-       actualTotals.recurringFixedIncome + actualTotals.recurringVariableIncome + actualTotals.oneTimeIncome + actualTotals.uncategorizedIncome,
-       [actualTotals]
-   );
+   // Generate Variance Data
+   const varianceData = useMemo(() => {
+        const variance: { category: BudgetItemCategory; description: string; budgeted: number; actual: number | null }[] = [];
+        const actualsTracked: Set<string> = new Set(); // Keep track of actuals already listed
 
-   const totalActualExpenses = useMemo(() =>
-       actualTotals.recurringFixedExpenses + actualTotals.recurringVariableExpenses + actualTotals.oneTimeFixedExpenses + actualTotals.oneTimeVariableExpenses + actualTotals.uncategorizedExpenses,
-       [actualTotals]
-   );
+        // 1. Iterate through budgeted items
+        budgetItems.forEach(item => {
+            const descKey = item.description.toLowerCase();
+            const actualGroup = actualSpendingByCategory[item.category]?.[descKey];
+            const actualAmount = actualGroup ? actualGroup.amount : 0;
 
+            variance.push({
+                category: item.category,
+                description: item.description,
+                budgeted: item.amount,
+                actual: actualAmount, // Actual might be 0 if no matching transaction
+            });
+            if(actualGroup) actualsTracked.add(`${item.category}-${descKey}`); // Mark this actual as handled
+        });
+
+        // 2. Add actual transactions that *didn't* match a budget item description
+        Object.entries(actualSpendingByCategory).forEach(([category, descriptions]) => {
+             Object.entries(descriptions).forEach(([descKey, data]) => {
+                const trackerKey = `${category}-${descKey}`;
+                if (!actualsTracked.has(trackerKey)) {
+                     // Find the original description casing (take the first matching transaction)
+                     const originalTx = filteredTransactions.find(tx =>
+                        (tx.amount > 0 ? 'income' :
+                         tx.frequency === 'recurring' ? 'recurring-expense' :
+                         tx.frequency === 'one-time' ? 'one-time-expense' : null) === category &&
+                         tx.description.toLowerCase() === descKey
+                     );
+                     const originalDescription = originalTx ? originalTx.description : descKey; // Fallback to lower key if not found
+
+                     variance.push({
+                         category: category as BudgetItemCategory,
+                         description: `* ${originalDescription}`, // Mark as unbudgeted actual
+                         budgeted: 0, // No budget allocated
+                         actual: data.amount,
+                    });
+                 }
+             });
+         });
+
+        // Sort the variance data
+         const categoryOrder: Record<BudgetItemCategory, number> = { 'income': 1, 'recurring-expense': 2, 'one-time-expense': 3, 'goal': 4 };
+         return variance.sort((a, b) => {
+            const categoryDiff = categoryOrder[a.category] - categoryOrder[b.category];
+            if (categoryDiff !== 0) return categoryDiff;
+            // Keep budgeted items before unbudgeted actuals (marked with *)
+             if (a.description.startsWith('*') && !b.description.startsWith('*')) return 1;
+             if (!a.description.startsWith('*') && b.description.startsWith('*')) return -1;
+             return a.description.localeCompare(b.description);
+         });
+
+    }, [budgetItems, actualSpendingByCategory, filteredTransactions]);
+
+
+   const varianceTotals = useMemo(() => {
+        let totalBudgetedIncome = 0;
+        let totalActualIncome = 0;
+        let totalBudgetedExpenses = 0;
+        let totalActualExpenses = 0;
+        let totalBudgetedGoals = 0;
+        let totalActualGoals = 0; // Assuming no direct actuals for goals yet
+
+        varianceData.forEach(item => {
+            if (item.category === 'income') {
+                totalBudgetedIncome += item.budgeted;
+                 totalActualIncome += item.actual ?? 0;
+            } else if (item.category === 'recurring-expense' || item.category === 'one-time-expense') {
+                 totalBudgetedExpenses += item.budgeted;
+                 totalActualExpenses += item.actual ?? 0;
+             } else if (item.category === 'goal') {
+                 totalBudgetedGoals += item.budgeted;
+                 // totalActualGoals += item.actual ?? 0; // Add if goals have actuals
+            }
+         });
+
+         return {
+             totalBudgetedIncome,
+             totalActualIncome,
+             totalBudgetedExpenses,
+             totalActualExpenses,
+             totalBudgetedGoals,
+             totalActualGoals,
+             netBudgeted: totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals,
+             netActual: totalActualIncome - totalActualExpenses - totalActualGoals,
+        };
+   }, [varianceData]);
 
   // --- Handlers ---
 
@@ -384,40 +446,55 @@ export default function StatementsPage() {
     );
 
     // Render function for budget variance report rows
-    const renderVarianceRow = (label: string, budgeted: number, actual: number) => {
-        const variance = budgeted - actual;
-        const isIncome = label.toLowerCase().includes('income');
-        let statusText = '';
-        let statusColor = 'text-muted-foreground'; // Default color
+    const renderVarianceRow = (category: BudgetItemCategory, description: string, budgeted: number, actual: number | null) => {
+        const variance = budgeted - (actual ?? 0);
+        const isIncome = category === 'income';
+        let statusText = '-';
+        let statusColor = 'text-muted-foreground';
+        const isUnbudgetedActual = description.startsWith('* ');
+        const displayDescription = isUnbudgetedActual ? description.substring(2) : description;
 
-        if (isIncome) {
-            if (variance < 0) { // Actual > Budget
-                statusText = `+${formatCurrency(Math.abs(variance))} (Favorable)`;
-                statusColor = 'text-accent';
-            } else if (variance > 0) { // Actual < Budget
-                statusText = `-${formatCurrency(variance)} (Unfavorable)`;
-                statusColor = 'text-destructive';
-            } else {
-                statusText = 'On Target';
+        if (actual === null && budgeted === 0) { // Neither budgeted nor actual
+             statusText = '-';
+             statusColor = 'text-muted-foreground';
+        } else if (actual === null) { // Budgeted but no actual
+            statusText = `-${formatCurrency(budgeted)} (Unspent Budget)`;
+             statusColor = isIncome ? 'text-destructive' : 'text-accent'; // Opposite logic for unspent income/expense
+        } else if (isUnbudgetedActual) { // Unbudgeted actual spending
+             statusText = `-${formatCurrency(actual)} (Unbudgeted)`;
+             statusColor = 'text-destructive';
+        } else { // Both budgeted and actual exist
+             if (isIncome) {
+                 if (variance < 0) { // Actual > Budget
+                     statusText = `+${formatCurrency(Math.abs(variance))} (Favorable)`;
+                     statusColor = 'text-accent';
+                 } else if (variance > 0) { // Actual < Budget
+                     statusText = `-${formatCurrency(variance)} (Unfavorable)`;
+                     statusColor = 'text-destructive';
+                 } else {
+                     statusText = 'On Target';
+                 }
+             } else { // Expenses or Goals
+                 if (variance > 0) { // Actual < Budget (Under Budget)
+                    statusText = `+${formatCurrency(variance)} (Favorable)`;
+                    statusColor = 'text-accent';
+                 } else if (variance < 0) { // Actual > Budget (Over Budget)
+                     statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`;
+                     statusColor = 'text-destructive';
+                 } else {
+                    statusText = 'On Target';
+                 }
             }
-        } else { // Expenses
-             if (variance > 0) { // Actual < Budget (Under Budget)
-                statusText = `+${formatCurrency(variance)} (Favorable)`;
-                statusColor = 'text-accent';
-             } else if (variance < 0) { // Actual > Budget (Over Budget)
-                 statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`;
-                 statusColor = 'text-destructive';
-             } else {
-                statusText = 'On Target';
-             }
-        }
+         }
 
         return (
-            <TableRow>
-                 <TableCell>{label}</TableCell>
-                 <TableCell className="text-right font-mono">{formatCurrency(budgeted)}</TableCell>
-                 <TableCell className="text-right font-mono">{formatCurrency(actual)}</TableCell>
-                 <TableCell className={cn("text-right font-mono text-sm", statusColor)}>
+            <TableRow key={`${category}-${description}`}>
+                 <TableCell className={cn(isUnbudgetedActual && "pl-6 italic text-muted-foreground")}>
+                    {displayDescription}
+                 </TableCell>
+                 <TableCell className="text-right font-mono">{budgeted > 0 ? formatCurrency(budgeted) : '-'}</TableCell>
+                 <TableCell className="text-right font-mono">{actual !== null ? formatCurrency(actual) : '-'}</TableCell>
+                 <TableCell className={cn("text-right font-mono text-xs", statusColor)}>
                      {statusText}
                 </TableCell>
             </TableRow>
@@ -524,7 +601,7 @@ export default function StatementsPage() {
              <Accordion type="multiple" className="w-full" defaultValue={['income', 'expenses']}> {/* Allow multiple open, default open */}
                  {/* Income Accordion */}
                 <AccordionItem value="income">
-                     <AccordionTriggerWithSum label="Income" sum={totalIncome} className="text-base font-semibold hover:no-underline" />
+                     <AccordionTriggerWithSum label="Income" sum={totalActualIncome} budgetedSum={varianceTotals.totalBudgetedIncome} className="text-base font-semibold hover:no-underline" />
                      <AccordionContent>
                          {derivedIncomeItems.length > 0 ? (
                            <ScrollArea className="h-[200px] w-full pr-3">
@@ -542,7 +619,7 @@ export default function StatementsPage() {
 
                  {/* Expenses Accordion */}
                  <AccordionItem value="expenses">
-                     <AccordionTriggerWithSum label="Expenses" sum={totalExpenses} className="text-base font-semibold hover:no-underline" />
+                     <AccordionTriggerWithSum label="Expenses" sum={totalActualExpenses} budgetedSum={varianceTotals.totalBudgetedExpenses} className="text-base font-semibold hover:no-underline" />
                      <AccordionContent>
                          {derivedExpenseItems.length > 0 ? (
                             <ScrollArea className="h-[200px] w-full pr-3">
@@ -701,81 +778,93 @@ export default function StatementsPage() {
          <Card className="lg:col-span-2"> {/* Takes full width on large screens */}
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
-                <CardDescription>Compare budgeted amounts with actuals from transactions in the selected date range.</CardDescription>
-                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/> Actuals are based on categorized transactions within the date range. Uncategorized transactions are listed separately.</p>
+                <CardDescription>Compare itemized budget amounts with actuals from transactions in the selected date range.</CardDescription>
+                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/> Actuals are grouped by transaction description. Items marked with * are unbudgeted actuals.</p>
             </CardHeader>
             <CardContent>
                  <ScrollArea className="h-[400px] w-full">
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Category</TableHead>
+                                <TableHead>Item / Description</TableHead>
                                 <TableHead className="text-right">Budgeted (KES)</TableHead>
                                 <TableHead className="text-right">Actual (KES)</TableHead>
-                                <TableHead className="text-right">Variance</TableHead>
+                                <TableHead className="text-right w-[150px]">Variance</TableHead>
                             </TableRow>
                         </TableHeader>
                          <TableBody>
-                            {/* Income Section */}
-                            <TableRow className="bg-muted/30 font-semibold">
+                             {/* Income Section */}
+                             <TableRow className="bg-muted/30 font-semibold sticky top-0 z-10">
                                 <TableCell colSpan={4} className="py-2"><TrendingUp className="inline h-4 w-4 mr-1 text-accent"/>Income</TableCell>
                             </TableRow>
-                            {renderVarianceRow('Recurring - Fixed Income', contextBudget.recurringFixedIncome, actualTotals.recurringFixedIncome)}
-                            {renderVarianceRow('Recurring - Variable Income', contextBudget.recurringVariableIncome, actualTotals.recurringVariableIncome)}
-                            {renderVarianceRow('One-Time Income', contextBudget.oneTimeIncome, actualTotals.oneTimeIncome)}
-                             {actualTotals.uncategorizedIncome > 0 && (
-                                <TableRow>
-                                    <TableCell className='pl-6 text-muted-foreground'>Uncategorized Income</TableCell>
-                                    <TableCell className="text-right font-mono">-</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(actualTotals.uncategorizedIncome)}</TableCell>
-                                    <TableCell className="text-right font-mono text-xs text-muted-foreground">(Not budgeted)</TableCell>
-                                </TableRow>
-                             )}
+                             {varianceData.filter(v => v.category === 'income').map(v => renderVarianceRow(v.category, v.description, v.budgeted, v.actual))}
                              {/* Income Subtotal */}
                             <TableRow className="border-t font-semibold">
                                 <TableCell>Total Income</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totalBudgetedIncome)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totalActualIncome)}</TableCell>
-                                <TableCell className={cn("text-right font-mono", (totalActualIncome - totalBudgetedIncome) >= 0 ? 'text-accent' : 'text-destructive')}>
-                                    {formatCurrency(totalActualIncome - totalBudgetedIncome)}
+                                <TableCell className="text-right font-mono">{formatCurrency(varianceTotals.totalBudgetedIncome)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(varianceTotals.totalActualIncome)}</TableCell>
+                                <TableCell className={cn("text-right font-mono text-xs", (varianceTotals.totalActualIncome - varianceTotals.totalBudgetedIncome) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                    {formatCurrency(varianceTotals.totalActualIncome - varianceTotals.totalBudgetedIncome)}
                                 </TableCell>
                             </TableRow>
 
-                            {/* Expenses Section */}
-                             <TableRow className="bg-muted/30 font-semibold mt-4">
-                                <TableCell colSpan={4} className="py-2"><TrendingDown className="inline h-4 w-4 mr-1 text-destructive"/>Expenses</TableCell>
+                            {/* Recurring Expenses Section */}
+                             <TableRow className="bg-muted/30 font-semibold sticky top-0 z-10">
+                                <TableCell colSpan={4} className="py-2"><TrendingDown className="inline h-4 w-4 mr-1 text-destructive"/>Recurring Expenses</TableCell>
                              </TableRow>
-                             {renderVarianceRow('Recurring - Fixed Expenses', contextBudget.recurringFixedExpenses, actualTotals.recurringFixedExpenses)}
-                             {renderVarianceRow('Recurring - Variable Expenses', contextBudget.recurringVariableExpenses, actualTotals.recurringVariableExpenses)}
-                             {renderVarianceRow('One-Time - Fixed Expenses', contextBudget.oneTimeFixedExpenses, actualTotals.oneTimeFixedExpenses)}
-                             {renderVarianceRow('One-Time - Variable Expenses', contextBudget.oneTimeVariableExpenses, actualTotals.oneTimeVariableExpenses)}
-                             {actualTotals.uncategorizedExpenses > 0 && (
-                                <TableRow>
-                                    <TableCell className='pl-6 text-muted-foreground'>Uncategorized Expenses</TableCell>
-                                    <TableCell className="text-right font-mono">-</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(actualTotals.uncategorizedExpenses)}</TableCell>
-                                    <TableCell className="text-right font-mono text-xs text-destructive">(Over Budget)</TableCell>
-                                </TableRow>
-                             )}
-                             {/* Expenses Subtotal */}
+                             {varianceData.filter(v => v.category === 'recurring-expense').map(v => renderVarianceRow(v.category, v.description, v.budgeted, v.actual))}
+                             {/* Recurring Expenses Subtotal */}
                              <TableRow className="border-t font-semibold">
-                                <TableCell>Total Expenses</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totalBudgetedExpenses)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totalActualExpenses)}</TableCell>
-                                <TableCell className={cn("text-right font-mono", (totalBudgetedExpenses - totalActualExpenses) >= 0 ? 'text-accent' : 'text-destructive')}>
-                                    {formatCurrency(totalBudgetedExpenses - totalActualExpenses)}
+                                <TableCell>Total Recurring Expenses</TableCell>
+                                 <TableCell className="text-right font-mono">{formatCurrency(budgetItems.filter(i => i.category === 'recurring-expense').reduce((s, i) => s + i.amount, 0))}</TableCell>
+                                 <TableCell className="text-right font-mono">{formatCurrency(varianceData.filter(v => v.category === 'recurring-expense').reduce((s, v) => s + (v.actual ?? 0), 0))}</TableCell>
+                                <TableCell className={cn("text-right font-mono text-xs", (varianceTotals.totalBudgetedExpenses - varianceTotals.totalActualExpenses) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                    {/* Variance logic needs category separation if subtotaling like this */}
+                                    {/* Placeholder for category specific variance calculation */}
                                 </TableCell>
                             </TableRow>
 
-                            {/* Net Summary Section */}
-                            <TableRow className="bg-primary/10 font-bold text-lg border-t-2 border-primary mt-4">
-                                <TableCell>Net (Income - Expenses)</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totalBudgetedIncome - totalBudgetedExpenses)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(totalActualIncome - totalActualExpenses)}</TableCell>
-                                <TableCell className={cn("text-right font-mono", ((totalActualIncome - totalActualExpenses) - (totalBudgetedIncome - totalBudgetedExpenses)) >= 0 ? 'text-accent' : 'text-destructive')}>
-                                    {formatCurrency((totalActualIncome - totalActualExpenses) - (totalBudgetedIncome - totalBudgetedExpenses))}
+                            {/* One-Time Expenses Section */}
+                             <TableRow className="bg-muted/30 font-semibold sticky top-0 z-10">
+                                <TableCell colSpan={4} className="py-2"><MinusCircle className="inline h-4 w-4 mr-1 text-destructive"/>One-Time Expenses</TableCell>
+                             </TableRow>
+                             {varianceData.filter(v => v.category === 'one-time-expense').map(v => renderVarianceRow(v.category, v.description, v.budgeted, v.actual))}
+                             {/* One-Time Expenses Subtotal */}
+                            <TableRow className="border-t font-semibold">
+                                <TableCell>Total One-Time Expenses</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(budgetItems.filter(i => i.category === 'one-time-expense').reduce((s, i) => s + i.amount, 0))}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(varianceData.filter(v => v.category === 'one-time-expense').reduce((s, v) => s + (v.actual ?? 0), 0))}</TableCell>
+                                <TableCell className={cn("text-right font-mono text-xs", (varianceTotals.totalBudgetedExpenses - varianceTotals.totalActualExpenses) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                    {/* Variance logic needs category separation if subtotaling like this */}
+                                     {/* Placeholder for category specific variance calculation */}
                                 </TableCell>
                             </TableRow>
+
+                            {/* Goals Section */}
+                             <TableRow className="bg-muted/30 font-semibold sticky top-0 z-10">
+                                <TableCell colSpan={4} className="py-2"><Target className="inline h-4 w-4 mr-1 text-primary"/>Goals</TableCell>
+                             </TableRow>
+                             {varianceData.filter(v => v.category === 'goal').map(v => renderVarianceRow(v.category, v.description, v.budgeted, v.actual))}
+                             {/* Goals Subtotal */}
+                             <TableRow className="border-t font-semibold">
+                                <TableCell>Total Goals</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(varianceTotals.totalBudgetedGoals)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(varianceTotals.totalActualGoals)}</TableCell>
+                                <TableCell className={cn("text-right font-mono text-xs", (varianceTotals.totalBudgetedGoals - varianceTotals.totalActualGoals) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                     {formatCurrency(varianceTotals.totalBudgetedGoals - varianceTotals.totalActualGoals)}
+                                </TableCell>
+                             </TableRow>
+
+
+                             {/* Grand Totals */}
+                             <TableRow className="bg-primary/10 font-bold text-lg border-t-2 border-primary mt-4 sticky bottom-0 z-10">
+                                <TableCell>Net Totals</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(varianceTotals.netBudgeted)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(varianceTotals.netActual)}</TableCell>
+                                <TableCell className={cn("text-right font-mono text-sm", (varianceTotals.netActual - varianceTotals.netBudgeted) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                    {formatCurrency(varianceTotals.netActual - varianceTotals.netBudgeted)}
+                                </TableCell>
+                             </TableRow>
                          </TableBody>
                     </Table>
                  </ScrollArea>
@@ -787,4 +876,3 @@ export default function StatementsPage() {
     </div>
   );
 }
-
