@@ -72,7 +72,7 @@ export default function BudgetPage() {
 
   const handleDeleteClick = (item: BudgetItem) => {
       setItemToDelete(item);
-      // AlertDialogTrigger below will open the confirmation dialog
+      // The AlertDialog will open based on the itemToDelete state change
   };
 
   const confirmDeleteItem = () => {
@@ -191,14 +191,11 @@ export default function BudgetPage() {
                                                      <Edit className="h-3 w-3" />
                                                      <span className="sr-only">Edit</span>
                                                  </Button>
-                                                 {/* Delete Button Trigger */}
-                                                 {/* This button now only sets the itemToDelete state */}
-                                                 <AlertDialogTrigger asChild>
-                                                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
-                                                          <Trash2 className="h-3 w-3" />
-                                                          <span className="sr-only">Delete</span>
-                                                      </Button>
-                                                 </AlertDialogTrigger>
+                                                 {/* Delete Button - Simply triggers the state change */}
+                                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
+                                                      <Trash2 className="h-3 w-3" />
+                                                      <span className="sr-only">Delete</span>
+                                                  </Button>
                                              </TableCell>
                                          </TableRow>
                                      ))
@@ -228,6 +225,7 @@ export default function BudgetPage() {
          {/* Alert Dialog for Delete Confirmation (Placed once outside the map) */}
          {/* This AlertDialog now controls the visibility based on itemToDelete */}
           <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+            {/* Removed AlertDialogTrigger from here */}
             <AlertDialogContent>
                 {itemToDelete && ( // Conditionally render content only if itemToDelete exists
                     <>
