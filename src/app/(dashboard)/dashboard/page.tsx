@@ -464,33 +464,34 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-         {/* Budget Variance Card - Updated color logic */}
+         {/* Budget Variance Card - Updated status description */}
          <Card className="lg:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
                  {/* Icon based on status */}
-                 {budgetVariance.value === null && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
-                 {budgetVariance.value !== null && budgetVariance.value >= 0 && <CheckCircle className="h-4 w-4 text-accent" />}
-                 {budgetVariance.value !== null && budgetVariance.value < 0 && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                 {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
+                 {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
+                 {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />}
+                 {budgetStatus === 'over-budget' && <AlertTriangle className="h-4 w-4 text-destructive" />}
             </CardHeader>
              <CardContent>
                  <div className={cn("text-2xl font-bold",
-                     budgetVariance.value === null && 'text-muted-foreground', // No data
-                     budgetVariance.value !== null && budgetVariance.value >= 0 && 'text-accent', // Favorable or on-track
-                     budgetVariance.value !== null && budgetVariance.value < 0 && 'text-destructive' // Unfavorable
+                     budgetStatus === 'no-data' && 'text-muted-foreground',
+                     (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent',
+                     budgetStatus === 'over-budget' && 'text-destructive'
                  )}>
-                     {budgetVariance.value !== null ? `${budgetVariance.value >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
+                     {budgetStatus !== 'no-data' ? `${budgetVariance.value! >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
                  </div>
-                 <p className={cn("text-xs",
-                     budgetVariance.value === null && 'text-muted-foreground',
-                     budgetVariance.value !== null && budgetVariance.value >= 0 && 'text-accent', // Favorable text color
-                     budgetVariance.value !== null && budgetVariance.value < 0 && 'text-destructive' // Unfavorable text color
+                  <p className={cn("text-xs",
+                     budgetStatus === 'no-data' && 'text-muted-foreground',
+                     (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent', // Favorable text color
+                     budgetStatus === 'over-budget' && 'text-destructive' // Unfavorable text color
                  )}>
-                     {budgetVariance.value === null && 'No Budget/Actuals Data'}
-                     {budgetVariance.value !== null && budgetVariance.value === 0 && 'On Target'}
-                     {budgetVariance.value !== null && budgetVariance.value > 0 && 'Favorable (Under Budget / Over Income)'}
-                     {budgetVariance.value !== null && budgetVariance.value < 0 && 'Unfavorable (Over Budget / Under Income)'}
-                 </p>
+                     {budgetStatus === 'no-data' && 'No Budget/Actuals Data'}
+                      {budgetStatus === 'on-track' && 'On Track (Actual matches Budget)'}
+                      {budgetStatus === 'under-budget' && 'Favorable (Under Budget / Over Income)'}
+                      {budgetStatus === 'over-budget' && 'Unfavorable (Over Budget / Under Income)'}
+                  </p>
                  <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                      <Link href="/statements">
                          View Report <ArrowRight className="ml-1 h-3 w-3" />
