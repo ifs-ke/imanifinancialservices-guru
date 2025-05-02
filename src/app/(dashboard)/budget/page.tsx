@@ -192,7 +192,8 @@ export default function BudgetPage() {
                                                      <span className="sr-only">Edit</span>
                                                  </Button>
                                                  {/* Delete Button - Triggers AlertDialog */}
-                                                 <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                                                 {/* Manage AlertDialog open state externally */}
+                                                  <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
                                                     <AlertDialogTrigger asChild>
                                                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
                                                             <Trash2 className="h-3 w-3" />

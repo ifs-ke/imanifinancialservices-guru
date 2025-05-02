@@ -7,13 +7,13 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle } from 'lucide-react'; // Added Target, CheckCircle, AlertTriangle
 import Link from 'next/link';
 import Image from 'next/image';
-import { useTransactions } from '@/contexts/TransactionsContext';
-import { useDebt } from '@/contexts/DebtContext';
-import { useStatement } from '@/contexts/StatementContext';
+import { useTransactionsStore } from '@/store/transactionsStore'; // Import transactions store
+import { useDebtStore } from '@/store/debtStore'; // Import debt store
+import { useStatementStore } from '@/store/statementStore'; // Import statement store
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import budget store hook and selectors
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
 import { format } from 'date-fns'; // Import date-fns format
-import { useBudget } from '@/contexts/BudgetContext'; // Import budget context
 import { cn } from '@/lib/utils'; // Import cn utility
 
 
@@ -37,16 +37,18 @@ const formatCurrency = (amount: number | undefined) => {
 const formatMonthYear = (date: Date) => format(date, 'MMM yyyy');
 
 export default function DashboardPage() {
-  const { transactions } = useTransactions();
-  const { debts } = useDebt();
-  const { assetItems, otherLiabilityItems } = useStatement();
-  const {
-      totalIncome: totalBudgetedIncome,
-      totalRecurringExpenses,
-      totalOneTimeExpenses,
-      totalGoals,
-      netBudgeted: netBudgetedMonthly // Renamed for clarity in this context
-  } = useBudget();
+  // Use Zustand store hooks directly
+  const transactions = useTransactionsStore(state => state.transactions);
+  const debts = useDebtStore(state => state.debts);
+  const assetItems = useStatementStore(state => state.assetItems);
+  const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
+  // Use budget store selectors
+  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
+  const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
+  const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
+  const totalGoals = useBudgetStore(selectTotalGoals);
+  const netBudgetedMonthly = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
+
 
   // Calculate financial metrics based on context data
   const financialData = useMemo(() => {
@@ -255,7 +257,7 @@ export default function DashboardPage() {
               {formattedNetWorth}
             </div>
             <p className="text-xs text-muted-foreground">
-               Assets ({formattedTotalAssets}) <br/> Liabilities ({formattedTotalLiabilities})
+               Assets ({formattedTotalAssets}) - Liabilities ({formattedTotalLiabilities})
             </p>
              {/* Link to Statements */}
             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
@@ -283,7 +285,7 @@ export default function DashboardPage() {
               {formattedCashFlow}
             </div>
             <p className="text-xs text-muted-foreground">
-              Income ({formattedTotalIncomeRecent}) <br/> Expenses ({formattedTotalExpensesRecent})
+              Income ({formattedTotalIncomeRecent}) - Expenses ({formattedTotalExpensesRecent})
             </p>
              {/* Link to Statements */}
             <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">

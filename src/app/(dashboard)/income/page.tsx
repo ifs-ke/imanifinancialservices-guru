@@ -6,7 +6,7 @@ import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useTransactions } from '@/contexts/TransactionsContext';
+import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
 import type { TransactionWithId } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Coins, TrendingUp, Tag } from 'lucide-react'; // Import relevant icons
@@ -36,7 +36,7 @@ const formatCategoryBadge = (value: string | undefined) => {
 }
 
 export default function IncomePage() {
-  const { transactions } = useTransactions();
+  const { transactions } = useTransactionsStore(); // Use Zustand hook
 
   // Filter only income (amount > 0)
   const incomeTransactions = useMemo(() =>
@@ -70,7 +70,12 @@ export default function IncomePage() {
 
     // Sort within categories by date descending
     for (const key in categories) {
-        categories[key as keyof typeof categories].sort((a, b) => b.date.getTime() - a.date.getTime());
+        categories[key as keyof typeof categories].sort((a, b) => {
+            const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+            const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+             if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0; // Handle invalid dates
+            return dateB.getTime() - dateA.getTime();
+        });
     }
 
     return categories;

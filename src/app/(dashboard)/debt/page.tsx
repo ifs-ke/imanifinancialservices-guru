@@ -105,11 +105,13 @@ export default function DebtPage() {
       };
 
       try {
+          console.log("Calling AI flow with input:", analysisInput); // Add logging
           const result = await analyzeDebtStrategy(analysisInput);
+           console.log("AI flow result:", result); // Add logging
           setAnalysisResult(result);
       } catch (error: any) {
           console.error("Debt analysis failed:", error);
-          setAnalysisError(`Analysis failed: ${error.message || 'Please try again.'}`);
+           setAnalysisError(`Analysis failed: ${error.message || 'Please try again.'}`);
           toast({
               title: "Analysis Failed",
               description: "Could not get debt strategy suggestions.",
@@ -255,7 +257,8 @@ export default function DebtPage() {
                             </DebtAmortizationSheet>
 
                           {/* Delete Button & Confirmation Dialog */}
-                          <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
+                           {/* Manage AlertDialog open state externally */}
+                           <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
                               <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
                                   <Trash2 className="h-4 w-4" />

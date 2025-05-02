@@ -401,17 +401,21 @@ export default function TransactionsPage() {
                                 </Button>
                               </AlertDialogTrigger>
                              <AlertDialogContent>
-                                 <AlertDialogHeader>
-                                   <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                   <AlertDialogDescription>
-                                     This action cannot be undone. This will permanently delete the transaction: <br/>
-                                     <strong>{formatDate(tx.date)} - {tx.description} ({formatCurrency(tx.amount)})</strong>
-                                   </AlertDialogDescription>
-                                 </AlertDialogHeader>
-                                 <AlertDialogFooter>
-                                   <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
-                                   <AlertDialogAction onClick={confirmDeleteTransaction}>Delete</AlertDialogAction>
-                                 </AlertDialogFooter>
+                               {transactionToDelete && ( // Only render content if transactionToDelete is set
+                                 <>
+                                   <AlertDialogHeader>
+                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                     <AlertDialogDescription>
+                                       This action cannot be undone. This will permanently delete the transaction: <br/>
+                                       <strong>{formatDate(transactionToDelete.date)} - {transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
+                                     </AlertDialogDescription>
+                                   </AlertDialogHeader>
+                                   <AlertDialogFooter>
+                                     <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
+                                     <AlertDialogAction onClick={confirmDeleteTransaction}>Delete</AlertDialogAction>
+                                   </AlertDialogFooter>
+                                 </>
+                                )}
                                </AlertDialogContent>
                            </AlertDialog>
                          </TableCell>

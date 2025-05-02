@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight, AlertTriangle, PieChart as PieChartIcon, CheckCircle } from 'lucide-react'; // Added icons
+import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight, AlertTriangle, PieChart as PieChartIcon, CheckCircle, Target } from 'lucide-react'; // Added icons
 import { Label } from '@/components/ui/label'; // Import Label component
 import {
   AlertDialog,
@@ -481,7 +481,7 @@ export default function StatementsPage() {
             statusText = `${formatCurrency(item.budgeted)} (Unspent)`; // Show unspent budget
              statusColor = isIncome ? 'text-destructive' : 'text-accent'; // Favorable for expenses/goals, Unfavorable for income
         } else if (isUnbudgetedActual) { // Unbudgeted actual spending
-             statusText = `-${formatCurrency(item.actual)} (Unbudgeted)`;
+             statusText = `-${formatCurrency(item.actual ?? 0)} (Unbudgeted)`; // Added null check
              statusColor = 'text-destructive';
         } else { // Both budgeted and actual exist
             // For variance calculation, we need to know the category type
@@ -491,11 +491,15 @@ export default function StatementsPage() {
             // Let's assume based on the sign of budgeted amount for simplicity here
             // A more robust way would be passing the category type to this function
             let calculatedVariance: number;
-            if (item.budgeted > 0 && item.description.toLowerCase().includes('income')) { // Assuming income is positive budget
-                calculatedVariance = (item.actual ?? 0) - item.budgeted;
-            } else { // Assuming expenses/goals have positive budget values representing outflow
-                calculatedVariance = item.budgeted - (item.actual ?? 0);
-            }
+             const actualValue = item.actual ?? 0; // Default actual to 0 if null
+
+             // Determine category based on the description or other properties if needed
+             // For simplicity, assume positive budget means income, otherwise expense/goal
+             if (item.budgeted > 0 && varianceDataByCategory.income.some(i => i.description === item.description)) { // Check if it's in income category
+                calculatedVariance = actualValue - item.budgeted;
+             } else { // Assuming expenses/goals have positive budget values representing outflow
+                calculatedVariance = item.budgeted - actualValue;
+             }
 
 
              if (calculatedVariance > 0) {
