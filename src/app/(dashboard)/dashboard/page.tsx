@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon } from 'lucide-react'; // Added LineChartIcon
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock } from 'lucide-react'; // Added CalendarClock Icon
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactions } from '@/contexts/TransactionsContext';
@@ -12,6 +12,8 @@ import { useStatement } from '@/contexts/StatementContext';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
 import { format } from 'date-fns'; // Import date-fns format
+import { useBudget } from '@/contexts/BudgetContext'; // Import budget context
+
 
 // Calculation Functions (consider moving to utils)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
@@ -36,6 +38,7 @@ export default function DashboardPage() {
   const { transactions } = useTransactions();
   const { debts } = useDebt();
   const { assetItems, otherLiabilityItems } = useStatement();
+  const { totalIncome: totalBudgetedIncome, totalRecurringExpenses } = useBudget();
 
   // Calculate financial metrics based on context data
   const financialData = useMemo(() => {
@@ -75,7 +78,6 @@ export default function DashboardPage() {
   const [formattedTotalExpensesRecent, setFormattedTotalExpensesRecent] = useState<string>('N/A');
   const [formattedOtherLiabilities, setFormattedOtherLiabilities] = useState<string>('N/A'); // Added state for other liabilities formatting
 
-
   useEffect(() => {
     // Format the values here to avoid server/client differences
     setFormattedNetWorth(formatCurrency(financialData.netWorth));
@@ -86,6 +88,30 @@ export default function DashboardPage() {
     setFormattedTotalExpensesRecent(formatCurrency(financialData.totalExpensesRecent));
     setFormattedOtherLiabilities(formatCurrency(financialData.totalOtherLiabilities)); // Format other liabilities
   }, [financialData]);
+
+  // --- Debt Payoff Timeline Calculation ---
+  const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
+
+    useEffect(() => {
+        // Calculate debt payoff timeline on debt or budgeted income change
+        if (debts.length > 0 && totalBudgetedIncome > 0) {
+            const totalDebtAmount = debts.reduce((sum, debt) => sum + debt.principal, 0);
+            // Rough estimate: available income after recurring expenses divided by total debt
+            const availableForDebt = totalBudgetedIncome - totalRecurringExpenses;
+
+            if (availableForDebt <= 0) {
+                setDebtPayoffTimeline("Cannot estimate: Income does not exceed expenses.");
+            } else {
+                const monthsToPayoff = totalDebtAmount / availableForDebt;
+                const years = Math.floor(monthsToPayoff / 12);
+                const remainingMonths = Math.ceil(monthsToPayoff % 12);
+                setDebtPayoffTimeline(`${years} years and ${remainingMonths} months (estimated)`);
+            }
+        } else {
+            setDebtPayoffTimeline("N/A"); // Reset if no debts or income
+        }
+    }, [debts, totalBudgetedIncome, totalRecurringExpenses]);
+
 
   // --- Chart Data and Config ---
 
@@ -255,6 +281,22 @@ export default function DashboardPage() {
                 </Link>
              </Button>
           </CardContent>
+        </Card>
+
+         {/* New Debt Payoff Timeline Card */}
+        <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Debt Payoff Timeline</CardTitle>
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">
+                    {debtPayoffTimeline}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    Based on current debt and estimated income.
+                </p>
+            </CardContent>
         </Card>
 
 
