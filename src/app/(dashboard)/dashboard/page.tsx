@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
@@ -284,27 +283,31 @@ export default function DashboardPage() {
    } satisfies ChartConfig;
 
    // 2. Asset Allocation Chart (Pie Chart) - Use theme variables for colors
-    const assetChartData = useMemo(() =>
-     assetItems
-       .filter(item => item.amount > 0) // Only include positive assets
-       .map((item, index) => ({
-         name: item.description,
-         value: item.amount,
-         fill: `hsl(var(--chart-${(index % 5) + 1}))` // Use theme chart colors
-     })), [assetItems]);
+    const assetChartData = useMemo(() => {
+         // Ensure items have a numeric amount and positive value
+        const validAssets = assetItems.filter(item => typeof item.amount === 'number' && item.amount > 0);
+        return validAssets.map((item, index) => ({
+             name: item.description,
+             value: item.amount,
+             fill: `hsl(var(--chart-${(index % 5) + 1}))` // Use theme chart colors
+         }));
+    }, [assetItems]);
 
     const assetChartConfig = useMemo(() => {
         const config: ChartConfig = {};
-        assetChartData.forEach((item) => {
-            config[item.name] = {
+         assetChartData.forEach((item) => {
+            // Generate a unique key for the config, handle potential duplicate names
+             const configKey = `${item.name.replace(/\s+/g, '_')}_${item.fill}`;
+             config[configKey] = {
                 label: item.name,
                 color: item.fill // Use the same theme fill color assigned earlier
             };
         });
         // Add a key for the value itself for the tooltip
-        config.value = { label: 'Amount (KES)' };
-        return config;
+         config.value = { label: 'Amount (KES)' };
+         return config;
     }, [assetChartData]);
+
 
     // 3. Income/Expense Trend Chart (Line Chart - Based on ALL transactions)
     // Use theme variables for colors
@@ -611,34 +614,49 @@ export default function DashboardPage() {
              <CardDescription>Distribution of your assets by value</CardDescription>
            </CardHeader>
            <CardContent className="flex items-center justify-center">
-              {assetChartData.length > 0 ? (
-                  <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
+             {assetChartData.length > 0 ? (
+                 <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
                      <ResponsiveContainer width="100%" height={200}>
                          <PieChart>
-                           <ChartTooltip content={<ChartTooltipContent nameKey="name" hideIndicator />} />
-                           <Pie
-                             data={assetChartData}
-                             dataKey="value"
-                             nameKey="name"
-                             cx="50%"
-                             cy="50%"
-                             outerRadius={70}
-                             innerRadius={50}
-                             labelLine={false}
-                             paddingAngle={2}
-                           >
-                             {assetChartData.map((entry, index) => (
-                               <Cell key={`cell-${index}`} fill={entry.fill} /> // Colors already use theme variables
-                             ))}
-                           </Pie>
+                             <ChartTooltip
+                                 cursor={false}
+                                 content={<ChartTooltipContent indicator="line" nameKey="name" hideLabel />}
+                             />
+                             <Pie
+                                data={assetChartData}
+                                dataKey="value"
+                                nameKey="name" // Ensure this matches the 'name' field in assetChartData
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={80} // Slightly larger radius
+                                innerRadius={50} // Create a donut chart effect
+                                labelLine={false}
+                                // Removed label prop for cleaner look
+                                // label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+                                //     const RADIAN = Math.PI / 180;
+                                //     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                //     const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                //     const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                //     // Only show label if percentage is significant
+                                //     return percent > 0.05 ? (
+                                //         <text x={x} y={y} fill="hsl(var(--card-foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10}>
+                                //             {`${(percent * 100).toFixed(0)}%`}
+                                //         </text>
+                                //     ) : null;
+                                // }}
+                             >
+                                {assetChartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                            </Pie>
                          </PieChart>
                      </ResponsiveContainer>
                  </ChartContainer>
               ) : (
-                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
+                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center px-4">
                      No positive asset data available. Add assets in Statements.
                  </div>
-              )}
+             )}
            </CardContent>
          </Card>
 
