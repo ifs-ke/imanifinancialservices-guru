@@ -1,4 +1,3 @@
-
 // src/contexts/DebtContext.tsx
 'use client';
 
@@ -8,7 +7,6 @@ import type { DebtItem } from '@/lib/types';
 // Generate unique IDs
 const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Removed sample data, start with an empty array
 const initialDebtsData: DebtItem[] = [];
 
 interface DebtContextType {
@@ -16,6 +14,8 @@ interface DebtContextType {
   addDebt: (debtData: Omit<DebtItem, 'id'>) => DebtItem;
   updateDebt: (updatedDebt: DebtItem) => void;
   deleteDebt: (id: string) => void;
+  importDebtsBatch: (newDebtsData: Omit<DebtItem, 'id'>[]) => DebtItem[]; // Add batch import signature
+  // deleteDebtsBatch: (ids: string[]) => void; // Add batch delete signature if needed for rollback
 }
 
 const DebtContext = createContext<DebtContextType | undefined>(undefined);
@@ -26,7 +26,6 @@ export const DebtProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return [...initialDebtsData].sort((a, b) => {
         if (a.term === 'short' && b.term === 'long') return -1;
         if (a.term === 'long' && b.term === 'short') return 1;
-        // Secondary sort by principal descending within term
         return b.principal - a.principal;
     });
   }, []);
@@ -39,7 +38,6 @@ export const DebtProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return [...debtList].sort((a, b) => {
         if (a.term === 'short' && b.term === 'long') return -1;
         if (a.term === 'long' && b.term === 'short') return 1;
-        // Secondary sort by principal descending within term
         return b.principal - a.principal;
     });
   }, []);
@@ -50,7 +48,7 @@ export const DebtProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ...debtData,
     };
     setDebts(prev => sortDebts([...prev, newDebt]));
-    return newDebt; // Return the debt with its new ID
+    return newDebt;
   }, [sortDebts]);
 
   const updateDebt = useCallback((updatedDebt: DebtItem) => {
@@ -63,12 +61,30 @@ export const DebtProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setDebts(prev => sortDebts(prev.filter(d => d.id !== id)));
   }, [sortDebts]);
 
+  // Implement batch import for debts
+  const importDebtsBatch = useCallback((newDebtsData: Omit<DebtItem, 'id'>[]): DebtItem[] => {
+    const newDebtsWithIds = newDebtsData.map(debtData => ({
+        id: generateId(),
+        ...debtData,
+    }));
+    setDebts(prev => sortDebts([...prev, ...newDebtsWithIds]));
+    return newDebtsWithIds; // Return the newly added debts with IDs
+  }, [sortDebts]);
+
+   // Placeholder for batch delete (needed for rollback)
+   // const deleteDebtsBatch = useCallback((ids: string[]) => {
+   //   const idsSet = new Set(ids);
+   //   setDebts(prev => sortDebts(prev.filter(d => !idsSet.has(d.id))));
+   // }, [sortDebts]);
+
   const contextValue = useMemo(() => ({
     debts,
     addDebt,
     updateDebt,
     deleteDebt,
-  }), [debts, addDebt, updateDebt, deleteDebt]);
+    importDebtsBatch, // Include batch import function
+    // deleteDebtsBatch, // Include batch delete if implemented
+  }), [debts, addDebt, updateDebt, deleteDebt, importDebtsBatch /*, deleteDebtsBatch*/]);
 
   return (
     <DebtContext.Provider value={contextValue}>
@@ -84,3 +100,5 @@ export const useDebt = (): DebtContextType => {
   }
   return context;
 };
+
+  
