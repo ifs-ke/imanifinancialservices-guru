@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle } from 'lucide-react'; // Added BrainCircuit, Loader2, AlertTriangle
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useDebt } from '@/contexts/DebtContext';
 import { useBudget } from '@/contexts/BudgetContext'; // Import useBudget
 import type { DebtItem } from '@/lib/types';
@@ -68,7 +68,7 @@ export default function DebtPage() {
   // DELETE
   const handleDeleteClick = (debt: DebtItem) => {
     setDebtToDelete(debt);
-    // AlertDialogTrigger below will open the confirmation dialog
+    // The AlertDialog will open based on the debtToDelete state change
   };
 
   const confirmDeleteDebt = () => {
@@ -248,14 +248,11 @@ export default function DebtPage() {
                                 </Button>
                             </DebtAmortizationSheet>
 
-                          {/* Delete Button Trigger */}
-                          {/* This button now only sets the debtToDelete state */}
-                           <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Delete</span>
-                              </Button>
-                            </AlertDialogTrigger>
+                          {/* Delete Button - Sets state to open dialog */}
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete</span>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -315,5 +312,3 @@ export default function DebtPage() {
     </div>
   );
 }
- 
-      
