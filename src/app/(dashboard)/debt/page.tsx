@@ -8,14 +8,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle } from 'lucide-react'; // Added BrainCircuit, Loader2, AlertTriangle
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebt } from '@/contexts/DebtContext';
+import { useBudget } from '@/contexts/BudgetContext'; // Import useBudget
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import DebtFormSheet from '@/components/debt/DebtFormSheet'; // Import the form sheet
 import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet'; // Import the amortization sheet
+import DebtAnalysisDialog from '@/components/debt/DebtAnalysisDialog'; // Import the analysis dialog
+import { analyzeDebtStrategy, type DebtAnalysisInput, type DebtAnalysisOutput } from '@/ai/flows/debt-analysis-flow'; // Import the AI flow
 
 // Formatting Functions
 const formatCurrency = (amount: number) => {
@@ -33,16 +36,21 @@ const formatPercentage = (rate: number) => {
 
 export default function DebtPage() {
   const { debts, deleteDebt } = useDebt();
+  const { totalBudgetedIncome, totalBudgetedExpenses } = useBudget(); // Get budget data
   const { toast } = useToast();
 
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DebtItem | null>(null);
   const [debtToDelete, setDebtToDelete] = useState<DebtItem | null>(null);
-  const [amortizationDebt, setAmortizationDebt] = useState<DebtItem | null>(null); // State for amortization view
+  // State for AI Analysis
+  const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<DebtAnalysisOutput | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  // Handlers for opening sheets
+  // Handlers for opening sheets/dialogs
   const handleAddClick = () => {
-    setEditingDebt(null); // Ensure no debt is being edited
+    setEditingDebt(null);
     setIsFormSheetOpen(true);
   };
 
@@ -51,15 +59,10 @@ export default function DebtPage() {
     setIsFormSheetOpen(true);
   };
 
-  const handleAmortizationClick = (debt: DebtItem) => {
-      setAmortizationDebt(debt);
-      // The DebtAmortizationSheet component will control its own open state via its trigger
-  };
-
   // Handle closing the form sheet
   const handleFormSheetClose = () => {
       setIsFormSheetOpen(false);
-      setEditingDebt(null); // Clear editing state when sheet closes
+      setEditingDebt(null);
   };
 
 
@@ -72,9 +75,53 @@ export default function DebtPage() {
   const confirmDeleteDebt = () => {
     if (!debtToDelete) return;
     deleteDebt(debtToDelete.id);
-    setDebtToDelete(null); // Close the dialog implicitly
+    setDebtToDelete(null);
     toast({ title: 'Debt Deleted', description: 'Successfully removed debt item.' });
   };
+
+  // --- AI Debt Analysis ---
+  const handleAnalyzeDebt = async () => {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+      setAnalysisResult(null);
+      setIsAnalysisDialogOpen(true); // Open dialog immediately to show loading
+
+      if (debts.length === 0) {
+          setAnalysisError("Please add debts before running the analysis.");
+          setIsAnalyzing(false);
+          return;
+      }
+
+      const analysisInput: DebtAnalysisInput = {
+          debts: debts,
+          totalBudgetedIncome: totalBudgetedIncome,
+          totalBudgetedExpenses: totalBudgetedExpenses,
+          // desiredPayoffTimeline: "within 5 years" // Example: Could add a field for this later
+      };
+
+      try {
+          const result = await analyzeDebtStrategy(analysisInput);
+          setAnalysisResult(result);
+      } catch (error: any) {
+          console.error("Debt analysis failed:", error);
+          setAnalysisError(`Analysis failed: ${error.message || 'Please try again.'}`);
+          toast({
+              title: "Analysis Failed",
+              description: "Could not get debt strategy suggestions.",
+              variant: "destructive"
+          });
+      } finally {
+          setIsAnalyzing(false);
+      }
+  };
+
+  const handleAnalysisDialogClose = () => {
+      setIsAnalysisDialogOpen(false);
+      // Optionally reset analysis state if needed
+      // setAnalysisResult(null);
+      // setAnalysisError(null);
+  };
+
 
   // --- Export Functionality ---
   const handleExportCsv = useCallback(() => {
@@ -84,16 +131,13 @@ export default function DebtPage() {
       }
 
       const csvRows = [];
-      // Define explicit headers for CSV
       const headers = ['Description', 'Principal (KES)', 'Interest Rate (%)', 'Min Payment (KES)', 'Term'];
       csvRows.push(headers.join(','));
 
       for (const debt of debts) {
-      // Sanitize description to prevent CSV injection issues (basic example: remove quotes)
       const sanitizedDescription = debt.description.replace(/"/g, "''");
-
       const values = [
-          `"${sanitizedDescription}"`, // Enclose description in quotes
+          `"${sanitizedDescription}"`,
           debt.principal,
           debt.interestRate,
           debt.minPayment,
@@ -103,15 +147,15 @@ export default function DebtPage() {
       }
 
       const csvData = csvRows.join('\n');
-      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); // Specify charset
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'debts_export.csv'; // Use a more descriptive name
-      document.body.appendChild(link); // Needed for Firefox
+      link.download = 'debts_export.csv';
+      document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url); // Clean up the object URL
+      URL.revokeObjectURL(url);
 
       toast({ title: "CSV Exported", description: "Successfully downloaded debt data." });
   }, [debts, toast]);
@@ -125,7 +169,7 @@ export default function DebtPage() {
             <Coins className="h-6 w-6 text-primary"/> Manage Debts
           </h1>
           <p className="text-muted-foreground">
-            Track your outstanding debts, interest rates, and payments.
+            Track your outstanding debts, view amortization, and get payoff strategies.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -133,6 +177,16 @@ export default function DebtPage() {
           <Button variant="outline" onClick={handleAddClick}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add Debt
           </Button>
+
+           {/* Analyze Debt Button */}
+           <Button onClick={handleAnalyzeDebt} disabled={isAnalyzing || debts.length === 0}>
+             {isAnalyzing ? (
+                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+             ) : (
+                 <BrainCircuit className="mr-2 h-4 w-4" />
+             )}
+             {isAnalyzing ? 'Analyzing...' : 'Suggest Strategy'}
+           </Button>
 
           {/* Import Button */}
            <Button asChild variant="default">
@@ -163,7 +217,7 @@ export default function DebtPage() {
                     <TableHead className="text-right">Principal Balance</TableHead>
                     <TableHead className="text-right">Interest Rate</TableHead>
                     <TableHead className="text-right">Min. Payment</TableHead>
-                    <TableHead className="text-right w-[120px]">Actions</TableHead> {/* Increased width */}
+                    <TableHead className="text-right w-[120px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -237,10 +291,23 @@ export default function DebtPage() {
          <DebtFormSheet
             isOpen={isFormSheetOpen}
             onClose={handleFormSheetClose}
-            debt={editingDebt} // Pass null for add, or the debt object for edit
+            debt={editingDebt}
+         />
+
+         {/* Debt Analysis Dialog */}
+         <DebtAnalysisDialog
+             isOpen={isAnalysisDialogOpen}
+             onClose={handleAnalysisDialogClose}
+             analysisResult={analysisResult}
+             isLoading={isAnalyzing}
+             error={analysisError}
+             formatCurrency={formatCurrency}
          />
 
       </main>
     </div>
   );
 }
+
+ 
+      
