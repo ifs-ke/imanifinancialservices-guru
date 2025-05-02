@@ -62,7 +62,7 @@ export const useDebtStore = create<DebtState>()(
             // },
         }),
         {
-            name: 'debtConqueror_debts', // Local storage key
+            name: 'ifcGuru_debts', // Local storage key updated
             storage: createJSONStorage(() => localStorage),
              // Ensure debts are sorted after deserialization
              deserialize: (str) => {

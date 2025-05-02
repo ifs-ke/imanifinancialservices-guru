@@ -21,8 +21,8 @@ const roboto_mono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Debt Conqueror',
-  description: 'Take control of your finances and conquer your debt.',
+  title: 'IFC - Guru',
+  description: 'Your personal finance management companion.',
 };
 
 export default function RootLayout({

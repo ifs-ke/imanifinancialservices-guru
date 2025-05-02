@@ -71,7 +71,7 @@ export const useTransactionsStore = create<TransactionsState>()(
             // },
         }),
         {
-            name: 'debtConqueror_transactions', // Local storage key
+            name: 'ifcGuru_transactions', // Local storage key updated
             storage: createJSONStorage(() => localStorage),
             // Need to handle Date serialization/deserialization
              serialize: (state) => JSON.stringify(state),

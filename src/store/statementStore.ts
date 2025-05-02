@@ -71,7 +71,7 @@ export const useStatementStore = create<StatementState>()(
             },
         }),
         {
-            name: 'debtConqueror_statementItems', // Combined storage key
+            name: 'ifcGuru_statementItems', // Local storage key updated
             storage: createJSONStorage(() => localStorage),
              // Ensure items are sorted after deserialization
              deserialize: (str) => {
