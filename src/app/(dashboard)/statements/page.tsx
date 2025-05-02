@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight, AlertTriangle, PieChart as PieChartIcon } from 'lucide-react'; // Added icons
+import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight, AlertTriangle, PieChart as PieChartIcon, CheckCircle } from 'lucide-react'; // Added icons
 import { Label } from '@/components/ui/label'; // Import Label component
 import {
   AlertDialog,
@@ -842,7 +842,7 @@ export default function StatementsPage() {
 
                             {/* Goals Section */}
                              <TableRow className="bg-muted/30 font-semibold sticky top-0 z-10">
-                                <TableCell colSpan={4} className="py-2"><Target className="inline h-4 w-4 mr-1 text-primary"/>Goals</TableCell>
+                                <TableCell colSpan={4} className="py-2"><CheckCircle className="inline h-4 w-4 mr-1 text-primary"/>Goals</TableCell>
                              </TableRow>
                              {varianceData.filter(v => v.category === 'goal').map(v => renderVarianceRow(v.category, v.description, v.budgeted, v.actual))}
                              {/* Goals Subtotal */}
