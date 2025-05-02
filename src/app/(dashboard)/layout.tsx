@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   Sidebar,
@@ -10,6 +9,7 @@ import { TransactionsProvider } from '@/contexts/TransactionsContext';
 import { DebtProvider } from '@/contexts/DebtContext';
 import { StatementProvider } from '@/contexts/StatementContext';
 import { ThemeToggle } from '@/components/ui/ThemeToggle'; // Import ThemeToggle
+import { BudgetProvider } from '@/contexts/BudgetContext';
 
 
 export default function DashboardLayout({
@@ -21,6 +21,7 @@ export default function DashboardLayout({
      <TransactionsProvider>
        <DebtProvider>
          <StatementProvider>
+          <BudgetProvider>
            <>
              <Sidebar side="left" variant="sidebar" collapsible="icon">
                <AppSidebar />
@@ -37,6 +38,7 @@ export default function DashboardLayout({
                {children}
               </SidebarInset>
            </>
+           </BudgetProvider>
          </StatementProvider>
        </DebtProvider>
      </TransactionsProvider>
