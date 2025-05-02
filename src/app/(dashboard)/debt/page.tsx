@@ -1,7 +1,7 @@
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
-import React, { useState, type ChangeEvent, useEffect, useCallback } from 'react'; // Added useCallback
+import React, { useState, type ChangeEvent, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown } from 'lucide-react'; // Added FileUp, FileDown
+import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List } from 'lucide-react'; // Added List icon for amortization toggle
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,7 @@ import { useDebt } from '@/contexts/DebtContext';
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link'; // Import Link for Import button
 import { format } from 'date-fns'; // Import format for potential date usage in export (though not currently used)
+import DebtAmortizationSchedule from '@/components/debt/DebtAmortizationSchedule'; // Import the new component
 
 // Formatting Function
 const formatCurrency = (amount: number) => {
@@ -69,7 +70,12 @@ export default function DebtPage() {
   const [editingDebt, setEditingDebt] = useState<DebtItem | null>(null);
   const [debtToDelete, setDebtToDelete] = useState<DebtItem | null>(null);
   const [formData, setFormData] = useState<Omit<DebtItem, 'id'>>(initialFormData);
-    const [showAmortization, setShowAmortization] = useState<DebtItem | null>(null); // To show the ammortization table
+  const [showAmortizationId, setShowAmortizationId] = useState<string | null>(null); // State to track which debt schedule to show
+
+  // Find the debt item corresponding to the ID for the amortization schedule
+  const selectedDebtForAmortization = useMemo(() => {
+      return debts.find(d => d.id === showAmortizationId) || null;
+  }, [debts, showAmortizationId]);
 
 
   // Reset form data when dialogs close
@@ -186,42 +192,6 @@ export default function DebtPage() {
         toast({ title: "CSV Exported", description: "Successfully downloaded debt data." });
     }, [debts, toast]);
 
-    // --- Amortization calculation ---
-    const calculateAmortization = (debt: DebtItem) => {
-        const monthlyInterestRate = debt.interestRate / 100 / 12;
-        const monthlyPayment = debt.minPayment; // Assuming minPayment is a valid monthly payment
-        let balance = debt.principal;
-        let paymentNumber = 0;
-        const schedule = [];
-
-        while (balance > 0 && paymentNumber < 360) { // Limiting for extreme cases
-            paymentNumber++;
-            const interestPayment = balance * monthlyInterestRate;
-            const principalPayment = monthlyPayment - interestPayment;
-            let actualPrincipalPayment = principalPayment;
-
-            if (balance - principalPayment < 0) {
-              // Adjust principal payment for the final payment
-              actualPrincipalPayment = balance;
-            }
-            balance -= actualPrincipalPayment;
-
-            schedule.push({
-                paymentNumber,
-                startingBalance: balance + actualPrincipalPayment,
-                payment: monthlyPayment,
-                principal: actualPrincipalPayment,
-                interest: interestPayment,
-                endingBalance: balance > 0 ? balance : 0,
-            });
-
-            if (balance <= 0) break;
-        }
-
-        return schedule;
-    };
-    const amortizationSchedule = showAmortization ? calculateAmortization(showAmortization) : [];
-
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
@@ -333,13 +303,15 @@ export default function DebtPage() {
                             <Edit className="h-4 w-4" />
                             <span className="sr-only">Edit</span>
                           </Button>
+                           {/* Amortization Toggle Button */}
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 className="mr-1 h-7 w-7"
-                                onClick={() => setShowAmortization(showAmortization?.id === debt.id ? null : debt)}
+                                onClick={() => setShowAmortizationId(prevId => prevId === debt.id ? null : debt.id)} // Toggle based on ID
+                                aria-label={`Show amortization for ${debt.description}`}
                             >
-                                <Coins className="h-4 w-4" />
+                                <List className="h-4 w-4" />
                                 <span className="sr-only">Amortization</span>
                             </Button>
                           <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
@@ -376,46 +348,13 @@ export default function DebtPage() {
                 </TableBody>
               </Table>
             </ScrollArea>
-              {showAmortization && (
-                  <div className="mt-4">
-                      <h3 className="text-lg font-semibold">Amortization Schedule for {showAmortization.description}</h3>
-                      <ScrollArea className="h-[300px] w-full">
-                          <Table>
-                              <TableHeader>
-                                  <TableRow>
-                                      <TableHead>Payment #</TableHead>
-                                      <TableHead className="text-right">Starting Balance</TableHead>
-                                      <TableHead className="text-right">Payment</TableHead>
-                                      <TableHead className="text-right">Principal</TableHead>
-                                      <TableHead className="text-right">Interest</TableHead>
-                                      <TableHead className="text-right">Ending Balance</TableHead>
-                                  </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                  {amortizationSchedule.map((row) => (
-                                      <TableRow key={row.paymentNumber}>
-                                          <TableCell>{row.paymentNumber}</TableCell>
-                                          <TableCell className="text-right font-mono">{formatCurrency(row.startingBalance)}</TableCell>
-                                          <TableCell className="text-right font-mono">{formatCurrency(row.payment)}</TableCell>
-                                          <TableCell className="text-right font-mono">{formatCurrency(row.principal)}</TableCell>
-                                          <TableCell className="text-right font-mono">{formatCurrency(row.interest)}</TableCell>
-                                          <TableCell className="text-right font-mono">{formatCurrency(row.endingBalance)}</TableCell>
-                                      </TableRow>
-                                  ))}
-                                  {amortizationSchedule.length === 0 && (
-                                      <TableRow>
-                                          <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                              Could not generate amortization schedule. Please check input data.
-                                          </TableCell>
-                                      </TableRow>
-                                  )}
-                              </TableBody>
-                          </Table>
-                      </ScrollArea>
-                  </div>
-              )}
           </CardContent>
         </Card>
+
+         {/* Amortization Schedule Section - Conditionally rendered below the main table */}
+        {selectedDebtForAmortization && (
+          <DebtAmortizationSchedule debt={selectedDebtForAmortization} />
+        )}
       </main>
 
       {/* Edit Debt Dialog */}
