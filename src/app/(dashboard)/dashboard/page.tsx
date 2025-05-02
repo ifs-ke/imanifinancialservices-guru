@@ -107,6 +107,106 @@ export default function DashboardPage() {
   const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
   const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A');
   const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
+  const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A'); // Add state for timeline
+
+
+  // --- Debt Payoff Timeline Calculation ---
+  useEffect(() => {
+    // Use totalBudgetedIncome and totalBudgetedExpenses directly from store selectors
+    const fundsForDebtPayment = totalBudgetedIncome - totalBudgetedExpenses; // Simple funds calculation
+    const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
+
+    if (totalDebtPrincipal <= 0) {
+        setDebtPayoffTimeline("Debt Free!");
+        return;
+    }
+
+    if (fundsForDebtPayment <= 0) {
+        setDebtPayoffTimeline("Cannot estimate: Budget doesn't cover expenses.");
+        return;
+    }
+
+    const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
+
+    let interestWarning = false;
+    debts.forEach(debt => {
+        const monthlyInterest = debt.principal * (debt.interestRate / 100 / 12);
+        if (debt.minPayment > 0 && monthlyInterest > 0 && debt.minPayment <= monthlyInterest) {
+            interestWarning = true;
+        }
+    });
+
+    if (fundsForDebtPayment < totalMinPayments) {
+        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments may not cover interest." : "Warning: Funds less than min payments.");
+        return;
+    }
+
+    // More robust amortization simulation (Avalanche Method)
+    let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
+    let months = 0;
+    const MAX_MONTHS = 720; // 60 years limit
+
+    while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
+        months++;
+        let availablePayment = fundsForDebtPayment;
+
+        // Accrue interest first
+        currentDebts.forEach(debt => {
+            if (debt.principal > 0) {
+                debt.principal += debt.principal * (debt.interestRate / 100 / 12);
+            }
+        });
+
+        // Pay minimums
+        currentDebts.forEach(debt => {
+            if (debt.principal > 0) {
+                const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
+                debt.principal -= payment;
+                availablePayment -= payment;
+            }
+        });
+
+        // Apply extra payments (Avalanche method: highest interest first, then highest balance)
+        if (availablePayment > 0) {
+            currentDebts.sort((a, b) => {
+                 const rateDiff = b.interestRate - a.interestRate;
+                 if (rateDiff !== 0) return rateDiff;
+                 return b.principal - a.principal; // Tie-breaker: higher balance
+            });
+
+            for (const debt of currentDebts) {
+                 if (debt.principal > 0 && availablePayment > 0) {
+                     const payment = Math.min(availablePayment, debt.principal);
+                     debt.principal -= payment;
+                     availablePayment -= payment;
+                 }
+                 if(availablePayment <= 0) break;
+            }
+        }
+
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); // Remove paid-off debts
+    }
+
+    // Format timeline string
+    if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
+       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (est.)`);
+    } else {
+        const years = Math.floor(months / 12);
+        const remainingMonths = months % 12;
+         let timelineString = "";
+        if (years > 0) {
+             timelineString += `${years} year${years > 1 ? 's' : ''}`;
+        }
+         if (remainingMonths > 0) {
+             if (years > 0) timelineString += " and ";
+             timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`;
+         }
+         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (est.)`); // Handle case where it's paid off quickly
+     }
+
+     // Depend on debts from debtStore and income/expense selectors from budgetStore
+    }, [debts, totalBudgetedIncome, totalBudgetedExpenses]);
+
 
 
   // Calculate Budget Variance using filtered transactions
@@ -136,17 +236,15 @@ export default function DashboardPage() {
       const netBudgeted = totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals;
       const netActual = actualIncome - actualExpenses; // Actual expenses for the period
 
-      // Basic variance: Actual net vs Budgeted net
+      // Variance calculation: Actual Net - Budgeted Net
+      // Positive variance means actual net is higher than budgeted (favorable)
+      // Negative variance means actual net is lower than budgeted (unfavorable)
       const variance = netActual - netBudgeted;
 
-      let status: typeof budgetStatus = 'on-track';
-      if (variance < 0) {
-          // If actual net is significantly less than budgeted net (negative variance)
-          status = 'over-budget'; // or 'under-income'
-      } else if (variance > 0) {
-          // If actual net is more than budgeted net (positive variance)
-          status = 'under-budget'; // or 'over-income' - means saved more or earned more than budgeted
-      }
+      let status: typeof budgetStatus = 'no-data';
+      if (variance > 0) status = 'under-budget'; // More income/less spending than budgeted (favorable)
+      else if (variance < 0) status = 'over-budget'; // Less income/more spending than budgeted (unfavorable)
+      else status = 'on-track'; // Actual matches budgeted exactly
 
        return { value: variance, status };
   }, [filteredTransactions, budgetItems]); // Depend on filtered transactions and budget items
@@ -169,9 +267,6 @@ export default function DashboardPage() {
      }
 
   }, [financialData, budgetVariance]);
-
-  // --- Debt Payoff Timeline Calculation (Not displayed on dashboard currently) ---
-
 
   // --- Chart Data and Config ---
 
@@ -369,34 +464,32 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-         {/* Budget Variance Card - New */}
+         {/* Budget Variance Card - Updated color logic */}
          <Card className="lg:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
-                 {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
-                 {budgetStatus === 'over-budget' && <AlertTriangle className="h-4 w-4 text-destructive" />}
-                 {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-primary" />} {/* Consider a different icon/color for under-budget */}
-                 {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
+                 {/* Icon based on status */}
+                 {budgetVariance.value === null && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
+                 {budgetVariance.value !== null && budgetVariance.value >= 0 && <CheckCircle className="h-4 w-4 text-accent" />}
+                 {budgetVariance.value !== null && budgetVariance.value < 0 && <AlertTriangle className="h-4 w-4 text-destructive" />}
             </CardHeader>
              <CardContent>
                  <div className={cn("text-2xl font-bold",
-                     budgetStatus === 'on-track' && 'text-accent',
-                     budgetStatus === 'over-budget' && 'text-destructive',
-                     budgetStatus === 'under-budget' && 'text-primary',
-                     budgetStatus === 'no-data' && 'text-muted-foreground'
+                     budgetVariance.value === null && 'text-muted-foreground', // No data
+                     budgetVariance.value !== null && budgetVariance.value >= 0 && 'text-accent', // Favorable or on-track
+                     budgetVariance.value !== null && budgetVariance.value < 0 && 'text-destructive' // Unfavorable
                  )}>
                      {budgetVariance.value !== null ? `${budgetVariance.value >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
                  </div>
                  <p className={cn("text-xs",
-                     budgetStatus === 'on-track' && 'text-accent',
-                     budgetStatus === 'over-budget' && 'text-destructive',
-                     budgetStatus === 'under-budget' && 'text-primary',
-                     budgetStatus === 'no-data' && 'text-muted-foreground'
+                     budgetVariance.value === null && 'text-muted-foreground',
+                     budgetVariance.value !== null && budgetVariance.value >= 0 && 'text-accent', // Favorable text color
+                     budgetVariance.value !== null && budgetVariance.value < 0 && 'text-destructive' // Unfavorable text color
                  )}>
-                     {budgetStatus === 'on-track' && 'On Track'}
-                     {budgetStatus === 'over-budget' && 'Over Budget / Under Income'}
-                     {budgetStatus === 'under-budget' && 'Under Budget / Over Income'}
-                     {budgetStatus === 'no-data' && 'No Budget/Actuals Data in Range'}
+                     {budgetVariance.value === null && 'No Budget/Actuals Data'}
+                     {budgetVariance.value !== null && budgetVariance.value === 0 && 'On Target'}
+                     {budgetVariance.value !== null && budgetVariance.value > 0 && 'Favorable (Under Budget / Over Income)'}
+                     {budgetVariance.value !== null && budgetVariance.value < 0 && 'Unfavorable (Over Budget / Under Income)'}
                  </p>
                  <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                      <Link href="/statements">
@@ -612,6 +705,11 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground">
               Track and manage your outstanding debts and view amortization.
             </p>
+             {/* Debt Payoff Timeline */}
+            <div className="mt-3 pt-3 border-t">
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><CalendarClock size={12}/> Est. Debt Payoff Timeline</p>
+                 <p className="font-semibold text-primary">{debtPayoffTimeline}</p>
+             </div>
           </CardContent>
           <CardFooter>
             <Button asChild variant="secondary" className="w-full">
