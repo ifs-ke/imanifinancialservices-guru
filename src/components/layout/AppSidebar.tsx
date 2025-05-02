@@ -52,7 +52,7 @@ export function AppSidebar() {
           <Landmark className="w-6 h-6 text-primary" />
           {state === 'expanded' && (
             <span className="font-semibold text-lg text-sidebar-foreground whitespace-nowrap">
-              IFC - Guru
+              Imani Financial Consultancies - Guru
             </span>
           )}
         </Link>
