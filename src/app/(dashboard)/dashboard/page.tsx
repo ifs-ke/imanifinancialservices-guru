@@ -1,9 +1,10 @@
+// src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock } from 'lucide-react'; // Added CalendarClock Icon
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle } from 'lucide-react'; // Added Target, CheckCircle, AlertTriangle
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactions } from '@/contexts/TransactionsContext';
@@ -13,6 +14,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "
 import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
 import { format } from 'date-fns'; // Import date-fns format
 import { useBudget } from '@/contexts/BudgetContext'; // Import budget context
+import { cn } from '@/lib/utils'; // Import cn utility
 
 
 // Calculation Functions (consider moving to utils)
@@ -38,7 +40,13 @@ export default function DashboardPage() {
   const { transactions } = useTransactions();
   const { debts } = useDebt();
   const { assetItems, otherLiabilityItems } = useStatement();
-  const { totalIncome: totalBudgetedIncome, totalRecurringExpenses } = useBudget();
+  const {
+      totalIncome: totalBudgetedIncome,
+      totalRecurringExpenses,
+      totalOneTimeExpenses,
+      totalGoals,
+      netBudgeted: netBudgetedMonthly // Renamed for clarity in this context
+  } = useBudget();
 
   // Calculate financial metrics based on context data
   const financialData = useMemo(() => {
@@ -56,18 +64,22 @@ export default function DashboardPage() {
     });
     const totalIncomeRecent = calculateTotal(recentTransactions.filter(tx => tx.amount > 0));
     const totalExpensesRecent = Math.abs(calculateTotal(recentTransactions.filter(tx => tx.amount < 0)));
-    const cashFlowRecent = totalIncomeRecent - totalExpensesRecent;
+    const netActualRecent = totalIncomeRecent - totalExpensesRecent; // Actual net for last 30 days
+
+    // Budget Variance Calculation (comparing 30-day actual net vs monthly budgeted net)
+    const budgetVariance = netActualRecent - netBudgetedMonthly;
 
     return {
       netWorth,
-      cashFlow: cashFlowRecent,
+      cashFlow: netActualRecent, // Use calculated net actual
       totalDebt,
       totalAssets,
       totalIncomeRecent,
       totalExpensesRecent,
       totalOtherLiabilities,
+      budgetVariance, // Add variance to the data object
     };
-  }, [transactions, debts, assetItems, otherLiabilityItems]);
+  }, [transactions, debts, assetItems, otherLiabilityItems, netBudgetedMonthly]);
 
   // State for formatted currency values to avoid hydration issues
   const [formattedNetWorth, setFormattedNetWorth] = useState<string>('N/A');
@@ -77,6 +89,8 @@ export default function DashboardPage() {
   const [formattedTotalIncomeRecent, setFormattedTotalIncomeRecent] = useState<string>('N/A');
   const [formattedTotalExpensesRecent, setFormattedTotalExpensesRecent] = useState<string>('N/A');
   const [formattedOtherLiabilities, setFormattedOtherLiabilities] = useState<string>('N/A'); // Added state for other liabilities formatting
+  const [budgetStatus, setBudgetStatus] = useState<string>('N/A'); // State for budget status
+  const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A'); // State for formatted variance
 
   useEffect(() => {
     // Format the values here to avoid server/client differences
@@ -87,6 +101,15 @@ export default function DashboardPage() {
     setFormattedTotalIncomeRecent(formatCurrency(financialData.totalIncomeRecent));
     setFormattedTotalExpensesRecent(formatCurrency(financialData.totalExpensesRecent));
     setFormattedOtherLiabilities(formatCurrency(financialData.totalOtherLiabilities)); // Format other liabilities
+
+    // Determine budget status and format variance
+     if (financialData.budgetVariance >= 0) {
+         setBudgetStatus("On Track");
+     } else {
+         setBudgetStatus("Off Track");
+     }
+    setFormattedBudgetVariance(formatCurrency(financialData.budgetVariance));
+
   }, [financialData]);
 
   // --- Debt Payoff Timeline Calculation ---
@@ -96,21 +119,35 @@ export default function DashboardPage() {
         // Calculate debt payoff timeline on debt or budgeted income change
         if (debts.length > 0 && totalBudgetedIncome > 0) {
             const totalDebtAmount = debts.reduce((sum, debt) => sum + debt.principal, 0);
-            // Rough estimate: available income after recurring expenses divided by total debt
-            const availableForDebt = totalBudgetedIncome - totalRecurringExpenses;
+             // Rough estimate: available income after *all* budgeted expenses (recurring + one-time + goals)
+             const totalBudgetedOutflows = totalRecurringExpenses + totalOneTimeExpenses + totalGoals;
+             const availableForDebt = totalBudgetedIncome - totalBudgetedOutflows;
 
             if (availableForDebt <= 0) {
-                setDebtPayoffTimeline("Cannot estimate: Income does not exceed expenses.");
+                setDebtPayoffTimeline("Cannot estimate: Budgeted income does not exceed outflows.");
             } else {
-                const monthsToPayoff = totalDebtAmount / availableForDebt;
-                const years = Math.floor(monthsToPayoff / 12);
-                const remainingMonths = Math.ceil(monthsToPayoff % 12);
-                setDebtPayoffTimeline(`${years} years and ${remainingMonths} months (estimated)`);
+                 // More realistic estimate: Sum of minimum payments + available surplus
+                 const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
+                 const actualPaymentTowardsDebt = Math.max(totalMinPayments, availableForDebt); // Pay at least minimums, or more if surplus allows
+
+
+                 // This is still a very rough estimate, ideally use amortization logic
+                 if (actualPaymentTowardsDebt <= 0) {
+                     setDebtPayoffTimeline("Cannot estimate: No funds available for debt.");
+                 } else {
+                    const monthsToPayoff = totalDebtAmount / actualPaymentTowardsDebt;
+                    const years = Math.floor(monthsToPayoff / 12);
+                    const remainingMonths = Math.ceil(monthsToPayoff % 12);
+                    setDebtPayoffTimeline(`${years} years and ${remainingMonths} months (estimated)`);
+                 }
             }
-        } else {
+        } else if (debts.length === 0) {
+           setDebtPayoffTimeline("Debt Free!"); // Show positive message if no debt
+        }
+        else {
             setDebtPayoffTimeline("N/A"); // Reset if no debts or income
         }
-    }, [debts, totalBudgetedIncome, totalRecurringExpenses]);
+    }, [debts, totalBudgetedIncome, totalRecurringExpenses, totalOneTimeExpenses, totalGoals]);
 
 
   // --- Chart Data and Config ---
@@ -220,6 +257,12 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">
                Assets ({formattedTotalAssets}) <br/> Liabilities ({formattedTotalLiabilities})
             </p>
+             {/* Link to Statements */}
+            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                <Link href="/statements">
+                    View Statement <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+            </Button>
           </CardContent>
         </Card>
         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
@@ -242,6 +285,12 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">
               Income ({formattedTotalIncomeRecent}) <br/> Expenses ({formattedTotalExpensesRecent})
             </p>
+             {/* Link to Statements */}
+            <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                <Link href="/statements">
+                    View Statement <ArrowRight className="ml-1 h-3 w-3" />
+                </Link>
+            </Button>
           </CardContent>
         </Card>
         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
@@ -283,21 +332,54 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-         {/* New Debt Payoff Timeline Card */}
+         {/* Debt Payoff Timeline Card */}
         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Debt Payoff Timeline</CardTitle>
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-lg font-bold"> {/* Slightly smaller font */}
                     {debtPayoffTimeline}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    Based on current debt and estimated income.
+                    Based on current debt & budgeted outflows.
                 </p>
+                 <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                    <Link href="/debt">
+                        Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
+                    </Link>
+                 </Button>
             </CardContent>
         </Card>
+
+         {/* Budget Variance Card */}
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1">
+             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Budget Variance (30d)</CardTitle>
+                  {financialData.budgetVariance >= 0 ? (
+                     <CheckCircle className="h-4 w-4 text-accent" />
+                 ) : (
+                     <AlertTriangle className="h-4 w-4 text-destructive" />
+                 )}
+             </CardHeader>
+             <CardContent>
+                 <div className={cn(
+                    "text-lg font-bold",
+                    financialData.budgetVariance >= 0 ? 'text-accent' : 'text-destructive'
+                 )}>
+                     {budgetStatus}
+                 </div>
+                 <p className="text-xs text-muted-foreground">
+                     {formattedBudgetVariance} {financialData.budgetVariance >= 0 ? 'Surplus' : 'Shortfall'} vs Budgeted Net
+                 </p>
+                 <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
+                     <Link href="/statements">
+                         View Variance Report <ArrowRight className="ml-1 h-3 w-3" />
+                     </Link>
+                 </Button>
+             </CardContent>
+         </Card>
 
 
         {/* Chart Cards - Span full width on md, adjust for lg/xl */}
@@ -446,7 +528,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex-grow">
              <Image
-              src="/images/transactions.jpg"
+              src="https://picsum.photos/400/200"
               alt="Ledger book with coins and pen"
               width={400}
               height={200}
@@ -472,7 +554,7 @@ export default function DashboardPage() {
           </CardHeader>
            <CardContent className="flex-grow">
              <Image
-              src="/images/income-expenses.jpg"
+              src="https://picsum.photos/400/200"
               alt="Graph showing upward and downward financial trends"
               width={400}
               height={200}
@@ -503,7 +585,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex-grow">
             <Image
-              src="/images/debts.jpg"
+              src="https://picsum.photos/400/200"
               alt="Stack of coins next to a calculator"
               width={400}
               height={200}
@@ -529,7 +611,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex-grow">
             <Image
-              src="/images/statements.jpg"
+              src="https://picsum.photos/400/200"
               alt="Formal financial statement document with pen"
               width={400}
               height={200}
