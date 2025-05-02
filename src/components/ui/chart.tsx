@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -361,5 +362,5 @@ export {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
-  ChartStyle,
+  ChartStyle, // Export ChartStyle
 }

@@ -270,81 +270,83 @@ export default function DashboardPage() {
 
   // --- Chart Data and Config ---
 
-  // 1. Income vs Expense Chart (Bar Chart - Based on ALL transactions)
-  const cashFlowChartData = useMemo(() => [
-    { name: 'Income', value: financialData.totalIncome, fill: "hsl(var(--chart-2))" }, // Use all-time income
-    { name: 'Expenses', value: financialData.totalExpenses, fill: "hsl(var(--destructive))" }, // Use all-time expenses
-  ], [financialData.totalIncome, financialData.totalExpenses]); // Depend on all-time data
+   // 1. Income vs Expense Chart (Bar Chart - Based on ALL transactions)
+   // Use theme variables for colors
+   const cashFlowChartData = useMemo(() => [
+     { name: 'Income', value: financialData.totalIncome, fill: "hsl(var(--accent))" }, // Use accent color for income
+     { name: 'Expenses', value: financialData.totalExpenses, fill: "hsl(var(--destructive))" }, // Use destructive for expenses
+   ], [financialData.totalIncome, financialData.totalExpenses]);
 
-  const cashFlowChartConfig = {
-    value: { label: 'Amount (KES)' },
-    Income: { label: 'Income', color: "hsl(var(--chart-2))" },
-    Expenses: { label: 'Expenses', color: "hsl(var(--destructive))" },
-  } satisfies ChartConfig;
+   const cashFlowChartConfig = {
+     value: { label: 'Amount (KES)' },
+     Income: { label: 'Income', color: "hsl(var(--accent))" }, // Use accent HSL
+     Expenses: { label: 'Expenses', color: "hsl(var(--destructive))" }, // Use destructive HSL
+   } satisfies ChartConfig;
 
-  // 2. Asset Allocation Chart (Pie Chart) - Remains the same, not date-dependent
-   const assetChartData = useMemo(() =>
-    assetItems
-      .filter(item => item.amount > 0) // Only include positive assets
-      .map((item, index) => ({
-        name: item.description,
-        value: item.amount,
-        fill: `hsl(var(--chart-${(index % 5) + 1}))` // Cycle through chart colors
-    })), [assetItems]);
+   // 2. Asset Allocation Chart (Pie Chart) - Use theme variables for colors
+    const assetChartData = useMemo(() =>
+     assetItems
+       .filter(item => item.amount > 0) // Only include positive assets
+       .map((item, index) => ({
+         name: item.description,
+         value: item.amount,
+         fill: `hsl(var(--chart-${(index % 5) + 1}))` // Use theme chart colors
+     })), [assetItems]);
 
-   const assetChartConfig = useMemo(() => {
-       const config: ChartConfig = {};
-       assetChartData.forEach((item) => {
-           config[item.name] = {
-               label: item.name,
-               color: item.fill // Use the same fill color assigned earlier
-           };
-       });
-       // Add a key for the value itself for the tooltip
-       config.value = { label: 'Amount (KES)' };
-       return config;
-   }, [assetChartData]);
-
-   // 3. Income/Expense Trend Chart (Line Chart - Based on ALL transactions)
-   const trendChartData = useMemo(() => {
-        const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
-
-        // Use ALL transactions for trend analysis
-        const sortedAllTransactions = [...allTransactions].sort((a, b) => { // Use allTransactions
-            const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-            const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-            if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
-            return dateA.getTime() - dateB.getTime();
+    const assetChartConfig = useMemo(() => {
+        const config: ChartConfig = {};
+        assetChartData.forEach((item) => {
+            config[item.name] = {
+                label: item.name,
+                color: item.fill // Use the same theme fill color assigned earlier
+            };
         });
+        // Add a key for the value itself for the tooltip
+        config.value = { label: 'Amount (KES)' };
+        return config;
+    }, [assetChartData]);
 
-        sortedAllTransactions.forEach(tx => {
-            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
-            if (isNaN(txDate.getTime())) return;
+    // 3. Income/Expense Trend Chart (Line Chart - Based on ALL transactions)
+    // Use theme variables for colors
+    const trendChartData = useMemo(() => {
+         const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
 
-            const monthKey = format(txDate, 'yyyy-MM');
-            if (!monthlyData[monthKey]) {
-                monthlyData[monthKey] = { month: format(txDate, 'MMM yyyy'), income: 0, expense: 0 };
-            }
+         // Use ALL transactions for trend analysis
+         const sortedAllTransactions = [...allTransactions].sort((a, b) => { // Use allTransactions
+             const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+             const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+             if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+             return dateA.getTime() - dateB.getTime();
+         });
 
-            if (tx.amount > 0) {
-                monthlyData[monthKey].income += tx.amount;
-            } else if (tx.amount < 0) {
-                monthlyData[monthKey].expense += Math.abs(tx.amount);
-            }
-        });
+         sortedAllTransactions.forEach(tx => {
+             const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+             if (isNaN(txDate.getTime())) return;
 
-        return Object.values(monthlyData).sort((a, b) => {
-            const dateA = new Date(a.month.replace(' ', ' 1, '));
-            const dateB = new Date(b.month.replace(' ', ' 1, '));
-            return dateA.getTime() - dateB.getTime();
-        });
-    }, [allTransactions]); // Depend on allTransactions
+             const monthKey = format(txDate, 'yyyy-MM');
+             if (!monthlyData[monthKey]) {
+                 monthlyData[monthKey] = { month: format(txDate, 'MMM yyyy'), income: 0, expense: 0 };
+             }
 
-   const trendChartConfig = {
-        income: { label: "Income", color: "hsl(var(--chart-2))" },
-        expense: { label: "Expenses", color: "hsl(var(--destructive))" },
-        month: { label: "Month" },
-    } satisfies ChartConfig;
+             if (tx.amount > 0) {
+                 monthlyData[monthKey].income += tx.amount;
+             } else if (tx.amount < 0) {
+                 monthlyData[monthKey].expense += Math.abs(tx.amount);
+             }
+         });
+
+         return Object.values(monthlyData).sort((a, b) => {
+             const dateA = new Date(a.month.replace(' ', ' 1, '));
+             const dateB = new Date(b.month.replace(' ', ' 1, '));
+             return dateA.getTime() - dateB.getTime();
+         });
+     }, [allTransactions]); // Depend on allTransactions
+
+    const trendChartConfig = {
+         income: { label: "Income", color: "hsl(var(--accent))" }, // Use accent HSL
+         expense: { label: "Expenses", color: "hsl(var(--destructive))" }, // Use destructive HSL
+         month: { label: "Month" },
+     } satisfies ChartConfig;
 
 
   return (
@@ -519,19 +521,21 @@ export default function DashboardPage() {
                             data={trendChartData}
                             margin={{ left: -20, right: 10, top: 10, bottom: 0 }}
                         >
-                            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" /> {/* Use theme border color */}
                             <XAxis
                                 dataKey="month"
                                 tickLine={false}
                                 axisLine={false}
                                 tickMargin={8}
                                 tickFormatter={(value) => value.slice(0, 3)} // Show only month abbreviation
+                                stroke="hsl(var(--foreground))" // Use theme text color
                             />
                             <YAxis
                                 tickLine={false}
                                 axisLine={false}
                                 tickMargin={8}
                                 tickFormatter={(value) => `KES ${value / 1000}k`} // Format as thousands
+                                stroke="hsl(var(--foreground))" // Use theme text color
                             />
                             <ChartTooltip
                                 cursor={true} // Show cursor for LineChart
@@ -540,14 +544,14 @@ export default function DashboardPage() {
                              <Line
                                 dataKey="income"
                                 type="monotone"
-                                stroke="hsl(var(--chart-2))"
+                                stroke="hsl(var(--accent))" // Use theme accent
                                 strokeWidth={2}
                                 dot={false} // Optionally hide dots for cleaner look
                              />
                              <Line
                                 dataKey="expense"
                                 type="monotone"
-                                stroke="hsl(var(--destructive))"
+                                stroke="hsl(var(--destructive))" // Use theme destructive
                                 strokeWidth={2}
                                 dot={false} // Optionally hide dots for cleaner look
                              />
@@ -573,21 +577,23 @@ export default function DashboardPage() {
               {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? ( // Use all-time data check
                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full">
                    <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
-                      <XAxis type="number" hide />
-                      <YAxis
-                       dataKey="name"
-                       type="category"
-                       tickLine={false}
-                       axisLine={false}
-                       tickMargin={10}
-                       tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }}
-                      />
-                     <ChartTooltip
-                       cursor={false}
-                       content={<ChartTooltipContent hideLabel />}
-                     />
-                     <Bar dataKey="value" radius={5} />
-                   </BarChart>
+                        <XAxis type="number" hide />
+                         <YAxis
+                           dataKey="name"
+                           type="category"
+                           tickLine={false}
+                           axisLine={false}
+                           tickMargin={10}
+                           tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} // Use theme foreground
+                           width={60} // Give slightly more space for labels
+                         />
+                         <CartesianGrid horizontal={false} stroke="hsl(var(--border))" /> {/* Use theme border */}
+                         <ChartTooltip
+                           cursor={false}
+                           content={<ChartTooltipContent hideLabel />}
+                         />
+                         <Bar dataKey="value" radius={5} />
+                     </BarChart>
                  </ChartContainer>
               ) : (
                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
@@ -609,8 +615,8 @@ export default function DashboardPage() {
                   <ChartContainer config={assetChartConfig} className="h-[200px] w-full max-w-[300px]">
                      <ResponsiveContainer width="100%" height={200}>
                          <PieChart>
-                          <ChartTooltip content={<ChartTooltipContent nameKey="name" hideIndicator />} />
-                          <Pie
+                           <ChartTooltip content={<ChartTooltipContent nameKey="name" hideIndicator />} />
+                           <Pie
                              data={assetChartData}
                              dataKey="value"
                              nameKey="name"
@@ -620,11 +626,11 @@ export default function DashboardPage() {
                              innerRadius={50}
                              labelLine={false}
                              paddingAngle={2}
-                          >
-                               {assetChartData.map((entry, index) => (
-                                 <Cell key={`cell-${index}`} fill={entry.fill} />
+                           >
+                             {assetChartData.map((entry, index) => (
+                               <Cell key={`cell-${index}`} fill={entry.fill} /> // Colors already use theme variables
                              ))}
-                          </Pie>
+                           </Pie>
                          </PieChart>
                      </ResponsiveContainer>
                  </ChartContainer>
@@ -707,7 +713,7 @@ export default function DashboardPage() {
               Track and manage your outstanding debts and view amortization.
             </p>
              {/* Debt Payoff Timeline */}
-            <div className="mt-3 pt-3 border-t">
+            <div className="mt-3 pt-3 border-t border-border"> {/* Use theme border */}
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><CalendarClock size={12}/> Est. Debt Payoff Timeline</p>
                  <p className="font-semibold text-primary">{debtPayoffTimeline}</p>
              </div>
@@ -778,3 +784,4 @@ export default function DashboardPage() {
 }
 
     
+
