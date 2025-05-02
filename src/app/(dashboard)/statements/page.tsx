@@ -35,8 +35,6 @@ import { Badge } from '@/components/ui/badge'; // Import Badge
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
 
 
-// Generate unique IDs (moved to store)
-
 // Calculation Function (totals are now derived from stores or selectors)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: DebtItem[]) => items.reduce((sum, item) => sum + item.principal, 0);
@@ -624,7 +622,7 @@ export default function StatementsPage() {
 
           </CardHeader>
            <CardContent>
-             <Accordion type="multiple" className="w-full" defaultValue={['income', 'expenses']}> {/* Allow multiple open, default open */}
+             <Accordion type="multiple" className="w-full"> {/* Removed defaultValue */}
                  {/* Income Accordion */}
                 <AccordionItem value="income">
                      <AccordionTriggerWithSum label="Income" sum={totalActualIncome} budgetedSum={varianceTotalsByCategory.totalBudgetedIncome} variance={varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.totalBudgetedIncome} className="hover:no-underline" />
@@ -687,7 +685,7 @@ export default function StatementsPage() {
              <CardDescription>Assets vs. Liabilities {isEditing ? '(Editing Assets & Other Liabilities)' : ''}</CardDescription>
           </CardHeader>
            <CardContent>
-             <Accordion type="multiple" className="w-full" defaultValue={['assets', 'liabilities']}> {/* Allow multiple open, default open */}
+             <Accordion type="multiple" className="w-full"> {/* Removed defaultValue */}
                  {/* Assets Accordion */}
                  <AccordionItem value="assets">
                     <AccordionTriggerWithSum label="Assets" sum={totalAssets} className="hover:no-underline" />
@@ -724,7 +722,7 @@ export default function StatementsPage() {
                      </AccordionTrigger>
                      <AccordionContent>
                          <ScrollArea className="h-[200px] w-full pr-3">
-                            <Accordion type="multiple" className="w-full pl-4 border-l ml-2" defaultValue={['short-term-debts', 'long-term-debts', 'other-liabilities']}> {/* Nested Accordion */}
+                            <Accordion type="multiple" className="w-full pl-4 border-l ml-2"> {/* Nested Accordion, Removed defaultValue */}
                                 {/* Short-Term Debts Accordion */}
                                 <AccordionItem value="short-term-debts">
                                     <AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" />
@@ -808,7 +806,7 @@ export default function StatementsPage() {
                  <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/> Actuals are grouped by transaction description. Items marked with * are unbudgeted actuals.</p>
             </CardHeader>
             <CardContent>
-                 <Accordion type="multiple" className="w-full" defaultValue={['income-variance', 'expenses-variance', 'goals-variance']}>
+                 <Accordion type="multiple" className="w-full"> {/* Removed defaultValue */}
                       {/* Income Variance Accordion */}
                       <AccordionItem value="income-variance">
                          <AccordionTriggerWithSum
@@ -933,3 +931,5 @@ export default function StatementsPage() {
   );
 }
 
+
+    
