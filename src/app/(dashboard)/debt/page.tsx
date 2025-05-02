@@ -2,13 +2,13 @@
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle } from 'lucide-react'; // Added BrainCircuit, Loader2, AlertTriangle
+import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle, CalendarClock } from 'lucide-react'; // Added BrainCircuit, Loader2, AlertTriangle, CalendarClock
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore'; // Import Zustand store hook
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses } from '@/store/budgetStore'; // Import budget store hook and selectors
@@ -51,6 +51,104 @@ export default function DebtPage() {
   const [analysisResult, setAnalysisResult] = useState<DebtAnalysisOutput | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  // State for Debt Payoff Timeline
+  const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
+
+
+   // --- Debt Payoff Timeline Calculation (Copied from Dashboard, now local to Debt page) ---
+   useEffect(() => {
+    // Calculation logic remains the same, based on total debt and budget figures
+    const fundsForDebtPayment = totalBudgetedIncome - totalBudgetedExpenses;
+    const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
+
+    if (totalDebtPrincipal <= 0) {
+        setDebtPayoffTimeline("Debt Free!");
+        return;
+    }
+
+    if (fundsForDebtPayment <= 0) {
+        setDebtPayoffTimeline("Cannot estimate: Budget doesn't cover expenses.");
+        return;
+    }
+
+    const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
+
+    let interestWarning = false;
+    debts.forEach(debt => {
+        const monthlyInterest = debt.principal * (debt.interestRate / 100 / 12);
+        if (debt.minPayment > 0 && monthlyInterest > 0 && debt.minPayment <= monthlyInterest) {
+            interestWarning = true;
+        }
+    });
+
+    if (fundsForDebtPayment < totalMinPayments) {
+        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments may not cover interest." : "Warning: Funds less than min payments.");
+        return;
+    }
+
+    let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
+    let months = 0;
+    const MAX_MONTHS = 720; // 60 years limit
+
+    while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
+        months++;
+        let availablePayment = fundsForDebtPayment;
+
+        // Accrue interest first
+        currentDebts.forEach(debt => {
+            if (debt.principal > 0) {
+                debt.principal += debt.principal * (debt.interestRate / 100 / 12);
+            }
+        });
+
+        // Pay minimums
+        currentDebts.forEach(debt => {
+            if (debt.principal > 0) {
+                const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
+                debt.principal -= payment;
+                availablePayment -= payment;
+            }
+        });
+
+        // Apply extra payments (Avalanche method: highest interest first, then highest balance)
+        if (availablePayment > 0) {
+            currentDebts.sort((a, b) => {
+                 const rateDiff = b.interestRate - a.interestRate;
+                 if (rateDiff !== 0) return rateDiff;
+                 return b.principal - a.principal; // Tie-breaker: higher balance
+            });
+
+            for (const debt of currentDebts) {
+                 if (debt.principal > 0 && availablePayment > 0) {
+                     const payment = Math.min(availablePayment, debt.principal);
+                     debt.principal -= payment;
+                     availablePayment -= payment;
+                 }
+                 if(availablePayment <= 0) break;
+            }
+        }
+
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
+    }
+
+    if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
+       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
+    } else {
+        const years = Math.floor(months / 12);
+        const remainingMonths = months % 12;
+         let timelineString = "";
+        if (years > 0) {
+             timelineString += `${years} year${years > 1 ? 's' : ''}`;
+        }
+         if (remainingMonths > 0) {
+             if (years > 0) timelineString += " and ";
+             timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`;
+         }
+         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`); // Handle case where it's paid off quickly
+     }
+
+   }, [debts, totalBudgetedIncome, totalBudgetedExpenses]); // Re-calculate on changes
+
 
   // Handlers for opening sheets/dialogs
   const handleAddClick = () => {
@@ -73,7 +171,6 @@ export default function DebtPage() {
   // DELETE
   const handleDeleteClick = (debt: DebtItem) => {
     setDebtToDelete(debt);
-    // The AlertDialog will open based on the debtToDelete state change
   };
 
   const confirmDeleteDebt = () => {
@@ -101,7 +198,6 @@ export default function DebtPage() {
           debts: debts, // Use debts from Zustand store
           totalBudgetedIncome: totalBudgetedIncome, // Use income from budget store
           totalBudgetedExpenses: totalBudgetedExpenses, // Use expenses from budget store
-          // desiredPayoffTimeline: "within 5 years" // Example: Could add a field for this later
       };
 
       try {
@@ -124,9 +220,6 @@ export default function DebtPage() {
 
   const handleAnalysisDialogClose = () => {
       setIsAnalysisDialogOpen(false);
-      // Optionally reset analysis state if needed
-      // setAnalysisResult(null);
-      // setAnalysisError(null);
   };
 
 
@@ -180,33 +273,43 @@ export default function DebtPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {/* Add Debt Button */}
           <Button variant="outline" onClick={handleAddClick}>
             <PlusCircle className="mr-2 h-4 w-4" /> Add Debt
           </Button>
-
-           {/* Analyze Debt Button */}
            <Button onClick={handleAnalyzeDebt} disabled={isAnalyzing || debts.length === 0}>
-             {isAnalyzing ? (
-                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-             ) : (
-                 <BrainCircuit className="mr-2 h-4 w-4" />
-             )}
+             {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit className="mr-2 h-4 w-4" />}
              {isAnalyzing ? 'Analyzing...' : 'Suggest Strategy'}
            </Button>
-
-          {/* Import Button */}
            <Button asChild variant="default">
              <Link href="/debt/import">
                <FileUp className="mr-2 h-4 w-4" /> Import CSV
              </Link>
            </Button>
-            {/* Export Button */}
             <Button variant="secondary" onClick={handleExportCsv}>
               <FileDown className="mr-2 h-4 w-4" /> Export CSV
             </Button>
         </div>
       </header>
+
+      {/* Debt Summary / Timeline Card */}
+      <Card className="mb-6 shadow-md">
+        <CardHeader>
+          <CardTitle>Debt Overview</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          {/* Total Debt */}
+          <div className="flex flex-col p-3 rounded-md border bg-destructive/10">
+            <span className="text-muted-foreground mb-1">Total Outstanding Debt</span>
+            <span className="font-bold text-lg font-mono text-destructive">{formatCurrency(debts.reduce((sum, d) => sum + d.principal, 0))}</span>
+          </div>
+          {/* Estimated Payoff Timeline */}
+           <div className="flex flex-col p-3 rounded-md border bg-primary/10">
+             <span className="text-muted-foreground mb-1 flex items-center gap-1"><CalendarClock size={14}/> Estimated Payoff Timeline</span>
+             <span className="font-bold text-lg font-mono text-primary">{debtPayoffTimeline}</span>
+             <span className="text-xs text-muted-foreground">(Based on current budget & avalanche method)</span>
+           </div>
+        </CardContent>
+      </Card>
 
       <main className="flex-1">
         <Card>
@@ -265,7 +368,7 @@ export default function DebtPage() {
                                </Button>
                              </AlertDialogTrigger>
                             <AlertDialogContent>
-                                {debtToDelete && ( // Render content only when debtToDelete is set
+                                {debtToDelete && debtToDelete.id === debt.id && ( // Render content only when this specific debt is selected
                                     <>
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -320,3 +423,4 @@ export default function DebtPage() {
   );
 }
 
+    

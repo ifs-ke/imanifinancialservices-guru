@@ -14,8 +14,9 @@ import { useStatementStore } from '@/store/statementStore'; // Import statement 
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import budget store hook and selectors
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
-import { format } from 'date-fns'; // Import date-fns format
+import { format, startOfMonth, endOfMonth } from 'date-fns'; // Import date-fns format
 import { cn } from '@/lib/utils'; // Import cn utility
+import type { BudgetItemCategory } from '@/lib/types'; // Import BudgetItemCategory
 
 
 // Calculation Functions (consider moving to utils)
@@ -44,15 +45,30 @@ export default function DashboardPage() {
   // Get statement items and date range from statementStore
   const assetItems = useStatementStore(state => state.assetItems);
   const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
-  const startDate = useStatementStore(state => state.startDate); // Keep for header display
-  const endDate = useStatementStore(state => state.endDate);     // Keep for header display
-  // Use budget store selectors
+  const startDate = useStatementStore(state => state.startDate); // Get date range for filtering transactions
+  const endDate = useStatementStore(state => state.endDate);
+  // Use budget store selectors and items
   const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
   const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
   const totalGoals = useBudgetStore(selectTotalGoals);
   const netBudgetedMonthly = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
   const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
+  const budgetItems = useBudgetStore(state => state.budgetItems); // Get budget items for variance
+
+
+   // Filter transactions based on the global startDate and endDate from the store
+   const filteredTransactions = useMemo(() => {
+       const start = startDate ? startDate.getTime() : 0;
+       // Set end date to the very end of the selected day
+       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
+       return allTransactions.filter(tx => {
+           const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+           if (isNaN(txDate.getTime())) return false;
+           const txTime = txDate.getTime();
+           return txTime >= start && txTime <= end;
+       });
+     }, [allTransactions, startDate, endDate]); // Depend on store dates
 
 
   // Calculate financial metrics based on ALL transactions and other context data
@@ -89,8 +105,51 @@ export default function DashboardPage() {
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
   const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A'); // Renamed state variable
   const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
-  // Removed other liabilities state as it's now part of totalLiabilities
+  const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A');
+  const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
 
+
+  // Calculate Budget Variance using filtered transactions
+  const budgetVariance = useMemo(() => {
+      const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
+      const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
+
+       // Group budget items by category to calculate totals
+       const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = {
+           income: 0,
+           'recurring-expense': 0,
+           'one-time-expense': 0,
+           goal: 0,
+       };
+       budgetItems.forEach(item => {
+           budgetedTotalsByCategory[item.category] += item.amount;
+       });
+       const totalBudgetedIncome = budgetedTotalsByCategory.income;
+       const totalBudgetedExpenses = budgetedTotalsByCategory['recurring-expense'] + budgetedTotalsByCategory['one-time-expense'];
+       const totalBudgetedGoals = budgetedTotalsByCategory.goal;
+
+      // Check if budget data exists
+       if (totalBudgetedIncome === 0 && totalBudgetedExpenses === 0 && totalBudgetedGoals === 0) {
+           return { value: null, status: 'no-data' };
+       }
+
+      const netBudgeted = totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals;
+      const netActual = actualIncome - actualExpenses; // Actual expenses for the period
+
+      // Basic variance: Actual net vs Budgeted net
+      const variance = netActual - netBudgeted;
+
+      let status: typeof budgetStatus = 'on-track';
+      if (variance < 0) {
+          // If actual net is significantly less than budgeted net (negative variance)
+          status = 'over-budget'; // or 'under-income'
+      } else if (variance > 0) {
+          // If actual net is more than budgeted net (positive variance)
+          status = 'under-budget'; // or 'over-income' - means saved more or earned more than budgeted
+      }
+
+       return { value: variance, status };
+  }, [filteredTransactions, budgetItems]); // Depend on filtered transactions and budget items
 
   useEffect(() => {
     // Format the values here to avoid server/client differences
@@ -100,104 +159,18 @@ export default function DashboardPage() {
     setFormattedCashFlow(formatCurrency(financialData.cashFlow));
     setFormattedTotalIncome(formatCurrency(financialData.totalIncome)); // Use all-time income data
     setFormattedTotalExpenses(formatCurrency(financialData.totalExpenses)); // Use all-time expense data
-
-
-    // Removed budget status/variance calculation from useEffect
-
-  }, [financialData]);
-
-  // --- Debt Payoff Timeline Calculation (Kept for potential use elsewhere, not main metrics) ---
-  const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
-
-  useEffect(() => {
-    // Calculation logic remains the same, based on total debt and budget figures
-    const fundsForDebtPayment = totalBudgetedIncome - totalBudgetedExpenses;
-    const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
-
-    if (totalDebtPrincipal <= 0) {
-        setDebtPayoffTimeline("Debt Free!");
-        return;
-    }
-
-    if (fundsForDebtPayment <= 0) {
-        setDebtPayoffTimeline("Cannot estimate: Budgeted income does not cover basic expenses.");
-        return;
-    }
-
-    const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
-
-    let interestWarning = false;
-    debts.forEach(debt => {
-        const monthlyInterest = debt.principal * (debt.interestRate / 100 / 12);
-        if (debt.minPayment > 0 && monthlyInterest > 0 && debt.minPayment <= monthlyInterest) {
-            interestWarning = true;
-        }
-    });
-
-    if (fundsForDebtPayment < totalMinPayments) {
-        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments may not cover interest." : "Warning: Funds less than min payments.");
-        return;
-    }
-
-    let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
-    let months = 0;
-    const MAX_MONTHS = 720;
-
-    while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
-        months++;
-        let availablePayment = fundsForDebtPayment;
-
-        currentDebts.forEach(debt => {
-            if (debt.principal > 0) {
-                debt.principal += debt.principal * (debt.interestRate / 100 / 12);
-            }
-        });
-
-        currentDebts.forEach(debt => {
-            if (debt.principal > 0) {
-                const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
-                debt.principal -= payment;
-                availablePayment -= payment;
-            }
-        });
-
-        if (availablePayment > 0) {
-            currentDebts.sort((a, b) => {
-                 const rateDiff = b.interestRate - a.interestRate;
-                 if (rateDiff !== 0) return rateDiff;
-                 return b.principal - a.principal;
-            });
-
-            for (const debt of currentDebts) {
-                 if (debt.principal > 0 && availablePayment > 0) {
-                     const payment = Math.min(availablePayment, debt.principal);
-                     debt.principal -= payment;
-                     availablePayment -= payment;
-                 }
-                 if(availablePayment <= 0) break;
-            }
-        }
-
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
-    }
-
-    if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
-       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
-    } else {
-        const years = Math.floor(months / 12);
-        const remainingMonths = months % 12;
-         let timelineString = "";
-        if (years > 0) {
-             timelineString += `${years} year${years > 1 ? 's' : ''}`;
-        }
-         if (remainingMonths > 0) {
-             if (years > 0) timelineString += " and ";
-             timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`;
-         }
-         setDebtPayoffTimeline(`${timelineString} (estimated)`);
+     // Format Budget Variance
+     if (budgetVariance.value !== null) {
+       setFormattedBudgetVariance(formatCurrency(budgetVariance.value));
+       setBudgetStatus(budgetVariance.status);
+     } else {
+       setFormattedBudgetVariance('N/A');
+       setBudgetStatus('no-data');
      }
 
-}, [debts, totalBudgetedIncome, totalBudgetedExpenses, totalGoals]); // Re-calculate on changes
+  }, [financialData, budgetVariance]);
+
+  // --- Debt Payoff Timeline Calculation (Not displayed on dashboard currently) ---
 
 
   // --- Chart Data and Config ---
@@ -285,16 +258,24 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           Executive Summary
         </h1>
-        <p className="text-muted-foreground">
-           High-level overview of your current financial position.
-        </p>
+         {/* Date Range Display */}
+         <p className="text-sm text-muted-foreground">
+           High-level overview of your financial position. Budget Variance uses range:
+           {startDate || endDate ? (
+                <span className='font-semibold ml-1'>
+                    {startDate ? format(startDate, 'PP') : 'Start'} - {endDate ? format(endDate, 'PP') : 'End'}
+                </span>
+            ) : (
+                <span className='font-semibold ml-1'>All Time</span>
+            )}
+         </p>
       </header>
 
       {/* Updated grid layout for better responsiveness and new charts */}
-      <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-4">
+       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"> {/* Adjusted for 5 columns on XL */}
 
         {/* Financial Metrics Cards - Span 1 col each */}
-        <Card className="md:col-span-1 lg:col-span-1">
+        <Card className="lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
             <Scale className="h-4 w-4 text-muted-foreground" />
@@ -315,7 +296,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-         <Card className="md:col-span-1 lg:col-span-1">
+         <Card className="lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
             <Landmark className="h-4 w-4 text-muted-foreground" />
@@ -335,7 +316,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-         <Card className="md:col-span-1 lg:col-span-1">
+         <Card className="lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>
             <Coins className="h-4 w-4 text-muted-foreground" />
@@ -360,7 +341,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-         <Card className="md:col-span-1 lg:col-span-1">
+         <Card className="lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle>
             {financialData.cashFlow >= 0 ? (
@@ -388,32 +369,47 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-
-         {/* Debt Payoff Timeline Card - Can be moved or kept based on importance */}
-        {/* <Card className="md:col-span-1 lg:col-span-1">
+         {/* Budget Variance Card - New */}
+         <Card className="lg:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Debt Payoff Timeline</CardTitle>
-                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
+                 {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
+                 {budgetStatus === 'over-budget' && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                 {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-primary" />} {/* Consider a different icon/color for under-budget */}
+                 {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
             </CardHeader>
-            <CardContent>
-                <div className="text-lg font-bold">
-                    {debtPayoffTimeline}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                    Based on current debt & budgeted expenses.
-                </p>
+             <CardContent>
+                 <div className={cn("text-2xl font-bold",
+                     budgetStatus === 'on-track' && 'text-accent',
+                     budgetStatus === 'over-budget' && 'text-destructive',
+                     budgetStatus === 'under-budget' && 'text-primary',
+                     budgetStatus === 'no-data' && 'text-muted-foreground'
+                 )}>
+                     {budgetVariance.value !== null ? `${budgetVariance.value >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
+                 </div>
+                 <p className={cn("text-xs",
+                     budgetStatus === 'on-track' && 'text-accent',
+                     budgetStatus === 'over-budget' && 'text-destructive',
+                     budgetStatus === 'under-budget' && 'text-primary',
+                     budgetStatus === 'no-data' && 'text-muted-foreground'
+                 )}>
+                     {budgetStatus === 'on-track' && 'On Track'}
+                     {budgetStatus === 'over-budget' && 'Over Budget / Under Income'}
+                     {budgetStatus === 'under-budget' && 'Under Budget / Over Income'}
+                     {budgetStatus === 'no-data' && 'No Budget/Actuals Data in Range'}
+                 </p>
                  <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                    <Link href="/debt">
-                        Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
-                    </Link>
+                     <Link href="/statements">
+                         View Report <ArrowRight className="ml-1 h-3 w-3" />
+                     </Link>
                  </Button>
-            </CardContent>
-        </Card> */}
+             </CardContent>
+         </Card>
 
 
 
-        {/* Chart Cards - Span full width on md, adjust for lg/xl */}
-        <Card className="md:col-span-2 lg:col-span-4">
+        {/* Chart Cards - Adjust spans */}
+        <Card className="md:col-span-2 lg:col-span-3 xl:col-span-3"> {/* Adjusted span */}
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
                 <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
@@ -436,9 +432,6 @@ export default function DashboardPage() {
                                 axisLine={false}
                                 tickMargin={8}
                                 tickFormatter={(value) => value.slice(0, 3)} // Show only month abbreviation
-                                // Optionally adjust number of ticks for smaller screens
-                                // interval="preserveStartEnd" // Show start and end, adjust middle
-                                // minTickGap={20} // Minimum gap between ticks
                             />
                             <YAxis
                                 tickLine={false}
@@ -450,7 +443,6 @@ export default function DashboardPage() {
                                 cursor={true} // Show cursor for LineChart
                                 content={<ChartTooltipContent indicator="line" />} // Use line indicator
                              />
-                             {/* Removed defs for gradients */}
                              <Line
                                 dataKey="income"
                                 type="monotone"
@@ -476,7 +468,7 @@ export default function DashboardPage() {
          </Card>
 
          {/* Existing Chart Cards */}
-         <Card className="md:col-span-1 lg:col-span-2"> {/* Adjust span */}
+         <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
                   <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall) {/* Updated title */}
@@ -511,7 +503,7 @@ export default function DashboardPage() {
            </CardContent>
          </Card>
 
-         <Card className="md:col-span-1 lg:col-span-2"> {/* Adjust span */}
+         <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
            <CardHeader>
              <CardTitle className="text-base flex items-center gap-2">
                  <PieChart className="h-4 w-4"/> Asset Allocation
@@ -552,7 +544,7 @@ export default function DashboardPage() {
 
 
         {/* Action/Navigation Cards - Adjust spans */}
-        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
           <CardHeader>
             <CardTitle>Manage Transactions</CardTitle>
           </CardHeader>
@@ -578,7 +570,7 @@ export default function DashboardPage() {
           </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
           <CardHeader>
             <CardTitle>Analyze Income & Expenses</CardTitle>
           </CardHeader>
@@ -604,7 +596,7 @@ export default function DashboardPage() {
              </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
           <CardHeader>
             <CardTitle>Manage Debts</CardTitle>
           </CardHeader>
@@ -630,7 +622,7 @@ export default function DashboardPage() {
           </CardFooter>
         </Card>
 
-        <Card className="md:col-span-1 lg:col-span-1 flex flex-col">
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
           <CardHeader>
             <CardTitle>View Statements</CardTitle>
           </CardHeader>
@@ -655,8 +647,35 @@ export default function DashboardPage() {
             </Button>
           </CardFooter>
         </Card>
+
+         <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col"> {/* Adjusted span */}
+          <CardHeader>
+            <CardTitle>Plan Your Budget</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-grow">
+             <Image
+              src="https://picsum.photos/400/200"
+              alt="Piggy bank with coins and a plant"
+              width={400}
+              height={200}
+              className="rounded-md object-cover mb-4 aspect-[2/1]"
+              data-ai-hint="budget planning piggy bank coins"
+            />
+            <p className="text-sm text-muted-foreground">
+              Set your income, expenses, and savings goals.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Button asChild variant="secondary" className="w-full">
+              <Link href="/budget">
+                Go to Budget <PieChart className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
       </main>
     </div>
   );
 }
 
+    
