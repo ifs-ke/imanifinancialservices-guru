@@ -4,11 +4,12 @@
 
 import React, { useState, useEffect, ChangeEvent, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableFooter as UiTableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight } from 'lucide-react'; // Added icons
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight, AlertTriangle, PieChart as PieChartIcon } from 'lucide-react'; // Added icons
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { useTransactions } from '@/contexts/TransactionsContext';
 import { useDebt } from '@/contexts/DebtContext';
 import { useStatement } from '@/contexts/StatementContext'; // Import Statement context
+import { useBudget } from '@/contexts/BudgetContext'; // Import Budget context
 import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId } from '@/lib/types'; // Import all needed types
 import { Badge } from '@/components/ui/badge'; // Import Badge
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
@@ -67,14 +69,18 @@ const formatCategoryBadge = (value: string | undefined) => {
 // Accordion Trigger Component with Sum
 const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number }
->(({ label, sum, children, ...props }, ref) => (
+  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; budgetedSum?: number }
+>(({ label, sum, budgetedSum, children, ...props }, ref) => (
   <AccordionTrigger ref={ref} {...props}>
-    <div className="flex justify-between w-full pr-2">
-      <span>{label}</span>
+    <div className="flex justify-between items-center w-full pr-2">
+      <span className="flex items-center gap-1">
+          {label}
+           {budgetedSum !== undefined && (
+                <span className="text-xs text-muted-foreground">(Budget: {formatCurrency(budgetedSum)})</span>
+           )}
+      </span>
       <span className="font-semibold font-mono">{formatCurrency(sum)}</span>
     </div>
-    {/* Pass children through, typically the Chevron icon */}
     {children}
   </AccordionTrigger>
 ));
@@ -87,6 +93,8 @@ export default function StatementsPage() {
   const { debts } = useDebt();
   // Use StatementContext for assets and other liabilities
   const { assetItems, otherLiabilityItems, setAssetItems, setOtherLiabilityItems } = useStatement();
+  // Use BudgetContext for budget data
+  const { budget: contextBudget, totalBudgetedIncome, totalBudgetedExpenses } = useBudget();
 
   // State for edit mode and temporary edits
   const [isEditing, setIsEditing] = useState(false);
@@ -108,10 +116,12 @@ export default function StatementsPage() {
 
   const filteredTransactions = useMemo(() => {
     const start = startDate ? startDate.getTime() : 0;
+    // Set end date to the very end of the selected day
     const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
     return transactions.filter(tx => {
-        if (!tx.date || isNaN(tx.date.getTime())) return false;
-        const txTime = tx.date.getTime();
+        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+        if (isNaN(txDate.getTime())) return false;
+        const txTime = txDate.getTime();
         return txTime >= start && txTime <= end;
     });
   }, [transactions, startDate, endDate]);
@@ -162,6 +172,64 @@ export default function StatementsPage() {
   const totalOtherLiabilities = useMemo(() => calculateTotal(isEditing ? editingOtherLiabilities : otherLiabilityItems), [isEditing, editingOtherLiabilities, otherLiabilityItems]);
   const totalLiabilities = totalShortTermDebt + totalLongTermDebt + totalOtherLiabilities;
   const netWorth = totalAssets - totalLiabilities;
+
+  // --- Budget Variance Calculations ---
+  const categorizedActualTransactions = useMemo(() => {
+    const categories = {
+      recurringFixedIncome: [] as TransactionWithId[],
+      recurringVariableIncome: [] as TransactionWithId[],
+      oneTimeIncome: [] as TransactionWithId[],
+      uncategorizedIncome: [] as TransactionWithId[],
+      recurringFixedExpenses: [] as TransactionWithId[],
+      recurringVariableExpenses: [] as TransactionWithId[],
+      oneTimeFixedExpenses: [] as TransactionWithId[],
+      oneTimeVariableExpenses: [] as TransactionWithId[],
+      uncategorizedExpenses: [] as TransactionWithId[],
+    };
+
+    filteredTransactions.forEach(tx => { // Use filtered transactions
+      if (tx.amount > 0) { // Income
+        if (tx.frequency === 'recurring' && tx.variability === 'fixed') categories.recurringFixedIncome.push(tx);
+        else if (tx.frequency === 'recurring' && tx.variability === 'variable') categories.recurringVariableIncome.push(tx);
+        else if (tx.frequency === 'one-time') categories.oneTimeIncome.push(tx); // Group all one-time
+        else categories.uncategorizedIncome.push(tx);
+      } else if (tx.amount < 0) { // Expense
+        if (tx.frequency === 'recurring' && tx.variability === 'fixed') categories.recurringFixedExpenses.push(tx);
+        else if (tx.frequency === 'recurring' && tx.variability === 'variable') categories.recurringVariableExpenses.push(tx);
+        else if (tx.frequency === 'one-time' && tx.variability === 'fixed') categories.oneTimeFixedExpenses.push(tx);
+        else if (tx.frequency === 'one-time' && tx.variability === 'variable') categories.oneTimeVariableExpenses.push(tx);
+        else categories.uncategorizedExpenses.push(tx);
+      }
+    });
+     Object.values(categories).forEach(category => category.sort((a, b) => b.date.getTime() - a.date.getTime()));
+    return categories;
+  }, [filteredTransactions]);
+
+  const calculateActualTotal = (items: TransactionWithId[], type: 'income' | 'expense') =>
+      items.reduce((sum, item) => sum + (type === 'income' ? item.amount : Math.abs(item.amount)), 0);
+
+   const actualTotals = useMemo(() => ({
+        recurringFixedIncome: calculateActualTotal(categorizedActualTransactions.recurringFixedIncome, 'income'),
+        recurringVariableIncome: calculateActualTotal(categorizedActualTransactions.recurringVariableIncome, 'income'),
+        oneTimeIncome: calculateActualTotal(categorizedActualTransactions.oneTimeIncome, 'income'),
+        uncategorizedIncome: calculateActualTotal(categorizedActualTransactions.uncategorizedIncome, 'income'),
+        recurringFixedExpenses: calculateActualTotal(categorizedActualTransactions.recurringFixedExpenses, 'expense'),
+        recurringVariableExpenses: calculateActualTotal(categorizedActualTransactions.recurringVariableExpenses, 'expense'),
+        oneTimeFixedExpenses: calculateActualTotal(categorizedActualTransactions.oneTimeFixedExpenses, 'expense'),
+        oneTimeVariableExpenses: calculateActualTotal(categorizedActualTransactions.oneTimeVariableExpenses, 'expense'),
+        uncategorizedExpenses: calculateActualTotal(categorizedActualTransactions.uncategorizedExpenses, 'expense'),
+   }), [categorizedActualTransactions]);
+
+   const totalActualIncome = useMemo(() =>
+       actualTotals.recurringFixedIncome + actualTotals.recurringVariableIncome + actualTotals.oneTimeIncome + actualTotals.uncategorizedIncome,
+       [actualTotals]
+   );
+
+   const totalActualExpenses = useMemo(() =>
+       actualTotals.recurringFixedExpenses + actualTotals.recurringVariableExpenses + actualTotals.oneTimeFixedExpenses + actualTotals.oneTimeVariableExpenses + actualTotals.uncategorizedExpenses,
+       [actualTotals]
+   );
+
 
   // --- Handlers ---
 
@@ -300,7 +368,7 @@ export default function StatementsPage() {
              {formatCategoryBadge(item.variability)}
          </TableCell>
          <TableCell className="text-right font-mono py-1.5"> {/* Reduced padding */}
-             {formatCurrency(type === 'income' ? item.amount : item.amount)} {/* Show expense as positive in list */}
+             {formatCurrency(type === 'income' ? item.amount : Math.abs(item.amount))} {/* Show expense as positive in list */}
          </TableCell>
        </TableRow>
    );
@@ -314,6 +382,47 @@ export default function StatementsPage() {
         </TableRow>
     );
 
+    // Render function for budget variance report rows
+    const renderVarianceRow = (label: string, budgeted: number, actual: number) => {
+        const variance = budgeted - actual;
+        const isIncome = label.toLowerCase().includes('income');
+        let statusText = '';
+        let statusColor = 'text-muted-foreground'; // Default color
+
+        if (isIncome) {
+            if (variance < 0) { // Actual > Budget
+                statusText = `+${formatCurrency(Math.abs(variance))} (Favorable)`;
+                statusColor = 'text-accent';
+            } else if (variance > 0) { // Actual < Budget
+                statusText = `-${formatCurrency(variance)} (Unfavorable)`;
+                statusColor = 'text-destructive';
+            } else {
+                statusText = 'On Target';
+            }
+        } else { // Expenses
+             if (variance > 0) { // Actual < Budget (Under Budget)
+                statusText = `+${formatCurrency(variance)} (Favorable)`;
+                statusColor = 'text-accent';
+             } else if (variance < 0) { // Actual > Budget (Over Budget)
+                 statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`;
+                 statusColor = 'text-destructive';
+             } else {
+                statusText = 'On Target';
+             }
+        }
+
+        return (
+            <TableRow>
+                 <TableCell>{label}</TableCell>
+                 <TableCell className="text-right font-mono">{formatCurrency(budgeted)}</TableCell>
+                 <TableCell className="text-right font-mono">{formatCurrency(actual)}</TableCell>
+                 <TableCell className={cn("text-right font-mono text-sm", statusColor)}>
+                     {statusText}
+                </TableCell>
+            </TableRow>
+        );
+    };
+
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
@@ -323,7 +432,7 @@ export default function StatementsPage() {
             Financial Statements
             </h1>
             <p className="text-muted-foreground">
-             Cash flow & Debts are derived. Edit Assets and Other Liabilities only. Changes are saved locally.
+             Review your financial position and performance. Edit Assets and Other Liabilities only.
             </p>
         </div>
          <div className="flex gap-2">
@@ -344,9 +453,62 @@ export default function StatementsPage() {
         </div>
       </header>
 
-      <main className="flex-1 grid gap-6 md:grid-cols-2">
+       {/* Date Range Pickers */}
+      <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 border rounded-lg bg-card">
+          <Label className="font-semibold">Select Date Range:</Label>
+           <Popover>
+               <PopoverTrigger asChild>
+                   <Button
+                       variant={"outline"}
+                       className={cn(
+                           "w-full sm:w-[180px] justify-start text-left font-normal h-8",
+                           !startDate && "text-muted-foreground"
+                       )}
+                   >
+                       <CalendarIcon className="mr-2 h-4 w-4" />
+                       {formatDate(startDate)}
+                   </Button>
+               </PopoverTrigger>
+               <PopoverContent className="w-auto p-0" align="start">
+                   <Calendar
+                       mode="single"
+                       selected={startDate}
+                       onSelect={setStartDate}
+                       initialFocus
+                   />
+               </PopoverContent>
+           </Popover>
+           <span className="text-muted-foreground hidden sm:inline">-</span>
+           <Popover>
+               <PopoverTrigger asChild>
+                   <Button
+                       variant={"outline"}
+                       className={cn(
+                           "w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0",
+                           !endDate && "text-muted-foreground"
+                       )}
+                   >
+                       <CalendarIcon className="mr-2 h-4 w-4" />
+                       {formatDate(endDate)}
+                   </Button>
+               </PopoverTrigger>
+               <PopoverContent className="w-auto p-0" align="start">
+                   <Calendar
+                       mode="single"
+                       selected={endDate}
+                       onSelect={setEndDate}
+                       disabled={(date) =>
+                           startDate ? date < startDate : false
+                       }
+                       initialFocus
+                   />
+               </PopoverContent>
+           </Popover>
+       </div>
+
+      <main className="flex-1 grid gap-6 lg:grid-cols-2"> {/* Adjusted grid for large screens */}
         {/* Cash Flow Statement Card */}
-        <Card>
+        <Card className="lg:col-span-1"> {/* Takes half width on large screens */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
             {cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}
@@ -355,70 +517,22 @@ export default function StatementsPage() {
              <CardDescription className="flex items-center gap-1 text-xs pt-2">
                 <Info size={14} className="text-muted-foreground"/> Derived from Transactions within the selected date range. Includes categories.
             </CardDescription>
-             {/* Date Range Pickers */}
-             <div className="flex flex-col sm:flex-row items-center gap-2 text-sm pt-4">
-                 <Popover>
-                     <PopoverTrigger asChild>
-                         <Button
-                         variant={"outline"}
-                         className={cn(
-                             "w-full sm:w-[180px] justify-start text-left font-normal h-8",
-                             !startDate && "text-muted-foreground"
-                         )}
-                         >
-                         <CalendarIcon className="mr-2 h-4 w-4" />
-                         {formatDate(startDate)}
-                         </Button>
-                     </PopoverTrigger>
-                     <PopoverContent className="w-auto p-0" align="start">
-                         <Calendar
-                         mode="single"
-                         selected={startDate}
-                         onSelect={setStartDate}
-                         initialFocus
-                         />
-                     </PopoverContent>
-                 </Popover>
-                 <span className="text-muted-foreground hidden sm:inline">-</span>
-                  <Popover>
-                     <PopoverTrigger asChild>
-                         <Button
-                         variant={"outline"}
-                          className={cn(
-                             "w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0",
-                             !endDate && "text-muted-foreground"
-                         )}
-                         >
-                         <CalendarIcon className="mr-2 h-4 w-4" />
-                          {formatDate(endDate)}
-                         </Button>
-                     </PopoverTrigger>
-                     <PopoverContent className="w-auto p-0" align="start">
-                         <Calendar
-                         mode="single"
-                         selected={endDate}
-                         onSelect={setEndDate}
-                          disabled={(date) =>
-                             startDate ? date < startDate : false
-                          }
-                         initialFocus
-                         />
-                     </PopoverContent>
-                 </Popover>
-             </div>
+
           </CardHeader>
            <CardContent>
-             <Accordion type="multiple" className="w-full"> {/* Allow multiple open */}
+             <Accordion type="multiple" className="w-full" defaultValue={['income', 'expenses']}> {/* Allow multiple open, default open */}
                  {/* Income Accordion */}
                 <AccordionItem value="income">
                      <AccordionTriggerWithSum label="Income" sum={totalIncome} className="text-base font-semibold hover:no-underline" />
                      <AccordionContent>
                          {derivedIncomeItems.length > 0 ? (
-                           <Table>
-                             <TableBody>
-                               {derivedIncomeItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'income'))}
-                             </TableBody>
-                           </Table>
+                           <ScrollArea className="h-[200px] w-full pr-3">
+                             <Table>
+                               <TableBody>
+                                 {derivedIncomeItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'income'))}
+                               </TableBody>
+                             </Table>
+                           </ScrollArea>
                          ) : (
                            <p className="text-center text-muted-foreground py-4 text-sm">No income in selected range.</p>
                          )}
@@ -430,11 +544,13 @@ export default function StatementsPage() {
                      <AccordionTriggerWithSum label="Expenses" sum={totalExpenses} className="text-base font-semibold hover:no-underline" />
                      <AccordionContent>
                          {derivedExpenseItems.length > 0 ? (
-                             <Table>
-                               <TableBody>
-                                 {derivedExpenseItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'expense'))}
-                               </TableBody>
-                             </Table>
+                            <ScrollArea className="h-[200px] w-full pr-3">
+                               <Table>
+                                 <TableBody>
+                                   {derivedExpenseItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'expense'))}
+                                 </TableBody>
+                               </Table>
+                             </ScrollArea>
                          ) : (
                            <p className="text-center text-muted-foreground py-4 text-sm">No expenses in selected range.</p>
                          )}
@@ -458,7 +574,7 @@ export default function StatementsPage() {
         </Card>
 
         {/* Net Worth Statement Card */}
-        <Card>
+        <Card className="lg:col-span-1"> {/* Takes half width on large screens */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Scale className="text-primary" />
@@ -467,27 +583,29 @@ export default function StatementsPage() {
              <CardDescription>Assets vs. Liabilities {isEditing ? '(Editing Assets & Other Liabilities)' : ''}</CardDescription>
           </CardHeader>
            <CardContent>
-             <Accordion type="multiple" className="w-full"> {/* Allow multiple open */}
+             <Accordion type="multiple" className="w-full" defaultValue={['assets', 'liabilities']}> {/* Allow multiple open, default open */}
                  {/* Assets Accordion */}
                  <AccordionItem value="assets">
                     <AccordionTriggerWithSum label="Assets" sum={totalAssets} className="text-base font-semibold hover:no-underline" />
                      <AccordionContent>
-                         <Table>
-                           <TableBody>
-                             {/* Render rows based on editingAssets if editing, else assetItems */}
-                             {(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}
-                           </TableBody>
-                         </Table>
-                         {isEditing && (
-                             <div className="text-center py-2 border-t border-dashed">
+                         <ScrollArea className="h-[200px] w-full pr-3">
+                             <Table>
+                               <TableBody>
+                                 {/* Render rows based on editingAssets if editing, else assetItems */}
+                                 {(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}
+                               </TableBody>
+                             </Table>
+                         </ScrollArea>
+                          {isEditing && (
+                             <div className="text-center py-2 border-t border-dashed mt-2">
                                  <Button variant="ghost" size="sm" onClick={() => handleAddItem('asset')}>
                                  <PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item
                                  </Button>
                              </div>
-                         )}
-                         {(isEditing ? editingAssets : assetItems).length === 0 && !isEditing && (
+                          )}
+                          {(isEditing ? editingAssets : assetItems).length === 0 && !isEditing && (
                             <p className="text-center text-muted-foreground py-4 text-sm">No assets recorded.</p>
-                         )}
+                          )}
                      </AccordionContent>
                  </AccordionItem>
 
@@ -501,62 +619,64 @@ export default function StatementsPage() {
                          </div>
                      </AccordionTrigger>
                      <AccordionContent>
-                        <Accordion type="multiple" className="w-full pl-4 border-l ml-2"> {/* Nested Accordion */}
-                            {/* Short-Term Debts Accordion */}
-                            <AccordionItem value="short-term-debts">
-                                <AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} className="text-sm font-medium text-muted-foreground hover:no-underline" />
-                                <AccordionContent>
-                                    {shortTermDebts.length > 0 ? (
-                                       <Table>
-                                         <TableBody>
-                                            {shortTermDebts.map(debt => renderDerivedDebtRow(debt))}
-                                         </TableBody>
-                                       </Table>
-                                    ) : (
-                                       <p className="text-center text-muted-foreground py-2 text-xs">No short-term debts recorded.</p>
-                                    )}
-                                </AccordionContent>
-                            </AccordionItem>
+                         <ScrollArea className="h-[200px] w-full pr-3">
+                            <Accordion type="multiple" className="w-full pl-4 border-l ml-2"> {/* Nested Accordion */}
+                                {/* Short-Term Debts Accordion */}
+                                <AccordionItem value="short-term-debts">
+                                    <AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" />
+                                    <AccordionContent className="pb-2">
+                                        {shortTermDebts.length > 0 ? (
+                                        <Table>
+                                            <TableBody>
+                                                {shortTermDebts.map(debt => renderDerivedDebtRow(debt))}
+                                            </TableBody>
+                                        </Table>
+                                        ) : (
+                                        <p className="text-center text-muted-foreground py-2 text-xs">No short-term debts recorded.</p>
+                                        )}
+                                    </AccordionContent>
+                                </AccordionItem>
 
-                             {/* Long-Term Debts Accordion */}
-                             <AccordionItem value="long-term-debts">
-                                <AccordionTriggerWithSum label="Long-Term Debts" sum={totalLongTermDebt} className="text-sm font-medium text-muted-foreground hover:no-underline" />
-                                <AccordionContent>
-                                     {longTermDebts.length > 0 ? (
-                                       <Table>
-                                         <TableBody>
-                                            {longTermDebts.map(debt => renderDerivedDebtRow(debt))}
-                                         </TableBody>
-                                       </Table>
-                                     ) : (
-                                       <p className="text-center text-muted-foreground py-2 text-xs">No long-term debts recorded.</p>
-                                     )}
-                                </AccordionContent>
-                            </AccordionItem>
+                                {/* Long-Term Debts Accordion */}
+                                <AccordionItem value="long-term-debts">
+                                    <AccordionTriggerWithSum label="Long-Term Debts" sum={totalLongTermDebt} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" />
+                                    <AccordionContent className="pb-2">
+                                        {longTermDebts.length > 0 ? (
+                                            <Table>
+                                            <TableBody>
+                                                {longTermDebts.map(debt => renderDerivedDebtRow(debt))}
+                                            </TableBody>
+                                            </Table>
+                                        ) : (
+                                            <p className="text-center text-muted-foreground py-2 text-xs">No long-term debts recorded.</p>
+                                        )}
+                                    </AccordionContent>
+                                </AccordionItem>
 
-                             {/* Other Liabilities Accordion */}
-                            <AccordionItem value="other-liabilities">
-                                <AccordionTriggerWithSum label="Other Liabilities" sum={totalOtherLiabilities} className="text-sm font-medium text-muted-foreground hover:no-underline" />
-                                <AccordionContent>
-                                     <Table>
-                                       <TableBody>
-                                          {/* Render rows based on editingOtherLiabilities if editing, else otherLiabilityItems */}
-                                          {(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}
-                                       </TableBody>
-                                     </Table>
-                                     {isEditing && (
-                                        <div className="text-center py-2 border-t border-dashed">
-                                             <Button variant="ghost" size="sm" onClick={() => handleAddItem('otherLiability')}>
-                                             <MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability
-                                             </Button>
-                                        </div>
-                                     )}
-                                      {(isEditing ? editingOtherLiabilities : otherLiabilityItems).length === 0 && !isEditing && (
-                                        <p className="text-center text-muted-foreground py-4 text-sm">No other liabilities recorded.</p>
-                                     )}
-                                </AccordionContent>
-                            </AccordionItem>
-                         </Accordion>
+                                {/* Other Liabilities Accordion */}
+                                <AccordionItem value="other-liabilities" className="border-b-0"> {/* Remove border for last item */}
+                                    <AccordionTriggerWithSum label="Other Liabilities" sum={totalOtherLiabilities} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" />
+                                    <AccordionContent className="pb-2">
+                                        <Table>
+                                            <TableBody>
+                                            {/* Render rows based on editingOtherLiabilities if editing, else otherLiabilityItems */}
+                                            {(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}
+                                            </TableBody>
+                                        </Table>
+                                        {isEditing && (
+                                            <div className="text-center py-2 border-t border-dashed mt-2">
+                                                <Button variant="ghost" size="sm" onClick={() => handleAddItem('otherLiability')}>
+                                                <MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability
+                                                </Button>
+                                            </div>
+                                        )}
+                                        {(isEditing ? editingOtherLiabilities : otherLiabilityItems).length === 0 && !isEditing && (
+                                            <p className="text-center text-muted-foreground py-4 text-sm">No other liabilities recorded.</p>
+                                        )}
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                         </ScrollArea>
                      </AccordionContent>
                  </AccordionItem>
             </Accordion>
@@ -575,9 +695,94 @@ export default function StatementsPage() {
              </div>
           </CardContent>
         </Card>
+
+         {/* Budget Variance Report Card - Added Here */}
+         <Card className="lg:col-span-2"> {/* Takes full width on large screens */}
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
+                <CardDescription>Compare budgeted amounts with actuals from transactions in the selected date range.</CardDescription>
+                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/> Actuals are based on categorized transactions within the date range. Uncategorized transactions are listed separately.</p>
+            </CardHeader>
+            <CardContent>
+                 <ScrollArea className="h-[400px] w-full">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Category</TableHead>
+                                <TableHead className="text-right">Budgeted (KES)</TableHead>
+                                <TableHead className="text-right">Actual (KES)</TableHead>
+                                <TableHead className="text-right">Variance</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                         <TableBody>
+                            {/* Income Section */}
+                            <TableRow className="bg-muted/30 font-semibold">
+                                <TableCell colSpan={4} className="py-2"><TrendingUp className="inline h-4 w-4 mr-1 text-accent"/>Income</TableCell>
+                            </TableRow>
+                            {renderVarianceRow('Recurring - Fixed Income', contextBudget.recurringFixedIncome, actualTotals.recurringFixedIncome)}
+                            {renderVarianceRow('Recurring - Variable Income', contextBudget.recurringVariableIncome, actualTotals.recurringVariableIncome)}
+                            {renderVarianceRow('One-Time Income', contextBudget.oneTimeIncome, actualTotals.oneTimeIncome)}
+                             {actualTotals.uncategorizedIncome > 0 && (
+                                <TableRow>
+                                    <TableCell className='pl-6 text-muted-foreground'>Uncategorized Income</TableCell>
+                                    <TableCell className="text-right font-mono">-</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(actualTotals.uncategorizedIncome)}</TableCell>
+                                    <TableCell className="text-right font-mono text-xs text-muted-foreground">(Not budgeted)</TableCell>
+                                </TableRow>
+                             )}
+                             {/* Income Subtotal */}
+                            <TableRow className="border-t font-semibold">
+                                <TableCell>Total Income</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(totalBudgetedIncome)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(totalActualIncome)}</TableCell>
+                                <TableCell className={cn("text-right font-mono", (totalActualIncome - totalBudgetedIncome) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                    {formatCurrency(totalActualIncome - totalBudgetedIncome)}
+                                </TableCell>
+                            </TableRow>
+
+                            {/* Expenses Section */}
+                             <TableRow className="bg-muted/30 font-semibold mt-4">
+                                <TableCell colSpan={4} className="py-2"><TrendingDown className="inline h-4 w-4 mr-1 text-destructive"/>Expenses</TableCell>
+                             </TableRow>
+                             {renderVarianceRow('Recurring - Fixed Expenses', contextBudget.recurringFixedExpenses, actualTotals.recurringFixedExpenses)}
+                             {renderVarianceRow('Recurring - Variable Expenses', contextBudget.recurringVariableExpenses, actualTotals.recurringVariableExpenses)}
+                             {renderVarianceRow('One-Time - Fixed Expenses', contextBudget.oneTimeFixedExpenses, actualTotals.oneTimeFixedExpenses)}
+                             {renderVarianceRow('One-Time - Variable Expenses', contextBudget.oneTimeVariableExpenses, actualTotals.oneTimeVariableExpenses)}
+                             {actualTotals.uncategorizedExpenses > 0 && (
+                                <TableRow>
+                                    <TableCell className='pl-6 text-muted-foreground'>Uncategorized Expenses</TableCell>
+                                    <TableCell className="text-right font-mono">-</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(actualTotals.uncategorizedExpenses)}</TableCell>
+                                    <TableCell className="text-right font-mono text-xs text-destructive">(Over Budget)</TableCell>
+                                </TableRow>
+                             )}
+                             {/* Expenses Subtotal */}
+                             <TableRow className="border-t font-semibold">
+                                <TableCell>Total Expenses</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(totalBudgetedExpenses)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(totalActualExpenses)}</TableCell>
+                                <TableCell className={cn("text-right font-mono", (totalBudgetedExpenses - totalActualExpenses) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                    {formatCurrency(totalBudgetedExpenses - totalActualExpenses)}
+                                </TableCell>
+                            </TableRow>
+
+                            {/* Net Summary Section */}
+                            <TableRow className="bg-primary/10 font-bold text-lg border-t-2 border-primary mt-4">
+                                <TableCell>Net (Income - Expenses)</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(totalBudgetedIncome - totalBudgetedExpenses)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(totalActualIncome - totalActualExpenses)}</TableCell>
+                                <TableCell className={cn("text-right font-mono", ((totalActualIncome - totalActualExpenses) - (totalBudgetedIncome - totalBudgetedExpenses)) >= 0 ? 'text-accent' : 'text-destructive')}>
+                                    {formatCurrency((totalActualIncome - totalActualExpenses) - (totalBudgetedIncome - totalBudgetedExpenses))}
+                                </TableCell>
+                            </TableRow>
+                         </TableBody>
+                    </Table>
+                 </ScrollArea>
+             </CardContent>
+         </Card>
+
+
       </main>
     </div>
   );
 }
-
-    
