@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableFooter as UiTableFooter, TableHead, T
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag } from 'lucide-react'; // Added Coins, MinusCircle, Tag
+import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight } from 'lucide-react'; // Added icons
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,8 @@ import { useDebt } from '@/contexts/DebtContext';
 import { useStatement } from '@/contexts/StatementContext'; // Import Statement context
 import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId } from '@/lib/types'; // Import all needed types
 import { Badge } from '@/components/ui/badge'; // Import Badge
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
+
 
 // Generate unique IDs
 const generateId = (prefix: 'asset' | 'lia'): string => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -61,6 +63,22 @@ const formatCategoryBadge = (value: string | undefined) => {
     const text = value.charAt(0).toUpperCase() + value.slice(1);
     return <Badge variant={variant} className="ml-2 text-xs font-normal">{text}</Badge>;
 }
+
+// Accordion Trigger Component with Sum
+const AccordionTriggerWithSum = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number }
+>(({ label, sum, children, ...props }, ref) => (
+  <AccordionTrigger ref={ref} {...props}>
+    <div className="flex justify-between w-full pr-2">
+      <span>{label}</span>
+      <span className="font-semibold font-mono">{formatCurrency(sum)}</span>
+    </div>
+    {/* Pass children through, typically the Chevron icon */}
+    {children}
+  </AccordionTrigger>
+));
+AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 
 
 export default function StatementsPage() {
@@ -120,7 +138,7 @@ export default function StatementsPage() {
       .map(tx => ({
           id: tx.id,
           description: tx.description,
-          amount: Math.abs(tx.amount),
+          amount: Math.abs(tx.amount), // Use absolute amount for expenses list
           frequency: tx.frequency,
           variability: tx.variability
       }))
@@ -211,8 +229,8 @@ export default function StatementsPage() {
 
   // Renders editable row for Assets or Other Liabilities using temporary state
   const renderEditableRow = (item: StatementItem | OtherLiabilityItem, type: 'asset' | 'otherLiability') => (
-    <TableRow key={item.id}>
-      <TableCell className="pl-6">
+    <TableRow key={item.id} className="text-sm">
+      <TableCell className="pl-2 py-1.5"> {/* Reduced padding */}
         {isEditing ? (
           <Input
             type="text"
@@ -225,7 +243,7 @@ export default function StatementsPage() {
           item.description
         )}
       </TableCell>
-      <TableCell className="text-right font-mono">
+      <TableCell className="text-right font-mono py-1.5"> {/* Reduced padding */}
         {isEditing ? (
           <Input
             type="number"
@@ -233,14 +251,14 @@ export default function StatementsPage() {
             value={item.amount.toString()} // Use temporary state value
             onChange={(e) => handleItemChange(e, item.id, type, 'amount')}
             placeholder="Amount"
-            className="h-8 text-right"
+            className="h-8 text-right w-32" // Fixed width
           />
         ) : (
            formatCurrency(item.amount) // Display context state value when not editing
         )}
       </TableCell>
       {isEditing && (
-         <TableCell className="w-[50px] pr-2">
+         <TableCell className="w-[50px] py-1.5 pr-2 text-right"> {/* Reduced padding */}
            <AlertDialog open={itemToDelete?.item.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
              <AlertDialogTrigger asChild>
                <Button
@@ -273,27 +291,27 @@ export default function StatementsPage() {
   );
 
   // Render function for derived Income/Expense items (read-only) including category badges
-  const renderDerivedItemRow = (item: TransactionWithId, type: 'income' | 'expense') => (
-      <TableRow key={item.id}>
-        <TableCell className="pl-6">
-            {item.description}
-            {/* Display category badges */}
-            {formatCategoryBadge(item.frequency)}
-            {formatCategoryBadge(item.variability)}
-        </TableCell>
-        <TableCell className="text-right font-mono">
-            {type === 'income' ? formatCurrency(item.amount) : `(${formatCurrency(Math.abs(item.amount))})`}
-        </TableCell>
-      </TableRow>
-  );
+   const renderDerivedItemRow = (item: TransactionWithId, type: 'income' | 'expense') => (
+       <TableRow key={item.id} className="text-sm">
+         <TableCell className="pl-2 py-1.5"> {/* Reduced padding */}
+             {item.description}
+             {/* Display category badges */}
+             {formatCategoryBadge(item.frequency)}
+             {formatCategoryBadge(item.variability)}
+         </TableCell>
+         <TableCell className="text-right font-mono py-1.5"> {/* Reduced padding */}
+             {formatCurrency(type === 'income' ? item.amount : item.amount)} {/* Show expense as positive in list */}
+         </TableCell>
+       </TableRow>
+   );
 
    // Render function for derived Debt items (read-only in this view)
-   const renderDerivedDebtRow = (debt: DebtItem) => (
-    <TableRow key={debt.id}>
-        <TableCell className="pl-6">{debt.description}</TableCell>
-        <TableCell className="text-right font-mono">{formatCurrency(debt.principal)}</TableCell>
-        {isEditing && <TableCell></TableCell>} {/* Keep alignment */}
-    </TableRow>
+    const renderDerivedDebtRow = (debt: DebtItem) => (
+        <TableRow key={debt.id} className="text-sm">
+            <TableCell className="pl-2 py-1.5">{debt.description}</TableCell> {/* Reduced padding */}
+            <TableCell className="text-right font-mono py-1.5">{formatCurrency(debt.principal)}</TableCell> {/* Reduced padding */}
+            {isEditing && <TableCell></TableCell>} {/* Keep alignment */}
+        </TableRow>
     );
 
 
@@ -389,58 +407,53 @@ export default function StatementsPage() {
                  </Popover>
              </div>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Category / Description</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {/* Income Section */}
-                <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
-                  <TableCell><Tag className="inline h-4 w-4 mr-1"/>Income</TableCell>
-                  <TableCell></TableCell>{/* Empty cell for alignment */}
-                </TableRow>
-                {derivedIncomeItems.length > 0 ? (
-                  derivedIncomeItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'income')) // Cast needed here
-                ) : (
-                  <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No income in selected range.</TableCell></TableRow>
-                )}
-                 <TableRow>
-                    <TableCell className="font-medium pl-6">Total Income</TableCell>
-                    <TableCell className="text-right font-semibold font-mono">{formatCurrency(totalIncome)}</TableCell>
-                  </TableRow>
+           <CardContent>
+             <Accordion type="multiple" className="w-full"> {/* Allow multiple open */}
+                 {/* Income Accordion */}
+                <AccordionItem value="income">
+                     <AccordionTriggerWithSum label="Income" sum={totalIncome} className="text-base font-semibold hover:no-underline" />
+                     <AccordionContent>
+                         {derivedIncomeItems.length > 0 ? (
+                           <Table>
+                             <TableBody>
+                               {derivedIncomeItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'income'))}
+                             </TableBody>
+                           </Table>
+                         ) : (
+                           <p className="text-center text-muted-foreground py-4 text-sm">No income in selected range.</p>
+                         )}
+                     </AccordionContent>
+                 </AccordionItem>
 
-                 {/* Expenses Section */}
-                 <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
-                  <TableCell><Tag className="inline h-4 w-4 mr-1"/>Expenses</TableCell>
-                  <TableCell></TableCell>{/* Empty cell for alignment */}
-                </TableRow>
-                 {derivedExpenseItems.length > 0 ? (
-                    derivedExpenseItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'expense')) // Cast needed here
-                ) : (
-                    <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground h-16">No expenses in selected range.</TableCell></TableRow>
-                )}
-                 <TableRow>
-                    <TableCell className="font-medium pl-6">Total Expenses</TableCell>
-                    <TableCell className="text-right font-semibold font-mono">({formatCurrency(totalExpenses)})</TableCell>
-                  </TableRow>
-              </TableBody>
-              <UiTableFooter>
-                <TableRow className="text-lg">
-                  <TableHead>Net Cash Flow</TableHead>
-                  <TableHead
-                    className={`text-right font-bold font-mono ${
+                 {/* Expenses Accordion */}
+                 <AccordionItem value="expenses">
+                     <AccordionTriggerWithSum label="Expenses" sum={totalExpenses} className="text-base font-semibold hover:no-underline" />
+                     <AccordionContent>
+                         {derivedExpenseItems.length > 0 ? (
+                             <Table>
+                               <TableBody>
+                                 {derivedExpenseItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'expense'))}
+                               </TableBody>
+                             </Table>
+                         ) : (
+                           <p className="text-center text-muted-foreground py-4 text-sm">No expenses in selected range.</p>
+                         )}
+                     </AccordionContent>
+                 </AccordionItem>
+            </Accordion>
+             {/* Net Cash Flow Footer */}
+             <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex justify-between items-center text-lg font-bold">
+                  <span>Net Cash Flow</span>
+                  <span
+                    className={`font-mono ${
                       cashFlow >= 0 ? 'text-accent' : 'text-destructive'
                     }`}
                   >
                     {formatCurrency(cashFlow)}
-                  </TableHead>
-                </TableRow>
-              </UiTableFooter>
-            </Table>
+                  </span>
+                </div>
+             </div>
           </CardContent>
         </Card>
 
@@ -453,114 +466,118 @@ export default function StatementsPage() {
             </CardTitle>
              <CardDescription>Assets vs. Liabilities {isEditing ? '(Editing Assets & Other Liabilities)' : ''}</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                 <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                   {isEditing && <TableHead className="w-[50px]">Action</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                 {/* Assets Section (Editable - uses temporary state) */}
-                 <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
-                   <TableCell className="flex items-center gap-2"><Landmark className="h-4 w-4"/>Assets</TableCell>
-                  <TableCell></TableCell>{/* Empty cell for alignment */}
-                  {isEditing && <TableCell></TableCell>}
-                </TableRow>
-                {/* Render rows based on editingAssets if editing, else assetItems */}
-                {(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}
-                 {isEditing && (
-                    <TableRow>
-                        <TableCell colSpan={3} className="text-center py-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleAddItem('asset')}>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item
-                            </Button>
-                        </TableCell>
-                    </TableRow>
-                 )}
-                 <TableRow>
-                    <TableCell className="font-medium pl-6">Total Assets</TableCell>
-                    {/* Total Assets calculation already considers isEditing state */}
-                    <TableCell className="text-right font-semibold font-mono">{formatCurrency(totalAssets)}</TableCell>
-                    {isEditing && <TableCell></TableCell>}
-                  </TableRow>
+           <CardContent>
+             <Accordion type="multiple" className="w-full"> {/* Allow multiple open */}
+                 {/* Assets Accordion */}
+                 <AccordionItem value="assets">
+                    <AccordionTriggerWithSum label="Assets" sum={totalAssets} className="text-base font-semibold hover:no-underline" />
+                     <AccordionContent>
+                         <Table>
+                           <TableBody>
+                             {/* Render rows based on editingAssets if editing, else assetItems */}
+                             {(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}
+                           </TableBody>
+                         </Table>
+                         {isEditing && (
+                             <div className="text-center py-2 border-t border-dashed">
+                                 <Button variant="ghost" size="sm" onClick={() => handleAddItem('asset')}>
+                                 <PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item
+                                 </Button>
+                             </div>
+                         )}
+                         {(isEditing ? editingAssets : assetItems).length === 0 && !isEditing && (
+                            <p className="text-center text-muted-foreground py-4 text-sm">No assets recorded.</p>
+                         )}
+                     </AccordionContent>
+                 </AccordionItem>
 
-                 {/* Liabilities Section (Grouped) */}
-                 <TableRow className="font-semibold bg-secondary/50 dark:bg-secondary/20">
-                   <TableCell className="flex items-center gap-2"><Coins className="h-4 w-4"/>Liabilities</TableCell>
-                   <TableCell></TableCell>{/* Empty cell for alignment */}
-                   {isEditing && <TableCell></TableCell>}
-                </TableRow>
-                {/* Short-Term Debts (Derived) */}
-                {shortTermDebts.length > 0 && (
-                    <TableRow className="font-medium text-muted-foreground">
-                        <TableCell className="pl-6">Short-Term Debts (from Debts)</TableCell>
-                        <TableCell></TableCell>{/* Empty cell for alignment */}
-                        {isEditing && <TableCell></TableCell>}
-                    </TableRow>
-                )}
-                {shortTermDebts.map(debt => renderDerivedDebtRow(debt))}
+                 {/* Liabilities Section (Uses Nested Accordions) */}
+                 <AccordionItem value="liabilities">
+                     {/* Top-level Liabilities Trigger */}
+                     <AccordionTrigger className="text-base font-semibold hover:no-underline">
+                         <div className="flex justify-between w-full pr-2">
+                            <span>Liabilities</span>
+                             <span className="font-semibold font-mono">({formatCurrency(totalLiabilities)})</span>
+                         </div>
+                     </AccordionTrigger>
+                     <AccordionContent>
+                        <Accordion type="multiple" className="w-full pl-4 border-l ml-2"> {/* Nested Accordion */}
+                            {/* Short-Term Debts Accordion */}
+                            <AccordionItem value="short-term-debts">
+                                <AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} className="text-sm font-medium text-muted-foreground hover:no-underline" />
+                                <AccordionContent>
+                                    {shortTermDebts.length > 0 ? (
+                                       <Table>
+                                         <TableBody>
+                                            {shortTermDebts.map(debt => renderDerivedDebtRow(debt))}
+                                         </TableBody>
+                                       </Table>
+                                    ) : (
+                                       <p className="text-center text-muted-foreground py-2 text-xs">No short-term debts recorded.</p>
+                                    )}
+                                </AccordionContent>
+                            </AccordionItem>
 
-                 {/* Long-Term Debts (Derived) */}
-                 {longTermDebts.length > 0 && (
-                    <TableRow className="font-medium text-muted-foreground">
-                        <TableCell className="pl-6">Long-Term Debts (from Debts)</TableCell>
-                        <TableCell></TableCell>{/* Empty cell for alignment */}
-                        {isEditing && <TableCell></TableCell>}
-                    </TableRow>
-                 )}
-                 {longTermDebts.map(debt => renderDerivedDebtRow(debt))}
+                             {/* Long-Term Debts Accordion */}
+                             <AccordionItem value="long-term-debts">
+                                <AccordionTriggerWithSum label="Long-Term Debts" sum={totalLongTermDebt} className="text-sm font-medium text-muted-foreground hover:no-underline" />
+                                <AccordionContent>
+                                     {longTermDebts.length > 0 ? (
+                                       <Table>
+                                         <TableBody>
+                                            {longTermDebts.map(debt => renderDerivedDebtRow(debt))}
+                                         </TableBody>
+                                       </Table>
+                                     ) : (
+                                       <p className="text-center text-muted-foreground py-2 text-xs">No long-term debts recorded.</p>
+                                     )}
+                                </AccordionContent>
+                            </AccordionItem>
 
-                 {/* Other Liabilities (Editable - uses temporary state) */}
-                  <TableRow className="font-medium text-muted-foreground">
-                        <TableCell className="pl-6">Other Liabilities</TableCell>
-                        <TableCell></TableCell>{/* Empty cell for alignment */}
-                        {isEditing && <TableCell></TableCell>}
-                    </TableRow>
-                  {/* Render rows based on editingOtherLiabilities if editing, else otherLiabilityItems */}
-                  {(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}
-                  {isEditing && (
-                    <TableRow>
-                        <TableCell colSpan={3} className="text-center py-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleAddItem('otherLiability')}>
-                            <MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability
-                            </Button>
-                        </TableCell>
-                    </TableRow>
-                 )}
-
-                 {/* Check combined lengths of derived and temporary/context states */}
-                 {(shortTermDebts.length === 0 && longTermDebts.length === 0 && (isEditing ? editingOtherLiabilities : otherLiabilityItems).length === 0) && (
-                     <TableRow><TableCell colSpan={isEditing ? 3 : 2} className="text-center text-muted-foreground h-16">No liabilities recorded.</TableCell></TableRow>
-                 )}
-
-                 <TableRow>
-                    <TableCell className="font-medium pl-6">Total Liabilities</TableCell>
-                    {/* Total Liabilities calculation already considers isEditing state */}
-                    <TableCell className="text-right font-semibold font-mono">({formatCurrency(totalLiabilities)})</TableCell>
-                    {isEditing && <TableCell></TableCell>}
-                  </TableRow>
-              </TableBody>
-               <UiTableFooter>
-                <TableRow className="text-lg">
-                  <TableHead>Net Worth</TableHead>
-                  <TableHead
-                    className={`text-right font-bold font-mono ${
+                             {/* Other Liabilities Accordion */}
+                            <AccordionItem value="other-liabilities">
+                                <AccordionTriggerWithSum label="Other Liabilities" sum={totalOtherLiabilities} className="text-sm font-medium text-muted-foreground hover:no-underline" />
+                                <AccordionContent>
+                                     <Table>
+                                       <TableBody>
+                                          {/* Render rows based on editingOtherLiabilities if editing, else otherLiabilityItems */}
+                                          {(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}
+                                       </TableBody>
+                                     </Table>
+                                     {isEditing && (
+                                        <div className="text-center py-2 border-t border-dashed">
+                                             <Button variant="ghost" size="sm" onClick={() => handleAddItem('otherLiability')}>
+                                             <MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability
+                                             </Button>
+                                        </div>
+                                     )}
+                                      {(isEditing ? editingOtherLiabilities : otherLiabilityItems).length === 0 && !isEditing && (
+                                        <p className="text-center text-muted-foreground py-4 text-sm">No other liabilities recorded.</p>
+                                     )}
+                                </AccordionContent>
+                            </AccordionItem>
+                         </Accordion>
+                     </AccordionContent>
+                 </AccordionItem>
+            </Accordion>
+             {/* Net Worth Footer */}
+             <div className="mt-4 pt-4 border-t border-border">
+                 <div className="flex justify-between items-center text-lg font-bold">
+                  <span>Net Worth</span>
+                  <span
+                    className={`font-mono ${
                       netWorth >= 0 ? 'text-primary' : 'text-destructive'
                     }`}
-                     colSpan={isEditing ? 2 : 1}
                   >
                     {formatCurrency(netWorth)}
-                  </TableHead>
-                  {isEditing && <TableHead></TableHead>}
-                </TableRow>
-              </UiTableFooter>
-            </Table>
+                  </span>
+                </div>
+             </div>
           </CardContent>
         </Card>
       </main>
     </div>
   );
 }
+
+    
