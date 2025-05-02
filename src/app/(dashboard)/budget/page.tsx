@@ -191,33 +191,32 @@ export default function BudgetPage() {
                                                      <Edit className="h-3 w-3" />
                                                      <span className="sr-only">Edit</span>
                                                  </Button>
-                                                 {/* Delete Button - Triggers AlertDialog */}
-                                                 {/* Manage AlertDialog open state externally */}
-                                                  <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
-                                                    <AlertDialogTrigger asChild>
-                                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
-                                                            <Trash2 className="h-3 w-3" />
-                                                            <span className="sr-only">Delete</span>
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                     <AlertDialogContent>
-                                                         {itemToDelete && ( // Render content only when itemToDelete is set
-                                                             <>
-                                                                 <AlertDialogHeader>
-                                                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                                     <AlertDialogDescription>
-                                                                         This action cannot be undone. This will permanently delete the budget item: <br />
-                                                                         <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
-                                                                     </AlertDialogDescription>
-                                                                 </AlertDialogHeader>
-                                                                 <AlertDialogFooter>
-                                                                     <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
-                                                                     <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
-                                                                 </AlertDialogFooter>
-                                                             </>
-                                                         )}
-                                                     </AlertDialogContent>
-                                                 </AlertDialog>
+                                                 {/* Delete Button & Confirmation Dialog */}
+                                                 <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                                                     <AlertDialogTrigger asChild>
+                                                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
+                                                             <Trash2 className="h-3 w-3" />
+                                                             <span className="sr-only">Delete</span>
+                                                         </Button>
+                                                     </AlertDialogTrigger>
+                                                      <AlertDialogContent>
+                                                          {itemToDelete && ( // Render content only when itemToDelete is set
+                                                              <>
+                                                                  <AlertDialogHeader>
+                                                                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                      <AlertDialogDescription>
+                                                                          This action cannot be undone. This will permanently delete the budget item: <br />
+                                                                          <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
+                                                                      </AlertDialogDescription>
+                                                                  </AlertDialogHeader>
+                                                                  <AlertDialogFooter>
+                                                                      <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+                                                                      <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
+                                                                  </AlertDialogFooter>
+                                                              </>
+                                                          )}
+                                                      </AlertDialogContent>
+                                                  </AlertDialog>
                                              </TableCell>
                                          </TableRow>
                                      ))
@@ -257,3 +256,4 @@ export default function BudgetPage() {
     </div>
   );
 }
+

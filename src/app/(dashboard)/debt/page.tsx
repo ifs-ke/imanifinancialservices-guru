@@ -257,14 +257,13 @@ export default function DebtPage() {
                             </DebtAmortizationSheet>
 
                           {/* Delete Button & Confirmation Dialog */}
-                           {/* Manage AlertDialog open state externally */}
                            <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
-                                  <Trash2 className="h-4 w-4" />
-                                  <span className="sr-only">Delete</span>
-                                </Button>
-                              </AlertDialogTrigger>
+                             <AlertDialogTrigger asChild>
+                               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
+                                 <Trash2 className="h-4 w-4" />
+                                 <span className="sr-only">Delete</span>
+                               </Button>
+                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 {debtToDelete && ( // Render content only when debtToDelete is set
                                     <>
@@ -320,3 +319,4 @@ export default function DebtPage() {
     </div>
   );
 }
+

@@ -392,14 +392,13 @@ export default function TransactionsPage() {
                              <span className="sr-only">Edit</span>
                            </Button>
                            {/* Delete Button & Confirmation Dialog */}
-                           {/* Manage AlertDialog open state externally */}
                            <AlertDialog open={transactionToDelete?.id === tx.id} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(tx)}>
-                                  <Trash2 className="h-4 w-4" />
-                                  <span className="sr-only">Delete</span>
-                                </Button>
-                              </AlertDialogTrigger>
+                             <AlertDialogTrigger asChild>
+                               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(tx)}>
+                                 <Trash2 className="h-4 w-4" />
+                                 <span className="sr-only">Delete</span>
+                               </Button>
+                             </AlertDialogTrigger>
                              <AlertDialogContent>
                                {transactionToDelete && ( // Only render content if transactionToDelete is set
                                  <>
@@ -511,3 +510,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
