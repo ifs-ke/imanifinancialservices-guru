@@ -1,58 +1,47 @@
+// src/contexts/BudgetContext.tsx
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo } from 'react';
-import type { TransactionFrequency, TransactionVariability } from '@/lib/types';
+import React, { createContext, useContext, useState, ReactNode, useMemo, useCallback, useEffect } from 'react';
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types';
 
-// Mock Budget Item Interface
-interface BudgetItem {
-    id: string;
-    category: string; // e.g., "Rent", "Groceries", "Salary"
-    amount: number;  // Budgeted amount
-    month: number;    // Month (0-11)
-    year: number;     // Year
-    frequency?: TransactionFrequency;
-    variability?: TransactionVariability;
+interface BudgetContextType {
+  incomeBudget: number;
+  expensesBudget: number;
+  setIncomeBudget: (budget: number) => void;
+  setExpensesBudget: (budget: number) => void;
 }
 
-const BudgetContext = createContext<{
-    budgets: BudgetItem[];
-    addBudget: (item: Omit<BudgetItem, 'id'>) => void;
-    updateBudget: (item: BudgetItem) => void;
-    deleteBudget: (id: string) => void;
-} | undefined>(undefined);
+const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
 export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [budgets, setBudgets] = useState<BudgetItem[]>([]);
+    const [incomeBudget, setIncomeBudgetState] = useState<number>(0);
+    const [expensesBudget, setExpensesBudgetState] = useState<number>(0);
 
-    const addBudget = (item: Omit<BudgetItem, 'id'>) => {
-        setBudgets(prev => [...prev, { ...item, id: `budget_${Date.now()}` }]);
-    };
+    const setIncomeBudget = useCallback((budget: number) => {
+        setIncomeBudgetState(budget);
+    }, []);
 
-    const updateBudget = (item: BudgetItem) => {
-        setBudgets(prev => prev.map(budget => budget.id === item.id ? item : budget));
-    };
+    const setExpensesBudget = useCallback((budget: number) => {
+        setExpensesBudgetState(budget);
+    }, []);
 
-    const deleteBudget = (id: string) => {
-        setBudgets(prev => prev.filter(budget => budget.id !== id));
-    };
-
-    const value = useMemo(() => ({
-        budgets,
-        addBudget,
-        updateBudget,
-        deleteBudget,
-    }), [budgets, addBudget, updateBudget, deleteBudget]);
+    const contextValue = useMemo(() => ({
+        incomeBudget,
+        expensesBudget,
+        setIncomeBudget,
+        setExpensesBudget,
+    }), [incomeBudget, expensesBudget, setIncomeBudget, setExpensesBudget]);
 
     return (
-        <BudgetContext.Provider value={value}>
+        <BudgetContext.Provider value={contextValue}>
             {children}
         </BudgetContext.Provider>
     );
 };
 
-export const useBudget = () => {
+export const useBudget = (): BudgetContextType => {
     const context = useContext(BudgetContext);
-    if (!context) {
+    if (context === undefined) {
         throw new Error('useBudget must be used within a BudgetProvider');
     }
     return context;

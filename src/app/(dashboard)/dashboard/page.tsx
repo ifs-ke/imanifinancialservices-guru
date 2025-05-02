@@ -1,4 +1,3 @@
-// src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -405,7 +404,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex-grow">
              <Image
-              src="https://picsum.photos/400/200?random=4" // Changed random seed
+              src="/images/transactions.jpg"
               alt="Ledger book with coins and pen"
               width={400}
               height={200}
@@ -431,7 +430,7 @@ export default function DashboardPage() {
           </CardHeader>
            <CardContent className="flex-grow">
              <Image
-              src="https://picsum.photos/400/200?random=5" // Changed random seed
+              src="/images/income-expenses.jpg"
               alt="Graph showing upward and downward financial trends"
               width={400}
               height={200}
@@ -462,7 +461,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex-grow">
             <Image
-              src="https://picsum.photos/400/200?random=6" // Changed random seed
+              src="/images/debts.jpg"
               alt="Stack of coins next to a calculator"
               width={400}
               height={200}
@@ -488,7 +487,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex-grow">
             <Image
-              src="https://picsum.photos/400/200?random=7" // Changed random seed
+              src="/images/statements.jpg"
               alt="Formal financial statement document with pen"
               width={400}
               height={200}
@@ -511,5 +510,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    

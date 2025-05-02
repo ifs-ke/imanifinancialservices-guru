@@ -24,7 +24,7 @@ import {
   Menu,
   Settings,
   Landmark,
-  ListChecks
+  PieChart, // Added Budget icon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -37,7 +37,7 @@ const menuItems = [
   { href: '/expenses', label: 'Expenses', icon: TrendingDown },
   { href: '/debt', label: 'Debts', icon: Coins },
   { href: '/statements', label: 'Statements', icon: FileText },
-  { href: '/budget', label: 'Budget', icon: ListChecks },
+  { href: '/budget', label: 'Budget', icon: PieChart }, // Added Budget link
 ];
 
 export function AppSidebar() {
