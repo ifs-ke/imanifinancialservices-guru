@@ -69,6 +69,8 @@ export default function DebtPage() {
   const [editingDebt, setEditingDebt] = useState<DebtItem | null>(null);
   const [debtToDelete, setDebtToDelete] = useState<DebtItem | null>(null);
   const [formData, setFormData] = useState<Omit<DebtItem, 'id'>>(initialFormData);
+    const [showAmortization, setShowAmortization] = useState<DebtItem | null>(null); // To show the ammortization table
+
 
   // Reset form data when dialogs close
   useEffect(() => {
@@ -184,6 +186,43 @@ export default function DebtPage() {
         toast({ title: "CSV Exported", description: "Successfully downloaded debt data." });
     }, [debts, toast]);
 
+    // --- Amortization calculation ---
+    const calculateAmortization = (debt: DebtItem) => {
+        const monthlyInterestRate = debt.interestRate / 100 / 12;
+        const monthlyPayment = debt.minPayment; // Assuming minPayment is a valid monthly payment
+        let balance = debt.principal;
+        let paymentNumber = 0;
+        const schedule = [];
+
+        while (balance > 0 && paymentNumber < 360) { // Limiting for extreme cases
+            paymentNumber++;
+            const interestPayment = balance * monthlyInterestRate;
+            const principalPayment = monthlyPayment - interestPayment;
+            let actualPrincipalPayment = principalPayment;
+
+            if (balance - principalPayment < 0) {
+              // Adjust principal payment for the final payment
+              actualPrincipalPayment = balance;
+            }
+            balance -= actualPrincipalPayment;
+
+            schedule.push({
+                paymentNumber,
+                startingBalance: balance + actualPrincipalPayment,
+                payment: monthlyPayment,
+                principal: actualPrincipalPayment,
+                interest: interestPayment,
+                endingBalance: balance > 0 ? balance : 0,
+            });
+
+            if (balance <= 0) break;
+        }
+
+        return schedule;
+    };
+    const amortizationSchedule = showAmortization ? calculateAmortization(showAmortization) : [];
+
+
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
       <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -294,6 +333,15 @@ export default function DebtPage() {
                             <Edit className="h-4 w-4" />
                             <span className="sr-only">Edit</span>
                           </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="mr-1 h-7 w-7"
+                                onClick={() => setShowAmortization(showAmortization?.id === debt.id ? null : debt)}
+                            >
+                                <Coins className="h-4 w-4" />
+                                <span className="sr-only">Amortization</span>
+                            </Button>
                           <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}>
@@ -328,6 +376,44 @@ export default function DebtPage() {
                 </TableBody>
               </Table>
             </ScrollArea>
+              {showAmortization && (
+                  <div className="mt-4">
+                      <h3 className="text-lg font-semibold">Amortization Schedule for {showAmortization.description}</h3>
+                      <ScrollArea className="h-[300px] w-full">
+                          <Table>
+                              <TableHeader>
+                                  <TableRow>
+                                      <TableHead>Payment #</TableHead>
+                                      <TableHead className="text-right">Starting Balance</TableHead>
+                                      <TableHead className="text-right">Payment</TableHead>
+                                      <TableHead className="text-right">Principal</TableHead>
+                                      <TableHead className="text-right">Interest</TableHead>
+                                      <TableHead className="text-right">Ending Balance</TableHead>
+                                  </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                  {amortizationSchedule.map((row) => (
+                                      <TableRow key={row.paymentNumber}>
+                                          <TableCell>{row.paymentNumber}</TableCell>
+                                          <TableCell className="text-right font-mono">{formatCurrency(row.startingBalance)}</TableCell>
+                                          <TableCell className="text-right font-mono">{formatCurrency(row.payment)}</TableCell>
+                                          <TableCell className="text-right font-mono">{formatCurrency(row.principal)}</TableCell>
+                                          <TableCell className="text-right font-mono">{formatCurrency(row.interest)}</TableCell>
+                                          <TableCell className="text-right font-mono">{formatCurrency(row.endingBalance)}</TableCell>
+                                      </TableRow>
+                                  ))}
+                                  {amortizationSchedule.length === 0 && (
+                                      <TableRow>
+                                          <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                              Could not generate amortization schedule. Please check input data.
+                                          </TableCell>
+                                      </TableRow>
+                                  )}
+                              </TableBody>
+                          </Table>
+                      </ScrollArea>
+                  </div>
+              )}
           </CardContent>
         </Card>
       </main>
@@ -380,5 +466,3 @@ export default function DebtPage() {
     </div>
   );
 }
-
-  
