@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -36,8 +36,8 @@ export default function BudgetPage() {
   const { toast } = useToast();
   const {
       budgetItems,
-      addBudgetItem,
-      updateBudgetItem,
+      // addBudgetItem, // No direct add here, handled by sheet
+      // updateBudgetItem, // No direct update here, handled by sheet
       deleteBudgetItem,
       totalIncome,
       totalRecurringExpenses,
@@ -98,6 +98,21 @@ export default function BudgetPage() {
       return groups;
   }, [budgetItems]);
 
+  // Calculate totals for each group
+   const groupTotals = useMemo(() => {
+       const totals: Record<BudgetItemCategory, number> = {
+           income: 0,
+           'recurring-expense': 0,
+           'one-time-expense': 0,
+           goal: 0,
+       };
+       Object.entries(groupedBudgetItems).forEach(([category, items]) => {
+           totals[category as BudgetItemCategory] = items.reduce((sum, item) => sum + item.amount, 0);
+       });
+       return totals;
+   }, [groupedBudgetItems]);
+
+
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
       <header className="mb-6">
@@ -108,30 +123,35 @@ export default function BudgetPage() {
       </header>
 
       {/* Budget Summary Card - Moved to Top */}
-      <Card className="mb-6">
+      <Card className="mb-6 shadow-md">
         <CardHeader>
             <CardTitle>Budget Summary</CardTitle>
             <CardDescription>Overview of your planned budget.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-             <div className="flex flex-col p-3 rounded-md border">
+             <div className="flex flex-col p-3 rounded-md border bg-accent/10">
                 <span className="text-muted-foreground mb-1">Total Budgeted Income</span>
                 <span className="font-bold text-lg font-mono text-accent">{formatCurrency(totalIncome)}</span>
             </div>
-             <div className="flex flex-col p-3 rounded-md border">
+             <div className="flex flex-col p-3 rounded-md border bg-destructive/10">
                 <span className="text-muted-foreground mb-1">Total Budgeted Expenses</span>
                  <span className="font-bold text-lg font-mono text-destructive">{formatCurrency(totalExpenses)}</span>
                  <span className="text-xs text-muted-foreground">(Recurring: {formatCurrency(totalRecurringExpenses)}, One-Time: {formatCurrency(totalOneTimeExpenses)})</span>
             </div>
-             <div className="flex flex-col p-3 rounded-md border">
+             <div className="flex flex-col p-3 rounded-md border bg-primary/10">
                 <span className="text-muted-foreground mb-1">Total Budgeted Goals</span>
                 <span className="font-bold text-lg font-mono text-primary">{formatCurrency(totalGoals)}</span>
             </div>
-             <div className="flex flex-col p-3 rounded-md border bg-muted/30">
+             <div className="flex flex-col p-3 rounded-md border bg-muted">
                 <span className="text-muted-foreground mb-1">Expected Net (Income - Exp - Goals)</span>
                  <span className={cn("font-bold text-lg font-mono", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>
                     {formatCurrency(netBudgeted)}
                 </span>
+                 {netBudgeted !== 0 && (
+                     <p className={cn("text-xs mt-1", netBudgeted > 0 ? 'text-primary' : 'text-destructive')}>
+                         {netBudgeted > 0 ? `${formatCurrency(netBudgeted)} Left Over` : `${formatCurrency(Math.abs(netBudgeted))} Shortfall`}
+                     </p>
+                 )}
             </div>
         </CardContent>
       </Card>
@@ -140,17 +160,17 @@ export default function BudgetPage() {
       <main className="flex-1 grid gap-6 md:grid-cols-1 lg:grid-cols-2"> {/* Grid for budget category cards */}
 
          {budgetCategories.map(({ name, key, icon: Icon }) => (
-             <Card key={key}>
-                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+             <Card key={key} className="flex flex-col shadow-sm"> {/* Added flex-col */}
+                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 border-b">
                      <CardTitle className="text-base font-medium flex items-center gap-2">
                          <Icon className="h-4 w-4" /> {name}
                      </CardTitle>
-                     <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => handleAddClick(key)}>
-                         <PlusCircle className="mr-1 h-3 w-3" /> Add
+                     <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleAddClick(key)}>
+                         <PlusCircle className="mr-1 h-3 w-3" /> Add {name}
                      </Button>
                  </CardHeader>
-                 <CardContent>
-                     <ScrollArea className="h-[250px] w-full"> {/* Set a fixed height for scroll */}
+                 <CardContent className="p-0 flex-grow"> {/* Remove padding, allow content to grow */}
+                      <ScrollArea className="h-[250px] w-full"> {/* Set a fixed height for scroll */}
                          <Table>
                              <TableHeader>
                                  <TableRow>
@@ -165,41 +185,27 @@ export default function BudgetPage() {
                                          <TableRow key={item.id}>
                                              <TableCell className="font-medium max-w-[150px] truncate" title={item.description}>{item.description}</TableCell>
                                              <TableCell className="text-right font-mono">{formatCurrency(item.amount)}</TableCell>
-                                             <TableCell className="text-right">
+                                             <TableCell className="text-right py-1"> {/* Reduced vertical padding */}
                                                  {/* Edit Button */}
                                                  <Button variant="ghost" size="icon" className="mr-1 h-6 w-6" onClick={() => handleEditClick(item)}>
                                                      <Edit className="h-3 w-3" />
                                                      <span className="sr-only">Edit</span>
                                                  </Button>
                                                  {/* Delete Button */}
-                                                 <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
-                                                    <AlertDialogTrigger asChild>
-                                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
-                                                             <Trash2 className="h-3 w-3" />
-                                                             <span className="sr-only">Delete</span>
-                                                         </Button>
-                                                     </AlertDialogTrigger>
-                                                     <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                             <AlertDialogDescription>
-                                                                 This action cannot be undone. This will permanently delete the budget item: <br />
-                                                                 <strong>{item.description} ({formatCurrency(item.amount)})</strong>
-                                                             </AlertDialogDescription>
-                                                         </AlertDialogHeader>
-                                                         <AlertDialogFooter>
-                                                             <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
-                                                             <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
-                                                         </AlertDialogFooter>
-                                                     </AlertDialogContent>
-                                                 </AlertDialog>
+                                                 {/* Keep AlertDialog outside the TableRow for better DOM structure */}
+                                                 <AlertDialogTrigger asChild>
+                                                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
+                                                          <Trash2 className="h-3 w-3" />
+                                                          <span className="sr-only">Delete</span>
+                                                      </Button>
+                                                  </AlertDialogTrigger>
                                              </TableCell>
                                          </TableRow>
                                      ))
                                  ) : (
                                      <TableRow>
                                          <TableCell colSpan={3} className="h-20 text-center text-muted-foreground text-sm">
-                                             No items in this category yet.
+                                             No {name.toLowerCase()} items budgeted yet.
                                          </TableCell>
                                      </TableRow>
                                  )}
@@ -207,8 +213,37 @@ export default function BudgetPage() {
                          </Table>
                      </ScrollArea>
                  </CardContent>
+                  {/* Footer to show category total */}
+                  {groupedBudgetItems[key].length > 0 && (
+                     <CardFooter className="p-3 border-t bg-muted/50 text-sm">
+                         <div className="flex justify-between w-full">
+                             <span className="font-semibold">Total {name}</span>
+                             <span className="font-bold font-mono">{formatCurrency(groupTotals[key])}</span>
+                         </div>
+                     </CardFooter>
+                 )}
              </Card>
          ))}
+
+          {/* Alert Dialog for Delete Confirmation (Placed once outside the map) */}
+          {itemToDelete && (
+              <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                   <AlertDialogContent>
+                       <AlertDialogHeader>
+                           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                           <AlertDialogDescription>
+                               This action cannot be undone. This will permanently delete the budget item: <br />
+                               <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
+                           </AlertDialogDescription>
+                       </AlertDialogHeader>
+                       <AlertDialogFooter>
+                           <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+                           <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
+                       </AlertDialogFooter>
+                   </AlertDialogContent>
+               </AlertDialog>
+           )}
+
 
           {/* Budget Item Form Sheet (for Add/Edit) */}
          <BudgetItemFormSheet
@@ -222,3 +257,5 @@ export default function BudgetPage() {
     </div>
   );
 }
+
+    
