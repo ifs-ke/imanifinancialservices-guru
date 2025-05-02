@@ -11,6 +11,7 @@ import { useBudget } from '@/contexts/BudgetContext'; // Import useBudget hook
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useToast } from '@/hooks/use-toast'; // Import useToast hook
 
 
 // Formatting Function (consider moving to utils)
@@ -25,6 +26,9 @@ const formatCurrency = (amount: number) => {
 
 
 export default function BudgetPage() {
+  // Call useToast hook inside the component
+  const { toast } = useToast();
+
   // Use Budget context for state management
   const { budget: contextBudget, setBudget, totalBudgetedIncome, totalBudgetedExpenses, totalBudgetedNet } = useBudget();
 
@@ -239,7 +243,3 @@ export default function BudgetPage() {
     </div>
   );
 }
-
-// Need to import useToast hook for save confirmation
-import { useToast } from '@/hooks/use-toast';
-const { toast } = useToast(); // Call useToast at the top level of the component
