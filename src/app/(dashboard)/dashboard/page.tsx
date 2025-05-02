@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
@@ -49,6 +48,7 @@ export default function DashboardPage() {
   const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
   const totalGoals = useBudgetStore(selectTotalGoals);
   const netBudgetedMonthly = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
+  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
 
 
   // Calculate financial metrics based on context data
@@ -115,42 +115,107 @@ export default function DashboardPage() {
 
   }, [financialData]);
 
-  // --- Debt Payoff Timeline Calculation ---
+  // --- Debt Payoff Timeline Calculation (Refactored for Accuracy) ---
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
 
-    useEffect(() => {
-        // Calculate debt payoff timeline on debt or budgeted income change
-        if (debts.length > 0 && totalBudgetedIncome > 0) {
-            const totalDebtAmount = debts.reduce((sum, debt) => sum + debt.principal, 0);
-             // Rough estimate: available income after *all* budgeted expenses (recurring + one-time + goals)
-             const totalBudgetedOutflows = totalRecurringExpenses + totalOneTimeExpenses + totalGoals;
-             const availableForDebt = totalBudgetedIncome - totalBudgetedOutflows;
+  useEffect(() => {
+    // Calculate funds available specifically for debt repayment
+    // Assumes totalBudgetedExpenses correctly represents living expenses *excluding* debt minimums
+    const fundsForDebtPayment = totalBudgetedIncome - totalBudgetedExpenses;
+    const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
-            if (availableForDebt <= 0) {
-                setDebtPayoffTimeline("Cannot estimate: Budgeted income does not exceed outflows.");
-            } else {
-                 // More realistic estimate: Sum of minimum payments + available surplus
-                 const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
-                 const actualPaymentTowardsDebt = Math.max(totalMinPayments, availableForDebt); // Pay at least minimums, or more if surplus allows
+    if (totalDebtPrincipal <= 0) {
+        setDebtPayoffTimeline("Debt Free!");
+        return;
+    }
 
+    if (fundsForDebtPayment <= 0) {
+        setDebtPayoffTimeline("Cannot estimate: Budgeted income does not cover basic expenses.");
+        return;
+    }
 
-                 // This is still a very rough estimate, ideally use amortization logic
-                 if (actualPaymentTowardsDebt <= 0) {
-                     setDebtPayoffTimeline("Cannot estimate: No funds available for debt.");
-                 } else {
-                    const monthsToPayoff = totalDebtAmount / actualPaymentTowardsDebt;
-                    const years = Math.floor(monthsToPayoff / 12);
-                    const remainingMonths = Math.ceil(monthsToPayoff % 12);
-                    setDebtPayoffTimeline(`${years} years and ${remainingMonths} months (estimated)`);
-                 }
+    const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
+
+    // Initial check if minimum payments might not cover interest
+    let interestWarning = false;
+    debts.forEach(debt => {
+        const monthlyInterest = debt.principal * (debt.interestRate / 100 / 12);
+        if (debt.minPayment > 0 && monthlyInterest > 0 && debt.minPayment <= monthlyInterest) {
+            interestWarning = true;
+        }
+    });
+
+    if (fundsForDebtPayment < totalMinPayments) {
+        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments may not cover interest." : "Warning: Funds less than min payments.");
+        return; // Can't simulate accelerated payoff if funds don't even cover minimums
+    }
+
+    // --- Simulation Start ---
+    let currentDebts = debts.map(d => ({ ...d, principal: d.principal })); // Deep clone debts for simulation
+    let months = 0;
+    const MAX_MONTHS = 720; // 60 years limit for safety
+
+    while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
+        months++;
+        let availablePayment = fundsForDebtPayment;
+
+        // 1. Calculate interest for the month and add to principal
+        currentDebts.forEach(debt => {
+            if (debt.principal > 0) {
+                debt.principal += debt.principal * (debt.interestRate / 100 / 12);
             }
-        } else if (debts.length === 0) {
-           setDebtPayoffTimeline("Debt Free!"); // Show positive message if no debt
+        });
+
+        // 2. Pay minimums on all debts
+        currentDebts.forEach(debt => {
+            if (debt.principal > 0) {
+                const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
+                debt.principal -= payment;
+                availablePayment -= payment;
+            }
+        });
+
+        // 3. Apply remaining funds to highest interest rate debt (Avalanche)
+        if (availablePayment > 0) {
+            // Sort by highest interest rate, then highest balance as tie-breaker
+            currentDebts.sort((a, b) => {
+                 const rateDiff = b.interestRate - a.interestRate;
+                 if (rateDiff !== 0) return rateDiff;
+                 return b.principal - a.principal;
+            });
+
+            for (const debt of currentDebts) {
+                 if (debt.principal > 0 && availablePayment > 0) {
+                     const payment = Math.min(availablePayment, debt.principal);
+                     debt.principal -= payment;
+                     availablePayment -= payment;
+                 }
+                 if(availablePayment <= 0) break; // No more funds left
+            }
         }
-        else {
-            setDebtPayoffTimeline("N/A"); // Reset if no debts or income
+
+         // Remove paid-off debts (clean principal slightly below zero due to floating point)
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
+    }
+    // --- Simulation End ---
+
+    if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
+       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
+    } else {
+        const years = Math.floor(months / 12);
+        const remainingMonths = months % 12;
+         let timelineString = "";
+        if (years > 0) {
+             timelineString += `${years} year${years > 1 ? 's' : ''}`;
         }
-    }, [debts, totalBudgetedIncome, totalRecurringExpenses, totalOneTimeExpenses, totalGoals]);
+         if (remainingMonths > 0) {
+             if (years > 0) timelineString += " and ";
+             timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`;
+         }
+         setDebtPayoffTimeline(`${timelineString} (estimated)`);
+     }
+
+}, [debts, totalBudgetedIncome, totalBudgetedExpenses, totalGoals]); // Re-calculate on changes
 
 
   // --- Chart Data and Config ---
@@ -346,7 +411,7 @@ export default function DashboardPage() {
                     {debtPayoffTimeline}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    Based on current debt & budgeted outflows.
+                    Based on current debt & budgeted expenses.
                 </p>
                  <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                     <Link href="/debt">
@@ -570,13 +635,8 @@ export default function DashboardPage() {
           </CardContent>
            <CardFooter className="flex flex-col sm:flex-row gap-2">
                 <Button asChild variant="secondary" className="flex-1">
-                <Link href="/income">
-                    Income <TrendingUp className="ml-2 h-4 w-4" />
-                </Link>
-                </Button>
-                 <Button asChild variant="secondary" className="flex-1">
-                <Link href="/expenses">
-                    Expenses <TrendingDown className="ml-2 h-4 w-4" />
+                <Link href="/income-expenses"> {/* Updated link */}
+                    Analysis <TrendingUp className="ml-2 h-4 w-4" />
                 </Link>
                 </Button>
              </CardFooter>
@@ -637,4 +697,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
