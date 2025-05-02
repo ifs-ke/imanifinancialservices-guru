@@ -12,13 +12,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Upload, FileCheck, RotateCcw, CheckCircle, AlertTriangle, XCircle, ArrowLeft, Loader2, ListChecks } from 'lucide-react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactions } from '@/contexts/TransactionsContext';
-import type { TransactionWithId, ModeOfPayment } from '@/lib/types';
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import new types
 import Papa, { type ParseResult } from 'papaparse'; // CSV parsing library
 import Link from 'next/link'; // For back button
 import { format } from 'date-fns'; // For date formatting
 import { cn } from '@/lib/utils'; // For conditional classes
 
 // Possible CSV headers and their corresponding Transaction fields
+// Added frequency and variability
 const POSSIBLE_HEADERS: { [key: string]: keyof TransactionWithId | 'ignore' } = {
   date: 'date',
   time: 'ignore', // Often combined with date or irrelevant
@@ -31,14 +32,19 @@ const POSSIBLE_HEADERS: { [key: string]: keyof TransactionWithId | 'ignore' } = 
   credit: 'amount', // Treat as positive
   'payment mode': 'modeOfPayment',
   'payment method': 'modeOfPayment',
+  mode: 'modeOfPayment', // Added shorter 'mode'
   type: 'ignore', // Often transaction type, less useful than description/amount
   category: 'ignore', // Let user categorize later if needed
   balance: 'ignore',
   'transaction id': 'ignore', // Bank's ID, not ours
+  frequency: 'frequency', // Added frequency
+  recurrence: 'frequency', // Added frequency alias
+  variability: 'variability', // Added variability
+  'fixed/variable': 'variability', // Added variability alias
 };
 
-// Expected Transaction fields for mapping
-const TRANSACTION_FIELDS: (keyof TransactionWithId)[] = ['date', 'description', 'amount', 'modeOfPayment'];
+// Expected Transaction fields for mapping - Added frequency and variability
+const TRANSACTION_FIELDS: (keyof TransactionWithId)[] = ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability'];
 
 // Define states for the import process
 type ImportStage = 'upload' | 'mapping' | 'preview' | 'reconciling' | 'complete' | 'error';
@@ -47,9 +53,12 @@ interface ParsedRow extends Record<string, string> {
   __originalIndex: number; // Keep track of original row for potential errors
 }
 
+// Added optional frequency and variability
 interface MappedTransaction extends Omit<TransactionWithId, 'id' | 'date'> {
     id?: string; // Might match existing during reconciliation
     date: Date | null; // Date might fail parsing
+    frequency?: TransactionFrequency; // Added frequency
+    variability?: TransactionVariability; // Added variability
     __originalData: ParsedRow;
     __parseError?: string;
     __duplicatePotential?: TransactionWithId; // Potential match found
@@ -60,6 +69,13 @@ interface MappedTransaction extends Omit<TransactionWithId, 'id' | 'date'> {
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
 };
+
+// Helper function to format categories nicely
+const formatCategory = (value: string | undefined) => {
+    if (!value) return <span className="text-muted-foreground italic">N/A</span>;
+    // Capitalize first letter
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 export default function ImportTransactionsPage() {
     const { transactions: existingTransactions, importTransactionsBatch } = useTransactions();
@@ -153,9 +169,10 @@ export default function ImportTransactionsPage() {
             } else {
                 // Try partial matches
                 for (const possibleKey in POSSIBLE_HEADERS) {
-                     if (lowerHeader.includes(possibleKey) && POSSIBLE_HEADERS[possibleKey] !== 'ignore') { // Added check to not map to ignore on partial match
+                     // Check if lowerHeader includes the possible key, AND ensure the mapped value is not 'ignore'
+                     if (lowerHeader.includes(possibleKey) && POSSIBLE_HEADERS[possibleKey] !== 'ignore') {
                         mappedField = POSSIBLE_HEADERS[possibleKey];
-                        break; // Take the first partial match
+                        break; // Take the first partial match that isn't 'ignore'
                      }
                  }
             }
@@ -163,6 +180,7 @@ export default function ImportTransactionsPage() {
         });
         setColumnMapping(initialMapping);
     };
+
 
     const handleMappingChange = (header: string, value: string) => {
         setColumnMapping(prev => ({
@@ -186,7 +204,7 @@ export default function ImportTransactionsPage() {
          // Check for duplicate mapping (excluding 'ignore')
         const assignedFields = mappedFields.filter(f => f !== 'ignore');
         if (new Set(assignedFields).size !== assignedFields.length) {
-             setImportError("Each transaction field (Date, Description, Amount, Mode of Payment) can only be mapped once.");
+             setImportError("Each transaction field (Date, Description, Amount, etc.) can only be mapped once.");
              toast({ title: "Duplicate Mapping", description: "A transaction field is mapped to multiple columns.", variant: "destructive" });
              return false;
          }
@@ -206,6 +224,8 @@ export default function ImportTransactionsPage() {
                 description: '', // Initialize description
                 amount: undefined, // Initialize amount as undefined
                 modeOfPayment: 'Bank', // Default mode of payment
+                frequency: undefined, // Default frequency
+                variability: undefined, // Default variability
             };
             let parseError = '';
 
@@ -269,6 +289,18 @@ export default function ImportTransactionsPage() {
                              else if (lowerMode.includes('mpesa') || lowerMode.includes('mobile money') || lowerMode.includes('m-pesa')) transaction.modeOfPayment = 'Mpesa';
                              // else keep the default 'Bank'
                             break;
+                         case 'frequency':
+                             const lowerFreq = rawValue.toLowerCase();
+                             if (lowerFreq.includes('recur') || lowerFreq.includes('monthly') || lowerFreq.includes('annual')) transaction.frequency = 'recurring';
+                             else if (lowerFreq.includes('one') || lowerFreq.includes('single')) transaction.frequency = 'one-time';
+                             // else remains undefined
+                            break;
+                         case 'variability':
+                             const lowerVar = rawValue.toLowerCase();
+                             if (lowerVar.includes('fix') || lowerVar.includes('constant')) transaction.variability = 'fixed';
+                             else if (lowerVar.includes('var') || lowerVar.includes('fluctuat')) transaction.variability = 'variable';
+                              // else remains undefined
+                            break;
                     }
                 } catch (e: any) {
                      parseError += `Error in column '${header}' ('${field}'): ${e.message}. `;
@@ -291,7 +323,9 @@ export default function ImportTransactionsPage() {
                 ...transaction,
                 amount: transaction.amount ?? 0, // Default to 0 if amount is still undefined (should be caught by error check though)
                 date: transaction.date, // Keep date possibly null if invalid
-                modeOfPayment: transaction.modeOfPayment! // Assert non-null due to default
+                modeOfPayment: transaction.modeOfPayment!, // Assert non-null due to default
+                frequency: transaction.frequency, // Keep potentially undefined
+                variability: transaction.variability, // Keep potentially undefined
             };
 
             return finalTransaction;
@@ -372,12 +406,16 @@ export default function ImportTransactionsPage() {
             return;
         }
 
+        // Include frequency and variability in the data sent for import
         const newTransactions: Omit<TransactionWithId, 'id'>[] = transactionsToImport.map(tx => ({
             date: tx.date!, // Assert non-null as errors/null dates are filtered
             description: tx.description!,
             amount: tx.amount!,
             modeOfPayment: tx.modeOfPayment!,
+            frequency: tx.frequency, // Pass frequency
+            variability: tx.variability, // Pass variability
         }));
+
 
         // Simulate API call or batch processing
         // In a real app, this would likely be an async function
@@ -484,9 +522,10 @@ export default function ImportTransactionsPage() {
          <Card>
             <CardHeader>
                 <CardTitle>Map Columns (Step 2/4)</CardTitle>
-                <CardDescription>Match columns from '{fileName}' to transaction fields. Date, Description, Amount are required. 'Mode of Payment' is optional.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+                 {/* Updated description to include frequency/variability */}
+                 <CardDescription>Match columns from '{fileName}' to transaction fields. Date, Description, Amount are required. Others are optional.</CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-4">
                 {importError && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle size={14} /> {importError}</p>}
                 <ScrollArea className="h-[400px] w-full">
                     <Table>
@@ -514,7 +553,10 @@ export default function ImportTransactionsPage() {
                                                     <SelectItem value="description">Description</SelectItem>
                                                     <SelectItem value="amount">Amount</SelectItem>
                                                     <SelectItem value="modeOfPayment">Mode of Payment</SelectItem>
-                                                </SelectGroup>
+                                                     {/* Added options for frequency and variability */}
+                                                     <SelectItem value="frequency">Frequency</SelectItem>
+                                                     <SelectItem value="variability">Variability</SelectItem>
+                                                 </SelectGroup>
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
@@ -542,7 +584,7 @@ export default function ImportTransactionsPage() {
          <Card>
             <CardHeader>
                 <CardTitle>Preview & Reconcile (Step 3/4)</CardTitle>
-                <CardDescription>Review parsed transactions. Uncheck rows to exclude. Potential duplicates are highlighted yellow. Rows with errors (red) cannot be imported.</CardDescription>
+                 <CardDescription>Review parsed transactions. Uncheck rows to exclude. Potential duplicates are highlighted yellow. Rows with errors (red) cannot be imported.</CardDescription>
              </CardHeader>
              <CardContent>
                  {importError && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle size={14} /> {importError}</p>}
@@ -553,10 +595,13 @@ export default function ImportTransactionsPage() {
                                 <TableHead className="w-[50px]">Import?</TableHead>
                                 <TableHead>Date</TableHead>
                                 <TableHead>Description</TableHead>
-                                <TableHead>Amount (KES)</TableHead>
-                                <TableHead>Mode</TableHead>
-                                <TableHead>Status</TableHead>
-                             </TableRow>
+                                 <TableHead>Amount (KES)</TableHead>
+                                 <TableHead>Mode</TableHead>
+                                 {/* Added headers for frequency and variability */}
+                                 <TableHead>Frequency</TableHead>
+                                 <TableHead>Variability</TableHead>
+                                 <TableHead>Status</TableHead>
+                              </TableRow>
                          </TableHeader>
                          <TableBody>
                              {mappedTransactions.map((tx, index) => (
@@ -584,7 +629,10 @@ export default function ImportTransactionsPage() {
                                          {tx.amount !== undefined && tx.amount !== null && !isNaN(tx.amount) ? formatCurrency(tx.amount) : 'Invalid Amt'}
                                      </TableCell>
                                      <TableCell>{tx.modeOfPayment || <span className="text-muted-foreground italic">N/A</span>}</TableCell>
-                                     <TableCell className="text-xs">
+                                      {/* Display parsed frequency and variability */}
+                                      <TableCell className="text-xs">{formatCategory(tx.frequency)}</TableCell>
+                                      <TableCell className="text-xs">{formatCategory(tx.variability)}</TableCell>
+                                      <TableCell className="text-xs">
                                          {tx.__parseError ? <span className="flex items-center gap-1 text-destructive"><XCircle size={14} /> Error</span> :
                                           tx.__duplicatePotential ? <span className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400"><AlertTriangle size={14} /> Duplicate?</span> :
                                           <span className="flex items-center gap-1 text-green-600 dark:text-green-400"><CheckCircle size={14} /> Ready</span>}
@@ -593,8 +641,9 @@ export default function ImportTransactionsPage() {
                              ))}
                                {mappedTransactions.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
-                                            No transactions parsed or preview available.
+                                         {/* Adjust colspan for new columns */}
+                                         <TableCell colSpan={8} className="text-center text-muted-foreground h-24">
+                                             No transactions parsed or preview available.
                                         </TableCell>
                                     </TableRow>
                                 )}
