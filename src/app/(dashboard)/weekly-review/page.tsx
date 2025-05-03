@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/weekly-review/page.tsx
 'use client';
 
@@ -7,11 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input'; // Import Input for search
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore, selectTotalGoals } from '@/store/budgetStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore'; // Import the new store
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks } from 'date-fns';
-import { CalendarCheck, ChevronLeft, ChevronRight, Save } from 'lucide-react';
+import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info } from 'lucide-react'; // Added Search, Info
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +48,7 @@ export default function WeeklyReviewPage() {
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 })); // Monday as start
   const [journalEntry, setJournalEntry] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(''); // State for transaction search
 
   const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
   const currentWeekKey = useMemo(() => getWeekKey(currentWeekStart), [currentWeekStart]);
@@ -56,14 +57,22 @@ export default function WeeklyReviewPage() {
   useEffect(() => {
     const reviewData = getReviewForWeek(currentWeekKey);
     setJournalEntry(reviewData?.journal || '');
+    setSearchTerm(''); // Reset search term when week changes
   }, [currentWeekKey, getReviewForWeek]);
 
-  // Filter transactions for the selected week
+  // Filter transactions for the selected week AND apply search term
   const weeklyTransactions = useMemo(() => {
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
     return transactions
       .filter((tx) => {
         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
-        return !isNaN(txDate.getTime()) && txDate >= currentWeekStart && txDate <= currentWeekEnd;
+        if (isNaN(txDate.getTime())) return false; // Skip invalid dates
+        const isInWeek = txDate >= currentWeekStart && txDate <= currentWeekEnd;
+         // Filter by search term (description or amount)
+         const matchesSearch = lowerCaseSearchTerm === '' ||
+             tx.description.toLowerCase().includes(lowerCaseSearchTerm) ||
+             tx.amount.toString().includes(searchTerm); // Allow searching by amount string
+        return isInWeek && matchesSearch;
       })
       .sort((a, b) => { // Sort by date descending within the week
             const dateA = a.date instanceof Date ? a.date : new Date(a.date);
@@ -71,15 +80,19 @@ export default function WeeklyReviewPage() {
             if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
             return dateB.getTime() - dateA.getTime();
          });
-  }, [transactions, currentWeekStart, currentWeekEnd]);
+  }, [transactions, currentWeekStart, currentWeekEnd, searchTerm]); // Add searchTerm dependency
 
-  // Calculate weekly summary
+  // Calculate weekly summary (based on ALL weekly transactions, not filtered ones)
   const weeklySummary = useMemo(() => {
-    const income = weeklyTransactions.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-    const expenses = weeklyTransactions.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+     const allWeeklyTxs = transactions.filter((tx) => {
+         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+         return !isNaN(txDate.getTime()) && txDate >= currentWeekStart && txDate <= currentWeekEnd;
+       });
+    const income = allWeeklyTxs.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+    const expenses = allWeeklyTxs.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     const netFlow = income - expenses;
     return { income, expenses, netFlow };
-  }, [weeklyTransactions]);
+  }, [transactions, currentWeekStart, currentWeekEnd]);
 
   // Handlers for week navigation
   const goToPreviousWeek = () => {
@@ -168,17 +181,28 @@ export default function WeeklyReviewPage() {
              <Card className="flex flex-col">
                 <CardHeader>
                     <CardTitle>Weekly Transactions</CardTitle>
-                    <CardDescription>All transactions recorded during this week.</CardDescription>
+                     {/* Search Input */}
+                     <div className="relative mt-2">
+                         <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                         <Input
+                             type="search"
+                             placeholder="Search transactions..."
+                             value={searchTerm}
+                             onChange={(e) => setSearchTerm(e.target.value)}
+                             className="pl-8 h-8 w-full sm:w-64" // Adjust width as needed
+                         />
+                     </div>
+                    <CardDescription className='pt-2'>Transactions recorded this week. Search by description or amount.</CardDescription>
                  </CardHeader>
                  <CardContent className="flex-grow p-0">
-                    <ScrollArea className="h-[400px] w-full">
+                    <ScrollArea className="h-[350px] w-full"> {/* Adjusted height */}
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead className="w-[100px]">Date</TableHead>
                                     <TableHead>Description</TableHead>
+                                    <TableHead className="w-[100px]">ID (Ref)</TableHead>
                                     <TableHead className="text-right">Amount (KES)</TableHead>
-                                    {/* Add Note column in future */}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -186,18 +210,21 @@ export default function WeeklyReviewPage() {
                                     weeklyTransactions.map((tx) => (
                                         <TableRow key={tx.id}>
                                             <TableCell>{formatDate(tx.date)}</TableCell>
-                                            <TableCell className="max-w-[200px] truncate" title={tx.description}>{tx.description}</TableCell>
+                                            <TableCell className="max-w-[180px] truncate" title={tx.description}>{tx.description}</TableCell>
+                                             {/* Display Transaction ID */}
+                                             <TableCell className="text-xs text-muted-foreground font-mono max-w-[80px] truncate" title={tx.id}>
+                                                 {tx.id.split('_')[1]} {/* Show part of ID */}
+                                             </TableCell>
                                              <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
                                                 {formatCurrency(tx.amount)}
                                             </TableCell>
-                                            {/* Future: Add input for transaction note */}
                                          </TableRow>
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                                            No transactions recorded for this week.
-                                        </TableCell>
+                                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                                             {searchTerm ? 'No transactions match your search.' : 'No transactions recorded for this week.'}
+                                         </TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
@@ -239,15 +266,19 @@ export default function WeeklyReviewPage() {
              <Card className="flex flex-col">
                 <CardHeader>
                     <CardTitle>Weekly Journal</CardTitle>
-                    <CardDescription>Reflect on your spending, savings, and goal progress this week.</CardDescription>
+                     {/* Updated Description */}
+                     <CardDescription className="flex items-start gap-1 text-xs pt-1">
+                        <Info size={16} className="text-muted-foreground flex-shrink-0 mt-0.5"/>
+                         Reflect on spending, savings, and goal progress. You can reference specific transactions using their ID (e.g., "Discussing tx_12345...").
+                     </CardDescription>
                 </CardHeader>
                  <CardContent className="flex-grow flex flex-col gap-2">
-                    <Label htmlFor="weekly-journal">Your Thoughts:</Label>
+                    <Label htmlFor="weekly-journal" className="sr-only">Journal Entry</Label> {/* Hide label visually */}
                     <Textarea
                         id="weekly-journal"
                         value={journalEntry}
                         onChange={(e) => setJournalEntry(e.target.value)}
-                        placeholder="How did your spending align with your budget? Any progress towards goals? What can be improved?"
+                        placeholder="How did spending align with budget? Any goal progress? Challenges? Wins? (Ref: tx_...)"
                         className="flex-grow min-h-[200px] text-sm" // Allow textarea to grow
                     />
                      <Button onClick={handleSaveJournal} disabled={isSaving} className="mt-2 w-full sm:w-auto self-end">
@@ -261,4 +292,3 @@ export default function WeeklyReviewPage() {
     </div>
   );
 }
-
