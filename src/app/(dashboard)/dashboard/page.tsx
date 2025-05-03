@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -100,8 +101,8 @@ export default function DashboardPage() {
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
   const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
-  const [formattedTotalIncome, setFormattedTotalIncome = useState<string>('N/A'); // Renamed state variable
-  const [formattedTotalExpenses, setFormattedTotalExpenses = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
   const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A');
   const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A'); // Add state for timeline
@@ -333,7 +334,7 @@ export default function DashboardPage() {
 
     const trendChartConfig = {
          income: { label: "Income", color: "hsl(var(--accent))" }, // Use accent HSL
-         expense: { label: "Expenses", color: "hsl(var(--destructive))" }, // Use destructive HSL
+         expense: { label: "Expenses", color: "hsl(var(--destructive))" }, // Use theme destructive HSL
          month: { label: "Month" },
      } satisfies ChartConfig;
 
