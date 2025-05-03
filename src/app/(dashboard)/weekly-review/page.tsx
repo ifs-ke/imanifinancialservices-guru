@@ -7,11 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore'; // Import the updated store
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks } from 'date-fns';
-import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle } from 'lucide-react'; // Added comment/edit icons
+import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen } from 'lucide-react'; // Added BookOpen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -45,23 +44,28 @@ export default function WeeklyReviewPage() {
 
   // State for the selected week
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 })); // Monday as start
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingJournal, setIsSavingJournal] = useState(false); // Specific state for journal saving
+  const [isSavingComment, setIsSavingComment] = useState(false); // Specific state for comment saving
   const [searchTerm, setSearchTerm] = useState(''); // State for transaction search
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null); // Track which transaction comment is being edited
   const [currentCommentText, setCurrentCommentText] = useState(''); // Hold the text of the comment being edited
   const [commentToDelete, setCommentToDelete] = useState<{ weekKey: string, transactionId: string } | null>(null); // Track comment to delete
+  const [currentJournalEntry, setCurrentJournalEntry] = useState(''); // State for the journal entry textarea
+
 
   const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
   const currentWeekKey = useMemo(() => getWeekKey(currentWeekStart), [currentWeekStart]);
 
-  // Effect to reset state when the week changes
+  // Effect to reset state and load journal when the week changes
   useEffect(() => {
     setSearchTerm('');
     setEditingCommentId(null);
     setCurrentCommentText('');
     setCommentToDelete(null);
-    // Note: Journal is handled separately if kept
-  }, [currentWeekKey]);
+    // Load journal entry for the current week
+    const review = getReviewForWeek(currentWeekKey);
+    setCurrentJournalEntry(review?.journal || '');
+  }, [currentWeekKey, getReviewForWeek]);
 
   // Filter transactions for the selected week AND apply search term
   const weeklyTransactions = useMemo(() => {
@@ -112,7 +116,7 @@ export default function WeeklyReviewPage() {
   };
 
   const handleSaveComment = (transactionId: string) => {
-      setIsSaving(true); // Use general saving state or create a specific one
+      setIsSavingComment(true);
       try {
           setTransactionComment(currentWeekKey, transactionId, currentCommentText.trim());
           toast({ title: 'Comment Saved', description: 'Transaction comment updated.' });
@@ -121,7 +125,7 @@ export default function WeeklyReviewPage() {
           console.error("Error saving comment:", error);
           toast({ title: 'Save Failed', description: 'Could not save comment.', variant: 'destructive' });
       } finally {
-          setIsSaving(false);
+          setIsSavingComment(false);
       }
   };
 
@@ -145,6 +149,25 @@ export default function WeeklyReviewPage() {
       }
   };
 
+   // --- Journal Handlers ---
+   const handleJournalChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+       setCurrentJournalEntry(event.target.value);
+   };
+
+   const handleSaveJournal = () => {
+       setIsSavingJournal(true);
+       try {
+           setJournalEntry(currentWeekKey, currentJournalEntry);
+           toast({ title: 'Journal Saved', description: `Saved entry for week ${currentWeekKey}.` });
+       } catch (error) {
+           console.error("Error saving journal:", error);
+           toast({ title: 'Save Failed', description: 'Could not save journal entry.', variant: 'destructive' });
+       } finally {
+           setIsSavingJournal(false);
+       }
+   };
+
+
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
@@ -153,7 +176,7 @@ export default function WeeklyReviewPage() {
             <CalendarCheck className="h-6 w-6 text-primary" /> Weekly Review & Comments
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Review and comment on transactions for the selected week.
+            Review transactions and journal about your financial progress for the selected week.
           </p>
         </div>
          {/* Week Navigation */}
@@ -194,7 +217,7 @@ export default function WeeklyReviewPage() {
        </Card>
 
 
-      <main className="flex-1">
+      <main className="flex-1 grid grid-cols-1 gap-6"> {/* Simplified layout */}
         {/* Transactions Table with Comments */}
         <Card className="flex flex-col">
            <CardHeader className="p-4 border-b">
@@ -202,11 +225,11 @@ export default function WeeklyReviewPage() {
               <CardDescription className="text-sm">Review transactions and add comments.</CardDescription>
            </CardHeader>
            <CardContent className="flex-grow p-0">
-              <ScrollArea className="h-[calc(100vh-400px)] w-full"> {/* Dynamic height */}
+              <ScrollArea className="h-[400px] w-full"> {/* Fixed height for table */}
                   <Table>
                       <TableHeader className="sticky top-0 bg-background z-10">
                           <TableRow>
-                              <TableHead className="w-[50px]"></TableHead> {/* Checkbox Placeholder - removed checkbox for now */}
+                              <TableHead className="w-[50px]"></TableHead> {/* Status Icon Placeholder */}
                               <TableHead className="w-[100px]">Date</TableHead>
                               <TableHead className="w-[90px]">ID (Ref)</TableHead>
                               <TableHead>Description</TableHead>
@@ -249,8 +272,8 @@ export default function WeeklyReviewPage() {
                                                             rows={1}
                                                             className="text-xs flex-grow min-h-[36px] max-h-[100px]" // Smaller textarea
                                                             />
-                                                         <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" onClick={() => handleSaveComment(tx.id)} disabled={isSaving}>
-                                                             <Save className="h-4 w-4" />
+                                                         <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" onClick={() => handleSaveComment(tx.id)} disabled={isSavingComment}>
+                                                              {isSavingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                                                          </Button>
                                                          <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" onClick={handleCancelEditComment}>
                                                              <XCircle className="h-4 w-4" />
@@ -315,9 +338,36 @@ export default function WeeklyReviewPage() {
               </ScrollArea>
            </CardContent>
          </Card>
+
+         {/* Weekly Journal Section */}
+         <Card className="flex flex-col">
+             <CardHeader className="p-4 border-b flex flex-row items-center justify-between">
+                  <div>
+                     <CardTitle className="text-lg flex items-center gap-2">
+                        <BookOpen className="h-5 w-5 text-primary" /> Weekly Journal
+                     </CardTitle>
+                      <CardDescription className="text-sm mt-1">Reflect on your financial progress and goals for the week.</CardDescription>
+                  </div>
+                  <Button size="sm" onClick={handleSaveJournal} disabled={isSavingJournal}>
+                      {isSavingJournal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      {isSavingJournal ? 'Saving...' : 'Save Journal'}
+                  </Button>
+             </CardHeader>
+             <CardContent className="p-4 flex-grow">
+                  <Textarea
+                      placeholder="Write your weekly financial reflections, challenges, and successes here..."
+                      value={currentJournalEntry}
+                      onChange={handleJournalChange}
+                       className="min-h-[200px] w-full border rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 bg-muted/20" // Notion-like styling
+                      aria-label="Weekly journal entry"
+                  />
+             </CardContent>
+         </Card>
+
       </main>
 
-      {/* Removed Journal Section */}
     </div>
   );
 }
+
+    
