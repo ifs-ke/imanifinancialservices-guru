@@ -98,8 +98,8 @@ export default function DashboardPage() {
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
   const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
-  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A'); // Renamed state variable
-  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A');
+  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A');
   const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A');
   const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A');
@@ -297,7 +297,7 @@ export default function DashboardPage() {
          month: { label: "Month" },
      } satisfies ChartConfig
 
-
+  // Removed the reference to the non-existent `BudgetPage` component
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 bg-background">
       <header className="mb-6">
@@ -557,5 +557,3 @@ export default function DashboardPage() {
      </div>
   );
 }
-
-    
