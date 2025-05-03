@@ -1,7 +1,7 @@
 // src/app/(dashboard)/layout.tsx
 'use client'; // Make layout client-side to use hooks
 
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   Sidebar,
   SidebarInset,
@@ -17,6 +17,12 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
    // Client-side auth check
    const { userId, isLoaded } = useAuth();
    // Initialize sync manager - This will trigger initial fetch on load if user is signed in
