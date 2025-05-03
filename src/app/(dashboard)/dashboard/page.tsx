@@ -1,10 +1,9 @@
-// src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle, Banknote, Landmark, Cloud, CloudOff } from 'lucide-react'; // Added Banknote, Landmark, Cloud, CloudOff
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle, Banknote, Landmark, Cloud, CloudOff, Lightbulb } from 'lucide-react'; // Added Lightbulb for Getting Started
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactionsStore } from '@/store/transactionsStore'; // Import transactions store
@@ -55,7 +54,6 @@ export default function DashboardPage() {
   const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
   const budgetItems = useBudgetStore(state => state.budgetItems); // Get budget items for variance
 
-
    // Filter transactions based on the global startDate and endDate from the store
    const filteredTransactions = useMemo(() => {
        const start = startDate ? startDate.getTime() : 0;
@@ -68,7 +66,6 @@ export default function DashboardPage() {
            return txTime >= start && txTime <= end;
        });
      }, [allTransactions, startDate, endDate]); // Depend on store dates
-
 
   // Calculate financial metrics based on ALL transactions and other context data
   const financialData = useMemo(() => {
@@ -96,7 +93,6 @@ export default function DashboardPage() {
     // Dependencies updated to use allTransactions instead of filteredTransactions
   }, [allTransactions, debts, assetItems, otherLiabilityItems]);
 
-
   // State for formatted currency values to avoid hydration issues
   const [formattedNetWorth, setFormattedNetWorth] = useState<string>('N/A');
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
@@ -108,11 +104,10 @@ export default function DashboardPage() {
   const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A'); // Add state for timeline
 
-
   // --- Debt Payoff Timeline Calculation ---
   useEffect(() => {
-    // Use totalBudgetedIncome and totalBudgetedExpenses directly from store selectors
-    const fundsForDebtPayment = monthlyBudgetedIncome - monthlyBudgetedExpenses; // Simple funds calculation
+    // Calculation logic remains the same, based on total debt and budget figures
+    const fundsForDebtPayment = monthlyBudgetedIncome - monthlyBudgetedExpenses;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
     if (totalDebtPrincipal <= 0) {
@@ -140,7 +135,6 @@ export default function DashboardPage() {
         return;
     }
 
-    // More robust amortization simulation (Avalanche Method)
     let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
     const MAX_MONTHS = 720; // 60 years limit
@@ -183,12 +177,11 @@ export default function DashboardPage() {
             }
         }
 
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); // Remove paid-off debts
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
     }
 
-    // Format timeline string
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
-       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (est.)`);
+       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
     } else {
         const years = Math.floor(months / 12);
         const remainingMonths = months % 12;
@@ -200,16 +193,11 @@ export default function DashboardPage() {
              if (years > 0) timelineString += " and ";
              timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`;
          }
-         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (est.)`); // Handle case where it's paid off quickly
+         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`); // Handle case where it's paid off quickly
      }
-
-     // Depend on debts from debtStore and income/expense selectors from budgetStore
-    }, [debts, monthlyBudgetedIncome, monthlyBudgetedExpenses]);
-
-
+   }, [debts, monthlyBudgetedIncome, monthlyBudgetedExpenses]); // Re-calculate on changes
 
    // Calculate Budget Variance using filtered transactions and prorated budget
-   // Updated calculation and status logic
    const budgetVariance = useMemo(() => {
        const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
        const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
@@ -221,7 +209,6 @@ export default function DashboardPage() {
        const daysInAvgMonth = 30.44; // Approximate average
        const budgetMultiplier = daysInPeriod / daysInAvgMonth;
 
-       // Calculate prorated budget totals for the period
        const proratedBudgetedIncome = budgetItems
            .filter(item => item.category === 'income')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
@@ -259,7 +246,6 @@ export default function DashboardPage() {
        return { value: variance, status };
    }, [filteredTransactions, budgetItems, startDate, endDate]);
 
-
   useEffect(() => {
     // Format the values here to avoid server/client differences
     setFormattedNetWorth(formatCurrency(financialData.netWorth));
@@ -293,8 +279,6 @@ export default function DashboardPage() {
      Income: { label: 'Income', color: "hsl(var(--accent))" }, // Use accent HSL
      Expenses: { label: 'Expenses', color: "hsl(var(--destructive))" }, // Use destructive HSL
    } satisfies ChartConfig;
-
-
 
     // 3. Income/Expense Trend Chart (Line Chart - Based on ALL transactions)
     // Use theme variables for colors
@@ -358,7 +342,47 @@ export default function DashboardPage() {
          </p>
       </header>
 
-      {/* Metrics Grid (Top Section) */}
+      {/* Getting Started Section */}
+      <Card className="mb-6 shadow-md">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Lightbulb className="h-4 w-4 text-muted-foreground" /> Getting Started
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              Welcome to IFC - Guru! Here's a quick guide to get you started:
+            </p>
+            <ol className="list-decimal pl-5 space-y-2 text-sm">
+              <li>
+                <Link href="/transactions" className="text-primary hover:underline">
+                  Add your transactions
+                </Link>{" "}
+                to track your income and expenses.
+              </li>
+              <li>
+                <Link href="/debt" className="text-primary hover:underline">
+                  Manage your debts
+                </Link>{" "}
+                to create a payoff plan.
+              </li>
+              <li>
+                <Link href="/statements" className="text-primary hover:underline">
+                  Review your financial statements
+                </Link>{" "}
+                to understand your net worth and cash flow.
+              </li>
+              <li>
+                <Link href="/budget" className="text-primary hover:underline">
+                  Set a budget
+                </Link>{" "}
+                to track your spending and savings goals.
+              </li>
+            </ol>
+          </CardContent>
+        </Card>
+
+       {/* Metrics Grid (Top Section) */}
        <div className="grid gap-4 sm:gap-6 mb-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
          <Card className="lg:col-span-1">
            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -468,8 +492,8 @@ export default function DashboardPage() {
                   <div className={cn("text-2xl font-bold",
                       budgetStatus === 'no-data' && 'text-muted-foreground',
                       budgetStatus === 'on-track' && 'text-accent', // On track is good, use accent
-                      budgetStatus === 'under-budget' && 'text-accent', // Favorable, use accent
-                      budgetStatus === 'over-budget' && 'text-destructive' // Unfavorable, use destructive
+                      budgetStatus === 'under-budget' && 'text-accent',
+                      budgetStatus === 'over-budget' && 'text-destructive'
                   )}>
                       {budgetStatus !== 'no-data' ? `${budgetVariance.value! >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
                   </div>
@@ -593,9 +617,6 @@ export default function DashboardPage() {
                )}
             </CardContent>
           </Card>
-
-         {/* Removed the last row of cards */}
-
        </main>
      </div>
   );
