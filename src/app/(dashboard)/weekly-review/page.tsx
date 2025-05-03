@@ -11,7 +11,7 @@ import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore, selectTotalGoals } from '@/store/budgetStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore'; // Import the new store
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks } from 'date-fns';
-import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info } from 'lucide-react'; // Added Search, Info
+import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2 } from 'lucide-react'; // Added Loader2
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -42,11 +42,13 @@ export default function WeeklyReviewPage() {
   const totalBudgetedGoalsAmount = useBudgetStore(selectTotalGoals); // Use selector for total goal amount
 
   // Weekly Review Store
-  const { reviews, setJournalEntry, getReviewForWeek } = useWeeklyReviewStore();
+  // Destructure the setter from the store with a different name if needed, or keep it if the state setter is renamed
+  const { reviews, setJournalEntry: saveJournalEntryToStore, getReviewForWeek } = useWeeklyReviewStore();
 
   // State for the selected week
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 })); // Monday as start
-  const [journalEntry, setJournalEntry] = useState('');
+  // Rename the useState setter to avoid conflict
+  const [localJournalEntry, setLocalJournalEntry] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState(''); // State for transaction search
 
@@ -56,7 +58,7 @@ export default function WeeklyReviewPage() {
   // Effect to load journal entry when the week changes
   useEffect(() => {
     const reviewData = getReviewForWeek(currentWeekKey);
-    setJournalEntry(reviewData?.journal || '');
+    setLocalJournalEntry(reviewData?.journal || ''); // Use the renamed local setter
     setSearchTerm(''); // Reset search term when week changes
   }, [currentWeekKey, getReviewForWeek]);
 
@@ -112,7 +114,8 @@ export default function WeeklyReviewPage() {
   const handleSaveJournal = useCallback(() => {
     setIsSaving(true);
     try {
-      setJournalEntry(currentWeekKey, journalEntry);
+      // Use the setter from the store, passing the local state value
+      saveJournalEntryToStore(currentWeekKey, localJournalEntry);
       toast({ title: 'Journal Saved', description: `Review for week of ${format(currentWeekStart, 'PP')} saved.` });
     } catch (error) {
       console.error("Error saving journal:", error);
@@ -120,7 +123,7 @@ export default function WeeklyReviewPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [currentWeekKey, journalEntry, setJournalEntry, toast, currentWeekStart]);
+  }, [currentWeekKey, localJournalEntry, saveJournalEntryToStore, toast, currentWeekStart]);
 
 
   return (
@@ -276,8 +279,8 @@ export default function WeeklyReviewPage() {
                     <Label htmlFor="weekly-journal" className="sr-only">Journal Entry</Label> {/* Hide label visually */}
                     <Textarea
                         id="weekly-journal"
-                        value={journalEntry}
-                        onChange={(e) => setJournalEntry(e.target.value)}
+                        value={localJournalEntry} // Use local state variable
+                        onChange={(e) => setLocalJournalEntry(e.target.value)} // Update local state
                         placeholder="How did spending align with budget? Any goal progress? Challenges? Wins? (Ref: tx_...)"
                         className="flex-grow min-h-[200px] text-sm" // Allow textarea to grow
                     />
