@@ -19,24 +19,22 @@ const defaultStartDate = startOfMonth(defaultEndDate);
 
 // Custom Session Storage with Base64 encoding (Placeholder for encryption)
 const createSessionStorageWithEncoding = (): StateStorage => {
-  const storage = sessionStorage;
+  const storage = sessionStorage; // Use sessionStorage
   return {
     getItem: (name) => {
       const str = storage.getItem(name);
       if (!str) return null;
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const decodedStr = decode(str);
+        const decodedStr = decode(str); // Decode Base64
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
-        return null;
+        return null; // Return null if decoding fails
       }
     },
     setItem: (name, value) => {
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const encodedValue = encode(value);
+        const encodedValue = encode(value); // Encode using Base64
         storage.setItem(name, encodedValue);
       } catch (e) {
          console.error(`Failed to encode item "${name}" for sessionStorage`, e);
@@ -105,25 +103,35 @@ export const useStatementStore = create<StatementState>()(
             deleteOtherLiabilityItem: (id) => {
                 set((state) => ({ otherLiabilityItems: sortItems(state.otherLiabilityItems.filter(item => item.id !== id)) }));
             },
+            // Clear function resets item arrays. Dates might persist or be reset based on requirements.
              clearStatementItems: () => set({
                  assetItems: [],
                  otherLiabilityItems: [],
-                 // Keep dates as they are not typically "cleared" on sign-out, maybe reset?
-                 // Or handle date reset separately if needed.
-                 // startDate: defaultStartDate,
-                 // endDate: defaultEndDate,
+                 // Reset dates to default when clearing state
+                 startDate: defaultStartDate,
+                 endDate: defaultEndDate,
              }),
         }),
         {
-            name: 'ifcGuru_statementItems', // Local storage key updated
+            name: 'ifcGuru_statementItems', // Session storage key
             storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
              // Ensure items are sorted after deserialization
              deserialize: (str) => {
                 const state = JSON.parse(str);
                  // Custom deserialization to handle Dates
                  const reviver = (key: string, value: any) => {
+                   // Dates stored with __type hint are parsed back to Date objects
                    if (value && typeof value === 'object' && value.__type === 'Date') {
                      return new Date(value.value);
+                   }
+                   // Handle potential legacy ISO string dates from previous versions if needed
+                   if ((key === 'startDate' || key === 'endDate') && typeof value === 'string') {
+                     try {
+                       const parsedDate = new Date(value);
+                       if (!isNaN(parsedDate.getTime())) {
+                         return parsedDate;
+                       }
+                     } catch (e) { /* Ignore parse errors for legacy dates */ }
                    }
                    return value;
                  };
@@ -131,9 +139,10 @@ export const useStatementStore = create<StatementState>()(
                  const parsedState = JSON.parse(JSON.stringify(state.state), reviver);
                  parsedState.assetItems = sortItems(parsedState.assetItems || []);
                  parsedState.otherLiabilityItems = sortItems(parsedState.otherLiabilityItems || []);
-                 // Ensure dates are Date objects or undefined after loading
-                 parsedState.startDate = parsedState.startDate ? new Date(parsedState.startDate) : defaultStartDate;
-                 parsedState.endDate = parsedState.endDate ? new Date(parsedState.endDate) : defaultEndDate;
+                 // Ensure dates are Date objects or undefined after loading, defaulting if invalid/missing
+                 parsedState.startDate = parsedState.startDate instanceof Date && !isNaN(parsedState.startDate.getTime()) ? parsedState.startDate : defaultStartDate;
+                 parsedState.endDate = parsedState.endDate instanceof Date && !isNaN(parsedState.endDate.getTime()) ? parsedState.endDate : defaultEndDate;
+
 
                 return { ...state, state: parsedState };
             },
@@ -142,6 +151,7 @@ export const useStatementStore = create<StatementState>()(
                  // Custom serialization to handle Dates
                  const replacer = (key: string, value: any) => {
                    if (value instanceof Date) {
+                     // Store Dates with a type hint for reliable deserialization
                      return { __type: 'Date', value: value.toISOString() };
                    }
                    return value;
@@ -163,3 +173,5 @@ export const selectTotalOtherLiabilities = (state: StatementState): number =>
 // Selectors for dates (optional, but can be useful)
 export const selectStartDate = (state: StatementState): Date | undefined => state.startDate;
 export const selectEndDate = (state: StatementState): Date | undefined => state.endDate;
+
+    

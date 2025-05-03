@@ -19,24 +19,22 @@ const sortDebts = (debtList: DebtItem[]): DebtItem[] => {
 
 // Custom Session Storage with Base64 encoding (Placeholder for encryption)
 const createSessionStorageWithEncoding = (): StateStorage => {
-  const storage = sessionStorage;
+  const storage = sessionStorage; // Use sessionStorage
   return {
     getItem: (name) => {
       const str = storage.getItem(name);
       if (!str) return null;
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const decodedStr = decode(str);
+        const decodedStr = decode(str); // Decode Base64
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
-        return null;
+        return null; // Return null if decoding fails
       }
     },
     setItem: (name, value) => {
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const encodedValue = encode(value);
+        const encodedValue = encode(value); // Encode using Base64
         storage.setItem(name, encodedValue);
       } catch (e) {
          console.error(`Failed to encode item "${name}" for sessionStorage`, e);
@@ -96,14 +94,11 @@ export const useDebtStore = create<DebtState>()(
                  set((state) => ({ debts: sortDebts([...state.debts, ...newDebtsWithIds]) }));
                  return newDebtsWithIds;
             },
-            clearDebts: () => set(initialState), // Reset to initial state
-            // deleteDebtsBatch: (ids) => {
-            //     const idsSet = new Set(ids);
-            //     set((state) => ({ debts: sortDebts(state.debts.filter(d => !idsSet.has(d.id))) }));
-            // },
+            // Clear function resets the state. Called by useSyncManager.
+            clearDebts: () => set(initialState),
         }),
         {
-            name: 'ifcGuru_debts', // Local storage key updated
+            name: 'ifcGuru_debts', // Session storage key
             storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
              // Ensure debts are sorted after deserialization
              deserialize: (str) => {
@@ -120,3 +115,5 @@ export const useDebtStore = create<DebtState>()(
 // Selector for total debt
 export const selectTotalDebt = (state: DebtState): number =>
     state.debts.reduce((sum, debt) => sum + debt.principal, 0);
+
+    

@@ -19,6 +19,7 @@ interface SaveDataPayload {
 
 // Helper function to safely upsert data into a collection for a specific user
 // It deletes all existing documents for the user and inserts the new ones.
+// This ensures that data is always scoped to the correct user.
 async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[]) {
   try {
     const collection: Collection = db.collection(collectionName);
@@ -26,7 +27,7 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
     // Ensure dates are stored as BSON Date objects
     const dataWithUserId = data.map(item => ({
         ...item,
-        userId,
+        userId, // Add userId for scoping
         // Convert common date fields to Date objects if they are strings
         ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}),
     }));
@@ -37,7 +38,7 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
     try {
       await session.withTransaction(async () => {
         // Delete existing documents ONLY for the specific user within the transaction
-        await collection.deleteMany({ userId }, { session });
+        await collection.deleteMany({ userId }, { session }); // Critical: Filter by userId
         // Insert new documents for the user if data is not empty
         if (dataWithUserId.length > 0) {
           await collection.insertMany(dataWithUserId, { session });
@@ -99,7 +100,9 @@ async function saveStatementDates(db: any, userId: string, startDate?: string, e
 
 
 export async function POST(request: Request) {
-  const { userId } = auth(); // Get the authenticated user's ID
+  // Retrieve the userId using Clerk's auth() helper
+  // This is the primary mechanism for ensuring data is associated with the correct user.
+  const { userId } = auth();
 
   if (!userId) {
     // If no userId, the request is unauthorized
@@ -135,6 +138,7 @@ export async function POST(request: Request) {
     const db = client.db(); // Use the default database from the connection URI
 
     // Perform all database operations, passing the userId to each helper
+    // This ensures all data operations are scoped to the authenticated user.
     await Promise.all([
       replaceCollectionData(db, 'transactions', userId, transactions),
       replaceCollectionData(db, 'debts', userId, debts),
@@ -153,3 +157,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+
+    

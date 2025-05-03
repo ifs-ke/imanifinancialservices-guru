@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
-
+import { getISOWeek, getYear } from 'date-fns'; // Import date-fns helpers
 
 // Define the structure for a weekly review entry
 export interface WeeklyReviewData { // Export for use in API route
@@ -12,24 +12,22 @@ export interface WeeklyReviewData { // Export for use in API route
 
 // Custom Session Storage with Base64 encoding (Placeholder for encryption)
 const createSessionStorageWithEncoding = (): StateStorage => {
-  const storage = sessionStorage;
+  const storage = sessionStorage; // Use sessionStorage
   return {
     getItem: (name) => {
       const str = storage.getItem(name);
       if (!str) return null;
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const decodedStr = decode(str);
+        const decodedStr = decode(str); // Decode Base64
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
-        return null;
+        return null; // Return null if decoding fails
       }
     },
     setItem: (name, value) => {
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const encodedValue = encode(value);
+        const encodedValue = encode(value); // Encode using Base64
         storage.setItem(name, encodedValue);
       } catch (e) {
          console.error(`Failed to encode item "${name}" for sessionStorage`, e);
@@ -110,12 +108,15 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
              const newComments = { ...currentReview.transactionComments };
              delete newComments[transactionId]; // Remove the comment
 
+             // If comments object becomes empty, set it to undefined for cleaner storage
+             const updatedComments = Object.keys(newComments).length > 0 ? newComments : undefined;
+
              return {
                  reviews: {
                      ...state.reviews,
                      [weekKey]: {
                          ...currentReview,
-                         transactionComments: newComments,
+                         transactionComments: updatedComments, // Use updatedComments
                      },
                  },
              };
@@ -132,11 +133,12 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       getTransactionComment: (weekKey, transactionId) => {
           return get().reviews[weekKey]?.transactionComments?.[transactionId];
       },
-      clearReviews: () => set(initialState), // Reset to initial state
+      // Clear function resets the state. Called by useSyncManager.
+      clearReviews: () => set(initialState),
 
     }),
     {
-      name: 'ifcGuru_weeklyReviews', // Unique name for local storage
+      name: 'ifcGuru_weeklyReviews', // Unique name for session storage
       storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
       // No special serialization needed for this structure yet
        // Deserialize: Ensure reviews is at least an empty object
@@ -152,10 +154,10 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
 );
 
 // Helper function to generate the week key (YYYY-WW) - using date-fns for robustness
-import { getISOWeek, getYear } from 'date-fns';
-
 export const getWeekKey = (date: Date): string => {
   const year = getYear(date);
   const weekNumber = getISOWeek(date); // Use ISO week number
   return `${year}-${weekNumber.toString().padStart(2, '0')}`;
 };
+
+    

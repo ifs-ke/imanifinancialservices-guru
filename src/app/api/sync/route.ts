@@ -9,6 +9,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
   try {
     const collection = db.collection(collectionName);
     // Filter by userId and exclude _id and userId from the returned documents
+    // This is the core security measure for fetching data.
     const data = await collection.find({ userId }, { projection: { _id: 0, userId: 0 } }).toArray();
     return data.map((item: any) => {
         // Ensure date fields common across types are handled
@@ -49,7 +50,7 @@ async function getStatementDates(db: any, userId: string): Promise<{ startDate?:
         const collection = db.collection('userProfiles');
         // Filter by userId and project only the required date fields
         const userProfile = await collection.findOne(
-            { userId },
+            { userId }, // Filter by userId
             { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1 } }
         );
         return {
@@ -65,7 +66,10 @@ async function getStatementDates(db: any, userId: string): Promise<{ startDate?:
 
 
 export async function GET() {
-  const { userId } = auth(); // Get the authenticated user's ID
+  // Retrieve the userId using Clerk's auth() helper.
+  // This ensures that only authenticated users can access this endpoint,
+  // and we know *which* user's data to fetch.
+  const { userId } = auth();
 
   if (!userId) {
     // If no userId, the request is unauthorized
@@ -77,7 +81,7 @@ export async function GET() {
     const db = client.db(); // Use default database from connection string
 
     // Check if user has ANY data in essential collections to determine if it's a "first sync"
-    const [transactionCount, debtCount, budgetCount, profileCount] = await Promise.all([
+    const [transactionCount, debtCount, budgetCount, profileCount, reviewCount] = await Promise.all([
         db.collection('transactions').countDocuments({ userId }), // Filter by userId
         db.collection('debts').countDocuments({ userId }), // Filter by userId
         db.collection('budgetItems').countDocuments({ userId }), // Filter by userId
@@ -86,13 +90,15 @@ export async function GET() {
     ]);
 
     // If user has no data across essential collections, return 404.
-    if (transactionCount === 0 && debtCount === 0 && budgetCount === 0 && profileCount === 0 /* add other counts if needed */) {
+    // This prevents returning an empty object for a user who has never saved data.
+    if (transactionCount === 0 && debtCount === 0 && budgetCount === 0 && profileCount === 0 && reviewCount === 0) {
         console.log(`Sync: No existing data found for user ${userId}. Client should initiate save.`);
         // Return 404 specifically to indicate no data exists for this user yet
         return NextResponse.json({ message: 'No data found for user' }, { status: 404 });
     }
 
     // Fetch data specific to the authenticated user from all relevant collections
+    // The userId is passed to each helper function to ensure data is correctly scoped.
     const [
         transactions,
         debts,
@@ -127,3 +133,5 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to fetch data from database' }, { status: 500 });
   }
 }
+
+    

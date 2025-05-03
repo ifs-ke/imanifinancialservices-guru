@@ -2,8 +2,10 @@
 
 /**
  * Encodes a string using Base64.
- * NOTE: This is NOT secure encryption, just simple encoding.
- * Replace with actual encryption logic if required.
+ * NOTE: This is NOT secure encryption, just simple encoding for basic obfuscation
+ * in sessionStorage. Replace with actual encryption logic if higher security is required
+ * for data at rest in the browser (though sessionStorage is generally preferred over
+ * localStorage for sensitivity due to automatic clearing).
  */
 export function encode(str: string): string {
   try {
@@ -12,7 +14,6 @@ export function encode(str: string): string {
       return btoa(unescape(encodeURIComponent(str))); // Handle UTF-8 characters
     } else {
       // Fallback for environments without btoa (like older Node.js without installing Buffer)
-      // This is less common in modern setups but provides a basic fallback.
       // Consider using Buffer explicitly in Node.js environments: Buffer.from(str).toString('base64')
       console.warn('btoa function not available, using basic fallback (may not handle all characters).');
       return Buffer.from(str).toString('base64'); // Requires Node.js Buffer
@@ -44,3 +45,5 @@ export function decode(encodedStr: string): string {
     return encodedStr;
   }
 }
+
+    

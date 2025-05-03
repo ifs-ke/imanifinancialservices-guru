@@ -1,6 +1,9 @@
 // src/lib/mongodb.ts
 import { MongoClient, ServerApiVersion } from 'mongodb';
 
+// Load the MongoDB URI from environment variables.
+// Security: Ensure MONGODB_URI is set in your deployment environment and not hardcoded.
+// It should contain credentials and be kept secret.
 const uri = process.env.MONGODB_URI;
 
 if (!uri) {
@@ -11,6 +14,7 @@ if (!uri) {
       // In a build step, you might want to throw an error:
       // throw new Error('Please define the MONGODB_URI environment variable inside .env');
   }
+  // It's generally better to let the connection attempt fail later than to throw here during runtime requests.
 }
 
 // Define MongoClientOptions with specific settings
@@ -36,13 +40,16 @@ let clientPromise: Promise<MongoClient> | null = null;
  * Handles connection logic for both development (with HMR) and production.
  * Includes basic error handling for the initial connection attempt.
  *
+ * Security: This function itself doesn't handle authentication/authorization beyond
+ * what's in the connection string. It's the responsibility of the calling code
+ * (API routes, server actions) to ensure data access is properly scoped per user.
+ *
  * @returns A Promise resolving to the connected MongoClient instance.
  * @throws An error if the MONGODB_URI is not defined or if the connection fails.
  */
 const connectToDatabase = async (): Promise<MongoClient> => {
    if (!uri) {
-       // It's better to throw this error here if the URI is definitively missing at runtime
-       // Or handle it gracefully in the API routes/hooks that call this function.
+       // Throwing here ensures the application fails fast if the URI is missing at runtime.
        throw new Error('MongoDB URI is not configured. Please set the MONGODB_URI environment variable.');
    }
 
@@ -84,8 +91,7 @@ const connectToDatabase = async (): Promise<MongoClient> => {
   try {
     // Wait for the connection promise to resolve
     const connectedClient = await clientPromise;
-    // Optional: Send a ping to confirm connection only on first connect?
-    // This adds latency, might be better to rely on successful operation calls.
+    // Optional: Ping check can be removed if causing latency issues.
     // await connectedClient.db("admin").command({ ping: 1 });
     // console.log("MongoDB: Connection successful.");
     return connectedClient;
@@ -101,3 +107,5 @@ const connectToDatabase = async (): Promise<MongoClient> => {
 };
 
 export default connectToDatabase;
+
+    

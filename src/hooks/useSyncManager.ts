@@ -58,6 +58,7 @@ export function useSyncManager() {
      clearBudgetItems();
      clearReviews();
      // Explicitly remove persisted state from sessionStorage
+     // This is crucial for ensuring no data leaks between users on the same browser
      sessionStorage.removeItem('ifcGuru_transactions');
      sessionStorage.removeItem('ifcGuru_debts');
      sessionStorage.removeItem('ifcGuru_statementItems');
@@ -258,7 +259,7 @@ export function useSyncManager() {
     if (isSignedIn && currentUserId) {
         if (prevUserId === undefined || currentUserId !== prevUserId) {
             // User signed in OR changed user
-            console.log(`User signed in or changed (${prevUserId} -> ${currentUserId}). Clearing local state and fetching new data.`);
+            console.log(`User signed in or changed (${prevUserId ?? 'none'} -> ${currentUserId}). Clearing local state and fetching new data.`);
             clearLocalState(); // Clear any previous user's state FIRST
             initialFetchAttempted.current = false; // Reset fetch attempt for the new user
             fetchDataFromDB(); // Fetch data for the new user
@@ -267,12 +268,13 @@ export function useSyncManager() {
              console.log("User already signed in, attempting initial fetch...");
              fetchDataFromDB();
         }
-    } else if (!isSignedIn && prevUserId !== null && prevUserId !== undefined) {
+    } else if (!isSignedIn && (prevUserId !== null && prevUserId !== undefined)) {
         // User signed out
         console.log("User signed out. Clearing local state.");
         clearLocalState();
     } else if (!isSignedIn) {
         // Initial load state, not signed in
+        console.log("Initial load: Not signed in. Setting status to local.");
         setSyncStatus('local');
         previousUserIdRef.current = null; // Explicitly set to null when not signed in
     }
@@ -288,6 +290,7 @@ export function useSyncManager() {
    useEffect(() => {
        // Only save if signed in, fetch is complete, and not currently syncing/saving
        if (!isSignedIn || !userId || !initialFetchAttempted.current || isSyncing || isSavingRef.current) {
+           // console.log("Save Subscription: Skipping due to conditions:", { isSignedIn, userId, initialFetchAttempted: initialFetchAttempted.current, isSyncing, isSavingRef: isSavingRef.current });
            return;
        }
 
@@ -296,33 +299,53 @@ export function useSyncManager() {
        const unsubscribes = [
            useTransactionsStore.subscribe((currentState, prevState) => {
                // Avoid triggering save immediately after hydration/fetch by checking isHydrated
-               if (useTransactionsStore.getState().isHydrated && currentState !== prevState) {
+               // Also check if the actual transaction list has changed
+               if (useTransactionsStore.getState().isHydrated && currentState.transactions !== prevState.transactions) {
                    console.log("Transaction store changed, triggering save...");
+                   setSyncStatus('local'); // Indicate data is local before save attempt
                    debouncedSave().catch(err => console.error("Save failed after transaction change:", err));
                }
            }),
-           useDebtStore.subscribe(() => {
-                console.log("Debt store changed, triggering save...");
-                debouncedSave().catch(err => console.error("Save failed after debt change:", err));
-            }),
-           useStatementStore.subscribe(() => {
-                console.log("Statement store changed, triggering save...");
-                debouncedSave().catch(err => console.error("Save failed after statement change:", err));
-            }),
-           useBudgetStore.subscribe(() => {
-                console.log("Budget store changed, triggering save...");
-                debouncedSave().catch(err => console.error("Save failed after budget change:", err));
-            }),
-           useWeeklyReviewStore.subscribe(() => {
-                console.log("Weekly review store changed, triggering save...");
-                debouncedSave().catch(err => console.error("Save failed after weekly review change:", err));
-            }),
+           useDebtStore.subscribe((currentState, prevState) => {
+               if (currentState.debts !== prevState.debts) {
+                 console.log("Debt store changed, triggering save...");
+                 setSyncStatus('local');
+                 debouncedSave().catch(err => console.error("Save failed after debt change:", err));
+               }
+           }),
+           useStatementStore.subscribe((currentState, prevState) => {
+                // Check individual relevant fields in statement store
+               if (currentState.assetItems !== prevState.assetItems ||
+                   currentState.otherLiabilityItems !== prevState.otherLiabilityItems ||
+                   currentState.startDate !== prevState.startDate ||
+                   currentState.endDate !== prevState.endDate) {
+                   console.log("Statement store changed, triggering save...");
+                   setSyncStatus('local');
+                   debouncedSave().catch(err => console.error("Save failed after statement change:", err));
+               }
+           }),
+           useBudgetStore.subscribe((currentState, prevState) => {
+               if (currentState.budgetItems !== prevState.budgetItems) {
+                 console.log("Budget store changed, triggering save...");
+                 setSyncStatus('local');
+                 debouncedSave().catch(err => console.error("Save failed after budget change:", err));
+               }
+           }),
+           useWeeklyReviewStore.subscribe((currentState, prevState) => {
+                if (currentState.reviews !== prevState.reviews) {
+                    console.log("Weekly review store changed, triggering save...");
+                    setSyncStatus('local');
+                    debouncedSave().catch(err => console.error("Save failed after weekly review change:", err));
+                }
+           }),
        ];
 
        return () => {
            console.log("Unsubscribing from store changes.");
            unsubscribes.forEach(unsub => unsub());
        };
+   // Only depend on necessary values to avoid re-subscribing too often
+   // eslint-disable-next-line react-hooks/exhaustive-deps
    }, [isSignedIn, userId, debouncedSave, initialFetchAttempted, isSyncing]);
 
 
@@ -346,3 +369,5 @@ export function useSyncManager() {
   // Return sync status and the retry function
   return { syncStatus, retrySync };
 }
+
+    

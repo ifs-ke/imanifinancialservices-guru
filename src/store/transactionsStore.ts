@@ -22,25 +22,27 @@ const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
 };
 
 // Custom Session Storage with Base64 encoding (Placeholder for encryption)
+// Security Note: Base64 is encoding, not encryption. For true confidentiality,
+// implement actual encryption/decryption here if sensitive data is stored locally
+// long-term. However, since this uses sessionStorage, the data is cleared
+// automatically when the browser session ends, reducing the window of exposure.
 const createSessionStorageWithEncoding = (): StateStorage => {
-  const storage = sessionStorage;
+  const storage = sessionStorage; // Use sessionStorage
   return {
     getItem: (name) => {
       const str = storage.getItem(name);
       if (!str) return null;
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const decodedStr = decode(str);
+        const decodedStr = decode(str); // Decode Base64
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
-        return null;
+        return null; // Return null if decoding fails
       }
     },
     setItem: (name, value) => {
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const encodedValue = encode(value);
+        const encodedValue = encode(value); // Encode using Base64
         storage.setItem(name, encodedValue);
       } catch (e) {
          console.error(`Failed to encode item "${name}" for sessionStorage`, e);
@@ -112,14 +114,11 @@ export const useTransactionsStore = create<TransactionsState>()(
                  set((state) => ({ transactions: sortTransactions([...state.transactions, ...newTransactionsWithIds]) }));
                  return newTransactionsWithIds;
             },
-            clearTransactions: () => set({ ...initialState, isHydrated: true }), // Reset to initial state, but keep hydrated flag
-            // deleteTransactionsBatch: (ids) => {
-            //     const idsSet = new Set(ids);
-            //     set((state) => ({ transactions: sortTransactions(state.transactions.filter(d => !idsSet.has(d.id))) }));
-            // },
+            // Clear function resets the state. This is called by useSyncManager on sign-out/user change.
+            clearTransactions: () => set({ ...initialState, isHydrated: true }), // Reset to initial state, keep hydrated
         }),
         {
-            name: 'ifcGuru_transactions', // Local storage key updated
+            name: 'ifcGuru_transactions', // Session storage key
             // Use custom sessionStorage with encoding
             storage: createJSONStorage(() => createSessionStorageWithEncoding()),
             // Custom hydration logic
@@ -137,7 +136,9 @@ export const useTransactionsStore = create<TransactionsState>()(
                    }
                    return value;
                  };
-                 return JSON.stringify({ ...state, state: JSON.parse(JSON.stringify(state.state, replacer)) });
+                 // Remove isHydrated before saving to storage
+                 const { isHydrated, ...stateToSave } = state.state;
+                 return JSON.stringify({ ...state, state: JSON.parse(JSON.stringify(stateToSave, replacer)) });
              },
              deserialize: (str) => {
                 const state = JSON.parse(str);
@@ -154,6 +155,8 @@ export const useTransactionsStore = create<TransactionsState>()(
                 parsedState.isHydrated = true; // Mark as hydrated after loading
                 return { ...state, state: parsedState };
             },
+             // Skip hydration if needed (e.g., handled by sync manager)
+             // skipHydration: true,
         }
     )
 );
@@ -170,3 +173,5 @@ export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+    

@@ -30,24 +30,22 @@ const sumByCategory = (items: BudgetItem[], category: BudgetItemCategory): numbe
 
 // Custom Session Storage with Base64 encoding (Placeholder for encryption)
 const createSessionStorageWithEncoding = (): StateStorage => {
-  const storage = sessionStorage;
+  const storage = sessionStorage; // Use sessionStorage
   return {
     getItem: (name) => {
       const str = storage.getItem(name);
       if (!str) return null;
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const decodedStr = decode(str);
+        const decodedStr = decode(str); // Decode Base64
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
-        return null;
+        return null; // Return null if decoding fails
       }
     },
     setItem: (name, value) => {
-      // IMPORTANT: This is Base64 encoding, NOT real encryption.
       try {
-        const encodedValue = encode(value);
+        const encodedValue = encode(value); // Encode using Base64
         storage.setItem(name, encodedValue);
       } catch (e) {
          console.error(`Failed to encode item "${name}" for sessionStorage`, e);
@@ -97,10 +95,11 @@ export const useBudgetStore = create<BudgetState>()(
             deleteBudgetItem: (id) => {
                 set((state) => ({ budgetItems: sortBudgetItems(state.budgetItems.filter(item => item.id !== id)) }));
             },
-            clearBudgetItems: () => set(initialState), // Reset to initial state
+            // Clear function resets the state. Called by useSyncManager.
+            clearBudgetItems: () => set(initialState),
         }),
         {
-            name: 'ifcGuru_budgetItems', // Local storage key updated
+            name: 'ifcGuru_budgetItems', // Session storage key
             storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
             // Ensure items are sorted after deserialization
             deserialize: (str) => {
@@ -132,3 +131,5 @@ export const selectTotalBudgetedExpenses = (state: BudgetState): number =>
 
 export const selectNetBudgeted = (state: BudgetState): number =>
     selectTotalBudgetedIncome(state) - selectTotalBudgetedExpenses(state) - selectTotalGoals(state);
+
+    
