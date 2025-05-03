@@ -297,7 +297,7 @@ export default function DashboardPage() {
          month: { label: "Month" },
      } satisfies ChartConfig
 
-  // Removed the reference to the non-existent `BudgetPage` component
+
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 bg-background">
       <header className="mb-6">
@@ -557,3 +557,5 @@ export default function DashboardPage() {
      </div>
   );
 }
+
+    
