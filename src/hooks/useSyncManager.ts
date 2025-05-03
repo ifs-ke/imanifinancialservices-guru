@@ -59,7 +59,7 @@ export function useSyncManager() {
   const [gettingStartedDismissed, setGettingStartedDismissed] = useState(false);
 
 
-  // --- Clear Local State Function ---
+   // --- Clear Local State Function ---
    const clearLocalState = useCallback(() => {
      console.log("Clearing local state (session storage)...");
      // Clear Zustand stores first to avoid re-persisting immediately
@@ -226,7 +226,7 @@ export function useSyncManager() {
               return;
           } else if (response.status === 404) {
                console.warn("Fetch: No cloud data found for user (after initial attempt/login). Ensuring clean local state.");
-               clearLocalState(); // Clear local state if no cloud data exists after initial checks
+               clearLocalState();
                setSyncStatus('local'); // Set status to local as there's nothing to sync *from*
                initialFetchAttempted.current = true;
                // Toast might be annoying here if it's just a new user
@@ -418,3 +418,4 @@ export function useSyncManager() {
 
   return { syncStatus, retrySync, gettingStartedDismissed, setGettingStartedDismissed };
 }
+
