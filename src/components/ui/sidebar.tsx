@@ -271,15 +271,15 @@ const Sidebar = React.forwardRef<
 )
 Sidebar.displayName = "Sidebar"
 
+// Updated SidebarTrigger to remove children prop and render icon directly
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button> & { asChild?: boolean } // Add asChild here
->(({ className, onClick, children, asChild, ...props }, ref) => {
+  Omit<React.ComponentProps<typeof Button>, "children"> // Removed children from props
+>(({ className, onClick, ...props }, ref) => {
   const { toggleSidebar, state, isMobile } = useSidebar() // Get state and isMobile
-  const Comp = asChild ? Slot : Button; // Use Slot if asChild is true
 
   return (
-     <Comp
+     <Button
         ref={ref}
         data-sidebar="trigger"
         variant="ghost"
@@ -291,13 +291,10 @@ const SidebarTrigger = React.forwardRef<
         }}
         {...props}
      >
-        {/* Allow children override, default to PanelLeft/Menu */}
-        {children ?? (
-             // Use Menu icon for mobile toggle or when sidebar is collapsed on desktop
-            (isMobile || state === 'collapsed') ? <Menu className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />
-        )}
+         {/* Use Menu icon for mobile toggle or when sidebar is collapsed on desktop */}
+         {(isMobile || state === 'collapsed') ? <Menu className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
         <span className="sr-only">Toggle Sidebar</span>
-    </Comp>
+    </Button>
   )
 })
 SidebarTrigger.displayName = "SidebarTrigger"
@@ -634,7 +631,7 @@ const SidebarMenuAction = React.forwardRef<
       ref={ref}
       data-sidebar="menu-action"
       className={cn(
-        "absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
+        "absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[active=true]/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
         // Increases the hit area of the button on mobile.
         "after:absolute after:-inset-2 after:md:hidden",
         "peer-data-[size=sm]/menu-button:top-1",

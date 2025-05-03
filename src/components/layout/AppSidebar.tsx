@@ -112,12 +112,8 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) { // Rece
             </Link>
          </div>
 
-        {/* Single Hamburger menu trigger */}
-        <SidebarTrigger asChild>
-             <Button variant="ghost" size="icon" className="h-7 w-7">
-                 {/* Icon handled internally by SidebarTrigger based on state */}
-             </Button>
-        </SidebarTrigger>
+        {/* Single Hamburger menu trigger - Removed asChild and nested Button */}
+        <SidebarTrigger className="h-7 w-7" />
       </SidebarHeader>
       <SidebarContent className="flex-1 overflow-y-auto p-2">
         <SidebarMenu>
