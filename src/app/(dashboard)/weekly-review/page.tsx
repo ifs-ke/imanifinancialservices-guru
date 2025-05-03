@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/weekly-review/page.tsx
 'use client';
 
@@ -5,19 +6,19 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input'; // Import Input for search
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { useTransactionsStore } from '@/store/transactionsStore';
-import { useBudgetStore, selectTotalGoals } from '@/store/budgetStore';
-import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore'; // Import the new store
+import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore'; // Import the updated store
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks } from 'date-fns';
-import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2 } from 'lucide-react'; // Added Loader2
+import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle } from 'lucide-react'; // Added comment/edit icons
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+
 
 // Formatting Functions
 const formatCurrency = (amount: number) => {
@@ -38,29 +39,29 @@ const formatDate = (date: Date | string) => {
 export default function WeeklyReviewPage() {
   const { toast } = useToast();
   const transactions = useTransactionsStore((state) => state.transactions);
-  const budgetGoals = useBudgetStore((state) => state.budgetItems.filter(item => item.category === 'goal'));
-  const totalBudgetedGoalsAmount = useBudgetStore(selectTotalGoals); // Use selector for total goal amount
 
-  // Weekly Review Store
-  // Destructure the setter from the store with a different name if needed, or keep it if the state setter is renamed
-  const { reviews, setJournalEntry: saveJournalEntryToStore, getReviewForWeek } = useWeeklyReviewStore();
+  // Weekly Review Store - Including new comment actions
+  const { reviews, setJournalEntry, getReviewForWeek, setTransactionComment, deleteTransactionComment, getTransactionComment } = useWeeklyReviewStore();
 
   // State for the selected week
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 })); // Monday as start
-  // Rename the useState setter to avoid conflict
-  const [localJournalEntry, setLocalJournalEntry] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState(''); // State for transaction search
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null); // Track which transaction comment is being edited
+  const [currentCommentText, setCurrentCommentText] = useState(''); // Hold the text of the comment being edited
+  const [commentToDelete, setCommentToDelete] = useState<{ weekKey: string, transactionId: string } | null>(null); // Track comment to delete
 
   const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
   const currentWeekKey = useMemo(() => getWeekKey(currentWeekStart), [currentWeekStart]);
 
-  // Effect to load journal entry when the week changes
+  // Effect to reset state when the week changes
   useEffect(() => {
-    const reviewData = getReviewForWeek(currentWeekKey);
-    setLocalJournalEntry(reviewData?.journal || ''); // Use the renamed local setter
-    setSearchTerm(''); // Reset search term when week changes
-  }, [currentWeekKey, getReviewForWeek]);
+    setSearchTerm('');
+    setEditingCommentId(null);
+    setCurrentCommentText('');
+    setCommentToDelete(null);
+    // Note: Journal is handled separately if kept
+  }, [currentWeekKey]);
 
   // Filter transactions for the selected week AND apply search term
   const weeklyTransactions = useMemo(() => {
@@ -84,18 +85,6 @@ export default function WeeklyReviewPage() {
          });
   }, [transactions, currentWeekStart, currentWeekEnd, searchTerm]); // Add searchTerm dependency
 
-  // Calculate weekly summary (based on ALL weekly transactions, not filtered ones)
-  const weeklySummary = useMemo(() => {
-     const allWeeklyTxs = transactions.filter((tx) => {
-         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
-         return !isNaN(txDate.getTime()) && txDate >= currentWeekStart && txDate <= currentWeekEnd;
-       });
-    const income = allWeeklyTxs.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-    const expenses = allWeeklyTxs.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-    const netFlow = income - expenses;
-    return { income, expenses, netFlow };
-  }, [transactions, currentWeekStart, currentWeekEnd]);
-
   // Handlers for week navigation
   const goToPreviousWeek = () => {
     setCurrentWeekStart(subWeeks(currentWeekStart, 1));
@@ -110,40 +99,70 @@ export default function WeeklyReviewPage() {
     }
   };
 
-  // Handler for saving journal entry
-  const handleSaveJournal = useCallback(() => {
-    setIsSaving(true);
-    try {
-      // Use the setter from the store, passing the local state value
-      saveJournalEntryToStore(currentWeekKey, localJournalEntry);
-      toast({ title: 'Journal Saved', description: `Review for week of ${format(currentWeekStart, 'PP')} saved.` });
-    } catch (error) {
-      console.error("Error saving journal:", error);
-      toast({ title: 'Save Failed', description: 'Could not save journal entry.', variant: 'destructive' });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [currentWeekKey, localJournalEntry, saveJournalEntryToStore, toast, currentWeekStart]);
+  // --- Comment Handlers ---
 
+  const handleEditCommentClick = (transactionId: string) => {
+      setEditingCommentId(transactionId);
+      setCurrentCommentText(getTransactionComment(currentWeekKey, transactionId) || '');
+  };
+
+  const handleCancelEditComment = () => {
+      setEditingCommentId(null);
+      setCurrentCommentText('');
+  };
+
+  const handleSaveComment = (transactionId: string) => {
+      setIsSaving(true); // Use general saving state or create a specific one
+      try {
+          setTransactionComment(currentWeekKey, transactionId, currentCommentText.trim());
+          toast({ title: 'Comment Saved', description: 'Transaction comment updated.' });
+          handleCancelEditComment(); // Exit edit mode
+      } catch (error) {
+          console.error("Error saving comment:", error);
+          toast({ title: 'Save Failed', description: 'Could not save comment.', variant: 'destructive' });
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
+  const handleDeleteCommentClick = (transactionId: string) => {
+      setCommentToDelete({ weekKey: currentWeekKey, transactionId });
+  };
+
+  const confirmDeleteComment = () => {
+      if (!commentToDelete) return;
+      try {
+          deleteTransactionComment(commentToDelete.weekKey, commentToDelete.transactionId);
+          toast({ title: 'Comment Deleted', description: 'Transaction comment removed.' });
+          setCommentToDelete(null); // Close dialog
+          if (editingCommentId === commentToDelete.transactionId) {
+              handleCancelEditComment(); // Cancel edit if deleting the currently edited comment
+          }
+      } catch (error) {
+          console.error("Error deleting comment:", error);
+          toast({ title: 'Delete Failed', description: 'Could not delete comment.', variant: 'destructive' });
+          setCommentToDelete(null); // Close dialog even on error
+      }
+  };
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <CalendarCheck className="h-6 w-6 text-primary" /> Weekly Financial Review
+            <CalendarCheck className="h-6 w-6 text-primary" /> Weekly Review & Comments
           </h1>
-          <p className="text-muted-foreground">
-            Reflect on your financial activity and progress for the week.
+          <p className="text-muted-foreground text-sm mt-1">
+            Review and comment on transactions for the selected week.
           </p>
         </div>
          {/* Week Navigation */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
            <Button variant="outline" size="icon" onClick={goToPreviousWeek} className="h-8 w-8">
              <ChevronLeft className="h-4 w-4" />
              <span className="sr-only">Previous Week</span>
            </Button>
-           <span className="text-sm font-medium w-48 text-center">
+           <span className="text-sm font-medium w-40 text-center"> {/* Adjusted width */}
              {format(currentWeekStart, 'MMM d')} - {format(currentWeekEnd, 'MMM d, yyyy')}
            </span>
            <Button variant="outline" size="icon" onClick={goToNextWeek} className="h-8 w-8" disabled={currentWeekEnd >= startOfWeek(new Date(), { weekStartsOn: 1 })}>
@@ -153,145 +172,154 @@ export default function WeeklyReviewPage() {
          </div>
       </header>
 
-      <main className="grid gap-6 lg:grid-cols-2">
-        {/* Left Column: Weekly Summary & Transactions */}
-        <div className="space-y-6">
-            {/* Weekly Summary Card */}
-            <Card>
-                 <CardHeader>
-                    <CardTitle>Weekly Summary</CardTitle>
-                    <CardDescription>Overview of your income and expenses for this week.</CardDescription>
-                 </CardHeader>
-                 <CardContent className="grid grid-cols-3 gap-4 text-sm">
-                     <div className="flex flex-col p-3 rounded-md border bg-accent/10">
-                        <span className="text-muted-foreground mb-1">Income</span>
-                        <span className="font-bold text-lg font-mono text-accent">{formatCurrency(weeklySummary.income)}</span>
-                    </div>
-                     <div className="flex flex-col p-3 rounded-md border bg-destructive/10">
-                        <span className="text-muted-foreground mb-1">Expenses</span>
-                        <span className="font-bold text-lg font-mono text-destructive">{formatCurrency(weeklySummary.expenses)}</span>
-                    </div>
-                     <div className="flex flex-col p-3 rounded-md border bg-muted">
-                        <span className="text-muted-foreground mb-1">Net Flow</span>
-                        <span className={cn("font-bold text-lg font-mono", weeklySummary.netFlow >= 0 ? 'text-accent' : 'text-destructive')}>
-                            {formatCurrency(weeklySummary.netFlow)}
-                        </span>
-                    </div>
-                 </CardContent>
-            </Card>
+      {/* Search and Filter Component */}
+       <Card>
+         <CardHeader className="p-4 border-b">
+           <CardTitle className="text-base font-semibold">Filter Transactions</CardTitle>
+           <CardDescription className="text-xs">Search by description or amount.</CardDescription>
+         </CardHeader>
+         <CardContent className="p-4">
+           <div className="relative">
+             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+             <Input
+               type="search"
+               placeholder="Search this week's transactions..."
+               value={searchTerm}
+               onChange={(e) => setSearchTerm(e.target.value)}
+               className="pl-8 h-9 w-full"
+             />
+           </div>
+           {/* Future: Add more filters here (e.g., income/expense, category) */}
+         </CardContent>
+       </Card>
 
-             {/* Weekly Transactions Card */}
-             <Card className="flex flex-col">
-                <CardHeader>
-                    <CardTitle>Weekly Transactions</CardTitle>
-                     {/* Search Input */}
-                     <div className="relative mt-2">
-                         <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                         <Input
-                             type="search"
-                             placeholder="Search transactions..."
-                             value={searchTerm}
-                             onChange={(e) => setSearchTerm(e.target.value)}
-                             className="pl-8 h-8 w-full sm:w-64" // Adjust width as needed
-                         />
-                     </div>
-                    <CardDescription className='pt-2'>Transactions recorded this week. Search by description or amount.</CardDescription>
-                 </CardHeader>
-                 <CardContent className="flex-grow p-0">
-                    <ScrollArea className="h-[350px] w-full"> {/* Adjusted height */}
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[100px]">Date</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead className="w-[100px]">ID (Ref)</TableHead>
-                                    <TableHead className="text-right">Amount (KES)</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {weeklyTransactions.length > 0 ? (
-                                    weeklyTransactions.map((tx) => (
-                                        <TableRow key={tx.id}>
-                                            <TableCell>{formatDate(tx.date)}</TableCell>
-                                            <TableCell className="max-w-[180px] truncate" title={tx.description}>{tx.description}</TableCell>
-                                             {/* Display Transaction ID */}
-                                             <TableCell className="text-xs text-muted-foreground font-mono max-w-[80px] truncate" title={tx.id}>
-                                                 {tx.id.split('_')[1]} {/* Show part of ID */}
-                                             </TableCell>
-                                             <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
-                                                {formatCurrency(tx.amount)}
-                                            </TableCell>
-                                         </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                                             {searchTerm ? 'No transactions match your search.' : 'No transactions recorded for this week.'}
-                                         </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </ScrollArea>
-                 </CardContent>
-             </Card>
-        </div>
 
-        {/* Right Column: Goals & Journal */}
-        <div className="space-y-6">
-            {/* Financial Goals Card */}
-             <Card>
-                <CardHeader>
-                    <CardTitle>Financial Goals</CardTitle>
-                    <CardDescription>Your current financial goals from the budget.</CardDescription>
-                </CardHeader>
-                 <CardContent>
-                    {budgetGoals.length > 0 ? (
-                        <ul className="space-y-2 text-sm">
-                            {budgetGoals.map(goal => (
-                                <li key={goal.id} className="flex justify-between items-center border-b pb-1">
-                                    <span>{goal.description}</span>
-                                    <Badge variant="secondary">{formatCurrency(goal.amount)}</Badge>
-                                </li>
-                            ))}
-                             <li className="flex justify-between items-center pt-2 font-semibold border-t mt-2">
-                                <span>Total Budgeted for Goals</span>
-                                <span>{formatCurrency(totalBudgetedGoalsAmount)}</span>
-                             </li>
-                         </ul>
-                    ) : (
-                         <p className="text-muted-foreground text-center py-4">No financial goals set in the budget yet.</p>
-                    )}
-                </CardContent>
-            </Card>
+      <main className="flex-1">
+        {/* Transactions Table with Comments */}
+        <Card className="flex flex-col">
+           <CardHeader className="p-4 border-b">
+              <CardTitle className="text-lg">Transactions & Comments</CardTitle>
+              <CardDescription className="text-sm">Review transactions and add comments.</CardDescription>
+           </CardHeader>
+           <CardContent className="flex-grow p-0">
+              <ScrollArea className="h-[calc(100vh-400px)] w-full"> {/* Dynamic height */}
+                  <Table>
+                      <TableHeader className="sticky top-0 bg-background z-10">
+                          <TableRow>
+                              <TableHead className="w-[50px]"></TableHead> {/* Checkbox Placeholder - removed checkbox for now */}
+                              <TableHead className="w-[100px]">Date</TableHead>
+                              <TableHead className="w-[90px]">ID (Ref)</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead className="text-right">Amount (KES)</TableHead>
+                              <TableHead>Comment / Actions</TableHead> {/* Combined Comment/Actions */}
+                          </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                          {weeklyTransactions.length > 0 ? (
+                              weeklyTransactions.map((tx) => {
+                                  const existingComment = getTransactionComment(currentWeekKey, tx.id);
+                                  const isEditingThis = editingCommentId === tx.id;
 
-            {/* Journal Card */}
-             <Card className="flex flex-col">
-                <CardHeader>
-                    <CardTitle>Weekly Journal</CardTitle>
-                     {/* Updated Description */}
-                     <CardDescription className="flex items-start gap-1 text-xs pt-1">
-                        <Info size={16} className="text-muted-foreground flex-shrink-0 mt-0.5"/>
-                         Reflect on spending, savings, and goal progress. You can reference specific transactions using their ID (e.g., "Discussing tx_12345...").
-                     </CardDescription>
-                </CardHeader>
-                 <CardContent className="flex-grow flex flex-col gap-2">
-                    <Label htmlFor="weekly-journal" className="sr-only">Journal Entry</Label> {/* Hide label visually */}
-                    <Textarea
-                        id="weekly-journal"
-                        value={localJournalEntry} // Use local state variable
-                        onChange={(e) => setLocalJournalEntry(e.target.value)} // Update local state
-                        placeholder="How did spending align with budget? Any goal progress? Challenges? Wins? (Ref: tx_...)"
-                        className="flex-grow min-h-[200px] text-sm" // Allow textarea to grow
-                    />
-                     <Button onClick={handleSaveJournal} disabled={isSaving} className="mt-2 w-full sm:w-auto self-end">
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        {isSaving ? 'Saving...' : 'Save Journal'}
-                     </Button>
-                 </CardContent>
-             </Card>
-        </div>
+                                  return (
+                                      <TableRow key={tx.id}>
+                                          <TableCell className="text-center">
+                                                {/* Placeholder or icon to indicate comment status */}
+                                                {existingComment ? (
+                                                    <MessageSquareText size={16} className="text-muted-foreground mx-auto" title="Has comment"/>
+                                                ) : (
+                                                     <MessageSquarePlus size={16} className="text-muted-foreground/50 mx-auto" title="No comment"/>
+                                                )}
+                                           </TableCell>
+                                          <TableCell className="text-xs">{formatDate(tx.date)}</TableCell>
+                                          <TableCell className="text-xs text-muted-foreground font-mono max-w-[70px] truncate" title={tx.id}>
+                                             {tx.id.substring(tx.id.length - 6)} {/* Show last 6 chars of ID */}
+                                          </TableCell>
+                                          <TableCell className="max-w-[200px] truncate" title={tx.description}>{tx.description}</TableCell>
+                                          <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
+                                              {formatCurrency(tx.amount)}
+                                          </TableCell>
+                                          <TableCell className="min-w-[250px]"> {/* Ensure enough space */}
+                                                {isEditingThis ? (
+                                                    // Edit Comment Form
+                                                    <div className="flex items-center gap-2">
+                                                        <Textarea
+                                                            value={currentCommentText}
+                                                            onChange={(e) => setCurrentCommentText(e.target.value)}
+                                                            placeholder="Add your comment..."
+                                                            rows={1}
+                                                            className="text-xs flex-grow min-h-[36px] max-h-[100px]" // Smaller textarea
+                                                            />
+                                                         <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" onClick={() => handleSaveComment(tx.id)} disabled={isSaving}>
+                                                             <Save className="h-4 w-4" />
+                                                         </Button>
+                                                         <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0" onClick={handleCancelEditComment}>
+                                                             <XCircle className="h-4 w-4" />
+                                                         </Button>
+                                                     </div>
+                                                ) : (
+                                                    // Display Comment & Action Buttons
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <p className={cn("text-xs flex-grow truncate", !existingComment && "italic text-muted-foreground/70")} title={existingComment}>
+                                                            {existingComment || 'No comment yet...'}
+                                                        </p>
+                                                         <div className="flex items-center flex-shrink-0">
+                                                             {/* Edit Button */}
+                                                             <Button variant="ghost" size="icon" className="mr-1 h-6 w-6" onClick={() => handleEditCommentClick(tx.id)}>
+                                                                <Edit className="h-3 w-3" />
+                                                                <span className="sr-only">Edit Comment</span>
+                                                            </Button>
+                                                             {/* Delete Button (only if comment exists) */}
+                                                            {existingComment && (
+                                                                <AlertDialog open={commentToDelete?.transactionId === tx.id && commentToDelete?.weekKey === currentWeekKey} onOpenChange={(open) => !open && setCommentToDelete(null)}>
+                                                                     <AlertDialogTrigger asChild>
+                                                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteCommentClick(tx.id)}>
+                                                                             <Trash2 className="h-3 w-3" />
+                                                                             <span className="sr-only">Delete Comment</span>
+                                                                         </Button>
+                                                                     </AlertDialogTrigger>
+                                                                    <AlertDialogContent>
+                                                                        {commentToDelete && commentToDelete.transactionId === tx.id && commentToDelete.weekKey === currentWeekKey && (
+                                                                           <>
+                                                                            <AlertDialogHeader>
+                                                                                <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                                                                                <AlertDialogDescription>
+                                                                                     Are you sure you want to delete the comment for transaction: <br/>
+                                                                                     <strong>{tx.description} ({formatCurrency(tx.amount)})</strong>? <br/> This action cannot be undone.
+                                                                                </AlertDialogDescription>
+                                                                            </AlertDialogHeader>
+                                                                            <AlertDialogFooter>
+                                                                                <AlertDialogCancel onClick={() => setCommentToDelete(null)}>Cancel</AlertDialogCancel>
+                                                                                <AlertDialogAction onClick={confirmDeleteComment}>Delete</AlertDialogAction>
+                                                                            </AlertDialogFooter>
+                                                                           </>
+                                                                        )}
+                                                                    </AlertDialogContent>
+                                                                 </AlertDialog>
+                                                             )}
+                                                         </div>
+                                                     </div>
+                                                )}
+                                          </TableCell>
+                                      </TableRow>
+                                  );
+                              })
+                          ) : (
+                              <TableRow>
+                                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                      {searchTerm ? 'No transactions match your search for this week.' : 'No transactions recorded for this week.'}
+                                  </TableCell>
+                              </TableRow>
+                          )}
+                      </TableBody>
+                  </Table>
+              </ScrollArea>
+           </CardContent>
+         </Card>
       </main>
+
+      {/* Removed Journal Section */}
     </div>
   );
 }
+
+```
