@@ -43,8 +43,12 @@ const menuItems = [
   { href: '/budget', label: 'Budget', icon: PieChart },
 ];
 
-// Placeholder state - replace with actual logic for persistence status
-const isSynced = false; // Example: Change to true if synced with DB
+// Indicate persistence status (currently only local)
+const isSynced = false; // Always false as there's no actual cloud sync yet.
+const persistenceStatusText = isSynced ? 'Data Synced' : 'Data Saved Locally';
+const persistenceTooltipText = isSynced
+  ? 'Data is synced with the cloud database.'
+  : "Data is saved in your browser's local storage. Cloud sync is not active.";
 
 
 export function AppSidebar() {
@@ -125,24 +129,23 @@ export function AppSidebar() {
           {/* Save Status Indicator */}
            <Tooltip>
                <TooltipTrigger asChild>
-                   <Button variant="ghost" size="icon" className="w-full justify-start px-2 cursor-default hover:bg-transparent">
+                   {/* Use a div instead of Button for non-interactive trigger */}
+                   <div className="flex items-center w-full justify-start px-2 py-1 cursor-default h-10">
                        {/* Conditionally render Cloud or CloudOff icon */}
                        {isSynced ? (
-                           <Cloud className="h-[1.2rem] w-[1.2rem] text-accent" /> // Synced icon
+                           <Cloud className="h-[1.2rem] w-[1.2rem] text-accent flex-shrink-0" /> // Synced icon
                        ) : (
-                           <CloudOff className="h-[1.2rem] w-[1.2rem] text-muted-foreground" /> // Local icon
+                           <CloudOff className="h-[1.2rem] w-[1.2rem] text-muted-foreground flex-shrink-0" /> // Local icon
                        )}
                        <span className="ml-2 text-xs text-muted-foreground group-data-[state=collapsed]:hidden">
-                           {isSynced ? 'Data Synced' : 'Data Saved Locally'} {/* Dynamic text */}
+                           {persistenceStatusText} {/* Dynamic text */}
                        </span>
                        <span className="sr-only">Data Save Status</span>
-                   </Button>
+                   </div>
                </TooltipTrigger>
                <TooltipContent side="right" align="center" sideOffset={10}>
                    <p className="text-xs">
-                        {isSynced
-                            ? 'Data is synced with the cloud database.'
-                            : "Session data is saved in your browser's local storage. Database sync is not active."}
+                        {persistenceTooltipText}
                     </p>
                </TooltipContent>
            </Tooltip>
@@ -150,4 +153,3 @@ export function AppSidebar() {
     </>
   );
 }
-
