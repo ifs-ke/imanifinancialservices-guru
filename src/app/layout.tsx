@@ -21,7 +21,7 @@ const roboto_mono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'IFC - Guru',
+  title: 'IFC - Guru', // Updated title
   description: 'Your personal finance management companion.',
 };
 

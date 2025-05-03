@@ -5,7 +5,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle, Banknote, Landmark } from 'lucide-react'; // Added Banknote, Landmark
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle, Banknote, Landmark, Cloud, CloudOff } from 'lucide-react'; // Added Banknote, Landmark, Cloud, CloudOff
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactionsStore } from '@/store/transactionsStore'; // Import transactions store
@@ -581,95 +581,10 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-         {/* Action/Navigation Cards - Make these span 1 column each for consistency */}
-          <Card className="flex flex-col"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle>Manage Transactions</CardTitle>
-           </CardHeader>
-           <CardContent className="flex-grow">
-              <Image
-               src="https://picsum.photos/400/200"
-               alt="Ledger book with coins and pen"
-               width={400}
-               height={200}
-               className="rounded-md object-cover mb-4 aspect-[2/1]"
-               data-ai-hint="money ledger coins pen" // Updated hint
-             />
-             <p className="text-sm text-muted-foreground">
-               Import, categorize, and manage your financial transactions.
-             </p>
-           </CardContent>
-            <CardFooter>
-              <Button asChild variant="outline" className="w-full">
-               <Link href="/transactions">
-                 Go to Transactions <ArrowRight className="ml-2 h-4 w-4" />
-               </Link>
-             </Button>
-           </CardFooter>
-         </Card>
-
-          <Card className="flex flex-col"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle>Analyze Income & Expenses</CardTitle>
-           </CardHeader>
-            <CardContent className="flex-grow">
-              <Image
-               src="https://picsum.photos/400/200"
-               alt="Graph showing upward and downward financial trends"
-               width={400}
-               height={200}
-               className="rounded-md object-cover mb-4 aspect-[2/1]"
-               data-ai-hint="finance chart graph money trend" // Updated hint
-             />
-             <p className="text-sm text-muted-foreground">
-               Detailed breakdown of your income and expense patterns.
-             </p>
-           </CardContent>
-            <CardFooter className="flex flex-col sm:flex-row gap-2">
-                 <Button asChild variant="secondary" className="flex-1">
-                 <Link href="/income-expenses">
-                     View Analysis <TrendingUp className="ml-2 h-4 w-4" />
-                 </Link>
-                 </Button>
-              </CardFooter>
-         </Card>
-
-          <Card className="flex flex-col"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle>Manage Debts</CardTitle>
-           </CardHeader>
-           <CardContent className="flex-grow">
-             <Image
-               src="https://picsum.photos/400/200"
-               alt="Stack of coins next to a calculator"
-               width={400}
-               height={200}
-               className="rounded-md object-cover mb-4 aspect-[2/1]"
-               data-ai-hint="coins calculator finance debt money"
-             />
-             <p className="text-sm text-muted-foreground">
-               Track and manage your outstanding debts and view amortization.
-             </p>
-              {/* Debt Payoff Timeline */}
-             <div className="mt-3 pt-3 border-t border-border"> {/* Use theme border */}
-                 <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1"><CalendarClock size={12}/> Est. Debt Payoff Timeline</p>
-                  <p className="font-semibold text-primary">{debtPayoffTimeline}</p>
-              </div>
-           </CardContent>
-           <CardFooter>
-             <Button asChild variant="secondary" className="w-full">
-               <Link href="/debt">
-                 Manage Debts <ArrowRight className="ml-2 h-4 w-4" />
-               </Link>
-             </Button>
-           </CardFooter>
-         </Card>
-
-         {/* Removed the last row containing "View Statements" and "Plan Your Budget" cards */}
+         {/* Removed the last row of cards */}
 
        </main>
      </div>
   );
 }
 
-    
