@@ -25,7 +25,8 @@ import {
   Settings,
   Landmark,
   PieChart, // Budget icon
-  CloudOff, Cloud // Use CloudOff icon for local persistence indication
+  CloudOff, Cloud, // Use CloudOff icon for local persistence indication
+  CalendarCheck // Icon for Weekly Review
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -37,10 +38,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: ReceiptText, secondaryIcon: FileUp },
-  { href: '/income-expenses', label: 'Income/Expenses', icon: TrendingUp }, // Updated: Combined Income/Expenses link
+  { href: '/income-expenses', label: 'Income/Expenses', icon: TrendingUp },
   { href: '/debt', label: 'Debts', icon: Coins },
   { href: '/statements', label: 'Statements', icon: FileText },
   { href: '/budget', label: 'Budget', icon: PieChart },
+  { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck }, // Added Weekly Review
 ];
 
 // Indicate persistence status (currently only local)
@@ -67,7 +69,7 @@ export function AppSidebar() {
                    "font-semibold text-lg text-sidebar-foreground whitespace-nowrap",
                    state === 'collapsed' && "hidden" // Hide text when collapsed
                )}>
-                  IFC - Guru {/* Updated Title */}
+                  IFC - Guru
               </span>
             </Link>
          </div>

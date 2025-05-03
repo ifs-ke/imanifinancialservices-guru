@@ -4,6 +4,7 @@ import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useBudgetStore } from '@/store/budgetStore';
+import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import the new store
 import { useMemo } from 'react';
 
 /**
@@ -15,6 +16,7 @@ export const useCombinedStore = () => {
     const debtState = useDebtStore();
     const statementState = useStatementStore();
     const budgetState = useBudgetStore();
+    const weeklyReviewState = useWeeklyReviewStore(); // Include weekly review store
 
     // Memoize the combined state to prevent unnecessary re-renders
     const combinedState = useMemo(() => ({
@@ -35,6 +37,10 @@ export const useCombinedStore = () => {
         // Statement Items
         assetItems: statementState.assetItems,
         otherLiabilityItems: statementState.otherLiabilityItems,
+        startDate: statementState.startDate, // Expose dates
+        endDate: statementState.endDate,
+        setStartDate: statementState.setStartDate,
+        setEndDate: statementState.setEndDate,
         setAssetItems: statementState.setAssetItems,
         setOtherLiabilityItems: statementState.setOtherLiabilityItems,
         addAssetItem: statementState.addAssetItem,
@@ -50,7 +56,12 @@ export const useCombinedStore = () => {
         updateBudgetItem: budgetState.updateBudgetItem,
         deleteBudgetItem: budgetState.deleteBudgetItem,
 
-    }), [transactionsState, debtState, statementState, budgetState]);
+        // Weekly Review
+        reviews: weeklyReviewState.reviews,
+        setJournalEntry: weeklyReviewState.setJournalEntry,
+        getReviewForWeek: weeklyReviewState.getReviewForWeek,
+
+    }), [transactionsState, debtState, statementState, budgetState, weeklyReviewState]); // Add weekly review state dependency
 
     return combinedState;
 };
