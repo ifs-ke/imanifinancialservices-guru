@@ -1,4 +1,3 @@
-
 // src/store/budgetStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -29,6 +28,7 @@ const sumByCategory = (items: BudgetItem[], category: BudgetItemCategory): numbe
 
 interface BudgetState {
     budgetItems: BudgetItem[];
+    setBudgetItems: (items: BudgetItem[]) => void; // Action to overwrite state
     addBudgetItem: (itemData: Omit<BudgetItem, 'id'>) => BudgetItem;
     updateBudgetItem: (updatedItem: BudgetItem) => void;
     deleteBudgetItem: (id: string) => void;
@@ -39,6 +39,10 @@ export const useBudgetStore = create<BudgetState>()(
     persist(
         (set, get) => ({
             budgetItems: [],
+             // Action to replace the entire budget items array
+             setBudgetItems: (items) => {
+                 set({ budgetItems: sortBudgetItems(items || []) }); // Add default empty array
+             },
             addBudgetItem: (itemData) => {
                 const newItem: BudgetItem = {
                     id: generateId(),
@@ -89,3 +93,4 @@ export const selectTotalBudgetedExpenses = (state: BudgetState): number =>
 
 export const selectNetBudgeted = (state: BudgetState): number =>
     selectTotalBudgetedIncome(state) - selectTotalBudgetedExpenses(state) - selectTotalGoals(state);
+

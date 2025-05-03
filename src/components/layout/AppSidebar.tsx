@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -26,7 +25,9 @@ import {
   Landmark,
   PieChart, // Budget icon
   CloudOff, Cloud, // Use CloudOff icon for local persistence indication
-  CalendarCheck // Icon for Weekly Review
+  CalendarCheck, // Icon for Weekly Review
+  RefreshCw, // Icon for syncing/error
+  AlertTriangle // Icon for error
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -45,17 +46,49 @@ const menuItems = [
   { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck }, // Added Weekly Review
 ];
 
-// Indicate persistence status (currently only local)
-const isSynced = false; // Always false as there's no actual cloud sync yet.
-const persistenceStatusText = isSynced ? 'Data Synced' : 'Data Saved Locally';
-const persistenceTooltipText = isSynced
-  ? 'Data is synced with the cloud database.'
-  : "Data is saved in your browser's local storage. Cloud sync is not active.";
+// Define props for AppSidebar to accept syncStatus
+interface AppSidebarProps {
+    syncStatus: 'idle' | 'syncing' | 'synced' | 'local' | 'error';
+}
 
-
-export function AppSidebar() {
+export function AppSidebar({ syncStatus }: AppSidebarProps) { // Receive syncStatus as a prop
   const pathname = usePathname();
   const { isMobile, state } = useSidebar(); // Get sidebar state
+
+  // Determine persistence status icon and text based on syncStatus
+    let persistenceIcon = CloudOff;
+    let persistenceStatusText = 'Data Saved Locally';
+    let persistenceTooltipText = "Data is saved in your browser's local storage. Sign in to sync.";
+    let iconColor = 'text-muted-foreground'; // Default color
+
+    switch (syncStatus) {
+        case 'syncing':
+            persistenceIcon = RefreshCw;
+            persistenceStatusText = 'Syncing...';
+            persistenceTooltipText = 'Attempting to sync data with the cloud.';
+            iconColor = 'text-primary animate-spin'; // Spinning blue icon
+            break;
+        case 'synced':
+            persistenceIcon = Cloud;
+            persistenceStatusText = 'Data Synced';
+            persistenceTooltipText = 'Data is successfully synced with the cloud.';
+            iconColor = 'text-accent'; // Green cloud for synced
+            break;
+        case 'error':
+            persistenceIcon = AlertTriangle;
+            persistenceStatusText = 'Sync Error';
+            persistenceTooltipText = 'Failed to sync data. Changes are saved locally.';
+            iconColor = 'text-destructive'; // Red triangle for error
+            break;
+        case 'local': // Explicitly handle 'local' status
+        default:
+            persistenceIcon = CloudOff;
+            persistenceStatusText = 'Data Saved Locally';
+            persistenceTooltipText = "Data is saved in your browser's local storage. Sign in to sync.";
+            iconColor = 'text-muted-foreground'; // Muted cloud-off for local
+            break;
+     }
+
 
   return (
     <>
@@ -128,17 +161,13 @@ export function AppSidebar() {
          </div>
           <Separator className="my-1"/>
           <ThemeToggle />
-          {/* Save Status Indicator */}
+          {/* Save Status Indicator - Now dynamic */}
            <Tooltip>
                <TooltipTrigger asChild>
                    {/* Use a div instead of Button for non-interactive trigger */}
                    <div className="flex items-center w-full justify-start px-2 py-1 cursor-default h-10">
-                       {/* Conditionally render Cloud or CloudOff icon */}
-                       {isSynced ? (
-                           <Cloud className="h-[1.2rem] w-[1.2rem] text-accent flex-shrink-0" /> // Synced icon
-                       ) : (
-                           <CloudOff className="h-[1.2rem] w-[1.2rem] text-muted-foreground flex-shrink-0" /> // Local icon
-                       )}
+                       {/* Dynamic Icon */}
+                       <persistenceIcon className={cn("h-[1.2rem] w-[1.2rem] flex-shrink-0", iconColor)} />
                        <span className="ml-2 text-xs text-muted-foreground group-data-[state=collapsed]:hidden">
                            {persistenceStatusText} {/* Dynamic text */}
                        </span>

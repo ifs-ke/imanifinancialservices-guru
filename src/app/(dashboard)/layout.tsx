@@ -1,3 +1,5 @@
+// src/app/(dashboard)/layout.tsx
+'use client'; // Make layout client-side to use hooks
 
 import React from 'react';
 import {
@@ -6,27 +8,36 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { ThemeToggle } from '@/components/ui/ThemeToggle'; // Import ThemeToggle
-import { auth } from '@clerk/nextjs/server'; // Import auth for server-side check
+import { useAuth } from '@clerk/nextjs'; // Import useAuth hook for client-side check
 import { redirect } from 'next/navigation';
-
+import { useSyncManager } from '@/hooks/useSyncManager'; // Import the sync manager hook
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-   // Server-side auth check (optional, middleware already protects)
-   const { userId } = auth();
+   // Client-side auth check
+   const { userId, isLoaded } = useAuth();
+   // Initialize sync manager - This will trigger initial fetch on load if user is signed in
+   const { syncStatus } = useSyncManager(); // Get sync status for AppSidebar
+
+   // Handle loading state from Clerk
+   if (!isLoaded) {
+     // You can return a loading spinner or skeleton here
+     return <div>Loading authentication...</div>;
+   }
+
+   // Redirect if not logged in after Clerk is loaded
    if (!userId) {
-       redirect('/sign-in'); // Redirect if not logged in
+     redirect('/sign-in');
    }
 
   return (
-    // Remove Context Providers - Zustand stores are accessed directly via hooks
     <>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
-        <AppSidebar />
+        {/* Pass syncStatus to AppSidebar */}
+        <AppSidebar syncStatus={syncStatus} />
         <SidebarRail />
       </Sidebar>
       <SidebarInset>

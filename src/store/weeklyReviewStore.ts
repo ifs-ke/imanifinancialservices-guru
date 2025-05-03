@@ -1,10 +1,9 @@
-
 // src/store/weeklyReviewStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 // Define the structure for a weekly review entry
-interface WeeklyReviewData {
+export interface WeeklyReviewData { // Export for use in API route
   journal: string;
   transactionComments?: Record<string, string>; // transactionId -> comment string
 }
@@ -12,6 +11,7 @@ interface WeeklyReviewData {
 // Define the state shape. The key will be 'YYYY-WW' (e.g., '2024-30')
 interface WeeklyReviewState {
   reviews: Record<string, WeeklyReviewData>;
+  setReviews: (reviews: Record<string, WeeklyReviewData>) => void; // Action to overwrite state
   setJournalEntry: (weekKey: string, journal: string) => void;
   // New actions for transaction comments
   setTransactionComment: (weekKey: string, transactionId: string, comment: string) => void;
@@ -24,6 +24,9 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
   persist(
     (set, get) => ({
       reviews: {}, // Initialize with an empty object
+
+      // Action to replace the entire reviews object
+      setReviews: (reviews) => set({ reviews: reviews || {} }), // Add default empty object
 
       // Action to save or update the journal entry for a specific week
       setJournalEntry: (weekKey, journal) => {
@@ -99,6 +102,12 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       name: 'ifcGuru_weeklyReviews', // Unique name for local storage
       storage: createJSONStorage(() => localStorage),
       // No special serialization needed for this structure yet
+       // Deserialize: Ensure reviews is at least an empty object
+       deserialize: (str) => {
+         const state = JSON.parse(str);
+         state.state.reviews = state.state.reviews || {};
+         return state;
+       },
     }
   )
 );
@@ -111,3 +120,4 @@ export const getWeekKey = (date: Date): string => {
   const weekNumber = getISOWeek(date); // Use ISO week number
   return `${year}-${weekNumber.toString().padStart(2, '0')}`;
 };
+

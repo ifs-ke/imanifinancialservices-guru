@@ -1,4 +1,3 @@
-
 // src/store/debtStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -19,6 +18,7 @@ const sortDebts = (debtList: DebtItem[]): DebtItem[] => {
 
 interface DebtState {
     debts: DebtItem[];
+    setDebts: (debts: DebtItem[]) => void; // Action to overwrite state
     addDebt: (debtData: Omit<DebtItem, 'id'>) => DebtItem;
     updateDebt: (updatedDebt: DebtItem) => void;
     deleteDebt: (id: string) => void;
@@ -30,6 +30,10 @@ export const useDebtStore = create<DebtState>()(
     persist(
         (set, get) => ({
             debts: [], // Initialize with empty array
+            // Action to replace the entire debts array
+            setDebts: (debts) => {
+                 set({ debts: sortDebts(debts || []) }); // Add default empty array
+            },
             addDebt: (debtData) => {
                 const newDebt: DebtItem = {
                     id: generateId(),
@@ -77,3 +81,4 @@ export const useDebtStore = create<DebtState>()(
 // Selector for total debt
 export const selectTotalDebt = (state: DebtState): number =>
     state.debts.reduce((sum, debt) => sum + debt.principal, 0);
+

@@ -1,4 +1,3 @@
-
 // src/store/transactionsStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -23,6 +22,7 @@ const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
 
 interface TransactionsState {
     transactions: TransactionWithId[];
+    setTransactions: (transactions: TransactionWithId[]) => void; // Action to overwrite state
     addTransaction: (transactionData: Omit<TransactionWithId, 'id'>) => TransactionWithId;
     updateTransaction: (updatedTransaction: TransactionWithId) => void;
     deleteTransaction: (id: string) => void;
@@ -34,6 +34,15 @@ export const useTransactionsStore = create<TransactionsState>()(
     persist(
         (set, get) => ({
             transactions: [], // Initialize with empty array
+            // Action to replace the entire transactions array
+            setTransactions: (transactions) => {
+                 // Ensure dates are Date objects before setting
+                 const validatedTransactions = transactions.map(tx => ({
+                     ...tx,
+                     date: tx.date instanceof Date ? tx.date : new Date(tx.date),
+                 }));
+                 set({ transactions: sortTransactions(validatedTransactions) });
+            },
             addTransaction: (transactionData) => {
                 const newTransaction: TransactionWithId = {
                     id: generateId(),
@@ -78,7 +87,7 @@ export const useTransactionsStore = create<TransactionsState>()(
              deserialize: (str) => {
                 const state = JSON.parse(str);
                  // Convert date strings back to Date objects
-                state.state.transactions = state.state.transactions.map((tx: any) => ({
+                state.state.transactions = (state.state.transactions || []).map((tx: any) => ({ // Add default empty array
                     ...tx,
                      date: tx.date ? new Date(tx.date) : new Date(), // Handle potential null/undefined dates
                  }));
@@ -102,3 +111,4 @@ export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+

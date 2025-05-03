@@ -1,4 +1,3 @@
-
 // src/store/statementStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -24,8 +23,8 @@ interface StatementState {
     endDate: Date | undefined;   // Add end date state
     setStartDate: (date: Date | undefined) => void; // Add action to set start date
     setEndDate: (date: Date | undefined) => void;   // Add action to set end date
-    setAssetItems: (items: StatementItem[]) => void; // Allow direct setting
-    setOtherLiabilityItems: (items: OtherLiabilityItem[]) => void; // Allow direct setting
+    setAssetItems: (items: StatementItem[]) => void; // Action to overwrite state
+    setOtherLiabilityItems: (items: OtherLiabilityItem[]) => void; // Action to overwrite state
     addAssetItem: (itemData: Omit<StatementItem, 'id'>) => void;
     addOtherLiabilityItem: (itemData: Omit<OtherLiabilityItem, 'id'>) => void;
     updateAssetItem: (updatedItem: StatementItem) => void;
@@ -43,8 +42,10 @@ export const useStatementStore = create<StatementState>()(
             endDate: defaultEndDate,     // Initialize end date
             setStartDate: (date) => set({ startDate: date }), // Implement setStartDate
             setEndDate: (date) => set({ endDate: date }),     // Implement setEndDate
-            setAssetItems: (items) => set({ assetItems: sortItems(items) }),
-            setOtherLiabilityItems: (items) => set({ otherLiabilityItems: sortItems(items) }),
+            // Action to replace the entire asset items array
+            setAssetItems: (items) => set({ assetItems: sortItems(items || []) }),
+            // Action to replace the entire other liability items array
+            setOtherLiabilityItems: (items) => set({ otherLiabilityItems: sortItems(items || []) }),
             addAssetItem: (itemData) => {
                 const newItem: StatementItem = { id: generateId('asset'), ...itemData };
                 set((state) => ({ assetItems: sortItems([...state.assetItems, newItem]) }));
@@ -108,3 +109,4 @@ export const selectTotalOtherLiabilities = (state: StatementState): number =>
 // Selectors for dates (optional, but can be useful)
 export const selectStartDate = (state: StatementState): Date | undefined => state.startDate;
 export const selectEndDate = (state: StatementState): Date | undefined => state.endDate;
+
