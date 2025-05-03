@@ -9,6 +9,7 @@ const isProtectedRoute = createRouteMatcher([
   '/debt(.*)',
   '/statements(.*)',
   '/budget(.*)',
+  '/weekly-review(.*)', // Protect the new weekly review route
 ]);
 
 export default clerkMiddleware((auth, req) => {
@@ -21,20 +22,7 @@ export const config = {
   matcher: [
     // Skip Next.js internals and static files
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-    // Match all routes except api routes
+    // Match all routes including api/trpc routes (Clerk needs to run on these)
     '/(api|trpc)(.*)',
   ],
 };
-
-// import { clerkMiddleware } from '@clerk/nextjs/server';
-
-// export default clerkMiddleware();
-
-// export const config = {
-//   matcher: [
-//     // Skip Next.js internals and all static files, unless found in search params
-//     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-//     // Always run for API routes
-//     '/(api|trpc)(.*)',
-//   ],
-// };
