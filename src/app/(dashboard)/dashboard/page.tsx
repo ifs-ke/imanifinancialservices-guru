@@ -481,9 +481,9 @@ export default function DashboardPage() {
        </div>
 
        {/* Charts and Navigation Grid (Bottom Section) */}
-       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3"> {/* Changed to 3 columns */}
          {/* Chart Cards */}
-         <Card className="md:col-span-2 lg:col-span-3 xl:col-span-3"> {/* Adjusted span */}
+         <Card className="md:col-span-2 lg:col-span-3 xl:col-span-2"> {/* Adjusted span */}
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                  <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
@@ -544,7 +544,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Existing Chart Cards */}
-          <Card className="md:col-span-1 lg:col-span-2 xl:col-span-2"> {/* Adjusted span */}
+          <Card className="md:col-span-1 lg:col-span-1 xl:col-span-1"> {/* Adjusted span */}
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                    <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall) {/* Updated title */}
@@ -665,58 +665,11 @@ export default function DashboardPage() {
            </CardFooter>
          </Card>
 
-          <Card className="flex flex-col"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle>View Statements</CardTitle>
-           </CardHeader>
-           <CardContent className="flex-grow">
-             <Image
-               src="https://picsum.photos/400/200"
-               alt="Formal financial statement document with pen"
-               width={400}
-               height={200}
-               className="rounded-md object-cover mb-4 aspect-[2/1]"
-               data-ai-hint="documents report sheet balance statement pen"
-             />
-             <p className="text-sm text-muted-foreground">
-               Review Net Worth, Cash Flow, and Budget Variance Reports.
-             </p>
-           </CardContent>
-           <CardFooter>
-             <Button asChild variant="secondary" className="w-full">
-               <Link href="/statements">
-                 View Statements <ArrowRight className="ml-2 h-4 w-4" />
-               </Link>
-             </Button>
-           </CardFooter>
-         </Card>
+         {/* Removed the last row containing "View Statements" and "Plan Your Budget" cards */}
 
-          <Card className="flex flex-col"> {/* Adjusted span */}
-           <CardHeader>
-             <CardTitle>Plan Your Budget</CardTitle>
-           </CardHeader>
-           <CardContent className="flex-grow">
-              <Image
-               src="https://picsum.photos/400/200"
-               alt="Piggy bank with coins and a plant"
-               width={400}
-               height={200}
-               className="rounded-md object-cover mb-4 aspect-[2/1]"
-               data-ai-hint="budget planning piggy bank coins"
-             />
-             <p className="text-sm text-muted-foreground">
-               Set your income, expenses, and savings goals.
-             </p>
-           </CardContent>
-           <CardFooter>
-             <Button asChild variant="secondary" className="w-full">
-               <Link href="/budget">
-                 Go to Budget <PieChart className="ml-2 h-4 w-4" />
-               </Link>
-             </Button>
-           </CardFooter>
-         </Card>
        </main>
      </div>
   );
 }
+
+    
