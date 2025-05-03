@@ -25,12 +25,14 @@ import {
   Settings,
   Landmark,
   PieChart, // Budget icon
+  Cloud, // Added Cloud icon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { UserButton } from '@clerk/nextjs'; // Import UserButton
 import { Separator } from '../ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -57,7 +59,7 @@ export function AppSidebar() {
                    "font-semibold text-lg text-sidebar-foreground whitespace-nowrap",
                    state === 'collapsed' && "hidden" // Hide text when collapsed
                )}>
-                  IFC - Guru
+                  Imani Financial Consultancies - Guru
               </span>
             </Link>
          </div>
@@ -116,6 +118,19 @@ export function AppSidebar() {
          </div>
           <Separator className="my-1"/>
           <ThemeToggle />
+          {/* Save Status Indicator */}
+          <Tooltip>
+              <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="w-full justify-start px-2 cursor-default hover:bg-transparent">
+                       <Cloud className="h-[1.2rem] w-[1.2rem] text-muted-foreground" />
+                       <span className="ml-2 text-xs text-muted-foreground group-data-[state=collapsed]:hidden">Data Saved Locally</span>
+                       <span className="sr-only">Data Save Status</span>
+                  </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="center" sideOffset={10}>
+                  <p className="text-xs">Session data is persisted in your browser's local storage.</p>
+              </TooltipContent>
+          </Tooltip>
       </SidebarFooter>
     </>
   );
