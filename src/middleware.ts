@@ -12,6 +12,7 @@ const isProtectedRoute = createRouteMatcher([
   '/statements(.*)',
   '/budget(.*)',
   '/weekly-review(.*)', // Protect the new weekly review route
+  '/logger(.*)', // Protect the new logger route
   '/api/(save|sync)(.*)', // Protect the data sync/save API endpoints
 ]);
 

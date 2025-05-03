@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Added useState, useEffect
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -28,15 +28,17 @@ import {
   CloudOff, Cloud, // Use CloudOff icon for local persistence indication
   CalendarCheck, // Icon for Weekly Review
   RefreshCw, // Icon for syncing/error
-  AlertTriangle // Icon for error
+  AlertTriangle, // Icon for error
+  ListTree // Icon for Logger
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { UserButton } from '@clerk/nextjs'; // Import UserButton
+import { UserButton, useAuth } from '@clerk/nextjs'; // Import UserButton and useAuth
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
 import type { SyncStatus } from '@/hooks/useSyncManager'; // Import the type
+import type { AppRole } from '@/lib/roles'; // Import AppRole type
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -45,8 +47,14 @@ const menuItems = [
   { href: '/debt', label: 'Debts', icon: Coins },
   { href: '/statements', label: 'Statements', icon: FileText },
   { href: '/budget', label: 'Budget', icon: PieChart },
-  { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck }, // Added Weekly Review
+  { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck },
 ];
+
+// Admin-only menu items
+const adminMenuItems = [
+    { href: '/logger', label: 'Logger', icon: ListTree },
+];
+
 
 // Define props for AppSidebar to accept syncStatus and retry function
 interface AppSidebarProps {
@@ -57,6 +65,18 @@ interface AppSidebarProps {
 export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) { // Receive syncStatus and retrySync as props
   const pathname = usePathname();
   const { isMobile, state } = useSidebar(); // Get sidebar state
+  const { sessionClaims } = useAuth(); // Get session claims for role check
+  const [userRole, setUserRole] = useState<AppRole | null>(null); // State for user role
+
+   // Check user role from claims client-side
+   useEffect(() => {
+       if (sessionClaims?.publicMetadata?.role) {
+           setUserRole(sessionClaims.publicMetadata.role as AppRole);
+       } else {
+           setUserRole(null); // Or 'user' if default is desired
+       }
+   }, [sessionClaims]);
+
 
   // Determine persistence status icon, text, color, and tooltip based on syncStatus
     let PersistenceIcon = CloudOff;
@@ -112,32 +132,58 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) { // Rece
             </Link>
          </div>
 
-        {/* Single Hamburger menu trigger - Removed asChild and nested Button */}
-        <SidebarTrigger className="h-7 w-7" />
+        {/* Single Hamburger menu trigger */}
+        <SidebarTrigger className={cn("h-7 w-7", isMobile && "block", !isMobile && (state === 'expanded' ? "visible" : "invisible"))} />
       </SidebarHeader>
       <SidebarContent className="flex-1 overflow-y-auto p-2">
         <SidebarMenu>
-          {menuItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+           {/* Regular Menu Items */}
+           {menuItems.map((item) => {
+             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
              return (
-                <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                    asChild
-                    isActive={isActive}
-                    tooltip={item.label}
-                    variant={isActive ? "active" : "ghost"}
-                >
-                    <Link href={item.href}>
-                    <item.icon className="h-4 w-4" />
-                     <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
-                    {item.secondaryIcon && (
-                        <item.secondaryIcon className="ml-auto h-3 w-3 text-muted-foreground group-data-[state=collapsed]:hidden" />
-                    )}
-                    </Link>
-                </SidebarMenuButton>
-                </SidebarMenuItem>
-            );
-         })}
+                 <SidebarMenuItem key={item.href}>
+                 <SidebarMenuButton
+                     asChild
+                     isActive={isActive}
+                     tooltip={item.label}
+                     variant={isActive ? "active" : "ghost"}
+                 >
+                     <Link href={item.href}>
+                     <item.icon className="h-4 w-4" />
+                      <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
+                     {item.secondaryIcon && (
+                         <item.secondaryIcon className="ml-auto h-3 w-3 text-muted-foreground group-data-[state=collapsed]:hidden" />
+                     )}
+                     </Link>
+                 </SidebarMenuButton>
+                 </SidebarMenuItem>
+             );
+          })}
+
+           {/* Admin Menu Items - Conditionally Rendered */}
+           {userRole === 'admin' && (
+               <>
+                  <Separator className="my-2" /> {/* Add separator */}
+                   {adminMenuItems.map((item) => {
+                       const isActive = pathname === item.href || pathname.startsWith(item.href);
+                       return (
+                           <SidebarMenuItem key={item.href}>
+                           <SidebarMenuButton
+                               asChild
+                               isActive={isActive}
+                               tooltip={item.label}
+                               variant={isActive ? "active" : "ghost"}
+                           >
+                               <Link href={item.href}>
+                               <item.icon className="h-4 w-4" />
+                                <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
+                               </Link>
+                           </SidebarMenuButton>
+                           </SidebarMenuItem>
+                       );
+                    })}
+               </>
+           )}
         </SidebarMenu>
       </SidebarContent>
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
