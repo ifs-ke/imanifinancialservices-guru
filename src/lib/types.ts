@@ -78,3 +78,24 @@ export interface BudgetItem {
     amount: number;
     category: BudgetItemCategory;
 }
+
+/**
+ * Represents the data stored for a specific weekly review.
+ * Includes journal entry and comments linked to transaction IDs.
+ * Added ownerId and sharedWith for collaboration.
+ */
+export interface WeeklyReviewData {
+  ownerId: string; // ID of the user who owns this review
+  journal: string;
+  transactionComments?: Record<string, string>; // transactionId -> comment string
+  sharedWith?: string[]; // Array of user IDs this review is shared with
+}
+
+/**
+ * Represents user information needed for sharing display.
+ */
+export interface UserShareInfo {
+    userId: string;
+    email: string; // Primary email for identification
+    name?: string; // Optional user's name
+}

@@ -8,8 +8,7 @@ import { useBudgetStore } from '@/store/budgetStore';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
 import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types'; // Ensure types include necessary fields
-// Import hashing utils (currently placeholders)
-// import { hashData, verifyHash } from '@/lib/storage-utils';
+import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
 
 
 // Define the structure of the synced data (as expected from the API)
@@ -19,11 +18,10 @@ interface SyncedData {
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
   budgetItems: BudgetItem[];
-  reviews: Record<string, WeeklyReviewData>;
+  ownedReviews: Record<string, WeeklyReviewData>; // Now explicitly owned
+  sharedReviews: Record<string, WeeklyReviewData>; // Add shared reviews
   startDate?: string; // Date as ISO string
   endDate?: string;   // Date as ISO string
-  // Add hash field if implemented server-side
-  // dataHash?: string;
 }
 
 // Define the possible sync statuses
@@ -51,7 +49,9 @@ export function useSyncManager() {
   const clearStatementItems = useStatementStore(state => state.clearStatementItems);
   const setBudgetItems = useBudgetStore(state => state.setBudgetItems);
   const clearBudgetItems = useBudgetStore(state => state.clearBudgetItems);
-  const setReviews = useWeeklyReviewStore(state => state.setReviews);
+  // Get weekly review setters
+  const setOwnedReviews = useWeeklyReviewStore(state => state.setOwnedReviews);
+  const setSharedReviews = useWeeklyReviewStore(state => state.setSharedReviews);
   const clearReviews = useWeeklyReviewStore(state => state.clearReviews);
 
   // --- Clear Local State Function ---
@@ -65,8 +65,6 @@ export function useSyncManager() {
      clearReviews();
 
      // Explicitly remove persisted state from sessionStorage
-     // This is crucial for ensuring no data leaks between users on the same browser
-     // and fulfills the "erase on exit" requirement as sessionStorage is session-bound.
      sessionStorage.removeItem('ifcGuru_transactions');
      sessionStorage.removeItem('ifcGuru_debts');
      sessionStorage.removeItem('ifcGuru_statementItems');
@@ -131,29 +129,27 @@ export function useSyncManager() {
     isSavingRef.current = true;
     setSyncStatus('syncing');
 
-    // Get current state from all stores
-    const currentState: Omit<SyncedData, 'dataHash'> = { // Exclude hash if not implemented
+    // Get current state from all stores, including ONLY owned reviews for saving
+    const currentState: Omit<SyncedData, 'sharedReviews' | 'dataHash'> = { // Exclude sharedReviews and hash
       transactions: useTransactionsStore.getState().transactions,
       debts: useDebtStore.getState().debts,
       assetItems: useStatementStore.getState().assetItems,
       otherLiabilityItems: useStatementStore.getState().otherLiabilityItems,
       budgetItems: useBudgetStore.getState().budgetItems,
-      reviews: useWeeklyReviewStore.getState().reviews,
+      ownedReviews: useWeeklyReviewStore.getState().ownedReviews, // Only save owned reviews
       startDate: useStatementStore.getState().startDate?.toISOString(),
       endDate: useStatementStore.getState().endDate?.toISOString(),
     };
 
-    // Placeholder: Hashing data before sending (replace with actual implementation if needed)
-    // const dataString = JSON.stringify(currentState);
-    // const dataHash = await hashData(dataString); // Use your hashing function
+    // Placeholder for hashing data
+    const dataString = JSON.stringify(currentState);
+    const dataHash = await hashData(dataString); // Use your hashing function
 
     try {
       const response = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Send currentState and potentially the hash
-        // body: JSON.stringify({ ...currentState, dataHash }),
-        body: JSON.stringify(currentState), // Send without hash for now
+        body: JSON.stringify({ ...currentState, dataHash }), // Include hash
       });
 
       if (!response.ok) {
@@ -165,9 +161,6 @@ export function useSyncManager() {
       setLastSyncTime(new Date());
       setSyncStatus('synced');
       console.log("Save: Successfully saved to DB.", result);
-      // Clear local storage only AFTER successful save if implementing offline first beyond sessionStorage
-      // For sessionStorage, this is not strictly necessary as it clears on session end anyway.
-      // clearLocalPersistence(); // Example call if using localStorage/IndexedDB
 
     } catch (error: any) {
       console.error('Save Error:', error);
@@ -182,7 +175,7 @@ export function useSyncManager() {
       setIsSyncing(false);
       isSavingRef.current = false;
     }
-  }, [isSignedIn, userId, toast]); // Removed store state dependencies as they are accessed via getState()
+  }, [isSignedIn, userId, toast]); // Dependencies remain the same
 
   const debouncedSave = useCallback(debounce(saveDataToDB, 3000), [saveDataToDB]);
 
@@ -206,24 +199,21 @@ export function useSyncManager() {
     setSyncStatus('syncing');
 
     try {
-      const response = await fetch('/api/sync');
+      const response = await fetch('/api/sync'); // Fetch data including owned and shared reviews
 
       if (!response.ok) {
           if (response.status === 404 && !initialFetchAttempted.current) {
               console.log("Fetch: No data found in DB for user. Attempting initial save of local (session) data...");
               initialFetchAttempted.current = true;
-              // Save current local (sessionStorage) state to the DB for the first time
               await saveDataToDB();
-              return; // Exit fetch after save attempt (saveDataToDB sets status)
+              return;
           } else if (response.status === 404) {
                console.warn("Fetch: No cloud data found for user (after initial attempt/login). Ensuring clean local state.");
-               // If data is still not found, it implies the user has no cloud data.
-               // Clear local state to ensure no data from a previous session/user remains.
                clearLocalState();
-               setSyncStatus('local'); // User is online but has no cloud data -> state is effectively 'local'
-               initialFetchAttempted.current = true; // Mark fetch as attempted
+               setSyncStatus('local');
+               initialFetchAttempted.current = true;
                toast({ title: 'No Cloud Data', description: 'Started with a clean slate as no data was found in the cloud.', variant: 'default' });
-               return; // Stop here
+               return;
           }
           const errorData = await response.json().catch(() => ({ error: 'Unknown error structure' }));
           throw new Error(`Fetch failed: ${response.statusText} (${errorData.error || 'No details'})`);
@@ -232,23 +222,25 @@ export function useSyncManager() {
       const data: SyncedData = await response.json();
       console.log("Fetch: Received data:", data);
 
-      // Placeholder: Verify data hash if implemented
-      // const receivedDataString = JSON.stringify({ /* structure matching hashed data */ });
-      // const isValid = await verifyHash(receivedDataString, data.dataHash || '');
-      // if (!isValid) {
-      //   throw new Error("Data integrity check failed. Tampered data received.");
-      // }
+      // Verify data hash
+      const { dataHash, ...dataToVerify } = data;
+      const calculatedHash = await hashData(JSON.stringify(dataToVerify));
+      const isValid = await verifyHash(JSON.stringify(dataToVerify), dataHash || ''); // Use verifyHash
+
+       if (!isValid) {
+         throw new Error("Data integrity check failed. Data may be corrupted or tampered with.");
+       }
+
 
       // --- Cache Reset on Successful Reconnection ---
-      // Fetch successful, overwrite local (sessionStorage) state with fetched data.
-      // This effectively resets the local cache with the authoritative server state.
       console.log("Fetch: Overwriting local state with fetched data...");
       setTransactions(data.transactions || []);
       setDebts(data.debts || []);
       setAssetItems(data.assetItems || []);
       setOtherLiabilityItems(data.otherLiabilityItems || []);
       setBudgetItems(data.budgetItems || []);
-      setReviews(data.reviews || {});
+      setOwnedReviews(data.ownedReviews || {}); // Set owned reviews
+      setSharedReviews(data.sharedReviews || {}); // Set shared reviews
       setStartDate(data.startDate ? new Date(data.startDate) : undefined);
       setEndDate(data.endDate ? new Date(data.endDate) : undefined);
 
@@ -269,14 +261,16 @@ export function useSyncManager() {
         description: `Could not fetch data from the cloud: ${error.message}. Using local data for this session.`,
         variant: 'destructive',
       });
-       // Do NOT clear local state on fetch error, allow offline use of existing session data.
-       // Set initialFetchAttempted to true even on error to prevent repeated initial save attempts.
        initialFetchAttempted.current = true;
     } finally {
       setIsSyncing(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, userId, toast, saveDataToDB, clearLocalState]); // Added clearLocalState
+  // Update dependencies for store setters
+  }, [
+      isSignedIn, userId, toast, saveDataToDB, clearLocalState,
+      setTransactions, setDebts, setAssetItems, setOtherLiabilityItems,
+      setBudgetItems, setOwnedReviews, setSharedReviews, setStartDate, setEndDate
+  ]);
 
 
   // --- Effects ---
@@ -290,30 +284,24 @@ export function useSyncManager() {
 
     if (isSignedIn && currentUserId) {
         if (prevUserId === undefined || currentUserId !== prevUserId) {
-            // User signed in OR changed user
             console.log(`Auth Effect: User signed in or changed (${prevUserId ?? 'none'} -> ${currentUserId}). Clearing local state and fetching new data.`);
-            // Crucially clear local state BEFORE fetching new data to prevent data merging/leakage.
             clearLocalState();
             initialFetchAttempted.current = false;
-            fetchDataFromDB(); // Fetch data for the new user
+            fetchDataFromDB();
         } else if (!initialFetchAttempted.current) {
-             // Same user, but initial fetch wasn't done (e.g., page refresh while logged in)
              console.log("Auth Effect: User already signed in, attempting initial fetch...");
              fetchDataFromDB();
         }
     } else if (!isSignedIn && (prevUserId !== null && prevUserId !== undefined)) {
-        // User signed out
         console.log("Auth Effect: User signed out. Clearing local state.");
         clearLocalState();
-        setSyncStatus('local'); // Explicitly set to local on sign out
+        setSyncStatus('local');
     } else if (!isSignedIn) {
-        // Initial load state, not signed in
         console.log("Auth Effect: Initial load: Not signed in. Status is local.");
         setSyncStatus('local');
         previousUserIdRef.current = null;
     }
 
-    // Update the previousUserIdRef *after* the logic runs
     if (previousUserIdRef.current !== currentUserId) {
       previousUserIdRef.current = currentUserId;
     }
@@ -322,11 +310,9 @@ export function useSyncManager() {
 
    // Subscribe to store changes and trigger debounced save
    useEffect(() => {
-       // Only attempt save if signed in AND initial fetch is complete (or deemed unnecessary).
        if (!isSignedIn || !userId || !initialFetchAttempted.current) {
            return;
        }
-       // Avoid saving immediately after a sync operation that is still in progress
        if (isSyncing || isSavingRef.current) {
            return;
        }
@@ -334,18 +320,25 @@ export function useSyncManager() {
        console.log("Save Subscription: Subscribing to store changes...");
 
         const triggerSave = (storeName: string) => {
+            // Only save if the data changing belongs to the current user
+            // This check is primarily relevant for weekly reviews which have ownerId
+            // For other stores, the data is assumed to belong to the current user due to fetch/clear logic
+             if (storeName === 'Weekly Review' && !Object.values(useWeeklyReviewStore.getState().ownedReviews).some(r => r.ownerId === userId)) {
+                 console.log(`Weekly Review store changed, but no changes to owned reviews detected for user ${userId}. Skipping save.`);
+                 return; // Don't save if the change wasn't to an owned review
+             }
+
             console.log(`${storeName} store changed, triggering save...`);
-            setSyncStatus('local'); // Indicate data is local (unsaved)
+            setSyncStatus('local');
             debouncedSave().catch(err => console.error(`Save failed after ${storeName} change:`, err));
         };
 
-       // Subscribe to each store, checking if it's hydrated and the relevant data changed
+       // Subscribe to each store
        const unsubscribes = [
            useTransactionsStore.subscribe((state, prevState) => {
                if (state.isHydrated && state.transactions !== prevState.transactions) triggerSave('Transaction');
            }),
            useDebtStore.subscribe((state, prevState) => {
-                // Assuming DebtStore doesn't need explicit hydration flag like transactions
                if (state.debts !== prevState.debts) triggerSave('Debt');
            }),
            useStatementStore.subscribe((state, prevState) => {
@@ -357,8 +350,9 @@ export function useSyncManager() {
            useBudgetStore.subscribe((state, prevState) => {
                if (state.budgetItems !== prevState.budgetItems) triggerSave('Budget');
            }),
+           // Only trigger save if OWNED reviews change. Changes to SHARED reviews shouldn't trigger a save for the current user.
            useWeeklyReviewStore.subscribe((state, prevState) => {
-               if (state.reviews !== prevState.reviews) triggerSave('Weekly Review');
+               if (state.ownedReviews !== prevState.ownedReviews) triggerSave('Weekly Review');
            }),
        ];
 
@@ -366,7 +360,6 @@ export function useSyncManager() {
            console.log("Save Subscription: Unsubscribing from store changes.");
            unsubscribes.forEach(unsub => unsub());
        };
-   // Dependencies ensure subscription logic re-runs if auth state changes or save function updates.
    }, [isSignedIn, userId, debouncedSave, initialFetchAttempted, isSyncing]);
 
 
@@ -376,7 +369,6 @@ export function useSyncManager() {
           toast({ title: "Cannot Sync", description: "Please sign in to sync data.", variant: "destructive" });
           return;
       }
-      // Allow retry only if there was a previous error AND not currently syncing/saving
       if (syncStatus === 'error' && !isSyncing && !isSavingRef.current) {
           console.log("Sync: Retrying fetch/sync...");
           fetchDataFromDB(true); // Pass true to indicate it's a retry attempt
@@ -385,13 +377,44 @@ export function useSyncManager() {
           toast({title: "Sync Busy", description: "Please wait for the current sync operation to complete.", variant: "default"});
       } else {
           console.log("Sync: No error to retry, or already syncing/synced.");
-          // Optionally provide feedback if syncStatus is not 'error'
           if (syncStatus !== 'error') {
               toast({title: "Already Synced", description: "Data is already synced or currently syncing.", variant: "default"});
           }
       }
   }, [syncStatus, isSyncing, fetchDataFromDB, toast, isSignedIn, userId]);
 
-  // Return sync status and the retry function
   return { syncStatus, retrySync };
+}
+
+// Placeholder hash function (replace with actual implementation)
+async function hashData(data: string): Promise<string> {
+    try {
+      const encoder = new TextEncoder();
+      const dataBuffer = encoder.encode(data);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    } catch (error) {
+        console.error("Hashing failed:", error);
+        // In a real app, you might want to handle this more robustly
+        return 'hashing_failed';
+    }
+}
+
+// Placeholder verify function (replace with actual implementation)
+async function verifyHash(data: string, expectedHash: string): Promise<boolean> {
+    if (!expectedHash || expectedHash === 'hashing_failed') {
+        console.warn("No valid hash provided for verification or hashing failed previously.");
+        // Decide behavior: Allow if no hash exists (initial load?), or reject?
+        // For now, let's allow if no hash was stored, but reject if hash failed.
+        return expectedHash !== 'hashing_failed';
+    }
+    try {
+        const calculatedHash = await hashData(data);
+        return calculatedHash === expectedHash;
+    } catch (error) {
+        console.error("Hash verification failed:", error);
+        return false;
+    }
 }
