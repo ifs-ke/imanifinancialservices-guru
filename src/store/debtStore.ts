@@ -7,24 +7,29 @@ import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decodin
 // Generate unique IDs
 const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Helper to sort debts
+// Helper to sort debts - IMPORTANT for consistent hashing
 const sortDebts = (debtList: DebtItem[]): DebtItem[] => {
     return [...debtList].sort((a, b) => {
+        // Primary sort: Description ascending
+        const descDiff = a.description.localeCompare(b.description);
+        if (descDiff !== 0) return descDiff;
+        // Secondary sort: Term (short before long)
         if (a.term === 'short' && b.term === 'long') return -1;
         if (a.term === 'long' && b.term === 'short') return 1;
+        // Tertiary sort: Principal descending
         return b.principal - a.principal;
     });
 };
 
 // Custom Session Storage with Base64 encoding
 const createSessionStorageWithEncoding = (): StateStorage => {
-  const storage = sessionStorage; // Use sessionStorage
+  const storage = sessionStorage;
   return {
     getItem: (name) => {
       const str = storage.getItem(name);
       if (!str) return null;
       try {
-        const decodedStr = decode(str); // Decode Base64
+        const decodedStr = decode(str);
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
@@ -33,7 +38,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
     },
     setItem: (name, value) => {
       try {
-        const encodedValue = encode(value); // Encode using Base64
+        const encodedValue = encode(value);
         storage.setItem(name, encodedValue);
       } catch (e) {
          console.error(`Failed to encode item "${name}" for sessionStorage`, e);
@@ -46,12 +51,12 @@ const createSessionStorageWithEncoding = (): StateStorage => {
 
 interface DebtState {
     debts: DebtItem[];
-    setDebts: (debts: DebtItem[]) => void; // Action to overwrite state
+    setDebts: (debts: DebtItem[]) => void;
     addDebt: (debtData: Omit<DebtItem, 'id'>) => DebtItem;
     updateDebt: (updatedDebt: DebtItem) => void;
     deleteDebt: (id: string) => void;
     importDebtsBatch: (newDebtsData: Omit<DebtItem, 'id'>[]) => DebtItem[];
-    clearDebts: () => void; // Action to clear state
+    clearDebts: () => void;
 }
 
 const initialState = {
@@ -91,13 +96,14 @@ export const useDebtStore = create<DebtState>()(
                  set((state) => ({ debts: sortDebts([...state.debts, ...newDebtsWithIds]) }));
                  return newDebtsWithIds;
             },
-            clearDebts: () => set(initialState), // Resets to initial empty state
+            clearDebts: () => set(initialState),
         }),
         {
-            name: 'ifcGuru_debts', // Session storage key
-            storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
+            name: 'ifcGuru_debts',
+            storage: createJSONStorage(() => createSessionStorageWithEncoding()),
              deserialize: (str) => {
                 const state = JSON.parse(str);
+                // Sort on hydration to ensure consistency
                 state.state.debts = sortDebts(state.state.debts || []);
                 return state;
             },

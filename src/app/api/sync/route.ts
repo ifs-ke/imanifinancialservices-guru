@@ -3,20 +3,27 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
-import { hashData } from '@/lib/storage-utils'; // Assuming hash utils are implemented
+import { hashData } from '@/lib/storage-utils';
+import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; // Import preparation helper
+import stringify from 'fast-json-stable-stringify'; // Import stable stringify
 
 // Helper to safely get collection data for a specific user
 async function getCollectionData<T>(db: any, collectionName: string, userId: string): Promise<T[]> {
   try {
     const collection = db.collection(collectionName);
+    // Ensure userId field exists for querying
+    await collection.createIndex({ userId: 1 }); // Create index if it doesn't exist
     const data = await collection.find({ userId }, { projection: { _id: 0, userId: 0 } }).toArray();
+
+    // Ensure dates are valid Date objects after fetching
     return data.map((item: any) => {
         if (item.date && !(item.date instanceof Date)) {
             try {
                 item.date = new Date(item.date);
-                 if (isNaN(item.date.getTime())) throw new Error("Invalid date string");
+                 if (isNaN(item.date.getTime())) throw new Error("Invalid date string from DB");
             } catch (e) {
-                 console.warn(`Invalid date format encountered in ${collectionName} for item ID ${item.id || 'N/A'} for user ${userId}. Setting to current date.`);
+                 console.warn(`Invalid date format encountered in DB for ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting date.`);
+                 // Handle appropriately - maybe skip item or use default? Using current date for now.
                  item.date = new Date();
             }
         }
@@ -24,7 +31,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
     });
   } catch (error) {
     console.error(`Error fetching ${collectionName} for user ${userId}:`, error);
-    return [];
+    throw new Error(`Failed to fetch ${collectionName}`); // Re-throw to handle in main function
   }
 }
 
@@ -32,18 +39,20 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
 async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<string, WeeklyReviewData>> {
     try {
       const collection = db.collection('weeklyReviews');
-      // Find reviews where the userId field matches the logged-in user
-      const ownedReviewsCursor = collection.find({ userId: userId }, { projection: { _id: 0 } }); // Exclude _id
+      await collection.createIndex({ userId: 1, weekKey: 1 }); // Index for querying
+      const ownedReviewsCursor = collection.find({ userId: userId }, { projection: { _id: 0 } });
       const reviewsMap: Record<string, WeeklyReviewData> = {};
       for await (const doc of ownedReviewsCursor) {
-          if (doc.weekKey) { // Ensure weekKey exists
+          if (doc.weekKey) {
+             // Ensure sharedWith is an array, default to empty if missing/null
+             doc.sharedWith = Array.isArray(doc.sharedWith) ? doc.sharedWith : [];
              reviewsMap[doc.weekKey] = doc as WeeklyReviewData;
           }
       }
        return reviewsMap;
     } catch (error) {
       console.error(`Error fetching owned weeklyReviews for user ${userId}:`, error);
-      return {};
+      throw new Error('Failed to fetch owned weekly reviews');
     }
 }
 
@@ -51,41 +60,44 @@ async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<st
 async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<string, WeeklyReviewData>> {
     try {
       const collection = db.collection('weeklyReviews');
-      // Find reviews where the sharedWith array contains the logged-in user's ID
-      // AND the ownerId is NOT the logged-in user's ID
+       await collection.createIndex({ sharedWith: 1 }); // Index for querying shared reviews
        const sharedReviewsCursor = collection.find(
-           { sharedWith: userId, userId: { $ne: userId } }, // Find where sharedWith includes userId, but user is not the owner
-           { projection: { _id: 0 } } // Exclude _id
+           { sharedWith: userId, userId: { $ne: userId } }, // sharedWith includes user, user is not owner
+           { projection: { _id: 0 } }
        );
        const reviewsMap: Record<string, WeeklyReviewData> = {};
        for await (const doc of sharedReviewsCursor) {
            if (doc.weekKey) {
+                // Ensure sharedWith is an array, default to empty if missing/null
+                doc.sharedWith = Array.isArray(doc.sharedWith) ? doc.sharedWith : [];
                reviewsMap[doc.weekKey] = doc as WeeklyReviewData;
            }
        }
        return reviewsMap;
     } catch (error) {
       console.error(`Error fetching shared weeklyReviews for user ${userId}:`, error);
-      return {};
+      throw new Error('Failed to fetch shared weekly reviews');
     }
 }
 
 
-// Helper to get statement dates for a specific user
-async function getStatementDates(db: any, userId: string): Promise<{ startDate?: string, endDate?: string }> {
+// Helper to get user profile data (including dates and getting started state)
+async function getUserProfileData(db: any, userId: string): Promise<{ startDate?: string, endDate?: string, gettingStartedDismissed?: boolean }> {
     try {
         const collection = db.collection('userProfiles');
+         await collection.createIndex({ userId: 1 });
         const userProfile = await collection.findOne(
             { userId },
-            { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1 } }
+            { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1, gettingStartedDismissed: 1 } }
         );
         return {
              startDate: userProfile?.statementStartDate instanceof Date ? userProfile.statementStartDate.toISOString() : undefined,
              endDate: userProfile?.statementEndDate instanceof Date ? userProfile.statementEndDate.toISOString() : undefined,
+             gettingStartedDismissed: userProfile?.gettingStartedDismissed ?? false, // Default to false if undefined
         };
     } catch (error) {
-        console.error(`Error fetching statement dates for user ${userId}:`, error);
-        return {};
+        console.error(`Error fetching user profile data for user ${userId}:`, error);
+        throw new Error('Failed to fetch user profile data');
     }
 }
 
@@ -101,17 +113,6 @@ export async function GET() {
     const client = await connectToDatabase();
     const db = client.db();
 
-    // Check if user has ANY data (consider checking profile or a primary collection)
-    const profileCount = await db.collection('userProfiles').countDocuments({ userId });
-    // Optionally add checks for other essential collections if a profile might not exist initially
-    // const transactionCount = await db.collection('transactions').countDocuments({ userId });
-    // etc.
-
-    if (profileCount === 0 /* && transactionCount === 0 etc. */) {
-        console.log(`Sync: No existing data found for user ${userId}. Client should initiate save.`);
-        return NextResponse.json({ message: 'No data found for user' }, { status: 404 });
-    }
-
     // Fetch all data types concurrently
     const [
         transactions,
@@ -120,49 +121,76 @@ export async function GET() {
         otherLiabilityItems,
         budgetItems,
         ownedReviews,
-        sharedReviews, // Fetch shared reviews
-        dates
+        sharedReviews,
+        profileData
     ] = await Promise.all([
         getCollectionData<TransactionWithId>(db, 'transactions', userId),
         getCollectionData<DebtItem>(db, 'debts', userId),
         getCollectionData<StatementItem>(db, 'assetItems', userId),
         getCollectionData<OtherLiabilityItem>(db, 'otherLiabilityItems', userId),
         getCollectionData<BudgetItem>(db, 'budgetItems', userId),
-        getOwnedWeeklyReviews(db, userId), // Fetch owned reviews
-        getSharedWeeklyReviews(db, userId), // Fetch shared reviews
-        getStatementDates(db, userId)
-    ]);
+        getOwnedWeeklyReviews(db, userId),
+        getSharedWeeklyReviews(db, userId),
+        getUserProfileData(db, userId)
+    ]).catch(fetchError => {
+         // If any fetch fails, log it and throw a generic error
+         console.error(`Sync fetch failed for user ${userId}:`, fetchError);
+         throw new Error("Failed to fetch all required data from database.");
+     });
 
-     // Combine all data for hashing
-     const dataToHash = {
+     // Check if *any* data exists for the user across primary collections.
+     // This helps differentiate a truly new user from one whose profile might be missing.
+     const hasAnyData = transactions.length > 0 || debts.length > 0 || assetItems.length > 0 || otherLiabilityItems.length > 0 || budgetItems.length > 0 || Object.keys(ownedReviews).length > 0;
+
+      if (!hasAnyData && !profileData.gettingStartedDismissed && profileData.startDate === undefined && profileData.endDate === undefined) {
+           console.log(`Sync: No existing data found for user ${userId}. Client should initiate save if they have local data.`);
+           // Return 404 but include empty structure and a hash for consistency? Or just 404?
+           // Returning empty structure + hash seems safer for client logic.
+            const emptyData = {
+                 transactions: [], debts: [], assetItems: [], otherLiabilityItems: [],
+                 budgetItems: [], ownedReviews: {}, sharedReviews: {},
+                 startDate: undefined, endDate: undefined, gettingStartedDismissed: false
+             };
+             const preparedEmptyData = prepareDataForHashing(emptyData);
+             const emptyDataHash = await hashData(stringify(preparedEmptyData));
+
+            return NextResponse.json({ ...preparedEmptyData, dataHash: emptyDataHash }, { status: 200 }); // Send 200 with empty data + hash
+           // Original 404 logic: return NextResponse.json({ message: 'No data found for user' }, { status: 404 });
+       }
+
+
+     // Combine all fetched data for hashing and response
+     const fetchedData = {
        transactions,
        debts,
        assetItems,
        otherLiabilityItems,
        budgetItems,
        ownedReviews,
-       sharedReviews, // Include shared reviews in the hash calculation
-       startDate: dates.startDate,
-       endDate: dates.endDate,
+       sharedReviews,
+       startDate: profileData.startDate,
+       endDate: profileData.endDate,
+       gettingStartedDismissed: profileData.gettingStartedDismissed,
      };
-     const dataHash = await hashData(JSON.stringify(dataToHash));
+
+      // Prepare data structure for hashing (consistent sorting, date formats)
+      const preparedData = prepareDataForHashing(fetchedData);
+      const dataString = stringify(preparedData); // Use stable stringify for hashing
+      const dataHash = await hashData(dataString);
+
+      console.log(`Sync API: Generated server hash for user ${userId}: ${dataHash}`);
+      // console.log("Sync API: Data used for server hash calculation:", dataString.substring(0, 300) + "..."); // Log truncated data
 
 
-    // Return all fetched data associated with the user, including hash
+    // Return all fetched data (in prepared format) associated with the user, including hash
     return NextResponse.json({
-      transactions,
-      debts,
-      assetItems,
-      otherLiabilityItems,
-      budgetItems,
-      ownedReviews,
-      sharedReviews, // Include shared reviews in the response
-      startDate: dates.startDate,
-      endDate: dates.endDate,
-      dataHash, // Send the hash to the client
+      ...preparedData, // Send the prepared data (dates as strings, sorted arrays)
+      dataHash,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Failed to fetch data for user ${userId}:`, error);
-    return NextResponse.json({ error: 'Failed to fetch data from database' }, { status: 500 });
+    // Use the error message if available, otherwise a generic message
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data from database';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

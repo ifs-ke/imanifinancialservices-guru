@@ -8,7 +8,7 @@ import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decodin
 // Generate unique IDs
 const generateId = (): string => `budget_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-// Helper to sort budget items
+// Helper to sort budget items - IMPORTANT for consistent hashing
 const sortBudgetItems = (items: BudgetItem[]): BudgetItem[] => {
     const categoryOrder: Record<BudgetItemCategory, number> = {
         'income': 1,
@@ -17,8 +17,10 @@ const sortBudgetItems = (items: BudgetItem[]): BudgetItem[] => {
         'goal': 4,
     };
     return [...items].sort((a, b) => {
+        // Primary sort: Category order
         const categoryDiff = categoryOrder[a.category] - categoryOrder[b.category];
         if (categoryDiff !== 0) return categoryDiff;
+        // Secondary sort: Description ascending
         return a.description.localeCompare(b.description);
     });
 };
@@ -30,13 +32,13 @@ const sumByCategory = (items: BudgetItem[], category: BudgetItemCategory): numbe
 
 // Custom Session Storage with Base64 encoding
 const createSessionStorageWithEncoding = (): StateStorage => {
-  const storage = sessionStorage; // Use sessionStorage
+  const storage = sessionStorage;
   return {
     getItem: (name) => {
       const str = storage.getItem(name);
       if (!str) return null;
       try {
-        const decodedStr = decode(str); // Decode Base64
+        const decodedStr = decode(str);
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
@@ -45,7 +47,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
     },
     setItem: (name, value) => {
       try {
-        const encodedValue = encode(value); // Encode using Base64
+        const encodedValue = encode(value);
         storage.setItem(name, encodedValue);
       } catch (e) {
          console.error(`Failed to encode item "${name}" for sessionStorage`, e);
@@ -93,13 +95,14 @@ export const useBudgetStore = create<BudgetState>()(
             deleteBudgetItem: (id) => {
                 set((state) => ({ budgetItems: sortBudgetItems(state.budgetItems.filter(item => item.id !== id)) }));
             },
-            clearBudgetItems: () => set(initialState), // Resets to initial empty state
+            clearBudgetItems: () => set(initialState),
         }),
         {
-            name: 'ifcGuru_budgetItems', // Session storage key
-            storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
+            name: 'ifcGuru_budgetItems',
+            storage: createJSONStorage(() => createSessionStorageWithEncoding()),
             deserialize: (str) => {
                 const state = JSON.parse(str);
+                 // Sort on hydration
                 state.state.budgetItems = sortBudgetItems(state.state.budgetItems || []);
                 return state;
             },
@@ -107,7 +110,7 @@ export const useBudgetStore = create<BudgetState>()(
     )
 );
 
-// Selectors for summary data
+// Selectors remain the same
 export const selectTotalBudgetedIncome = (state: BudgetState): number =>
     sumByCategory(state.budgetItems, 'income');
 

@@ -4,37 +4,44 @@ import { auth } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import { Collection } from 'mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
-import { hashData, verifyHash } from '@/lib/storage-utils'; // Assuming hash utils are implemented
+import { hashData, verifyHash } from '@/lib/storage-utils'; // Use updated hash utils
+import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; // Import preparation helper
+import stringify from 'fast-json-stable-stringify'; // Import stable stringify
 
-// Define the structure of the incoming request body
+// Define the structure of the incoming request body (should match client's prepared data + hash)
 interface SaveDataPayload {
   transactions: TransactionWithId[];
   debts: DebtItem[];
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
   budgetItems: BudgetItem[];
-  ownedReviews: Record<string, WeeklyReviewData>; // Only owned reviews are sent for saving
+  ownedReviews: Record<string, WeeklyReviewData>;
   startDate?: string; // Date as ISO string
   endDate?: string;   // Date as ISO string
-  dataHash: string; // Hash of the data being saved
+  gettingStartedDismissed?: boolean;
+  dataHash: string; // Hash of the prepared data being saved
 }
 
 // Helper function to safely upsert data into a collection for a specific user
 async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[]) {
   try {
     const collection: Collection = db.collection(collectionName);
-    const dataWithUserId = data.map(item => ({
+    // Data received should already have Dates converted to ISO strings by prepareDataForHashing on client
+    // Convert back to Date objects before saving to MongoDB
+    const dataWithUserIdAndDates = data.map(item => ({
         ...item,
-        userId, // Add userId for scoping
-        ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}),
+        userId,
+        ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}), // Convert ISO string back to Date
     }));
 
     const session = db.client.startSession();
     try {
       await session.withTransaction(async () => {
+        // Delete existing data scoped to the user within the transaction
         await collection.deleteMany({ userId }, { session });
-        if (dataWithUserId.length > 0) {
-          await collection.insertMany(dataWithUserId, { session });
+        // Insert new data if any exists
+        if (dataWithUserIdAndDates.length > 0) {
+          await collection.insertMany(dataWithUserIdAndDates, { session });
         }
       });
        console.log(`Successfully replaced ${collectionName} for user ${userId}`);
@@ -54,32 +61,35 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
         const reviewKeys = Object.keys(ownedReviews);
 
         if (reviewKeys.length === 0) {
-             // If the user sends an empty ownedReviews object, potentially delete all their owned reviews.
-             // Be cautious with this logic. Maybe only update/insert?
-             // For now, we only upsert provided reviews.
              console.log(`No owned reviews provided to save for user ${userId}.`);
+             // Optionally delete existing owned reviews if the payload is explicitly empty,
+             // but be careful not to accidentally wipe data. Current approach only upserts.
+             // await collection.deleteMany({ userId: userId }); // Uncomment with caution
              return;
         }
 
         const bulkOps = reviewKeys.map(weekKey => {
             const reviewData = ownedReviews[weekKey];
-             // Ensure ownerId matches the current user before saving
+             // CRITICAL: Ensure ownerId in the review data matches the authenticated userId
              if (reviewData.ownerId !== userId) {
-                 console.warn(`Skipping save for review ${weekKey}: ownerId mismatch (expected ${userId}, got ${reviewData.ownerId})`);
+                 console.warn(`SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData.ownerId}). Skipping.`);
                  return null; // Skip this operation
              }
+            // Ensure sharedWith is an array or undefined
+            const cleanSharedWith = Array.isArray(reviewData.sharedWith) ? reviewData.sharedWith : undefined;
+
             return {
                  updateOne: {
-                     filter: { userId: userId, weekKey: weekKey }, // Find specific review by user and week
-                     update: { $set: { userId: userId, weekKey: weekKey, ...reviewData } }, // Set all fields including userId and weekKey
-                     upsert: true // Create if it doesn't exist
+                     filter: { userId: userId, weekKey: weekKey }, // Ensure we only update reviews owned by this user
+                     update: { $set: { ...reviewData, userId: userId, weekKey: weekKey, sharedWith: cleanSharedWith } }, // Explicitly set userId and weekKey, ensure sharedWith format
+                     upsert: true
                  }
              };
-         }).filter(op => op !== null); // Filter out null operations
+         }).filter(op => op !== null); // Filter out skipped operations
 
 
         if (bulkOps.length > 0) {
-             await collection.bulkWrite(bulkOps as any); // Perform bulk upsert
+             await collection.bulkWrite(bulkOps as any);
              console.log(`Successfully saved/updated ${bulkOps.length} owned weeklyReviews for user ${userId}`);
          } else {
              console.log(`No valid owned reviews to save for user ${userId}.`);
@@ -92,28 +102,30 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
 }
 
 
-// Helper function to save statement dates for a specific user
-async function saveStatementDates(db: any, userId: string, startDate?: string, endDate?: string) {
-    if (startDate === undefined && endDate === undefined) return;
+// Helper function to save statement dates and getting started state for a specific user
+async function saveUserProfileData(db: any, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean) {
+    if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) return;
 
     try {
         const collection: Collection = db.collection('userProfiles');
         const updateDoc: any = {};
-         if (startDate !== undefined) updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
-         if (endDate !== undefined) updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
+        if (startDate !== undefined) updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
+        if (endDate !== undefined) updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
+        if (gettingStartedDismissed !== undefined) updateDoc.gettingStartedDismissed = gettingStartedDismissed;
+
 
         if (Object.keys(updateDoc).length > 0) {
              await collection.updateOne(
-                 { userId },
-                 { $set: { userId, ...updateDoc } },
-                 { upsert: true }
+                 { userId }, // Filter by userId
+                 { $set: updateDoc }, // Set only the provided fields
+                 { upsert: true } // Create profile if it doesn't exist
              );
-             console.log(`Successfully saved statement dates for user ${userId}`);
+             console.log(`Successfully saved user profile data for user ${userId}`);
          }
 
     } catch (error) {
-        console.error(`Error saving statement dates for user ${userId}:`, error);
-        throw new Error('Failed to save statement dates');
+        console.error(`Error saving user profile data for user ${userId}:`, error);
+        throw new Error('Failed to save user profile data');
     }
 }
 
@@ -132,40 +144,49 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  if (!payload || typeof payload !== 'object') {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+  if (!payload || typeof payload !== 'object' || !payload.dataHash) {
+      return NextResponse.json({ error: 'Invalid payload or missing dataHash' }, { status: 400 });
   }
 
-  const {
-      transactions = [],
-      debts = [],
-      assetItems = [],
-      otherLiabilityItems = [],
-      budgetItems = [],
-      ownedReviews = {}, // Only expect ownedReviews
-      startDate,
-      endDate,
-      dataHash // Expect the hash from the client
-  } = payload;
+  const { dataHash, ...receivedData } = payload;
+
+   // IMPORTANT: Re-prepare the *received* data for hashing on the server-side
+   // This ensures the data structure and sorting matches exactly what the client hashed.
+   const preparedDataForVerification = prepareDataForHashing(receivedData);
+   const dataString = stringify(preparedDataForVerification); // Use stable stringify
+   const calculatedServerHash = await hashData(dataString);
+
+    console.log(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`);
+    // console.log("Save API: Data used for server hash calculation:", JSON.stringify(preparedDataForVerification).substring(0, 300) + "..."); // Log truncated data
 
    // Verify hash before proceeding
-   const dataToVerify = {
-       transactions, debts, assetItems, otherLiabilityItems,
-       budgetItems, ownedReviews, startDate, endDate
-   };
-   const calculatedHash = await hashData(JSON.stringify(dataToVerify)); // Recalculate hash server-side
+    const isValid = await verifyHash(dataString, dataHash); // Use verifyHash
 
-   // Simple comparison for now. In production, use a secure comparison function.
-    if (calculatedHash !== dataHash) {
-       console.error(`Data integrity check failed for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedHash}`);
+    if (!isValid) {
+       console.error(`Data integrity check failed for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedServerHash}`);
        return NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
     }
-    console.log(`Data integrity check passed for user ${userId}.`);
+    console.log(`Data integrity check passed for user ${userId}. Proceeding with save.`);
 
 
   try {
     const client = await connectToDatabase();
     const db = client.db();
+
+    // Destructure the *prepared* data for saving (which has dates as strings etc.)
+    // The helper functions will handle converting back to Date objects where needed.
+    const {
+      transactions = [],
+      debts = [],
+      assetItems = [],
+      otherLiabilityItems = [],
+      budgetItems = [],
+      ownedReviews = {},
+      startDate,
+      endDate,
+      gettingStartedDismissed
+    } = preparedDataForVerification;
+
 
     // Perform all database operations, passing the userId to each helper
     await Promise.all([
@@ -174,8 +195,8 @@ export async function POST(request: Request) {
       replaceCollectionData(db, 'assetItems', userId, assetItems),
       replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems),
       replaceCollectionData(db, 'budgetItems', userId, budgetItems),
-      saveOwnedWeeklyReviews(db, userId, ownedReviews), // Save only OWNED reviews
-      saveStatementDates(db, userId, startDate, endDate)
+      saveOwnedWeeklyReviews(db, userId, ownedReviews),
+      saveUserProfileData(db, userId, startDate, endDate, gettingStartedDismissed) // Pass gettingStartedDismissed
     ]);
 
      return NextResponse.json({ message: `Data saved successfully for user ${userId}` });
