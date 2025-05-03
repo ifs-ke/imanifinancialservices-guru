@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/statements/page.tsx
 'use client';
 
@@ -24,12 +23,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, differenceInDays } from 'date-fns'; // Import differenceInDays
 import { cn } from '@/lib/utils';
 import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
 import { useDebtStore } from '@/store/debtStore'; // Import Zustand store hook
 import { useStatementStore } from '@/store/statementStore'; // Import Zustand store hook for items and dates
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import Zustand store hook and selectors
+import { useBudgetStore } from '@/store/budgetStore'; // Import Zustand store hook and selectors
 import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId, BudgetItem, BudgetItemCategory } from '@/lib/types'; // Import all needed types
 import { Badge } from '@/components/ui/badge'; // Import Badge
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
@@ -138,14 +137,18 @@ export default function StatementsPage() {
 
   // Filter transactions based on the global startDate and endDate from the store
   const filteredTransactions = useMemo(() => {
-    const start = startDate ? startDate.getTime() : 0;
+    const start = startDate || startOfMonth(new Date()); // Use default if undefined
+    const end = endDate || endOfMonth(new Date()); // Use default if undefined
     // Set end date to the very end of the selected day
-    const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
+    const endOfDay = new Date(end);
+    endOfDay.setHours(23, 59, 59, 999);
+
     return transactions.filter(tx => {
         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
         if (isNaN(txDate.getTime())) return false;
         const txTime = txDate.getTime();
-        return txTime >= start && txTime <= end;
+        // Ensure start time comparison includes the beginning of the start day
+        return txTime >= start.getTime() && txTime <= endOfDay.getTime();
     });
   }, [transactions, startDate, endDate]); // Depend on store dates
 
@@ -226,68 +229,76 @@ export default function StatementsPage() {
         return actuals;
     }, [filteredTransactions]);
 
-   // Generate Variance Data (now includes category grouping)
+   // Generate Variance Data (now includes category grouping and prorated budget)
    const varianceDataByCategory = useMemo(() => {
-        const varianceByCategory: Record<BudgetItemCategory, { description: string; budgeted: number; actual: number | null }[]> = {
-            income: [],
-            'recurring-expense': [],
-            'one-time-expense': [],
-            goal: [],
-        };
-        const actualsTracked: Set<string> = new Set(); // Keep track of actuals already listed
+       const varianceByCategory: Record<BudgetItemCategory, { description: string; budgeted: number; actual: number | null }[]> = {
+           income: [],
+           'recurring-expense': [],
+           'one-time-expense': [],
+           goal: [],
+       };
+       const actualsTracked: Set<string> = new Set(); // Keep track of actuals already listed
 
-        // 1. Iterate through budgeted items (from budgetStore)
-        budgetItems.forEach(item => {
-            const descKey = item.description.toLowerCase();
-            const actualGroup = actualSpendingByCategory[item.category]?.[descKey];
-            const actualAmount = actualGroup ? actualGroup.amount : 0;
+       // Calculate duration of the selected period in days
+       const start = startDate || startOfMonth(new Date());
+       const end = endDate || endOfMonth(new Date());
+       const daysInPeriod = differenceInDays(end, start) + 1;
+       const daysInAvgMonth = 30.44;
+       const budgetMultiplier = daysInPeriod / daysInAvgMonth;
 
-            varianceByCategory[item.category].push({
-                description: item.description,
-                budgeted: item.amount,
-                actual: actualAmount, // Actual might be 0 if no matching transaction
-            });
-             if(actualGroup) actualsTracked.add(`${item.category}-${descKey}`); // Mark this actual as handled
-        });
+       // 1. Iterate through budgeted items (from budgetStore) and prorate budget
+       budgetItems.forEach(item => {
+           const descKey = item.description.toLowerCase();
+           const actualGroup = actualSpendingByCategory[item.category]?.[descKey];
+           const actualAmount = actualGroup ? actualGroup.amount : 0;
+           const proratedBudget = item.amount * budgetMultiplier; // Prorate the budget amount
+
+           varianceByCategory[item.category].push({
+               description: item.description,
+               budgeted: proratedBudget, // Use prorated budget
+               actual: actualAmount,
+           });
+            if(actualGroup) actualsTracked.add(`${item.category}-${descKey}`);
+       });
 
         // 2. Add actual transactions that *didn't* match a budget item description
-        Object.entries(actualSpendingByCategory).forEach(([category, descriptions]) => {
-             Object.entries(descriptions).forEach(([descKey, data]) => {
-                const trackerKey = `${category}-${descKey}`;
-                 if (!actualsTracked.has(trackerKey)) {
-                     // Find the original description casing (take the first matching transaction)
-                     const originalTx = filteredTransactions.find(tx =>
-                         (tx.amount > 0 ? 'income' :
-                          tx.frequency === 'recurring' ? 'recurring-expense' :
-                          tx.frequency === 'one-time' ? 'one-time-expense' : null) === category &&
-                          tx.description.toLowerCase() === descKey
-                     );
-                     const originalDescription = originalTx ? originalTx.description : descKey; // Fallback to lower key if not found
+       Object.entries(actualSpendingByCategory).forEach(([category, descriptions]) => {
+            Object.entries(descriptions).forEach(([descKey, data]) => {
+               const trackerKey = `${category}-${descKey}`;
+                if (!actualsTracked.has(trackerKey)) {
+                    const originalTx = filteredTransactions.find(tx =>
+                        (tx.amount > 0 ? 'income' :
+                         tx.frequency === 'recurring' ? 'recurring-expense' :
+                         tx.frequency === 'one-time' ? 'one-time-expense' : null) === category &&
+                         tx.description.toLowerCase() === descKey
+                    );
+                    const originalDescription = originalTx ? originalTx.description : descKey;
 
-                     varianceByCategory[category as BudgetItemCategory].push({
-                         description: `* ${originalDescription}`, // Mark as unbudgeted actual
-                         budgeted: 0, // No budget allocated
-                         actual: data.amount,
-                     });
-                 }
-             });
-         });
-
-        // Sort within each category
-        Object.values(varianceByCategory).forEach(categoryItems => {
-            categoryItems.sort((a, b) => {
-                 // Keep budgeted items before unbudgeted actuals (marked with *)
-                if (a.description.startsWith('*') && !b.description.startsWith('*')) return 1;
-                if (!a.description.startsWith('*') && b.description.startsWith('*')) return -1;
-                 return a.description.localeCompare(b.description);
+                    varianceByCategory[category as BudgetItemCategory].push({
+                        description: `* ${originalDescription}`,
+                        budgeted: 0, // No prorated budget for unbudgeted items
+                        actual: data.amount,
+                    });
+                }
             });
         });
 
-        return varianceByCategory;
+       // Sort within each category
+       Object.values(varianceByCategory).forEach(categoryItems => {
+           categoryItems.sort((a, b) => {
+               if (a.description.startsWith('*') && !b.description.startsWith('*')) return 1;
+               if (!a.description.startsWith('*') && b.description.startsWith('*')) return -1;
+                return a.description.localeCompare(b.description);
+           });
+       });
 
-    }, [budgetItems, actualSpendingByCategory, filteredTransactions]);
+       return varianceByCategory;
 
-   // Calculate totals based on the categorized variance data
+   // Depend on budget items, actual spending, filtered transactions, and date range
+   }, [budgetItems, actualSpendingByCategory, filteredTransactions, startDate, endDate]);
+
+
+   // Calculate totals based on the categorized variance data (uses prorated budget)
    const varianceTotalsByCategory = useMemo(() => {
         const totals: Record<BudgetItemCategory, { budgeted: number; actual: number }> = {
             income: { budgeted: 0, actual: 0 },
@@ -298,18 +309,18 @@ export default function StatementsPage() {
 
         Object.entries(varianceDataByCategory).forEach(([category, items]) => {
              items.forEach(item => {
-                 totals[category as BudgetItemCategory].budgeted += item.budgeted;
+                 totals[category as BudgetItemCategory].budgeted += item.budgeted; // Summing prorated budgets
                  totals[category as BudgetItemCategory].actual += item.actual ?? 0;
              });
          });
 
-         // Calculate overall totals
+         // Calculate overall totals based on prorated figures
         const totalBudgetedIncome = totals.income.budgeted;
         const totalActualIncome = totals.income.actual;
         const totalBudgetedExpenses = totals['recurring-expense'].budgeted + totals['one-time-expense'].budgeted;
         const totalActualExpenses = totals['recurring-expense'].actual + totals['one-time-expense'].actual;
         const totalBudgetedGoals = totals.goal.budgeted;
-        const totalActualGoals = totals.goal.actual; // Likely 0 unless goals have actuals
+        const totalActualGoals = totals.goal.actual;
 
          return {
              ...totals,
@@ -319,7 +330,7 @@ export default function StatementsPage() {
              totalActualExpenses,
              totalBudgetedGoals,
              totalActualGoals,
-             netBudgeted: totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals,
+             netBudgeted: totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals, // Net based on prorated budget
              netActual: totalActualIncome - totalActualExpenses - totalActualGoals,
          };
    }, [varianceDataByCategory]);
@@ -477,49 +488,45 @@ export default function StatementsPage() {
 
     // Render function for budget variance report rows
     const renderVarianceRow = (item: { description: string; budgeted: number; actual: number | null }) => {
-        const variance = item.budgeted - (item.actual ?? 0);
-        const isIncome = item.budgeted > 0 && (item.actual ?? 0) >= 0; // Crude check for income category, refine if needed
+         // Variance calculation depends on category (Income vs Expense/Goal)
+         let variance: number;
+         const actualValue = item.actual ?? 0; // Treat null actuals as 0 for calculation
+         const budgetedValue = item.budgeted; // Already prorated
+         const isUnbudgetedActual = item.description.startsWith('* ');
+         const displayDescription = isUnbudgetedActual ? item.description.substring(2) : item.description;
+
+          // Determine category based on which group it's in (requires knowing context or passing category)
+          // This is a simplified check; ideally, pass the category type
+          const isIncome = varianceDataByCategory.income.some(i => i.description === item.description || `* ${i.description}` === item.description);
+
+         if (isIncome) {
+            variance = actualValue - budgetedValue; // Favorable if actual > budgeted
+         } else { // Assuming Expense or Goal
+            variance = budgetedValue - actualValue; // Favorable if budgeted > actual
+         }
+
         let statusText = '-';
         let statusColor = 'text-muted-foreground';
-        const isUnbudgetedActual = item.description.startsWith('* ');
-        const displayDescription = isUnbudgetedActual ? item.description.substring(2) : item.description;
 
-        if (item.actual === null && item.budgeted === 0) { // Neither budgeted nor actual
+        if (item.actual === null && budgetedValue === 0) { // Neither exists
              statusText = '-';
-             statusColor = 'text-muted-foreground';
+        } else if (isUnbudgetedActual) { // Unbudgeted actual spending/income
+             // Income: Unbudgeted is favorable (+), Expense/Goal: Unbudgeted is unfavorable (-)
+             statusText = `${isIncome ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`;
+             statusColor = isIncome ? 'text-accent' : 'text-destructive';
         } else if (item.actual === null) { // Budgeted but no actual
-            statusText = `${formatCurrency(item.budgeted)} (Unspent)`; // Show unspent budget
-             statusColor = isIncome ? 'text-destructive' : 'text-accent'; // Favorable for expenses/goals, Unfavorable for income
-        } else if (isUnbudgetedActual) { // Unbudgeted actual spending
-             statusText = `-${formatCurrency(item.actual ?? 0)} (Unbudgeted)`; // Added null check
-             statusColor = 'text-destructive';
+            // Income: Budgeted but not received is unfavorable (-), Expense/Goal: Budgeted but not spent is favorable (+)
+             statusText = `${isIncome ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncome ? 'Received' : 'Spent'})`;
+             statusColor = isIncome ? 'text-destructive' : 'text-accent';
         } else { // Both budgeted and actual exist
-            // For variance calculation, we need to know the category type
-            // Income: actual > budgeted is favorable (positive variance)
-            // Expense/Goal: actual < budgeted is favorable (positive variance)
-            // We'll calculate actual - budgeted for income, budgeted - actual for others
-            // Let's assume based on the sign of budgeted amount for simplicity here
-            // A more robust way would be passing the category type to this function
-            let calculatedVariance: number;
-             const actualValue = item.actual ?? 0; // Default actual to 0 if null
-
-             // Determine category based on the description or other properties if needed
-             // For simplicity, assume positive budget means income, otherwise expense/goal
-             if (item.budgeted > 0 && varianceDataByCategory.income.some(i => i.description === item.description)) { // Check if it's in income category
-                calculatedVariance = actualValue - item.budgeted;
-             } else { // Assuming expenses/goals have positive budget values representing outflow
-                calculatedVariance = item.budgeted - actualValue;
-             }
-
-
-             if (calculatedVariance > 0) {
-                 statusText = `+${formatCurrency(calculatedVariance)} (Favorable)`;
+             if (Math.abs(variance) < 0.01) { // Consider a threshold for "on target"
+                 statusText = 'On Target';
+             } else if (variance > 0) {
+                 statusText = `+${formatCurrency(variance)} (Favorable)`;
                  statusColor = 'text-accent';
-             } else if (calculatedVariance < 0) {
-                 statusText = `-${formatCurrency(Math.abs(calculatedVariance))} (Unfavorable)`;
-                 statusColor = 'text-destructive';
              } else {
-                statusText = 'On Target';
+                 statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`;
+                 statusColor = 'text-destructive';
              }
          }
 
@@ -528,7 +535,7 @@ export default function StatementsPage() {
                  <TableCell className={cn("pl-2 py-1.5", isUnbudgetedActual && "pl-6 italic text-muted-foreground")}>
                     {displayDescription}
                  </TableCell>
-                 <TableCell className="text-right font-mono py-1.5">{item.budgeted > 0 ? formatCurrency(item.budgeted) : '-'}</TableCell>
+                 <TableCell className="text-right font-mono py-1.5">{budgetedValue > 0 ? formatCurrency(budgetedValue) : '-'}</TableCell>
                  <TableCell className="text-right font-mono py-1.5">{item.actual !== null ? formatCurrency(item.actual) : '-'}</TableCell>
                  <TableCell className={cn("text-right font-mono text-xs py-1.5", statusColor)}>
                      {statusText}
@@ -814,8 +821,8 @@ export default function StatementsPage() {
          <Card className="lg:col-span-2">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
-                <CardDescription>Compare budgeted amounts with actuals from transactions in the selected date range.</CardDescription>
-                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/> Actuals are grouped by transaction description. Items marked with * are unbudgeted actuals.</p>
+                <CardDescription>Compare prorated budget amounts with actuals from transactions in the selected date range.</CardDescription>
+                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/> Actuals are grouped by transaction description. Items marked with * are unbudgeted actuals. Budget is prorated based on the date range length (~30.44 days/month).</p>
             </CardHeader>
             <CardContent>
                  <Accordion type="multiple" className="w-full"> {/* Removed defaultValue */}
@@ -824,7 +831,7 @@ export default function StatementsPage() {
                          <AccordionTriggerWithSum
                              label="Income"
                              sum={varianceTotalsByCategory.income.actual}
-                             budgetedSum={varianceTotalsByCategory.income.budgeted}
+                             budgetedSum={varianceTotalsByCategory.income.budgeted} // Prorated budget sum
                              variance={varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.totalBudgetedIncome}
                              className="text-accent"
                          />
@@ -835,7 +842,7 @@ export default function StatementsPage() {
                                           <TableHeader className="sticky top-0 bg-background z-10">
                                               <TableRow>
                                                   <TableHead>Item / Description</TableHead>
-                                                  <TableHead className="text-right">Budgeted</TableHead>
+                                                  <TableHead className="text-right">Prorated Budget</TableHead>
                                                   <TableHead className="text-right">Actual</TableHead>
                                                   <TableHead className="text-right w-[150px]">Variance</TableHead>
                                               </TableRow>
@@ -856,7 +863,7 @@ export default function StatementsPage() {
                           <AccordionTriggerWithSum
                              label="Expenses"
                              sum={varianceTotalsByCategory.totalActualExpenses}
-                             budgetedSum={varianceTotalsByCategory.totalBudgetedExpenses}
+                             budgetedSum={varianceTotalsByCategory.totalBudgetedExpenses} // Prorated budget sum
                              variance={varianceTotalsByCategory.totalBudgetedExpenses - varianceTotalsByCategory.totalActualExpenses} // Favorable is positive
                              className="text-destructive"
                          />
@@ -867,7 +874,7 @@ export default function StatementsPage() {
                                          <TableHeader className="sticky top-0 bg-background z-10">
                                               <TableRow>
                                                   <TableHead>Item / Description</TableHead>
-                                                  <TableHead className="text-right">Budgeted</TableHead>
+                                                  <TableHead className="text-right">Prorated Budget</TableHead>
                                                   <TableHead className="text-right">Actual</TableHead>
                                                   <TableHead className="text-right w-[150px]">Variance</TableHead>
                                               </TableRow>
@@ -891,7 +898,7 @@ export default function StatementsPage() {
                           <AccordionTriggerWithSum
                              label="Goals"
                              sum={varianceTotalsByCategory.goal.actual} // Actual might be 0
-                             budgetedSum={varianceTotalsByCategory.goal.budgeted}
+                             budgetedSum={varianceTotalsByCategory.goal.budgeted} // Prorated budget sum
                              variance={varianceTotalsByCategory.goal.budgeted - varianceTotalsByCategory.goal.actual} // Favorable is positive
                              className="text-primary"
                          />
@@ -902,7 +909,7 @@ export default function StatementsPage() {
                                           <TableHeader className="sticky top-0 bg-background z-10">
                                               <TableRow>
                                                   <TableHead>Item / Description</TableHead>
-                                                  <TableHead className="text-right">Budgeted</TableHead>
+                                                  <TableHead className="text-right">Prorated Budget</TableHead>
                                                   <TableHead className="text-right">Actual</TableHead>
                                                   <TableHead className="text-right w-[150px]">Variance</TableHead>
                                               </TableRow>
@@ -925,7 +932,7 @@ export default function StatementsPage() {
                          <TableFooter>
                              <TableRow className="bg-muted/30 font-bold text-lg">
                                  <TableCell>Net Totals (Income - Expenses - Goals)</TableCell>
-                                 <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell>
+                                 <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell> {/* Net based on prorated budget */}
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netActual)}</TableCell>
                                   <TableCell className={cn("text-right font-mono text-sm", (varianceTotalsByCategory.netActual - varianceTotalsByCategory.netBudgeted) >= 0 ? 'text-accent' : 'text-destructive')}>
                                      {varianceTotalsByCategory.netActual - varianceTotalsByCategory.netBudgeted >= 0 ? '+' : ''}{formatCurrency(varianceTotalsByCategory.netActual - varianceTotalsByCategory.netBudgeted)}
@@ -943,5 +950,7 @@ export default function StatementsPage() {
   );
 }
 
+
+    
 
     

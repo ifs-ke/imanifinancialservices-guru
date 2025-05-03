@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
@@ -14,7 +13,7 @@ import { useStatementStore } from '@/store/statementStore'; // Import statement 
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore'; // Import budget store hook and selectors
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts'; // Changed to LineChart, Line
-import { format, startOfMonth, endOfMonth } from 'date-fns'; // Import date-fns format
+import { format, startOfMonth, endOfMonth, differenceInDays } from 'date-fns'; // Import date-fns format & differenceInDays
 import { cn } from '@/lib/utils'; // Import cn utility
 import type { BudgetItemCategory } from '@/lib/types'; // Import BudgetItemCategory
 
@@ -48,12 +47,12 @@ export default function DashboardPage() {
   const startDate = useStatementStore(state => state.startDate); // Get date range for filtering transactions
   const endDate = useStatementStore(state => state.endDate);
   // Use budget store selectors and items
-  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
-  const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
-  const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
-  const totalGoals = useBudgetStore(selectTotalGoals);
-  const netBudgetedMonthly = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
-  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
+  const monthlyBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
+  const monthlyRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
+  const monthlyOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
+  const monthlyBudgetedGoals = useBudgetStore(selectTotalGoals);
+  const monthlyNetBudgeted = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
+  const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
   const budgetItems = useBudgetStore(state => state.budgetItems); // Get budget items for variance
 
 
@@ -113,7 +112,7 @@ export default function DashboardPage() {
   // --- Debt Payoff Timeline Calculation ---
   useEffect(() => {
     // Use totalBudgetedIncome and totalBudgetedExpenses directly from store selectors
-    const fundsForDebtPayment = totalBudgetedIncome - totalBudgetedExpenses; // Simple funds calculation
+    const fundsForDebtPayment = monthlyBudgetedIncome - monthlyBudgetedExpenses; // Simple funds calculation
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
     if (totalDebtPrincipal <= 0) {
@@ -205,49 +204,62 @@ export default function DashboardPage() {
      }
 
      // Depend on debts from debtStore and income/expense selectors from budgetStore
-    }, [debts, totalBudgetedIncome, totalBudgetedExpenses]);
+    }, [debts, monthlyBudgetedIncome, monthlyBudgetedExpenses]);
 
 
 
-  // Calculate Budget Variance using filtered transactions
-  const budgetVariance = useMemo(() => {
-      const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
-      const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
+   // Calculate Budget Variance using filtered transactions and prorated budget
+   const budgetVariance = useMemo(() => {
+       const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
+       const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
 
-       // Group budget items by category to calculate totals
+       // Calculate duration of the selected period in days
+       const start = startDate || startOfMonth(new Date()); // Default to start of current month if no start date
+       const end = endDate || endOfMonth(new Date()); // Default to end of current month if no end date
+       const daysInPeriod = differenceInDays(end, start) + 1; // +1 to include both start and end days
+       const daysInAvgMonth = 30.44; // Approximate average days in a month
+
+        // Prorate monthly budget figures based on the number of days in the selected period
+       const budgetMultiplier = daysInPeriod / daysInAvgMonth;
+
+       // Group budget items by category to calculate *prorated* totals
        const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = {
            income: 0,
            'recurring-expense': 0,
-           'one-time-expense': 0,
+           'one-time-expense': 0, // One-time might be treated differently; prorating might not be ideal
            goal: 0,
        };
        budgetItems.forEach(item => {
-           budgetedTotalsByCategory[item.category] += item.amount;
+            // Simple prorating for all categories for now
+           budgetedTotalsByCategory[item.category] += item.amount * budgetMultiplier;
        });
-       const totalBudgetedIncome = budgetedTotalsByCategory.income;
-       const totalBudgetedExpenses = budgetedTotalsByCategory['recurring-expense'] + budgetedTotalsByCategory['one-time-expense'];
-       const totalBudgetedGoals = budgetedTotalsByCategory.goal;
+       const proratedBudgetedIncome = budgetedTotalsByCategory.income;
+       const proratedBudgetedExpenses = budgetedTotalsByCategory['recurring-expense'] + budgetedTotalsByCategory['one-time-expense'];
+       const proratedBudgetedGoals = budgetedTotalsByCategory.goal;
 
-      // Check if budget data exists
-       if (totalBudgetedIncome === 0 && totalBudgetedExpenses === 0 && totalBudgetedGoals === 0) {
-           return { value: null, status: 'no-data' };
-       }
+        // Check if prorated budget data exists
+        if (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0 && actualIncome === 0 && actualExpenses === 0) {
+             return { value: null, status: 'no-data' };
+         }
 
-      const netBudgeted = totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals;
-      const netActual = actualIncome - actualExpenses; // Actual expenses for the period
 
-      // Variance calculation: Actual Net - Budgeted Net
-      // Positive variance means actual net is higher than budgeted (favorable)
-      // Negative variance means actual net is lower than budgeted (unfavorable)
-      const variance = netActual - netBudgeted;
+       const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals;
+       const netActual = actualIncome - actualExpenses; // Actual net for the filtered period
 
-      let status: typeof budgetStatus = 'no-data';
-      if (variance > 0) status = 'under-budget'; // More income/less spending than budgeted (favorable)
-      else if (variance < 0) status = 'over-budget'; // Less income/more spending than budgeted (unfavorable)
-      else status = 'on-track'; // Actual matches budgeted exactly
+       // Variance calculation: Actual Net - Budgeted Net (Prorated)
+       const variance = netActual - netBudgetedProrated;
+
+       let status: typeof budgetStatus = 'no-data';
+        if(proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0) {
+            status = 'no-data'; // Explicitly no-data if budget is zero
+        } else if (variance > 0.01) status = 'under-budget'; // Favorable (More income/less spending than prorated budget)
+        else if (variance < -0.01) status = 'over-budget'; // Unfavorable (Less income/more spending than prorated budget)
+        else status = 'on-track'; // Actual matches prorated budget closely
+
 
        return { value: variance, status };
-  }, [filteredTransactions, budgetItems]); // Depend on filtered transactions and budget items
+   // Depend on filtered transactions, budget items, and the date range
+   }, [filteredTransactions, budgetItems, startDate, endDate]);
 
   useEffect(() => {
     // Format the values here to avoid server/client differences
@@ -588,3 +600,5 @@ export default function DashboardPage() {
   );
 }
 
+
+    
