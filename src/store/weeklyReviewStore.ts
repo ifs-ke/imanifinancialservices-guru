@@ -10,7 +10,7 @@ export interface WeeklyReviewData { // Export for use in API route
   transactionComments?: Record<string, string>; // transactionId -> comment string
 }
 
-// Custom Session Storage with Base64 encoding (Placeholder for encryption)
+// Custom Session Storage with Base64 encoding
 const createSessionStorageWithEncoding = (): StateStorage => {
   const storage = sessionStorage; // Use sessionStorage
   return {
@@ -22,7 +22,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
-        return null; // Return null if decoding fails
+        return null;
       }
     },
     setItem: (name, value) => {
@@ -42,7 +42,6 @@ interface WeeklyReviewState {
   reviews: Record<string, WeeklyReviewData>;
   setReviews: (reviews: Record<string, WeeklyReviewData>) => void; // Action to overwrite state
   setJournalEntry: (weekKey: string, journal: string) => void;
-  // New actions for transaction comments
   setTransactionComment: (weekKey: string, transactionId: string, comment: string) => void;
   deleteTransactionComment: (weekKey: string, transactionId: string) => void;
   getReviewForWeek: (weekKey: string) => WeeklyReviewData | undefined;
@@ -57,12 +56,10 @@ const initialState = {
 export const useWeeklyReviewStore = create<WeeklyReviewState>()(
   persist(
     (set, get) => ({
-      ...initialState, // Initialize with an empty object
+      ...initialState,
 
-      // Action to replace the entire reviews object
-      setReviews: (reviews) => set({ reviews: reviews || {} }), // Add default empty object
+      setReviews: (reviews) => set({ reviews: reviews || {} }),
 
-      // Action to save or update the journal entry for a specific week
       setJournalEntry: (weekKey, journal) => {
         set((state) => {
              const currentReview = state.reviews[weekKey] || { journal: '', transactionComments: {} };
@@ -78,12 +75,10 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
         });
       },
 
-       // Action to save or update a comment for a specific transaction within a week
        setTransactionComment: (weekKey, transactionId, comment) => {
          set((state) => {
             const currentReview = state.reviews[weekKey] || { journal: '', transactionComments: {} };
              const newComments = { ...(currentReview.transactionComments || {}), [transactionId]: comment };
-             // Remove comment if empty string is passed
              if (comment.trim() === '') {
                 delete newComments[transactionId];
              }
@@ -99,16 +94,14 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
          });
        },
 
-      // Action to delete a comment for a specific transaction within a week
       deleteTransactionComment: (weekKey, transactionId) => {
          set((state) => {
              const currentReview = state.reviews[weekKey];
-             if (!currentReview || !currentReview.transactionComments) return state; // No review or comments to delete from
+             if (!currentReview || !currentReview.transactionComments) return state;
 
              const newComments = { ...currentReview.transactionComments };
-             delete newComments[transactionId]; // Remove the comment
+             delete newComments[transactionId];
 
-             // If comments object becomes empty, set it to undefined for cleaner storage
              const updatedComments = Object.keys(newComments).length > 0 ? newComments : undefined;
 
              return {
@@ -116,48 +109,38 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                      ...state.reviews,
                      [weekKey]: {
                          ...currentReview,
-                         transactionComments: updatedComments, // Use updatedComments
+                         transactionComments: updatedComments,
                      },
                  },
              };
          });
       },
 
-
-      // Selector function to get the review data for a specific week
       getReviewForWeek: (weekKey) => {
           return get().reviews[weekKey];
       },
 
-      // Selector function to get a specific transaction comment for a week
       getTransactionComment: (weekKey, transactionId) => {
           return get().reviews[weekKey]?.transactionComments?.[transactionId];
       },
-      // Clear function resets the state. Called by useSyncManager.
-      clearReviews: () => set(initialState),
+      clearReviews: () => set(initialState), // Resets to initial empty state
 
     }),
     {
       name: 'ifcGuru_weeklyReviews', // Unique name for session storage
       storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
-      // No special serialization needed for this structure yet
-       // Deserialize: Ensure reviews is at least an empty object
        deserialize: (str) => {
          const state = JSON.parse(str);
          state.state.reviews = state.state.reviews || {};
          return state;
        },
-        // No complex types like Date in this store
-        // serialize: (state) => JSON.stringify(state),
     }
   )
 );
 
-// Helper function to generate the week key (YYYY-WW) - using date-fns for robustness
+// Helper function to generate the week key (YYYY-WW)
 export const getWeekKey = (date: Date): string => {
   const year = getYear(date);
-  const weekNumber = getISOWeek(date); // Use ISO week number
+  const weekNumber = getISOWeek(date);
   return `${year}-${weekNumber.toString().padStart(2, '0')}`;
 };
-
-    

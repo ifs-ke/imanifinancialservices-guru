@@ -15,17 +15,14 @@ const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
         if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0; // Handle invalid dates during sort
         const dateDiff = dateB.getTime() - dateA.getTime();
         if (dateDiff !== 0) return dateDiff;
-        if (a.amount > 0 && b.amount < 0) return -1;
-        if (a.amount < 0 && b.amount > 0) return 1;
+        // Secondary sort: Income before expenses, then by absolute amount descending
+        if (a.amount >= 0 && b.amount < 0) return -1;
+        if (a.amount < 0 && b.amount >= 0) return 1;
         return Math.abs(b.amount) - Math.abs(a.amount);
     });
 };
 
-// Custom Session Storage with Base64 encoding (Placeholder for encryption)
-// Security Note: Base64 is encoding, not encryption. For true confidentiality,
-// implement actual encryption/decryption here if sensitive data is stored locally
-// long-term. However, since this uses sessionStorage, the data is cleared
-// automatically when the browser session ends, reducing the window of exposure.
+// Custom Session Storage with Base64 encoding
 const createSessionStorageWithEncoding = (): StateStorage => {
   const storage = sessionStorage; // Use sessionStorage
   return {
@@ -37,7 +34,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         return decodedStr;
       } catch (e) {
         console.error(`Failed to decode item "${name}" from sessionStorage`, e);
-        return null; // Return null if decoding fails
+        return null;
       }
     },
     setItem: (name, value) => {
@@ -62,7 +59,6 @@ interface TransactionsState {
     deleteTransaction: (id: string) => void;
     importTransactionsBatch: (newTransactionsData: Omit<TransactionWithId, 'id'>[]) => TransactionWithId[];
     clearTransactions: () => void; // Action to clear state
-    // deleteTransactionsBatch: (ids: string[]) => void; // Optional for rollback
 }
 
 const initialState = {
@@ -74,20 +70,18 @@ export const useTransactionsStore = create<TransactionsState>()(
     persist(
         (set, get) => ({
             ...initialState,
-            // Action to replace the entire transactions array
             setTransactions: (transactions) => {
-                 // Ensure dates are Date objects before setting
-                 const validatedTransactions = (transactions || []).map(tx => ({ // Handle potential null/undefined input
+                 const validatedTransactions = (transactions || []).map(tx => ({
                      ...tx,
                      date: tx.date instanceof Date ? tx.date : new Date(tx.date),
                  }));
-                 set({ transactions: sortTransactions(validatedTransactions), isHydrated: true }); // Mark as hydrated
+                 set({ transactions: sortTransactions(validatedTransactions), isHydrated: true });
             },
             addTransaction: (transactionData) => {
                 const newTransaction: TransactionWithId = {
                     id: generateId(),
                     ...transactionData,
-                    date: transactionData.date instanceof Date ? transactionData.date : new Date(transactionData.date), // Ensure date is Date object
+                    date: transactionData.date instanceof Date ? transactionData.date : new Date(transactionData.date),
                 };
                 set((state) => ({ transactions: sortTransactions([...state.transactions, newTransaction]) }));
                 return newTransaction;
@@ -97,7 +91,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                     transactions: sortTransactions(
                         state.transactions.map(tx => tx.id === updatedTransaction.id ? {
                             ...updatedTransaction,
-                             date: updatedTransaction.date instanceof Date ? updatedTransaction.date : new Date(updatedTransaction.date), // Ensure date is Date object
+                             date: updatedTransaction.date instanceof Date ? updatedTransaction.date : new Date(updatedTransaction.date),
                         } : tx)
                     )
                 }));
@@ -109,69 +103,57 @@ export const useTransactionsStore = create<TransactionsState>()(
                  const newTransactionsWithIds = newTransactionsData.map(txData => ({
                      id: generateId(),
                      ...txData,
-                     date: txData.date instanceof Date ? txData.date : new Date(txData.date), // Ensure date is Date object
+                     date: txData.date instanceof Date ? txData.date : new Date(txData.date),
                  }));
                  set((state) => ({ transactions: sortTransactions([...state.transactions, ...newTransactionsWithIds]) }));
                  return newTransactionsWithIds;
             },
-            // Clear function resets the state. This is called by useSyncManager on sign-out/user change.
-            clearTransactions: () => set({ ...initialState, isHydrated: true }), // Reset to initial state, keep hydrated
+            // Clear function resets the state but keeps isHydrated=true
+            // because clearing is usually followed by fetching new data or starting fresh.
+            clearTransactions: () => set({ ...initialState, isHydrated: true }),
         }),
         {
             name: 'ifcGuru_transactions', // Session storage key
-            // Use custom sessionStorage with encoding
-            storage: createJSONStorage(() => createSessionStorageWithEncoding()),
-            // Custom hydration logic
+            storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
                  }
              },
-            // Need to handle Date serialization/deserialization
              serialize: (state) => {
-                 // Custom serialization to handle Dates
                  const replacer = (key: string, value: any) => {
                    if (value instanceof Date) {
                      return { __type: 'Date', value: value.toISOString() };
                    }
                    return value;
                  };
-                 // Remove isHydrated before saving to storage
                  const { isHydrated, ...stateToSave } = state.state;
                  return JSON.stringify({ ...state, state: JSON.parse(JSON.stringify(stateToSave, replacer)) });
              },
              deserialize: (str) => {
                 const state = JSON.parse(str);
-                // Custom deserialization to handle Dates
                 const reviver = (key: string, value: any) => {
                   if (value && typeof value === 'object' && value.__type === 'Date') {
                     return new Date(value.value);
                   }
                   return value;
                 };
-
                 const parsedState = JSON.parse(JSON.stringify(state.state), reviver);
-                parsedState.transactions = sortTransactions(parsedState.transactions || []); // Sort after loading
+                parsedState.transactions = sortTransactions(parsedState.transactions || []);
                 parsedState.isHydrated = true; // Mark as hydrated after loading
                 return { ...state, state: parsedState };
             },
-             // Skip hydration if needed (e.g., handled by sync manager)
-             // skipHydration: true,
         }
     )
 );
 
-// Selectors for derived data can be added here or used directly in components
-// Example: Calculate total income
+// Selectors
 export const selectTotalIncome = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount > 0)
         .reduce((sum, tx) => sum + tx.amount, 0);
 
-// Example: Calculate total expenses
 export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-
-    
