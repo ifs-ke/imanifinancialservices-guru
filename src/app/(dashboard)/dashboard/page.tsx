@@ -15,12 +15,13 @@ import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'rec
 import { format, startOfMonth, endOfMonth, differenceInDays } from 'date-fns'; // Import date-fns format & differenceInDays
 import { cn } from '@/lib/utils'; // Import cn utility
 import type { BudgetItemCategory } from '@/lib/types'; // Import BudgetItemCategory
-
+import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { X } from 'lucide-react';  // Import X icon
 
 // Calculation Functions (consider moving to utils)
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
-const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0); // Corrected from item.principal
+const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.principal, 0); // Corrected from item.principal
 
 // Formatting Functions
 const formatCurrency = (amount: number | undefined) => {
@@ -53,6 +54,7 @@ export default function DashboardPage() {
   const monthlyNetBudgeted = useBudgetStore(selectNetBudgeted); // Renamed for clarity in this context
   const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Get total basic expenses
   const budgetItems = useBudgetStore(state => state.budgetItems); // Get budget items for variance
+  const { toast } = useToast();
 
    // Filter transactions based on the global startDate and endDate from the store
    const filteredTransactions = useMemo(() => {
@@ -87,7 +89,7 @@ export default function DashboardPage() {
       totalAssets,
       totalLiabilities, // Add combined liabilities
       totalIncome: totalIncomeAllTime, // Use all-time income
-      totalExpenses: totalExpensesAllTime, // Use all-time expenses
+      totalExpenses: totalExpensesAllTime, // Use all-time expense data
       totalOtherLiabilities,
     };
     // Dependencies updated to use allTransactions instead of filteredTransactions
@@ -98,14 +100,14 @@ export default function DashboardPage() {
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
   const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
-  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A'); // Renamed state variable
-  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalIncome, setFormattedTotalIncome = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalExpenses, setFormattedTotalExpenses = useState<string>('N/A'); // Renamed state variable
   const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A');
   const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A'); // Add state for timeline
 
-  // --- Debt Payoff Timeline Calculation ---
-  useEffect(() => {
+   // --- Debt Payoff Timeline Calculation ---
+   useEffect(() => {
     // Calculation logic remains the same, based on total debt and budget figures
     const fundsForDebtPayment = monthlyBudgetedIncome - monthlyBudgetedExpenses;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
@@ -265,6 +267,19 @@ export default function DashboardPage() {
 
   }, [financialData, budgetVariance]);
 
+     // State for managing Getting Started card visibility
+     const [showGettingStarted, setShowGettingStarted] = useState(true);
+
+     // Function to handle closing the Getting Started card
+     const handleCloseGettingStarted = () => {
+         setShowGettingStarted(false);
+         toast({
+             title: "Getting Started Guide Dismissed",
+             description: "You can always refer back to the documentation for help.",
+         });
+     };
+
+
   // --- Chart Data and Config ---
 
    // 1. Income vs Expense Chart (Bar Chart - Based on ALL transactions)
@@ -342,45 +357,52 @@ export default function DashboardPage() {
          </p>
       </header>
 
-      {/* Getting Started Section */}
-      <Card className="mb-6 shadow-md">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Lightbulb className="h-4 w-4 text-muted-foreground" /> Getting Started
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">
-              Welcome to IFC - Guru! Here's a quick guide to get you started:
-            </p>
-            <ol className="list-decimal pl-5 space-y-2 text-sm">
-              <li>
-                <Link href="/transactions" className="text-primary hover:underline">
-                  Add your transactions
-                </Link>{" "}
-                to track your income and expenses.
-              </li>
-              <li>
-                <Link href="/debt" className="text-primary hover:underline">
-                  Manage your debts
-                </Link>{" "}
-                to create a payoff plan.
-              </li>
-              <li>
-                <Link href="/statements" className="text-primary hover:underline">
-                  Review your financial statements
-                </Link>{" "}
-                to understand your net worth and cash flow.
-              </li>
-              <li>
-                <Link href="/budget" className="text-primary hover:underline">
-                  Set a budget
-                </Link>{" "}
-                to track your spending and savings goals.
-              </li>
-            </ol>
-          </CardContent>
-        </Card>
+       {/* Getting Started Section */}
+        {showGettingStarted && (
+            <Card className="mb-6 shadow-md">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Lightbulb className="h-4 w-4 text-muted-foreground" /> Getting Started
+                    </CardTitle>
+                    <Button variant="ghost" size="icon" onClick={handleCloseGettingStarted}>
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Dismiss</span>
+                    </Button>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                    <p className="text-sm text-muted-foreground">
+                        Welcome to IFC - Guru! Here's a quick guide to get you started:
+                    </p>
+                    <ol className="list-decimal pl-5 space-y-2 text-sm">
+                        <li>
+                            <Link href="/transactions" className="text-primary hover:underline">
+                                Add your transactions
+                            </Link>{" "}
+                            to track your income and expenses.
+                        </li>
+                        <li>
+                            <Link href="/debt" className="text-primary hover:underline">
+                                Manage your debts
+                            </Link>{" "}
+                            to create a payoff plan.
+                        </li>
+                        <li>
+                            <Link href="/statements" className="text-primary hover:underline">
+                                Review your financial statements
+                            </Link>{" "}
+                            to understand your net worth and cash flow.
+                        </li>
+                        <li>
+                            <Link href="/budget" className="text-primary hover:underline">
+                                Set a budget
+                            </Link>{" "}
+                            to track your spending and savings goals.
+                        </li>
+                    </ol>
+                </CardContent>
+            </Card>
+        )}
+
 
        {/* Metrics Grid (Top Section) */}
        <div className="grid gap-4 sm:gap-6 mb-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

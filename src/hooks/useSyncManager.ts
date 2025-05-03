@@ -10,7 +10,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types'; // Ensure types include necessary fields
 import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
 
-
 // Define the structure of the synced data (as expected from the API)
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -22,16 +21,17 @@ interface SyncedData {
   sharedReviews: Record<string, WeeklyReviewData>; // Add shared reviews
   startDate?: string; // Date as ISO string
   endDate?: string;   // Date as ISO string
+  gettingStartedDismissed: boolean;
 }
 
 // Define the possible sync statuses
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'local' | 'error';
 
 export function useSyncManager() {
-  const { isSignedIn, userId } = useAuth();
+  const { isSignedIn, userId, isLoaded } = useAuth();
   const { toast } = useToast();
   const [isSyncing, setIsSyncing] = useState(false); // Tracks if an operation (fetch or save) is in progress
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(isSignedIn ? 'idle' : 'local'); // Initial status depends on sign-in
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle'); // Initial status depends on sign-in
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const initialFetchAttempted = useRef(false); // Track if initial fetch has been done
   const isSavingRef = useRef(false); // Ref to track save state to avoid race conditions in debounced save
@@ -53,6 +53,9 @@ export function useSyncManager() {
   const setOwnedReviews = useWeeklyReviewStore(state => state.setOwnedReviews);
   const setSharedReviews = useWeeklyReviewStore(state => state.setSharedReviews);
   const clearReviews = useWeeklyReviewStore(state => state.clearReviews);
+
+  const [gettingStartedDismissed, setGettingStartedDismissed] = useState(false);
+
 
   // --- Clear Local State Function ---
    const clearLocalState = useCallback(() => {
@@ -84,7 +87,6 @@ export function useSyncManager() {
      clearReviews,
    ]);
 
-
   // --- Debounced Save Logic ---
   const debounce = <F extends (...args: any[]) => Promise<void>>(func: F, waitFor: number) => {
       let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -110,7 +112,6 @@ export function useSyncManager() {
 
       return debounced;
   };
-
 
   // --- Save Data Function ---
   const saveDataToDB = useCallback(async () => {
@@ -139,6 +140,7 @@ export function useSyncManager() {
       ownedReviews: useWeeklyReviewStore.getState().ownedReviews, // Only save owned reviews
       startDate: useStatementStore.getState().startDate?.toISOString(),
       endDate: useStatementStore.getState().endDate?.toISOString(),
+      gettingStartedDismissed: gettingStartedDismissed,
     };
 
     // Placeholder for hashing data
@@ -175,15 +177,15 @@ export function useSyncManager() {
       setIsSyncing(false);
       isSavingRef.current = false;
     }
-  }, [isSignedIn, userId, toast]); // Dependencies remain the same
+  }, [isSignedIn, userId, toast, gettingStartedDismissed]); // Dependencies remain the same
 
   const debouncedSave = useCallback(debounce(saveDataToDB, 3000), [saveDataToDB]);
 
   // --- Fetch Data Function ---
   const fetchDataFromDB = useCallback(async (isRetry = false) => {
-    if (!isSignedIn || !userId) {
-      console.log("Fetch: User not signed in.");
-      return;
+    if (!isSignedIn || !userId || !isLoaded) {
+        console.log("Fetch: User not signed in, or Clerk not loaded.");
+        return;
     }
     if (isSavingRef.current && !isRetry) {
          console.log("Fetch: Save operation in progress, skipping fetch.");
@@ -231,7 +233,6 @@ export function useSyncManager() {
          throw new Error("Data integrity check failed. Data may be corrupted or tampered with.");
        }
 
-
       // --- Cache Reset on Successful Reconnection ---
       console.log("Fetch: Overwriting local state with fetched data...");
       setTransactions(data.transactions || []);
@@ -243,6 +244,7 @@ export function useSyncManager() {
       setSharedReviews(data.sharedReviews || {}); // Set shared reviews
       setStartDate(data.startDate ? new Date(data.startDate) : undefined);
       setEndDate(data.endDate ? new Date(data.endDate) : undefined);
+      setGettingStartedDismissed(data.gettingStartedDismissed || false);
 
 
       setLastSyncTime(new Date());
@@ -267,9 +269,9 @@ export function useSyncManager() {
     }
   // Update dependencies for store setters
   }, [
-      isSignedIn, userId, toast, saveDataToDB, clearLocalState,
+      isSignedIn, userId, toast, clearLocalState,
       setTransactions, setDebts, setAssetItems, setOtherLiabilityItems,
-      setBudgetItems, setOwnedReviews, setSharedReviews, setStartDate, setEndDate
+      setBudgetItems, setOwnedReviews, setSharedReviews, setStartDate, setEndDate, isLoaded
   ]);
 
 
@@ -277,40 +279,41 @@ export function useSyncManager() {
 
   // Handle user sign-in/sign-out and userId changes
   useEffect(() => {
-    const currentUserId = userId;
-    const prevUserId = previousUserIdRef.current;
+      if (!isLoaded) return;  // Clerk loading - do nothing
+      const currentUserId = userId;
+      const prevUserId = previousUserIdRef.current;
 
-    console.log(`Auth Effect: Current User ID: ${currentUserId}, Previous User ID: ${prevUserId}, IsSignedIn: ${isSignedIn}`);
+      console.log(`Auth Effect: Current User ID: ${currentUserId}, Previous User ID: ${prevUserId}, IsSignedIn: ${isSignedIn}`);
 
-    if (isSignedIn && currentUserId) {
-        if (prevUserId === undefined || currentUserId !== prevUserId) {
-            console.log(`Auth Effect: User signed in or changed (${prevUserId ?? 'none'} -> ${currentUserId}). Clearing local state and fetching new data.`);
-            clearLocalState();
-            initialFetchAttempted.current = false;
-            fetchDataFromDB();
-        } else if (!initialFetchAttempted.current) {
-             console.log("Auth Effect: User already signed in, attempting initial fetch...");
-             fetchDataFromDB();
-        }
-    } else if (!isSignedIn && (prevUserId !== null && prevUserId !== undefined)) {
-        console.log("Auth Effect: User signed out. Clearing local state.");
-        clearLocalState();
-        setSyncStatus('local');
-    } else if (!isSignedIn) {
-        console.log("Auth Effect: Initial load: Not signed in. Status is local.");
-        setSyncStatus('local');
-        previousUserIdRef.current = null;
-    }
+      if (isSignedIn && currentUserId) {
+          if (prevUserId === undefined || currentUserId !== prevUserId) {
+              console.log(`Auth Effect: User signed in or changed (${prevUserId ?? 'none'} -> ${currentUserId}). Clearing local state and fetching new data.`);
+              clearLocalState();
+              initialFetchAttempted.current = false;
+              fetchDataFromDB();
+          } else if (!initialFetchAttempted.current) {
+              console.log("Auth Effect: User already signed in, attempting initial fetch...");
+              fetchDataFromDB();
+          }
+      } else if (!isSignedIn && (prevUserId !== null && prevUserId !== undefined)) {
+          console.log("Auth Effect: User signed out. Clearing local state.");
+          clearLocalState();
+          setSyncStatus('local');
+      } else if (!isSignedIn) {
+          console.log("Auth Effect: Initial load: Not signed in. Status is local.");
+          setSyncStatus('local');
+          previousUserIdRef.current = null;
+      }
 
-    if (previousUserIdRef.current !== currentUserId) {
-      previousUserIdRef.current = currentUserId;
-    }
+      if (previousUserIdRef.current !== currentUserId) {
+          previousUserIdRef.current = currentUserId;
+      }
 
-  }, [isSignedIn, userId, fetchDataFromDB, clearLocalState]);
+  }, [isSignedIn, userId, fetchDataFromDB, clearLocalState, isLoaded]);
 
    // Subscribe to store changes and trigger debounced save
    useEffect(() => {
-       if (!isSignedIn || !userId || !initialFetchAttempted.current) {
+       if (!isSignedIn || !userId || !initialFetchAttempted.current || !isLoaded) {
            return;
        }
        if (isSyncing || isSavingRef.current) {
@@ -360,7 +363,7 @@ export function useSyncManager() {
            console.log("Save Subscription: Unsubscribing from store changes.");
            unsubscribes.forEach(unsub => unsub());
        };
-   }, [isSignedIn, userId, debouncedSave, initialFetchAttempted, isSyncing]);
+   }, [isSignedIn, userId, debouncedSave, initialFetchAttempted, isSyncing, isLoaded]);
 
 
   // --- Retry Function ---
@@ -383,7 +386,7 @@ export function useSyncManager() {
       }
   }, [syncStatus, isSyncing, fetchDataFromDB, toast, isSignedIn, userId]);
 
-  return { syncStatus, retrySync };
+  return { syncStatus, retrySync, gettingStartedDismissed, setGettingStartedDismissed };
 }
 
 // Placeholder hash function (replace with actual implementation)
