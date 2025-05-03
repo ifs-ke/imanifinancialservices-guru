@@ -4,7 +4,7 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
-import { PanelLeft } from "lucide-react"
+import { Menu, PanelLeft } from "lucide-react" // Import Menu icon
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -58,7 +58,7 @@ const SidebarProvider = React.forwardRef<
 >(
   (
     {
-      defaultOpen = true,
+      defaultOpen = false, // Changed default to false
       open: openProp,
       onOpenChange: setOpenProp,
       className,
@@ -169,7 +169,7 @@ const Sidebar = React.forwardRef<
     {
       side = "left",
       variant = "sidebar",
-      collapsible = "offcanvas",
+      collapsible = "icon", // Default to icon collapsible
       className,
       children,
       ...props
@@ -218,31 +218,42 @@ const Sidebar = React.forwardRef<
         ref={ref}
         className="group peer hidden md:block text-sidebar-foreground"
         data-state={state}
-        data-collapsible={state === "collapsed" ? collapsible : ""}
+        data-collapsible={collapsible} // Pass collapsible type
         data-variant={variant}
         data-side={side}
       >
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
-            "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
-            "group-data-[collapsible=offcanvas]:w-0",
-            "group-data-[side=right]:rotate-180",
-            variant === "floating" || variant === "inset"
-              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
+            "duration-200 relative h-svh bg-transparent transition-[width] ease-linear",
+            // Width logic based on state and collapsible type
+            state === 'expanded' ? "w-[--sidebar-width]" :
+            collapsible === 'icon' ? (variant === "floating" || variant === "inset" ? "w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]" : "w-[--sidebar-width-icon]") :
+            collapsible === 'offcanvas' ? "w-0" :
+            "w-[--sidebar-width]", // Fallback or none
+            "group-data-[side=right]:rotate-180"
           )}
         />
         <div
           className={cn(
-            "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
-            side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-            // Adjust the padding for floating and inset variants.
-            variant === "floating" || variant === "inset"
-              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l border-sidebar-border", // Added sidebar border here
+            "duration-200 fixed inset-y-0 z-10 hidden h-svh transition-[left,right,width] ease-linear md:flex",
+             // Positioning and width based on side, state and collapsible type
+             side === "left" ? (
+                 state === 'expanded' ? "left-0 w-[--sidebar-width]" :
+                 collapsible === 'icon' ? (variant === "floating" || variant === "inset" ? "left-0 w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)] p-2" : "left-0 w-[--sidebar-width-icon]") :
+                 collapsible === 'offcanvas' ? "left-[calc(var(--sidebar-width)*-1)] w-[--sidebar-width]" :
+                 "left-0 w-[--sidebar-width]"
+             ) : ( // side === "right"
+                 state === 'expanded' ? "right-0 w-[--sidebar-width]" :
+                 collapsible === 'icon' ? (variant === "floating" || variant === "inset" ? "right-0 w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)] p-2" : "right-0 w-[--sidebar-width-icon]") :
+                 collapsible === 'offcanvas' ? "right-[calc(var(--sidebar-width)*-1)] w-[--sidebar-width]" :
+                 "right-0 w-[--sidebar-width]"
+             ),
+             // Border logic
+             variant !== "floating" && variant !== "inset" && (
+                 side === "left" ? "border-r" : "border-l"
+             ),
+            "border-sidebar-border",
             className
           )}
           {...props}
@@ -264,7 +275,7 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button> & { asChild?: boolean } // Add asChild here
 >(({ className, onClick, children, asChild, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, state, isMobile } = useSidebar() // Get state and isMobile
   const Comp = asChild ? Slot : Button; // Use Slot if asChild is true
 
   return (
@@ -280,13 +291,12 @@ const SidebarTrigger = React.forwardRef<
         }}
         {...props}
      >
-        {/* Allow children override, default to PanelLeft */}
+        {/* Allow children override, default to PanelLeft/Menu */}
         {children ?? (
-            <>
-                <PanelLeft />
-                <span className="sr-only">Toggle Sidebar</span>
-            </>
+             // Use Menu icon for mobile toggle or when sidebar is collapsed on desktop
+            (isMobile || state === 'collapsed') ? <Menu className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />
         )}
+        <span className="sr-only">Toggle Sidebar</span>
     </Comp>
   )
 })
@@ -330,7 +340,10 @@ const SidebarInset = React.forwardRef<
       ref={ref}
       className={cn(
         "relative flex min-h-svh flex-1 flex-col bg-background",
-        "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
+         // Simplified logic for inset margins based on peer state
+         "md:peer-data-[state=expanded]:peer-data-[variant=inset]:ml-[--sidebar-width]",
+         "md:peer-data-[state=collapsed]:peer-data-[collapsible=icon]:peer-data-[variant=inset]:ml-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]",
+         "md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
       {...props}
@@ -776,5 +789,3 @@ export {
   SidebarTrigger,
   useSidebar,
 }
-
-    
