@@ -199,37 +199,39 @@ export default function StatementsPage() {
   const totalLiabilities = totalShortTermDebt + totalLongTermDebt + totalOtherLiabilities;
   const netWorth = totalAssets - totalLiabilities;
 
-  // --- Budget Variance Calculation Refactor (using data from stores) ---
-  // Group actual transactions by description for comparison with budget items
-    const actualSpendingByCategory = useMemo(() => {
-        const actuals: Record<BudgetItemCategory, { [description: string]: { amount: number, count: number } }> = {
-            income: {},
-            'recurring-expense': {},
-            'one-time-expense': {},
-            goal: {}, // Goals might not have direct transactions, depending on implementation
-        };
+   // --- Budget Variance Calculation Refactor (Aligns with Dashboard) ---
+   // Group actual transactions by description for comparison with budget items
+   const actualSpendingByCategory = useMemo(() => {
+       const actuals: Record<BudgetItemCategory, { [description: string]: { amount: number; count: number } }> = {
+           income: {},
+           'recurring-expense': {},
+           'one-time-expense': {},
+           goal: {},
+       };
 
-        filteredTransactions.forEach(tx => {
-            const category: BudgetItemCategory | null =
-                tx.amount > 0 ? 'income' :
-                tx.frequency === 'recurring' ? 'recurring-expense' :
-                tx.frequency === 'one-time' ? 'one-time-expense' : null; // Map transaction properties to budget categories
+       filteredTransactions.forEach(tx => {
+           // Simplified mapping based on transaction amount/type
+           const category: BudgetItemCategory | null =
+               tx.amount > 0 ? 'income' :
+               tx.frequency === 'recurring' ? 'recurring-expense' :
+               tx.frequency === 'one-time' ? 'one-time-expense' :
+               null; // Treat un-categorized expenses as 'one-time' for variance, adjust if needed
 
-            if (category) {
-                const descKey = tx.description.toLowerCase(); // Use lowercase description for grouping
-                const amount = Math.abs(tx.amount);
+           if (category) {
+               const descKey = tx.description.toLowerCase();
+               const amount = Math.abs(tx.amount);
 
-                if (!actuals[category][descKey]) {
-                    actuals[category][descKey] = { amount: 0, count: 0 };
-                }
-                actuals[category][descKey].amount += amount;
-                actuals[category][descKey].count += 1;
-            }
-        });
-        return actuals;
-    }, [filteredTransactions]);
+               if (!actuals[category][descKey]) {
+                   actuals[category][descKey] = { amount: 0, count: 0 };
+               }
+               actuals[category][descKey].amount += amount;
+               actuals[category][descKey].count += 1;
+           }
+       });
+       return actuals;
+   }, [filteredTransactions]);
 
-   // Generate Variance Data (now includes category grouping and prorated budget)
+   // Generate Variance Data (includes category grouping and prorated budget)
    const varianceDataByCategory = useMemo(() => {
        const varianceByCategory: Record<BudgetItemCategory, { description: string; budgeted: number; actual: number | null }[]> = {
            income: [],
@@ -246,94 +248,95 @@ export default function StatementsPage() {
        const daysInAvgMonth = 30.44;
        const budgetMultiplier = daysInPeriod / daysInAvgMonth;
 
-       // 1. Iterate through budgeted items (from budgetStore) and prorate budget
+       // 1. Iterate through budgeted items and prorate budget
        budgetItems.forEach(item => {
            const descKey = item.description.toLowerCase();
            const actualGroup = actualSpendingByCategory[item.category]?.[descKey];
-           const actualAmount = actualGroup ? actualGroup.amount : 0;
-           const proratedBudget = item.amount * budgetMultiplier; // Prorate the budget amount
+           const actualAmount = actualGroup ? actualGroup.amount : null; // Use null if no actuals
+           const proratedBudget = item.amount * budgetMultiplier;
 
            varianceByCategory[item.category].push({
                description: item.description,
-               budgeted: proratedBudget, // Use prorated budget
+               budgeted: proratedBudget,
                actual: actualAmount,
            });
-            if(actualGroup) actualsTracked.add(`${item.category}-${descKey}`);
+           if (actualGroup) actualsTracked.add(`${item.category}-${descKey}`);
        });
 
-        // 2. Add actual transactions that *didn't* match a budget item description
+       // 2. Add actual transactions that didn't match a budget item description
        Object.entries(actualSpendingByCategory).forEach(([category, descriptions]) => {
-            Object.entries(descriptions).forEach(([descKey, data]) => {
+           Object.entries(descriptions).forEach(([descKey, data]) => {
                const trackerKey = `${category}-${descKey}`;
-                if (!actualsTracked.has(trackerKey)) {
-                    const originalTx = filteredTransactions.find(tx =>
-                        (tx.amount > 0 ? 'income' :
-                         tx.frequency === 'recurring' ? 'recurring-expense' :
-                         tx.frequency === 'one-time' ? 'one-time-expense' : null) === category &&
-                         tx.description.toLowerCase() === descKey
-                    );
-                    const originalDescription = originalTx ? originalTx.description : descKey;
+               if (!actualsTracked.has(trackerKey)) {
+                    // Find the original transaction to get the exact description casing
+                   const originalTx = filteredTransactions.find(tx =>
+                       tx.description.toLowerCase() === descKey &&
+                       (tx.amount > 0 ? 'income' : (tx.frequency === 'recurring' ? 'recurring-expense' : 'one-time-expense')) === category
+                   );
+                    const displayDescription = originalTx ? originalTx.description : descKey; // Use original casing if found
 
-                    varianceByCategory[category as BudgetItemCategory].push({
-                        description: `* ${originalDescription}`,
-                        budgeted: 0, // No prorated budget for unbudgeted items
-                        actual: data.amount,
-                    });
-                }
-            });
-        });
+                   varianceByCategory[category as BudgetItemCategory].push({
+                       description: `* ${displayDescription}`, // Mark unbudgeted
+                       budgeted: 0, // No budget for this item
+                       actual: data.amount,
+                   });
+               }
+           });
+       });
 
-       // Sort within each category
+       // Sort within each category (unbudgeted at the bottom)
        Object.values(varianceByCategory).forEach(categoryItems => {
            categoryItems.sort((a, b) => {
-               if (a.description.startsWith('*') && !b.description.startsWith('*')) return 1;
-               if (!a.description.startsWith('*') && b.description.startsWith('*')) return -1;
-                return a.description.localeCompare(b.description);
+               const aUnbudgeted = a.description.startsWith('* ');
+               const bUnbudgeted = b.description.startsWith('* ');
+               if (aUnbudgeted && !bUnbudgeted) return 1;
+               if (!aUnbudgeted && bUnbudgeted) return -1;
+               return a.description.localeCompare(b.description);
            });
        });
 
        return varianceByCategory;
-
-   // Depend on budget items, actual spending, filtered transactions, and date range
-   }, [budgetItems, actualSpendingByCategory, filteredTransactions, startDate, endDate]);
+   }, [budgetItems, actualSpendingByCategory, startDate, endDate, filteredTransactions]); // Added filteredTransactions dependency
 
 
    // Calculate totals based on the categorized variance data (uses prorated budget)
    const varianceTotalsByCategory = useMemo(() => {
-        const totals: Record<BudgetItemCategory, { budgeted: number; actual: number }> = {
-            income: { budgeted: 0, actual: 0 },
-            'recurring-expense': { budgeted: 0, actual: 0 },
-            'one-time-expense': { budgeted: 0, actual: 0 },
-            goal: { budgeted: 0, actual: 0 },
-        };
+       const totals: Record<BudgetItemCategory, { budgeted: number; actual: number }> = {
+           income: { budgeted: 0, actual: 0 },
+           'recurring-expense': { budgeted: 0, actual: 0 },
+           'one-time-expense': { budgeted: 0, actual: 0 },
+           goal: { budgeted: 0, actual: 0 },
+       };
 
-        Object.entries(varianceDataByCategory).forEach(([category, items]) => {
-             items.forEach(item => {
-                 totals[category as BudgetItemCategory].budgeted += item.budgeted; // Summing prorated budgets
-                 totals[category as BudgetItemCategory].actual += item.actual ?? 0;
-             });
-         });
+       Object.entries(varianceDataByCategory).forEach(([category, items]) => {
+           items.forEach(item => {
+               totals[category as BudgetItemCategory].budgeted += item.budgeted; // Summing prorated budgets
+               totals[category as BudgetItemCategory].actual += item.actual ?? 0; // Summing actuals (treat null as 0)
+           });
+       });
 
-         // Calculate overall totals based on prorated figures
-        const totalBudgetedIncome = totals.income.budgeted;
-        const totalActualIncome = totals.income.actual;
-        const totalBudgetedExpenses = totals['recurring-expense'].budgeted + totals['one-time-expense'].budgeted;
-        const totalActualExpenses = totals['recurring-expense'].actual + totals['one-time-expense'].actual;
-        const totalBudgetedGoals = totals.goal.budgeted;
-        const totalActualGoals = totals.goal.actual;
+       // Calculate overall totals based on prorated figures
+       const totalBudgetedIncome = totals.income.budgeted;
+       const totalActualIncome = totals.income.actual;
+       const totalBudgetedExpenses = totals['recurring-expense'].budgeted + totals['one-time-expense'].budgeted;
+       const totalActualExpenses = totals['recurring-expense'].actual + totals['one-time-expense'].actual;
+       const totalBudgetedGoals = totals.goal.budgeted;
+       const totalActualGoals = totals.goal.actual; // Actual for goals might often be 0 unless tracked via transactions
 
-         return {
-             ...totals,
-             totalBudgetedIncome,
-             totalActualIncome,
-             totalBudgetedExpenses,
-             totalActualExpenses,
-             totalBudgetedGoals,
-             totalActualGoals,
-             netBudgeted: totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals, // Net based on prorated budget
-             netActual: totalActualIncome - totalActualExpenses - totalActualGoals,
-         };
+       return {
+           ...totals,
+           totalBudgetedIncome,
+           totalActualIncome,
+           totalBudgetedExpenses,
+           totalActualExpenses,
+           totalBudgetedGoals,
+           totalActualGoals,
+           netBudgeted: totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals, // Net based on prorated budget
+           netActual: totalActualIncome - totalActualExpenses - totalActualGoals,
+           overallVariance: (totalActualIncome - totalActualExpenses - totalActualGoals) - (totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals),
+       };
    }, [varianceDataByCategory]);
+
 
   // --- Handlers ---
 
@@ -486,49 +489,56 @@ export default function StatementsPage() {
         </TableRow>
     );
 
-    // Render function for budget variance report rows
+    // Render function for budget variance report rows - Aligning with Dashboard logic
     const renderVarianceRow = (item: { description: string; budgeted: number; actual: number | null }) => {
-         // Variance calculation depends on category (Income vs Expense/Goal)
-         let variance: number;
-         const actualValue = item.actual ?? 0; // Treat null actuals as 0 for calculation
+         const actualValue = item.actual ?? 0; // Treat null actuals as 0
          const budgetedValue = item.budgeted; // Already prorated
          const isUnbudgetedActual = item.description.startsWith('* ');
          const displayDescription = isUnbudgetedActual ? item.description.substring(2) : item.description;
 
-          // Determine category based on which group it's in (requires knowing context or passing category)
-          // This is a simplified check; ideally, pass the category type
-          const isIncome = varianceDataByCategory.income.some(i => i.description === item.description || `* ${i.description}` === item.description);
+         // Determine category based on which group it's in
+         const isIncome = varianceDataByCategory.income.some(i => i.description === item.description || `* ${i.description}` === item.description);
+         const isGoal = varianceDataByCategory.goal.some(g => g.description === item.description || `* ${g.description}` === item.description);
+
+         let variance: number;
+         let statusText = '-';
+         let statusColor = 'text-muted-foreground';
+         let isFavorable = false;
 
          if (isIncome) {
-            variance = actualValue - budgetedValue; // Favorable if actual > budgeted
-         } else { // Assuming Expense or Goal
-            variance = budgetedValue - actualValue; // Favorable if budgeted > actual
+             variance = actualValue - budgetedValue; // Actual > Budget is favorable
+             isFavorable = variance > 0;
+         } else { // Expense or Goal
+             variance = budgetedValue - actualValue; // Budget > Actual is favorable
+             isFavorable = variance > 0;
          }
 
-        let statusText = '-';
-        let statusColor = 'text-muted-foreground';
-
-        if (item.actual === null && budgetedValue === 0) { // Neither exists
-             statusText = '-';
-        } else if (isUnbudgetedActual) { // Unbudgeted actual spending/income
-             // Income: Unbudgeted is favorable (+), Expense/Goal: Unbudgeted is unfavorable (-)
+          // Determine Status Text and Color
+          if (item.actual === null && budgetedValue === 0) {
+             statusText = '-'; // No data
+         } else if (isUnbudgetedActual) {
+             // Unbudgeted income is favorable, unbudgeted expense/goal is unfavorable
              statusText = `${isIncome ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`;
              statusColor = isIncome ? 'text-accent' : 'text-destructive';
-        } else if (item.actual === null) { // Budgeted but no actual
-            // Income: Budgeted but not received is unfavorable (-), Expense/Goal: Budgeted but not spent is favorable (+)
+         } else if (item.actual === null) {
+             // Budgeted income not received is unfavorable, budgeted expense/goal not spent is favorable
              statusText = `${isIncome ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncome ? 'Received' : 'Spent'})`;
              statusColor = isIncome ? 'text-destructive' : 'text-accent';
-        } else { // Both budgeted and actual exist
-             if (Math.abs(variance) < 0.01) { // Consider a threshold for "on target"
-                 statusText = 'On Target';
-             } else if (variance > 0) {
-                 statusText = `+${formatCurrency(variance)} (Favorable)`;
+         } else { // Both budgeted and actual exist
+             const threshold = Math.max(Math.abs(budgetedValue * 0.01), 50); // Use a small threshold for 'on track'
+
+             if (Math.abs(variance) <= threshold) {
+                 statusText = 'On Track';
+                 statusColor = 'text-accent'; // Consider 'on track' as favorable
+             } else if (isFavorable) {
+                 statusText = `+${formatCurrency(Math.abs(variance))} (Favorable)`;
                  statusColor = 'text-accent';
              } else {
                  statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`;
                  statusColor = 'text-destructive';
              }
          }
+
 
         return (
             <TableRow key={item.description} className="text-sm">
@@ -934,8 +944,8 @@ export default function StatementsPage() {
                                  <TableCell>Net Totals (Income - Expenses - Goals)</TableCell>
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell> {/* Net based on prorated budget */}
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netActual)}</TableCell>
-                                  <TableCell className={cn("text-right font-mono text-sm", (varianceTotalsByCategory.netActual - varianceTotalsByCategory.netBudgeted) >= 0 ? 'text-accent' : 'text-destructive')}>
-                                     {varianceTotalsByCategory.netActual - varianceTotalsByCategory.netBudgeted >= 0 ? '+' : ''}{formatCurrency(varianceTotalsByCategory.netActual - varianceTotalsByCategory.netBudgeted)}
+                                  <TableCell className={cn("text-right font-mono text-sm", varianceTotalsByCategory.overallVariance >= 0 ? 'text-accent' : 'text-destructive')}>
+                                     {varianceTotalsByCategory.overallVariance >= 0 ? '+' : ''}{formatCurrency(varianceTotalsByCategory.overallVariance)}
                                  </TableCell>
                               </TableRow>
                           </TableFooter>
@@ -949,8 +959,3 @@ export default function StatementsPage() {
     </div>
   );
 }
-
-
-    
-
-    

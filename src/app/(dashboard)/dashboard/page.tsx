@@ -209,57 +209,56 @@ export default function DashboardPage() {
 
 
    // Calculate Budget Variance using filtered transactions and prorated budget
+   // Updated calculation and status logic
    const budgetVariance = useMemo(() => {
        const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
        const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
 
        // Calculate duration of the selected period in days
-       const start = startDate || startOfMonth(new Date()); // Default to start of current month if no start date
-       const end = endDate || endOfMonth(new Date()); // Default to end of current month if no end date
-       const daysInPeriod = differenceInDays(end, start) + 1; // +1 to include both start and end days
-       const daysInAvgMonth = 30.44; // Approximate average days in a month
-
-        // Prorate monthly budget figures based on the number of days in the selected period
+       const start = startDate || startOfMonth(new Date()); // Default if no date selected
+       const end = endDate || endOfMonth(new Date());
+       const daysInPeriod = differenceInDays(end, start) + 1;
+       const daysInAvgMonth = 30.44; // Approximate average
        const budgetMultiplier = daysInPeriod / daysInAvgMonth;
 
-       // Group budget items by category to calculate *prorated* totals
-       const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = {
-           income: 0,
-           'recurring-expense': 0,
-           'one-time-expense': 0, // One-time might be treated differently; prorating might not be ideal
-           goal: 0,
-       };
-       budgetItems.forEach(item => {
-            // Simple prorating for all categories for now
-           budgetedTotalsByCategory[item.category] += item.amount * budgetMultiplier;
-       });
-       const proratedBudgetedIncome = budgetedTotalsByCategory.income;
-       const proratedBudgetedExpenses = budgetedTotalsByCategory['recurring-expense'] + budgetedTotalsByCategory['one-time-expense'];
-       const proratedBudgetedGoals = budgetedTotalsByCategory.goal;
+       // Calculate prorated budget totals for the period
+       const proratedBudgetedIncome = budgetItems
+           .filter(item => item.category === 'income')
+           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
 
-        // Check if prorated budget data exists
-        if (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0 && actualIncome === 0 && actualExpenses === 0) {
-             return { value: null, status: 'no-data' };
-         }
+       const proratedBudgetedExpenses = budgetItems
+           .filter(item => item.category === 'recurring-expense' || item.category === 'one-time-expense')
+           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
 
+       const proratedBudgetedGoals = budgetItems
+           .filter(item => item.category === 'goal')
+           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
+
+       // Check if enough data exists to calculate variance meaningfully
+       if ((proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0) || (actualIncome === 0 && actualExpenses === 0)) {
+           return { value: null, status: 'no-data' };
+       }
 
        const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals;
-       const netActual = actualIncome - actualExpenses; // Actual net for the filtered period
+       const netActual = actualIncome - actualExpenses;
 
-       // Variance calculation: Actual Net - Budgeted Net (Prorated)
        const variance = netActual - netBudgetedProrated;
 
-       let status: typeof budgetStatus = 'no-data';
-        if(proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0) {
-            status = 'no-data'; // Explicitly no-data if budget is zero
-        } else if (variance > 0.01) status = 'under-budget'; // Favorable (More income/less spending than prorated budget)
-        else if (variance < -0.01) status = 'over-budget'; // Unfavorable (Less income/more spending than prorated budget)
-        else status = 'on-track'; // Actual matches prorated budget closely
+       let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
+       // Use a small threshold (e.g., 1% of budgeted income or a fixed small amount) to determine "on-track"
+       const threshold = Math.max(Math.abs(netBudgetedProrated * 0.01), 50); // Example threshold (1% or 50 KES)
 
+       if (Math.abs(variance) <= threshold) {
+           status = 'on-track';
+       } else if (variance > 0) {
+           status = 'under-budget'; // Favorable: Actual net is better than budgeted net
+       } else {
+           status = 'over-budget'; // Unfavorable: Actual net is worse than budgeted net
+       }
 
        return { value: variance, status };
-   // Depend on filtered transactions, budget items, and the date range
    }, [filteredTransactions, budgetItems, startDate, endDate]);
+
 
   useEffect(() => {
     // Format the values here to avoid server/client differences
@@ -462,26 +461,28 @@ export default function DashboardPage() {
                   {/* Icon based on status */}
                   {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
                   {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
-                  {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />}
-                  {budgetStatus === 'over-budget' && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                  {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />} {/* Favorable icon */}
+                  {budgetStatus === 'over-budget' && <AlertTriangle className="h-4 w-4 text-destructive" />} {/* Unfavorable icon */}
              </CardHeader>
               <CardContent>
                   <div className={cn("text-2xl font-bold",
                       budgetStatus === 'no-data' && 'text-muted-foreground',
-                      (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent',
-                      budgetStatus === 'over-budget' && 'text-destructive'
+                      budgetStatus === 'on-track' && 'text-accent', // On track is good, use accent
+                      budgetStatus === 'under-budget' && 'text-accent', // Favorable, use accent
+                      budgetStatus === 'over-budget' && 'text-destructive' // Unfavorable, use destructive
                   )}>
                       {budgetStatus !== 'no-data' ? `${budgetVariance.value! >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
                   </div>
                    <p className={cn("text-xs",
-                      budgetStatus === 'no-data' && 'text-muted-foreground',
-                      (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent', // Favorable text color
-                      budgetStatus === 'over-budget' && 'text-destructive' // Unfavorable text color
-                  )}>
-                      {budgetStatus === 'no-data' && 'No Budget/Actuals Data'}
-                       {budgetStatus === 'on-track' && 'On Track (Actual matches Budget)'}
-                       {budgetStatus === 'under-budget' && 'Favorable (Under Budget / Over Income)'}
-                       {budgetStatus === 'over-budget' && 'Unfavorable (Over Budget / Under Income)'}
+                       budgetStatus === 'no-data' && 'text-muted-foreground',
+                       budgetStatus === 'on-track' && 'text-accent', // Status text color matches value color
+                       budgetStatus === 'under-budget' && 'text-accent',
+                       budgetStatus === 'over-budget' && 'text-destructive'
+                   )}>
+                       {budgetStatus === 'no-data' && 'No Budget/Actuals Data for Period'}
+                       {budgetStatus === 'on-track' && 'On Track'}
+                       {budgetStatus === 'under-budget' && 'Favorable (Under Budget/Over Income)'}
+                       {budgetStatus === 'over-budget' && 'Unfavorable (Over Budget/Under Income)'}
                    </p>
                   <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                       <Link href="/statements">
@@ -599,6 +600,3 @@ export default function DashboardPage() {
      </div>
   );
 }
-
-
-    
