@@ -4,10 +4,11 @@ import { auth } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
 
-// Helper to safely get collection data
+// Helper to safely get collection data for a specific user
 async function getCollectionData<T>(db: any, collectionName: string, userId: string): Promise<T[]> {
   try {
     const collection = db.collection(collectionName);
+    // Filter by userId and exclude _id and userId from the returned documents
     const data = await collection.find({ userId }, { projection: { _id: 0, userId: 0 } }).toArray();
     return data.map((item: any) => {
         // Ensure date fields common across types are handled
@@ -16,7 +17,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
                 item.date = new Date(item.date);
                  if (isNaN(item.date.getTime())) throw new Error("Invalid date string");
             } catch (e) {
-                 console.warn(`Invalid date format encountered in ${collectionName} for item ID ${item.id || 'N/A'}. Setting to current date.`);
+                 console.warn(`Invalid date format encountered in ${collectionName} for item ID ${item.id || 'N/A'} for user ${userId}. Setting to current date.`);
                  item.date = new Date(); // Fallback for invalid dates
             }
         }
@@ -29,10 +30,11 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
   }
 }
 
-// Helper to safely get weekly reviews data
+// Helper to safely get weekly reviews data for a specific user
 async function getWeeklyReviews(db: any, userId: string): Promise<Record<string, WeeklyReviewData>> {
     try {
       const collection = db.collection('weeklyReviews');
+      // Filter by userId and exclude _id and userId
       const userReviewDoc = await collection.findOne({ userId }, { projection: { _id: 0, userId: 0 } });
       return userReviewDoc ? userReviewDoc.reviews || {} : {};
     } catch (error) {
@@ -41,14 +43,19 @@ async function getWeeklyReviews(db: any, userId: string): Promise<Record<string,
     }
 }
 
-// Helper to get statement dates
+// Helper to get statement dates for a specific user
 async function getStatementDates(db: any, userId: string): Promise<{ startDate?: string, endDate?: string }> {
     try {
         const collection = db.collection('userProfiles');
-        const userProfile = await collection.findOne({ userId }, { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1 } });
+        // Filter by userId and project only the required date fields
+        const userProfile = await collection.findOne(
+            { userId },
+            { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1 } }
+        );
         return {
-            startDate: userProfile?.statementStartDate?.toISOString(), // Return ISO string or undefined
-            endDate: userProfile?.statementEndDate?.toISOString(),
+             // Convert Date objects back to ISO strings for the response
+             startDate: userProfile?.statementStartDate instanceof Date ? userProfile.statementStartDate.toISOString() : undefined,
+             endDate: userProfile?.statementEndDate instanceof Date ? userProfile.statementEndDate.toISOString() : undefined,
         };
     } catch (error) {
         console.error(`Error fetching statement dates for user ${userId}:`, error);
@@ -58,41 +65,34 @@ async function getStatementDates(db: any, userId: string): Promise<{ startDate?:
 
 
 export async function GET() {
-  const { userId } = auth();
+  const { userId } = auth(); // Get the authenticated user's ID
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // If no userId, the request is unauthorized
+    return NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
   }
 
   try {
     const client = await connectToDatabase();
     const db = client.db(); // Use default database from connection string
 
-    // Check if user has ANY data to determine if it's a "first sync" scenario
-    // We can check one collection, e.g., transactions
-    const hasExistingData = await db.collection('transactions').findOne({ userId }, { projection: { _id: 1 } });
-
-    // If user has no data AT ALL, return a 404.
-    // The client hook (useSyncManager) should interpret this 404 on initial fetch
-    // as a signal to perform an initial save.
-    // We need to be careful not to send 404 if *some* collections exist but others don't.
-    // A more robust check might involve checking multiple essential collections.
-    // For now, checking one might suffice, assuming transactions are core.
-    // Let's refine: fetch counts from essential collections. If all are zero, return 404.
-    const [transactionCount, debtCount, budgetCount] = await Promise.all([
-        db.collection('transactions').countDocuments({ userId }),
-        db.collection('debts').countDocuments({ userId }),
-        db.collection('budgetItems').countDocuments({ userId }),
-        // Add other essential collections if needed
+    // Check if user has ANY data in essential collections to determine if it's a "first sync"
+    const [transactionCount, debtCount, budgetCount, profileCount] = await Promise.all([
+        db.collection('transactions').countDocuments({ userId }), // Filter by userId
+        db.collection('debts').countDocuments({ userId }), // Filter by userId
+        db.collection('budgetItems').countDocuments({ userId }), // Filter by userId
+        db.collection('userProfiles').countDocuments({ userId }), // Check profile for dates etc.
+        db.collection('weeklyReviews').countDocuments({ userId }) // Check reviews
     ]);
 
-    if (transactionCount === 0 && debtCount === 0 && budgetCount === 0) {
+    // If user has no data across essential collections, return 404.
+    if (transactionCount === 0 && debtCount === 0 && budgetCount === 0 && profileCount === 0 /* add other counts if needed */) {
         console.log(`Sync: No existing data found for user ${userId}. Client should initiate save.`);
+        // Return 404 specifically to indicate no data exists for this user yet
         return NextResponse.json({ message: 'No data found for user' }, { status: 404 });
     }
 
-
-    // Fetch data from all relevant collections in parallel if data exists
+    // Fetch data specific to the authenticated user from all relevant collections
     const [
         transactions,
         debts,
@@ -108,9 +108,10 @@ export async function GET() {
         getCollectionData<OtherLiabilityItem>(db, 'otherLiabilityItems', userId),
         getCollectionData<BudgetItem>(db, 'budgetItems', userId),
         getWeeklyReviews(db, userId),
-        getStatementDates(db, userId) // Fetch dates separately
+        getStatementDates(db, userId) // Fetch dates for the user
     ]);
 
+    // Return all fetched data associated with the user
     return NextResponse.json({
       transactions,
       debts,
@@ -122,7 +123,7 @@ export async function GET() {
       endDate: dates.endDate,
     });
   } catch (error) {
-    console.error('Failed to fetch user data:', error);
+    console.error(`Failed to fetch data for user ${userId}:`, error);
     return NextResponse.json({ error: 'Failed to fetch data from database' }, { status: 500 });
   }
 }

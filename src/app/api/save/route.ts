@@ -17,22 +17,28 @@ interface SaveDataPayload {
   endDate?: string;   // Date as ISO string
 }
 
-// Helper function to safely upsert data into a collection
+// Helper function to safely upsert data into a collection for a specific user
 // It deletes all existing documents for the user and inserts the new ones.
-// This is simpler than merging but overwrites any server-side changes not reflected in the client state.
 async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[]) {
   try {
     const collection: Collection = db.collection(collectionName);
     // Add userId to each item before inserting
-    const dataWithUserId = data.map(item => ({ ...item, userId }));
+    // Ensure dates are stored as BSON Date objects
+    const dataWithUserId = data.map(item => ({
+        ...item,
+        userId,
+        // Convert common date fields to Date objects if they are strings
+        ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}),
+    }));
+
 
     // Start a session for transaction
     const session = db.client.startSession();
     try {
       await session.withTransaction(async () => {
-        // Delete existing documents for the user within the transaction
+        // Delete existing documents ONLY for the specific user within the transaction
         await collection.deleteMany({ userId }, { session });
-        // Insert new documents if data is not empty
+        // Insert new documents for the user if data is not empty
         if (dataWithUserId.length > 0) {
           await collection.insertMany(dataWithUserId, { session });
         }
@@ -47,16 +53,15 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
   }
 }
 
-// Helper function to save weekly reviews (potentially different structure)
-// Assumes a single document per user holding the reviews object
+// Helper function to save weekly reviews for a specific user
 async function saveWeeklyReviews(db: any, userId: string, reviews: Record<string, WeeklyReviewData>) {
     try {
         const collection: Collection = db.collection('weeklyReviews');
-        // Use upsert to create or replace the user's review document
+        // Use upsert to create or replace the specific user's review document
         await collection.updateOne(
             { userId }, // Filter by userId
-            { $set: { userId, reviews } }, // Set the userId and the entire reviews object
-            { upsert: true } // Create the document if it doesn't exist
+            { $set: { userId, reviews } }, // Set the userId and the entire reviews object for this user
+            { upsert: true } // Create the document if it doesn't exist for this user
         );
          console.log(`Successfully saved weeklyReviews for user ${userId}`);
     } catch (error) {
@@ -65,22 +70,23 @@ async function saveWeeklyReviews(db: any, userId: string, reviews: Record<string
     }
 }
 
-// Helper function to save statement dates (store in a separate doc or user profile)
-// For simplicity, storing in a 'userProfiles' collection
+// Helper function to save statement dates for a specific user
 async function saveStatementDates(db: any, userId: string, startDate?: string, endDate?: string) {
     if (startDate === undefined && endDate === undefined) return; // Nothing to save
 
     try {
         const collection: Collection = db.collection('userProfiles'); // Example collection
         const updateDoc: any = {};
-        if (startDate !== undefined) updateDoc.statementStartDate = startDate ? new Date(startDate) : null; // Store as Date or null
-        if (endDate !== undefined) updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
+         // Store dates as BSON Date objects if provided, otherwise store null
+         if (startDate !== undefined) updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
+         if (endDate !== undefined) updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
+
 
         if (Object.keys(updateDoc).length > 0) {
              await collection.updateOne(
-                 { userId },
-                 { $set: updateDoc },
-                 { upsert: true }
+                 { userId }, // Filter by userId
+                 { $set: { userId, ...updateDoc } }, // Ensure userId is set on upsert
+                 { upsert: true } // Create profile if it doesn't exist
              );
              console.log(`Successfully saved statement dates for user ${userId}`);
          }
@@ -93,10 +99,11 @@ async function saveStatementDates(db: any, userId: string, startDate?: string, e
 
 
 export async function POST(request: Request) {
-  const { userId } = auth();
+  const { userId } = auth(); // Get the authenticated user's ID
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // If no userId, the request is unauthorized
+    return NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
   }
 
   let payload: SaveDataPayload;
@@ -125,23 +132,22 @@ export async function POST(request: Request) {
 
   try {
     const client = await connectToDatabase();
-    const db = client.db();
+    const db = client.db(); // Use the default database from the connection URI
 
-    // Perform all database operations
-    // Use Promise.all to run replacements in parallel for efficiency
+    // Perform all database operations, passing the userId to each helper
     await Promise.all([
       replaceCollectionData(db, 'transactions', userId, transactions),
       replaceCollectionData(db, 'debts', userId, debts),
       replaceCollectionData(db, 'assetItems', userId, assetItems),
       replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems),
       replaceCollectionData(db, 'budgetItems', userId, budgetItems),
-      saveWeeklyReviews(db, userId, reviews), // Use specific function for reviews
-      saveStatementDates(db, userId, startDate, endDate) // Save dates
+      saveWeeklyReviews(db, userId, reviews), // Pass userId
+      saveStatementDates(db, userId, startDate, endDate) // Pass userId
     ]);
 
-    return NextResponse.json({ message: 'Data saved successfully' });
+     return NextResponse.json({ message: `Data saved successfully for user ${userId}` });
   } catch (error: any) {
-    console.error('Failed to save user data:', error);
+    console.error(`Failed to save data for user ${userId}:`, error);
     // Return specific error message if available, otherwise generic message
     const errorMessage = error instanceof Error ? error.message : 'Failed to save data to database';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
