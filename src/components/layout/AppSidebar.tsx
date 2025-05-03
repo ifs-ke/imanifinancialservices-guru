@@ -25,7 +25,7 @@ import {
   Settings,
   Landmark,
   PieChart, // Budget icon
-  Cloud, // Added Cloud icon
+  CloudOff, // Use CloudOff icon for local persistence indication
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -121,14 +121,16 @@ export function AppSidebar() {
           {/* Save Status Indicator */}
           <Tooltip>
               <TooltipTrigger asChild>
+                  {/* Use CloudOff icon and update text */}
                   <Button variant="ghost" size="icon" className="w-full justify-start px-2 cursor-default hover:bg-transparent">
-                       <Cloud className="h-[1.2rem] w-[1.2rem] text-muted-foreground" />
+                       <CloudOff className="h-[1.2rem] w-[1.2rem] text-muted-foreground" />
                        <span className="ml-2 text-xs text-muted-foreground group-data-[state=collapsed]:hidden">Data Saved Locally</span>
                        <span className="sr-only">Data Save Status</span>
                   </Button>
               </TooltipTrigger>
               <TooltipContent side="right" align="center" sideOffset={10}>
-                  <p className="text-xs">Session data is persisted in your browser's local storage.</p>
+                  {/* Update tooltip content */}
+                  <p className="text-xs">Session data is saved in your browser's local storage. Database sync is not active.</p>
               </TooltipContent>
           </Tooltip>
       </SidebarFooter>
