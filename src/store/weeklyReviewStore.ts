@@ -111,5 +111,3 @@ export const getWeekKey = (date: Date): string => {
   const weekNumber = getISOWeek(date); // Use ISO week number
   return `${year}-${weekNumber.toString().padStart(2, '0')}`;
 };
-
-```
