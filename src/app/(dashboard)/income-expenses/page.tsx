@@ -3,14 +3,14 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Removed CardFooter import
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import type { TransactionWithId } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Coins, TrendingDown, TrendingUp, Tag, Scale } from 'lucide-react';
-import { Separator } from '@/components/ui/separator'; // Import Separator
+import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
 // Formatting Function
@@ -60,7 +60,6 @@ export default function IncomeExpensesPage() {
       else if (tx.frequency === 'one-time' && tx.variability === 'variable') categories.oneTimeVariable.push(tx);
       else categories.uncategorized.push(tx);
     });
-    // Sort within categories by date descending
     for (const key in categories) {
         categories[key as keyof typeof categories].sort((a, b) => {
             const dateA = a.date instanceof Date ? a.date : new Date(a.date);
@@ -72,7 +71,6 @@ export default function IncomeExpensesPage() {
     return categories;
   };
 
-  // Categorize income and expenses
   const categorizedIncome = useMemo(() => categorizeTransactions(incomeTransactions), [incomeTransactions]);
   const categorizedExpenses = useMemo(() => categorizeTransactions(expenseTransactions), [expenseTransactions]);
 
@@ -103,14 +101,14 @@ export default function IncomeExpensesPage() {
   // Render function for transaction rows
   const renderTransactionRow = (tx: TransactionWithId, isExpense = false) => (
     <TableRow key={tx.id}>
-      <TableCell className="font-medium">{formatDate(tx.date)}</TableCell>
-      <TableCell className="max-w-[250px] truncate" title={tx.description}>{tx.description}</TableCell>
-      <TableCell>{tx.modeOfPayment}</TableCell>
-      <TableCell className="text-right font-mono">{formatCurrency(isExpense ? Math.abs(tx.amount) : tx.amount)}</TableCell>
+      <TableCell className="font-medium w-[100px] pl-4 pr-2">{formatDate(tx.date)}</TableCell> {/* Added padding */}
+      <TableCell className="max-w-[200px] sm:max-w-[250px] truncate px-2" title={tx.description}>{tx.description}</TableCell> {/* Added padding */}
+      <TableCell className="w-[90px] px-2">{tx.modeOfPayment}</TableCell> {/* Added padding */}
+      <TableCell className="text-right font-mono w-[140px] pr-4 pl-2">{formatCurrency(isExpense ? Math.abs(tx.amount) : tx.amount)}</TableCell> {/* Added padding */}
     </TableRow>
   );
 
-  // Render function for category sections - Moved total to CardContent
+  // Render function for category sections
   const renderCategorySection = (
     title: string,
     description: string,
@@ -118,29 +116,28 @@ export default function IncomeExpensesPage() {
     total: number,
     isExpense = false
   ) => (
-    <Card className="flex flex-col">
-      <CardHeader>
+    <Card className="flex flex-col shadow-sm h-full"> {/* Ensure cards take full height */}
+      <CardHeader className="p-4"> {/* Adjusted padding */}
         <CardTitle className="flex items-center gap-2 text-base"><Tag className="h-4 w-4"/>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex-grow p-0"> {/* Allow content to grow, remove padding */}
-        {/* Moved total display here */}
+      <CardContent className="flex-grow p-0">
         {transactions.length > 0 && (
-            <div className="px-6 pb-3 text-sm border-b"> {/* Add padding and border */}
+            <div className="px-4 pb-3 text-sm border-b"> {/* Adjusted padding */}
                 <div className="flex justify-between w-full">
                 <span className="font-semibold">Total {title}</span>
                 <span className="font-bold font-mono">{formatCurrency(total)}</span>
                 </div>
             </div>
         )}
-        <ScrollArea className="h-[300px] w-full">
+        <ScrollArea className="h-[350px] w-full"> {/* Slightly increased height */}
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[100px]">Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="w-[90px]">Mode</TableHead>
-                <TableHead className="text-right w-[140px]">Amount (KES)</TableHead>
+                <TableHead className="w-[100px] pl-4 pr-2">Date</TableHead> {/* Added padding */}
+                <TableHead className="px-2">Description</TableHead> {/* Added padding */}
+                <TableHead className="w-[90px] px-2">Mode</TableHead> {/* Added padding */}
+                <TableHead className="text-right w-[140px] pr-4 pl-2">Amount (KES)</TableHead> {/* Added padding */}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -153,7 +150,6 @@ export default function IncomeExpensesPage() {
           </Table>
         </ScrollArea>
       </CardContent>
-       {/* Removed CardFooter */}
     </Card>
   );
 
@@ -163,39 +159,37 @@ export default function IncomeExpensesPage() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <TrendingUp className="text-primary" /> Income & Expense Analysis
         </h1>
-        <p className="text-muted-foreground">
-          Detailed breakdown of your income and expenses based on recurrence and variability.
-        </p>
+        <p className="text-muted-foreground">Breakdown based on recurrence and variability.</p>
       </header>
 
       {/* Summary Section */}
        <section className="mb-8 grid gap-4 md:grid-cols-3">
            <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
                  <CardTitle className="text-sm font-medium">Total Income</CardTitle>
                  <TrendingUp className="h-4 w-4 text-accent" />
                </CardHeader>
-               <CardContent>
+               <CardContent className="p-4"> {/* Adjusted padding */}
                  <div className="text-2xl font-bold text-accent">{formatCurrency(incomeTotals.grandTotal)}</div>
                  <p className="text-xs text-muted-foreground">Across all categories</p>
                </CardContent>
            </Card>
            <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
                  <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
                  <TrendingDown className="h-4 w-4 text-destructive" />
                </CardHeader>
-               <CardContent>
+               <CardContent className="p-4"> {/* Adjusted padding */}
                  <div className="text-2xl font-bold text-destructive">{formatCurrency(expenseTotals.grandTotal)}</div>
                  <p className="text-xs text-muted-foreground">Across all categories</p>
                </CardContent>
            </Card>
            <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
                  <CardTitle className="text-sm font-medium">Net Income</CardTitle>
                  <Scale className="h-4 w-4 text-muted-foreground" />
                </CardHeader>
-               <CardContent>
+               <CardContent className="p-4"> {/* Adjusted padding */}
                   <div className={cn("text-2xl font-bold", netIncome >= 0 ? 'text-accent' : 'text-destructive')}>
                       {formatCurrency(netIncome)}
                   </div>
@@ -204,32 +198,29 @@ export default function IncomeExpensesPage() {
            </Card>
        </section>
 
-
       <main className="flex-1 grid gap-8 lg:grid-cols-2">
-
         {/* Income Details Section */}
         <section className="space-y-6">
-            <h2 className="text-xl font-semibold flex items-center gap-2"><TrendingUp className="text-accent"/>Income Details</h2>
-            {renderCategorySection("Recurring - Fixed", "Income received regularly with the same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
-            {renderCategorySection("Recurring - Variable", "Income received regularly but the amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
-            {renderCategorySection("One-Time - Fixed", "Non-recurring income with a fixed amount (e.g., Bonus, Gift).", categorizedIncome.oneTimeFixed, incomeTotals.oneTimeFixed)}
-            {renderCategorySection("One-Time - Variable", "Non-recurring income with varying amounts (e.g., Freelance projects).", categorizedIncome.oneTimeVariable, incomeTotals.oneTimeVariable)}
-            {categorizedIncome.uncategorized.length > 0 && renderCategorySection("Uncategorized Income", "Income missing frequency or variability information.", categorizedIncome.uncategorized, incomeTotals.uncategorized)}
+            <h2 className="text-xl font-semibold flex items-center gap-2"><TrendingUp className="text-accent"/> Income Details</h2>
+            {renderCategorySection("Recurring - Fixed", "Regular income, same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
+            {renderCategorySection("Recurring - Variable", "Regular income, amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
+            {renderCategorySection("One-Time - Fixed", "Non-recurring income, fixed amount (e.g., Bonus).", categorizedIncome.oneTimeFixed, incomeTotals.oneTimeFixed)}
+            {renderCategorySection("One-Time - Variable", "Non-recurring income, varying amount (e.g., Freelance).", categorizedIncome.oneTimeVariable, incomeTotals.oneTimeVariable)}
+            {categorizedIncome.uncategorized.length > 0 && renderCategorySection("Uncategorized Income", "Missing frequency/variability info.", categorizedIncome.uncategorized, incomeTotals.uncategorized)}
         </section>
 
         {/* Expense Details Section */}
          <section className="space-y-6">
-             <h2 className="text-xl font-semibold flex items-center gap-2"><TrendingDown className="text-destructive"/>Expense Details</h2>
-             {renderCategorySection("Recurring - Fixed", "Expenses that occur regularly with the same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
-             {renderCategorySection("Recurring - Variable", "Expenses that occur regularly but the amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
-             {renderCategorySection("One-Time - Fixed", "Non-recurring expenses with a fixed amount (e.g., Specific purchase).", categorizedExpenses.oneTimeFixed, expenseTotals.oneTimeFixed, true)}
-             {renderCategorySection("One-Time - Variable", "Non-recurring expenses with varying amounts (e.g., Dining out).", categorizedExpenses.oneTimeVariable, expenseTotals.oneTimeVariable, true)}
-              {categorizedExpenses.uncategorized.length > 0 && renderCategorySection("Uncategorized Expenses", "Expenses missing frequency or variability information.", categorizedExpenses.uncategorized, expenseTotals.uncategorized, true)}
+             <h2 className="text-xl font-semibold flex items-center gap-2"><TrendingDown className="text-destructive"/> Expense Details</h2>
+             {renderCategorySection("Recurring - Fixed", "Regular expenses, same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
+             {renderCategorySection("Recurring - Variable", "Regular expenses, amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
+             {renderCategorySection("One-Time - Fixed", "Non-recurring expenses, fixed amount.", categorizedExpenses.oneTimeFixed, expenseTotals.oneTimeFixed, true)}
+             {renderCategorySection("One-Time - Variable", "Non-recurring expenses, varying amount (e.g., Dining out).", categorizedExpenses.oneTimeVariable, expenseTotals.oneTimeVariable, true)}
+              {categorizedExpenses.uncategorized.length > 0 && renderCategorySection("Uncategorized Expenses", "Missing frequency/variability info.", categorizedExpenses.uncategorized, expenseTotals.uncategorized, true)}
         </section>
-
-
       </main>
     </div>
   );
 }
 
+    
