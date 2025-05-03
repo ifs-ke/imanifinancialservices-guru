@@ -35,6 +35,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { UserButton } from '@clerk/nextjs'; // Import UserButton
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
+import type { SyncStatus } from '@/hooks/useSyncManager'; // Import the type
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -46,43 +47,46 @@ const menuItems = [
   { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck }, // Added Weekly Review
 ];
 
-// Define props for AppSidebar to accept syncStatus
+// Define props for AppSidebar to accept syncStatus and retry function
 interface AppSidebarProps {
-    syncStatus: 'idle' | 'syncing' | 'synced' | 'local' | 'error';
+    syncStatus: SyncStatus; // Use the imported type
+    retrySync?: () => void; // Optional retry function
 }
 
-export function AppSidebar({ syncStatus }: AppSidebarProps) { // Receive syncStatus as a prop
+export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) { // Receive syncStatus and retrySync as props
   const pathname = usePathname();
   const { isMobile, state } = useSidebar(); // Get sidebar state
 
-  // Determine persistence status icon and text based on syncStatus
-    let persistenceIcon = CloudOff;
+  // Determine persistence status icon, text, color, and tooltip based on syncStatus
+    let PersistenceIcon = CloudOff;
     let persistenceStatusText = 'Data Saved Locally';
     let persistenceTooltipText = "Data is saved in your browser's local storage. Sign in to sync.";
     let iconColor = 'text-muted-foreground'; // Default color
+    let isClickable = false; // Should the icon be clickable for retry?
 
     switch (syncStatus) {
         case 'syncing':
-            persistenceIcon = RefreshCw;
+            PersistenceIcon = RefreshCw;
             persistenceStatusText = 'Syncing...';
             persistenceTooltipText = 'Attempting to sync data with the cloud.';
             iconColor = 'text-primary animate-spin'; // Spinning blue icon
             break;
         case 'synced':
-            persistenceIcon = Cloud;
+            PersistenceIcon = Cloud;
             persistenceStatusText = 'Data Synced';
             persistenceTooltipText = 'Data is successfully synced with the cloud.';
             iconColor = 'text-accent'; // Green cloud for synced
             break;
         case 'error':
-            persistenceIcon = AlertTriangle;
+            PersistenceIcon = AlertTriangle;
             persistenceStatusText = 'Sync Error';
-            persistenceTooltipText = 'Failed to sync data. Changes are saved locally.';
+            persistenceTooltipText = 'Failed to sync data. Click to retry.'; // Updated tooltip
             iconColor = 'text-destructive'; // Red triangle for error
+            isClickable = true; // Enable click to retry
             break;
         case 'local': // Explicitly handle 'local' status
         default:
-            persistenceIcon = CloudOff;
+            PersistenceIcon = CloudOff;
             persistenceStatusText = 'Data Saved Locally';
             persistenceTooltipText = "Data is saved in your browser's local storage. Sign in to sync.";
             iconColor = 'text-muted-foreground'; // Muted cloud-off for local
@@ -102,7 +106,7 @@ export function AppSidebar({ syncStatus }: AppSidebarProps) { // Receive syncSta
                    "font-semibold text-lg text-sidebar-foreground whitespace-nowrap",
                    state === 'collapsed' && "hidden" // Hide text when collapsed
                )}>
-                  IFC - Guru
+                   IFC - Guru
               </span>
             </Link>
          </div>
@@ -161,18 +165,25 @@ export function AppSidebar({ syncStatus }: AppSidebarProps) { // Receive syncSta
          </div>
           <Separator className="my-1"/>
           <ThemeToggle />
-          {/* Save Status Indicator - Now dynamic */}
+          {/* Save Status Indicator - Now dynamic and potentially clickable */}
            <Tooltip>
                <TooltipTrigger asChild>
-                   {/* Use a div instead of Button for non-interactive trigger */}
-                   <div className="flex items-center w-full justify-start px-2 py-1 cursor-default h-10">
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                        "flex items-center w-full justify-start px-2 py-1 h-10",
+                        !isClickable && "cursor-default pointer-events-none" // Make non-clickable if not error
+                    )}
+                    onClick={isClickable ? retrySync : undefined} // Call retrySync only if clickable
+                    disabled={!isClickable && syncStatus !== 'error'} // Disable explicitly if not clickable error
+                 >
                        {/* Dynamic Icon */}
-                       <persistenceIcon className={cn("h-[1.2rem] w-[1.2rem] flex-shrink-0", iconColor)} />
+                       <PersistenceIcon className={cn("h-[1.2rem] w-[1.2rem] flex-shrink-0", iconColor)} />
                        <span className="ml-2 text-xs text-muted-foreground group-data-[state=collapsed]:hidden">
                            {persistenceStatusText} {/* Dynamic text */}
                        </span>
                        <span className="sr-only">Data Save Status</span>
-                   </div>
+                   </Button>
                </TooltipTrigger>
                <TooltipContent side="right" align="center" sideOffset={10}>
                    <p className="text-xs">

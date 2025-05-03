@@ -20,12 +20,17 @@ export default function DashboardLayout({
    // Client-side auth check
    const { userId, isLoaded } = useAuth();
    // Initialize sync manager - This will trigger initial fetch on load if user is signed in
-   const { syncStatus } = useSyncManager(); // Get sync status for AppSidebar
+   const { syncStatus, retrySync } = useSyncManager(); // Get sync status AND retry function
 
    // Handle loading state from Clerk
    if (!isLoaded) {
      // You can return a loading spinner or skeleton here
-     return <div>Loading authentication...</div>;
+     // Adding a simple loading text for now
+     return (
+        <div className="flex justify-center items-center min-h-screen">
+          Loading authentication...
+        </div>
+     );
    }
 
    // Redirect if not logged in after Clerk is loaded
@@ -36,8 +41,8 @@ export default function DashboardLayout({
   return (
     <>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
-        {/* Pass syncStatus to AppSidebar */}
-        <AppSidebar syncStatus={syncStatus} />
+        {/* Pass syncStatus and retrySync to AppSidebar */}
+        <AppSidebar syncStatus={syncStatus} retrySync={retrySync}/>
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
