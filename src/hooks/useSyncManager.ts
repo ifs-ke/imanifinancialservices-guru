@@ -31,6 +31,7 @@ export function useSyncManager() {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const initialFetchAttempted = useRef(false); // Track if initial fetch has been done
   const isSavingRef = useRef(false); // Ref to track save state to avoid race conditions in debounced save
+  const previousUserIdRef = useRef<string | null | undefined>(undefined); // Ref to store the previous userId
 
   // Get store setters and clear actions
   const setTransactions = useTransactionsStore(state => state.setTransactions);
@@ -46,6 +47,35 @@ export function useSyncManager() {
   const clearBudgetItems = useBudgetStore(state => state.clearBudgetItems);
   const setReviews = useWeeklyReviewStore(state => state.setReviews);
   const clearReviews = useWeeklyReviewStore(state => state.clearReviews);
+
+  // --- Clear Local State Function ---
+   const clearLocalState = useCallback(() => {
+     console.log("Clearing local state (session storage)...");
+     // Clear Zustand stores first to avoid re-persisting immediately
+     clearTransactions();
+     clearDebts();
+     clearStatementItems();
+     clearBudgetItems();
+     clearReviews();
+     // Explicitly remove persisted state from sessionStorage
+     sessionStorage.removeItem('ifcGuru_transactions');
+     sessionStorage.removeItem('ifcGuru_debts');
+     sessionStorage.removeItem('ifcGuru_statementItems');
+     sessionStorage.removeItem('ifcGuru_budgetItems');
+     sessionStorage.removeItem('ifcGuru_weeklyReviews');
+     console.log("Local state cleared.");
+     setSyncStatus('local'); // Reset status to local
+     setLastSyncTime(null);
+     initialFetchAttempted.current = false; // Allow refetch if user signs in again
+     previousUserIdRef.current = undefined; // Reset previous user ID tracking
+   }, [
+     clearTransactions,
+     clearDebts,
+     clearStatementItems,
+     clearBudgetItems,
+     clearReviews,
+   ]);
+
 
   // --- Debounced Save Logic ---
   const debounce = <F extends (...args: any[]) => Promise<void>>(func: F, waitFor: number) => {
@@ -63,6 +93,8 @@ export function useSyncManager() {
                   } catch (error) {
                       console.error("Debounced function error:", error);
                       reject(error); // Reject on error
+                  } finally {
+                      timeout = null; // Clear timeout ref after execution
                   }
               }, waitFor);
           });
@@ -76,10 +108,9 @@ export function useSyncManager() {
   const saveDataToDB = useCallback(async () => {
      if (!isSignedIn || !userId) {
        console.log("Save: User not signed in.");
-       setSyncStatus((prev) => prev === 'error' ? 'error' : 'local'); // Stay error or revert to local
+       setSyncStatus((prev) => (prev === 'error' || prev === 'syncing') ? 'error' : 'local'); // Stay error or syncing or revert to local
        return;
      }
-     // Use ref to check if already saving to prevent race conditions with debounce
      if (isSavingRef.current) {
         console.log("Save: Save operation already in progress, skipping.");
         return;
@@ -87,8 +118,8 @@ export function useSyncManager() {
 
     console.log("Save: Starting save to DB...");
     setIsSyncing(true);
-    isSavingRef.current = true; // Mark as saving
-    setSyncStatus('syncing'); // Indicate syncing status
+    isSavingRef.current = true;
+    setSyncStatus('syncing');
 
     // Get current state from all stores
     const currentState: SyncedData = {
@@ -103,7 +134,7 @@ export function useSyncManager() {
     };
 
     try {
-      const response = await fetch('/api/save', { // Use the save endpoint
+      const response = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentState),
@@ -116,24 +147,23 @@ export function useSyncManager() {
 
       const result = await response.json();
       setLastSyncTime(new Date());
-      setSyncStatus('synced'); // Mark as synced after successful save
+      setSyncStatus('synced');
       console.log("Save: Successfully saved to DB.", result);
-      // Success toast might be too noisy for auto-save, consider UI indicator change only
 
     } catch (error: any) {
       console.error('Save Error:', error);
-      setSyncStatus('error'); // Set status to error on failure
+      setSyncStatus('error');
       toast({
         title: 'Save Failed',
         description: `Could not save data to the cloud: ${error.message}`,
         variant: 'destructive',
       });
-      throw error; // Re-throw error to be caught by debounced wrapper if needed
+      throw error;
     } finally {
       setIsSyncing(false);
-      isSavingRef.current = false; // Mark as not saving anymore
+      isSavingRef.current = false;
     }
-  }, [isSignedIn, userId, toast]); // isSyncing removed as dependency, using ref instead
+  }, [isSignedIn, userId, toast]);
 
   const debouncedSave = useCallback(debounce(saveDataToDB, 3000), [saveDataToDB]);
 
@@ -141,16 +171,14 @@ export function useSyncManager() {
   const fetchDataFromDB = useCallback(async (isRetry = false) => {
     if (!isSignedIn || !userId) {
       console.log("Fetch: User not signed in.");
-      setSyncStatus('local');
-      initialFetchAttempted.current = false; // Reset fetch attempt status if signed out
+      // Don't clear local state here, handle it based on userId change in useEffect
       return;
     }
-     // Prevent fetch if a save is in progress
-     if (isSavingRef.current && !isRetry) {
+    if (isSavingRef.current && !isRetry) {
          console.log("Fetch: Save operation in progress, skipping fetch.");
          return;
      }
-    if (isSyncing && !isRetry) { // Prevent concurrent fetches (allow retry)
+    if (isSyncing && !isRetry) {
         console.log("Fetch: Fetch operation already in progress, skipping.");
         return;
     }
@@ -160,21 +188,21 @@ export function useSyncManager() {
     setSyncStatus('syncing');
 
     try {
-      const response = await fetch('/api/sync'); // Use the sync/fetch endpoint
+      const response = await fetch('/api/sync');
       if (!response.ok) {
           if (response.status === 404 && !initialFetchAttempted.current) {
-              // User's data not found on the server, likely first time sync.
-              // Push local data first.
               console.log("Fetch: No data found in DB for user. Attempting initial save...");
-              initialFetchAttempted.current = true; // Mark that we tried the initial fetch
+              initialFetchAttempted.current = true;
+              // Important: Do not clear local state here, save the existing local data first
               await saveDataToDB(); // This will set status to synced or error
-              // No need to re-fetch here, save handles the state update
-              return;
+              return; // Exit fetch after attempting save
           } else if (response.status === 404) {
-              // Data still not found after initial save attempt or subsequent fetches
-               console.warn("Fetch: Data not found in DB for user, but initial fetch/save already attempted.");
-               setSyncStatus('local'); // Revert to local, maybe show a different error?
-               toast({ title: 'No Cloud Data', description: 'No saved data found in the cloud for this user.', variant: 'default' });
+               console.warn("Fetch: Data not found in DB for user, but initial fetch/save already attempted or unnecessary.");
+               // If data is still not found, it implies the user has no cloud data.
+               // We should clear any potential stale local data from a previous user.
+               clearLocalState(); // Clear potentially stale local data
+               setSyncStatus('local'); // User has no cloud data, so they are effectively 'local'
+               toast({ title: 'No Cloud Data', description: 'Started with a clean slate as no data was found in the cloud.', variant: 'default' });
                return; // Stop here
           }
           const errorData = await response.json().catch(() => ({ error: 'Unknown error structure' }));
@@ -184,8 +212,7 @@ export function useSyncManager() {
 
       console.log("Fetch: Received data:", data);
 
-      // Update Zustand stores with fetched data
-      // Note: This overwrites local state. Implement merging if needed.
+      // Update Zustand stores with fetched data - This overwrites local state
       setTransactions(data.transactions || []);
       setDebts(data.debts || []);
       setAssetItems(data.assetItems || []);
@@ -198,18 +225,15 @@ export function useSyncManager() {
 
       setLastSyncTime(new Date());
       setSyncStatus('synced');
-      initialFetchAttempted.current = true; // Mark initial fetch as successful
+      initialFetchAttempted.current = true;
       console.log("Fetch: Successfully synced with DB.");
        if (isRetry) {
            toast({ title: 'Sync Successful', description: 'Data successfully synced after retry.' });
-       } else {
-           // Initial sync toast might be too noisy if it happens on every load
-           // toast({ title: 'Sync Complete', description: 'Data synced with the cloud.' });
        }
 
     } catch (error: any) {
       console.error('Fetch Error:', error);
-      setSyncStatus('error'); // Set status to error on fetch failure
+      setSyncStatus('error');
       toast({
         title: 'Sync Failed',
         description: `Could not fetch data from the cloud: ${error.message}`,
@@ -219,76 +243,79 @@ export function useSyncManager() {
       setIsSyncing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, userId, toast, saveDataToDB]); // isSyncing removed, isSavingRef used internally
-
-  // --- Clear Local State Function ---
-   const clearLocalState = useCallback(() => {
-     console.log("Clearing local state (session storage)...");
-     clearTransactions();
-     clearDebts();
-     clearStatementItems();
-     clearBudgetItems();
-     clearReviews();
-     sessionStorage.removeItem('ifcGuru_transactions'); // Explicitly remove persisted state
-     sessionStorage.removeItem('ifcGuru_debts');
-     sessionStorage.removeItem('ifcGuru_statementItems');
-     sessionStorage.removeItem('ifcGuru_budgetItems');
-     sessionStorage.removeItem('ifcGuru_weeklyReviews');
-     setSyncStatus('local'); // Reset status to local
-     setLastSyncTime(null);
-     initialFetchAttempted.current = false;
-   }, [
-     clearTransactions,
-     clearDebts,
-     clearStatementItems,
-     clearBudgetItems,
-     clearReviews,
-   ]);
+  }, [isSignedIn, userId, toast, saveDataToDB, clearLocalState /* Add clearLocalState dependency */]);
 
 
   // --- Effects ---
 
-  // Fetch data on initial load or when user signs in
+  // Handle user sign-in/sign-out and userId changes
   useEffect(() => {
-    if (isSignedIn && userId && !initialFetchAttempted.current) {
-      fetchDataFromDB();
-    } else if (!isSignedIn) {
-        // User signed out, clear local (session) state
+    const currentUserId = userId;
+    const prevUserId = previousUserIdRef.current;
+
+    console.log(`Sync Effect: Current User ID: ${currentUserId}, Previous User ID: ${prevUserId}, IsSignedIn: ${isSignedIn}`);
+
+    if (isSignedIn && currentUserId) {
+        if (prevUserId === undefined || currentUserId !== prevUserId) {
+            // User signed in OR changed user
+            console.log(`User signed in or changed (${prevUserId} -> ${currentUserId}). Clearing local state and fetching new data.`);
+            clearLocalState(); // Clear any previous user's state FIRST
+            initialFetchAttempted.current = false; // Reset fetch attempt for the new user
+            fetchDataFromDB(); // Fetch data for the new user
+        } else if (!initialFetchAttempted.current) {
+             // Same user, but initial fetch wasn't done (e.g., page refresh while logged in)
+             console.log("User already signed in, attempting initial fetch...");
+             fetchDataFromDB();
+        }
+    } else if (!isSignedIn && prevUserId !== null && prevUserId !== undefined) {
+        // User signed out
+        console.log("User signed out. Clearing local state.");
         clearLocalState();
+    } else if (!isSignedIn) {
+        // Initial load state, not signed in
+        setSyncStatus('local');
+        previousUserIdRef.current = null; // Explicitly set to null when not signed in
     }
+
+    // Update the previousUserIdRef *after* the logic runs
+    if (previousUserIdRef.current !== currentUserId) {
+      previousUserIdRef.current = currentUserId;
+    }
+
   }, [isSignedIn, userId, fetchDataFromDB, clearLocalState]);
 
-   // Subscribe to store changes and trigger debounced save ONLY if signed in and not currently fetching
+   // Subscribe to store changes and trigger debounced save
    useEffect(() => {
-       if (!isSignedIn || !userId || isSyncing) { // Also check if syncing (fetching)
-           return; // Don't subscribe or save if not signed in or currently fetching
+       // Only save if signed in, fetch is complete, and not currently syncing/saving
+       if (!isSignedIn || !userId || !initialFetchAttempted.current || isSyncing || isSavingRef.current) {
+           return;
        }
 
        console.log("Subscribing to store changes for save...");
 
        const unsubscribes = [
            useTransactionsStore.subscribe((currentState, prevState) => {
-               // Avoid triggering save immediately after hydration/fetch
+               // Avoid triggering save immediately after hydration/fetch by checking isHydrated
                if (useTransactionsStore.getState().isHydrated && currentState !== prevState) {
                    console.log("Transaction store changed, triggering save...");
-                   debouncedSave();
+                   debouncedSave().catch(err => console.error("Save failed after transaction change:", err));
                }
            }),
            useDebtStore.subscribe(() => {
                 console.log("Debt store changed, triggering save...");
-                debouncedSave()
+                debouncedSave().catch(err => console.error("Save failed after debt change:", err));
             }),
            useStatementStore.subscribe(() => {
                 console.log("Statement store changed, triggering save...");
-                debouncedSave()
+                debouncedSave().catch(err => console.error("Save failed after statement change:", err));
             }),
            useBudgetStore.subscribe(() => {
                 console.log("Budget store changed, triggering save...");
-                debouncedSave()
+                debouncedSave().catch(err => console.error("Save failed after budget change:", err));
             }),
            useWeeklyReviewStore.subscribe(() => {
                 console.log("Weekly review store changed, triggering save...");
-                debouncedSave()
+                debouncedSave().catch(err => console.error("Save failed after weekly review change:", err));
             }),
        ];
 
@@ -296,20 +323,25 @@ export function useSyncManager() {
            console.log("Unsubscribing from store changes.");
            unsubscribes.forEach(unsub => unsub());
        };
-   // Only re-subscribe if sign-in status or the debouncedSave function itself changes
-   }, [isSignedIn, userId, debouncedSave, isSyncing]);
+   }, [isSignedIn, userId, debouncedSave, initialFetchAttempted, isSyncing]);
 
 
   // --- Retry Function ---
   const retrySync = useCallback(() => {
-      if (syncStatus === 'error' && !isSyncing) { // Only retry if in error state and not already syncing
+      if (!isSignedIn || !userId) {
+          toast({ title: "Cannot Sync", description: "Please sign in to sync data.", variant: "destructive" });
+          return;
+      }
+      if (syncStatus === 'error' && !isSyncing && !isSavingRef.current) {
           console.log("Sync: Retrying fetch/sync...");
-          fetchDataFromDB(true); // Pass flag to indicate retry
-      } else if (isSyncing) {
+          fetchDataFromDB(true);
+      } else if (isSyncing || isSavingRef.current) {
           console.log("Sync: Cannot retry, an operation is already in progress.");
           toast({title: "Sync Busy", description: "Please wait for the current sync operation to complete.", variant: "default"});
+      } else {
+          console.log("Sync: No error to retry.");
       }
-  }, [syncStatus, fetchDataFromDB, isSyncing, toast]);
+  }, [syncStatus, isSyncing, fetchDataFromDB, toast, isSignedIn, userId]);
 
   // Return sync status and the retry function
   return { syncStatus, retrySync };
