@@ -95,15 +95,21 @@ const calculateBudgetVariance = (
     const netActual = actualIncome - actualExpenses;
 
     // 2. Calculate Budgeted Totals from Budget Items
+    // For weekly variance, we need to proportionally allocate the MONTHLY budget
+    // This is a simplification; a more accurate approach might require weekly budgets or more complex allocation logic.
+    // Assumption: Divide monthly budget figures by ~4.33 for a weekly estimate.
+    const WEEKS_IN_MONTH_ESTIMATE = 4.33;
+
     const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = {
         income: 0,
         'recurring-expense': 0,
-        'one-time-expense': 0,
+        'one-time-expense': 0, // One-time expenses are tricky weekly; maybe exclude or allocate fully if occurred this week? For simplicity, allocate weekly fraction.
         goal: 0,
     };
     budgetItems.forEach(item => {
-        budgetedTotalsByCategory[item.category] += item.amount;
+        budgetedTotalsByCategory[item.category] += item.amount / WEEKS_IN_MONTH_ESTIMATE;
     });
+
     const totalBudgetedIncome = budgetedTotalsByCategory.income;
     const totalBudgetedExpenses = budgetedTotalsByCategory['recurring-expense'] + budgetedTotalsByCategory['one-time-expense'];
     const totalBudgetedGoals = budgetedTotalsByCategory.goal;
@@ -114,12 +120,13 @@ const calculateBudgetVariance = (
        return { netBudgeted, netActual, variance: 0, status: 'no-data' };
      }
 
+    // Variance: Actual Net - Budgeted Net (Weekly Estimate)
     const variance = netActual - netBudgeted; // Favorable is positive (more income/less spend than budgeted)
     let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
 
-     if (variance > 0) status = 'under-budget'; // Favorable
-     else if (variance < 0) status = 'over-budget'; // Unfavorable
-     else status = 'on-track'; // Exactly matches
+     if (variance > 0.01) status = 'under-budget'; // Favorable (using small threshold)
+     else if (variance < -0.01) status = 'over-budget'; // Unfavorable (using small threshold)
+     else status = 'on-track'; // Approximately matches
 
     return { netBudgeted, netActual, variance, status };
 };
@@ -314,49 +321,60 @@ export default function WeeklyReviewPage() {
             setIsSaving(false);
         };
 
+        // Determine badge color and text based on variance status
+        let varianceBadgeVariant: 'default' | 'destructive' | 'outline' = 'outline';
+        let varianceBadgeText = 'No Data';
+        let varianceColorClass = 'text-muted-foreground';
+
+        if (review.varianceStatus === 'on-track' || review.varianceStatus === 'under-budget') {
+            varianceBadgeVariant = 'default'; // Use accent color (via default badge style) for favorable
+            varianceBadgeText = review.varianceStatus === 'on-track' ? 'On Track' : 'Favorable';
+            varianceColorClass = 'text-accent';
+        } else if (review.varianceStatus === 'over-budget') {
+            varianceBadgeVariant = 'destructive';
+            varianceBadgeText = 'Unfavorable';
+            varianceColorClass = 'text-destructive';
+        }
+
+
         return (
-            <Card className="flex flex-col">
-                 <CardHeader className="p-4 border-b">
-                     <div className="flex justify-between items-start gap-2">
+            <Card className="flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200">
+                 <CardHeader className="p-4 border-b bg-muted/30">
+                     <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                          <div>
-                            <CardTitle className="text-base font-semibold">
-                                Journal: {dateRangeStr} ({review.weekKey})
-                            </CardTitle>
-                             <CardDescription className="text-xs mt-1 space-x-2">
-                                 <span>{review.transactionCount} transactions</span>
-                                 <span>|</span>
-                                 <span className={cn(review.netFlow >= 0 ? "text-accent" : "text-destructive")}>
-                                    Net: {formatCurrency(review.netFlow)}
+                            <CardTitle className="text-base font-semibold flex items-center gap-2">
+                                 <BookOpen className="h-4 w-4 text-primary" /> Journal: {dateRangeStr}
+                                 <span className="text-xs font-mono text-muted-foreground">({review.weekKey})</span>
+                             </CardTitle>
+                             {/* Weekly Metrics */}
+                             <div className="text-xs text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                                 <span>Transactions: <span className="font-medium text-foreground">{review.transactionCount}</span></span>
+                                 <span className={cn("whitespace-nowrap", review.netFlow >= 0 ? "text-accent" : "text-destructive")}>
+                                    Net Flow: <span className="font-medium">{formatCurrency(review.netFlow)}</span>
                                  </span>
-                                 <span>|</span>
-                                 <span className={cn(
-                                     review.varianceStatus === 'no-data' && 'text-muted-foreground',
-                                     (review.varianceStatus === 'on-track' || review.varianceStatus === 'under-budget') && 'text-accent',
-                                     review.varianceStatus === 'over-budget' && 'text-destructive'
-                                 )}>
-                                     Var: {review.varianceStatus === 'no-data' ? 'N/A' : `${review.budgetVariance >= 0 ? '+' : ''}${formatCurrency(review.budgetVariance)}`}
-                                     <Badge variant={
-                                        review.varianceStatus === 'no-data' ? 'outline' :
-                                        (review.varianceStatus === 'on-track' || review.varianceStatus === 'under-budget') ? 'default' : // Use default (primary) for favorable
-                                        'destructive' // Destructive for unfavorable
-                                        }
-                                         className={cn("ml-1 text-xs px-1.5 py-0 h-4",
-                                              review.varianceStatus === 'on-track' || review.varianceStatus === 'under-budget' ? 'bg-accent border-accent' : ''
+                                  <span className={cn("whitespace-nowrap", varianceColorClass)}>
+                                     Variance: <span className="font-medium">
+                                        {review.varianceStatus === 'no-data' ? 'N/A' : `${review.budgetVariance >= 0 ? '+' : ''}${formatCurrency(review.budgetVariance)}`}
+                                     </span>
+                                      <Badge
+                                         variant={varianceBadgeVariant}
+                                          className={cn("ml-1 text-xs px-1.5 py-0 h-4 font-normal",
+                                             varianceBadgeVariant === 'default' && 'bg-accent border-accent text-accent-foreground' // Style favorable badge explicitly if needed
                                          )}>
-                                         {review.varianceStatus === 'no-data' ? 'No Data' :
-                                          review.varianceStatus === 'on-track' ? 'On Track' :
-                                          review.varianceStatus === 'under-budget' ? 'Favorable' : 'Unfavorable'}
+                                         {varianceBadgeText}
                                      </Badge>
                                  </span>
-                             </CardDescription>
+                             </div>
                          </div>
-                         {/* Show save button only if text changed */}
-                         {journalText !== review.journal && (
-                             <Button size="sm" onClick={handleLocalSave} disabled={isSaving}>
-                                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                 {isSaving ? 'Saving...' : 'Save'}
-                             </Button>
-                         )}
+                         {/* Save button */}
+                          <div className="mt-2 sm:mt-0">
+                             {journalText !== review.journal && (
+                                <Button size="sm" onClick={handleLocalSave} disabled={isSaving} className="h-8 px-3">
+                                     {isSaving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+                                     {isSaving ? 'Saving...' : 'Save Journal'}
+                                 </Button>
+                             )}
+                           </div>
                      </div>
                  </CardHeader>
                  <CardContent className="p-4 flex-grow">
@@ -364,7 +382,7 @@ export default function WeeklyReviewPage() {
                          placeholder="Write your reflections for this week..."
                          value={journalText}
                          onChange={(e) => setJournalText(e.target.value)}
-                         className="min-h-[150px] w-full border rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 bg-muted/20"
+                         className="min-h-[150px] w-full border rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-sm" // Consistent text size
                          aria-label={`Journal entry for week ${review.weekKey}`}
                      />
                  </CardContent>
