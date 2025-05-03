@@ -1,12 +1,43 @@
 // src/store/weeklyReviewStore.ts
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
+import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
+
 
 // Define the structure for a weekly review entry
 export interface WeeklyReviewData { // Export for use in API route
   journal: string;
   transactionComments?: Record<string, string>; // transactionId -> comment string
 }
+
+// Custom Session Storage with Base64 encoding (Placeholder for encryption)
+const createSessionStorageWithEncoding = (): StateStorage => {
+  const storage = sessionStorage;
+  return {
+    getItem: (name) => {
+      const str = storage.getItem(name);
+      if (!str) return null;
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const decodedStr = decode(str);
+        return decodedStr;
+      } catch (e) {
+        console.error(`Failed to decode item "${name}" from sessionStorage`, e);
+        return null;
+      }
+    },
+    setItem: (name, value) => {
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const encodedValue = encode(value);
+        storage.setItem(name, encodedValue);
+      } catch (e) {
+         console.error(`Failed to encode item "${name}" for sessionStorage`, e);
+      }
+    },
+    removeItem: (name) => storage.removeItem(name),
+  };
+};
 
 // Define the state shape. The key will be 'YYYY-WW' (e.g., '2024-30')
 interface WeeklyReviewState {
@@ -18,12 +49,17 @@ interface WeeklyReviewState {
   deleteTransactionComment: (weekKey: string, transactionId: string) => void;
   getReviewForWeek: (weekKey: string) => WeeklyReviewData | undefined;
   getTransactionComment: (weekKey: string, transactionId: string) => string | undefined;
+  clearReviews: () => void; // Action to clear state
 }
+
+const initialState = {
+    reviews: {},
+};
 
 export const useWeeklyReviewStore = create<WeeklyReviewState>()(
   persist(
     (set, get) => ({
-      reviews: {}, // Initialize with an empty object
+      ...initialState, // Initialize with an empty object
 
       // Action to replace the entire reviews object
       setReviews: (reviews) => set({ reviews: reviews || {} }), // Add default empty object
@@ -96,11 +132,12 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       getTransactionComment: (weekKey, transactionId) => {
           return get().reviews[weekKey]?.transactionComments?.[transactionId];
       },
+      clearReviews: () => set(initialState), // Reset to initial state
 
     }),
     {
       name: 'ifcGuru_weeklyReviews', // Unique name for local storage
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
       // No special serialization needed for this structure yet
        // Deserialize: Ensure reviews is at least an empty object
        deserialize: (str) => {
@@ -108,6 +145,8 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
          state.state.reviews = state.state.reviews || {};
          return state;
        },
+        // No complex types like Date in this store
+        // serialize: (state) => JSON.stringify(state),
     }
   )
 );
@@ -120,4 +159,3 @@ export const getWeekKey = (date: Date): string => {
   const weekNumber = getISOWeek(date); // Use ISO week number
   return `${year}-${weekNumber.toString().padStart(2, '0')}`;
 };
-

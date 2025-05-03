@@ -1,7 +1,9 @@
 // src/store/budgetStore.ts
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
+import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
+
 
 // Generate unique IDs
 const generateId = (): string => `budget_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -26,19 +28,53 @@ const sumByCategory = (items: BudgetItem[], category: BudgetItemCategory): numbe
     return items.filter(item => item.category === category).reduce((sum, item) => sum + item.amount, 0);
 };
 
+// Custom Session Storage with Base64 encoding (Placeholder for encryption)
+const createSessionStorageWithEncoding = (): StateStorage => {
+  const storage = sessionStorage;
+  return {
+    getItem: (name) => {
+      const str = storage.getItem(name);
+      if (!str) return null;
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const decodedStr = decode(str);
+        return decodedStr;
+      } catch (e) {
+        console.error(`Failed to decode item "${name}" from sessionStorage`, e);
+        return null;
+      }
+    },
+    setItem: (name, value) => {
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const encodedValue = encode(value);
+        storage.setItem(name, encodedValue);
+      } catch (e) {
+         console.error(`Failed to encode item "${name}" for sessionStorage`, e);
+      }
+    },
+    removeItem: (name) => storage.removeItem(name),
+  };
+};
+
 interface BudgetState {
     budgetItems: BudgetItem[];
     setBudgetItems: (items: BudgetItem[]) => void; // Action to overwrite state
     addBudgetItem: (itemData: Omit<BudgetItem, 'id'>) => BudgetItem;
     updateBudgetItem: (updatedItem: BudgetItem) => void;
     deleteBudgetItem: (id: string) => void;
+    clearBudgetItems: () => void; // Action to clear state
     // Derived state/selectors can be defined here or calculated in components
 }
+
+const initialState = {
+    budgetItems: [],
+};
 
 export const useBudgetStore = create<BudgetState>()(
     persist(
         (set, get) => ({
-            budgetItems: [],
+            ...initialState,
              // Action to replace the entire budget items array
              setBudgetItems: (items) => {
                  set({ budgetItems: sortBudgetItems(items || []) }); // Add default empty array
@@ -61,16 +97,19 @@ export const useBudgetStore = create<BudgetState>()(
             deleteBudgetItem: (id) => {
                 set((state) => ({ budgetItems: sortBudgetItems(state.budgetItems.filter(item => item.id !== id)) }));
             },
+            clearBudgetItems: () => set(initialState), // Reset to initial state
         }),
         {
             name: 'ifcGuru_budgetItems', // Local storage key updated
-            storage: createJSONStorage(() => localStorage),
+            storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
             // Ensure items are sorted after deserialization
             deserialize: (str) => {
                 const state = JSON.parse(str);
                 state.state.budgetItems = sortBudgetItems(state.state.budgetItems || []);
                 return state;
             },
+            // No complex types like Date in BudgetItem
+            // serialize: (state) => JSON.stringify(state),
         }
     )
 );
@@ -93,4 +132,3 @@ export const selectTotalBudgetedExpenses = (state: BudgetState): number =>
 
 export const selectNetBudgeted = (state: BudgetState): number =>
     selectTotalBudgetedIncome(state) - selectTotalBudgetedExpenses(state) - selectTotalGoals(state);
-

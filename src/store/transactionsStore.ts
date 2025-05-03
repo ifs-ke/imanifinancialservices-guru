@@ -1,7 +1,8 @@
 // src/store/transactionsStore.ts
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
+import type { TransactionWithId } from '@/lib/types';
+import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
 
 // Generate unique IDs
 const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -20,28 +21,65 @@ const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
     });
 };
 
+// Custom Session Storage with Base64 encoding (Placeholder for encryption)
+const createSessionStorageWithEncoding = (): StateStorage => {
+  const storage = sessionStorage;
+  return {
+    getItem: (name) => {
+      const str = storage.getItem(name);
+      if (!str) return null;
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const decodedStr = decode(str);
+        return decodedStr;
+      } catch (e) {
+        console.error(`Failed to decode item "${name}" from sessionStorage`, e);
+        return null;
+      }
+    },
+    setItem: (name, value) => {
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const encodedValue = encode(value);
+        storage.setItem(name, encodedValue);
+      } catch (e) {
+         console.error(`Failed to encode item "${name}" for sessionStorage`, e);
+      }
+    },
+    removeItem: (name) => storage.removeItem(name),
+  };
+};
+
+
 interface TransactionsState {
     transactions: TransactionWithId[];
+    isHydrated: boolean; // Track hydration status
     setTransactions: (transactions: TransactionWithId[]) => void; // Action to overwrite state
     addTransaction: (transactionData: Omit<TransactionWithId, 'id'>) => TransactionWithId;
     updateTransaction: (updatedTransaction: TransactionWithId) => void;
     deleteTransaction: (id: string) => void;
     importTransactionsBatch: (newTransactionsData: Omit<TransactionWithId, 'id'>[]) => TransactionWithId[];
+    clearTransactions: () => void; // Action to clear state
     // deleteTransactionsBatch: (ids: string[]) => void; // Optional for rollback
 }
+
+const initialState = {
+    transactions: [],
+    isHydrated: false, // Start as not hydrated
+};
 
 export const useTransactionsStore = create<TransactionsState>()(
     persist(
         (set, get) => ({
-            transactions: [], // Initialize with empty array
+            ...initialState,
             // Action to replace the entire transactions array
             setTransactions: (transactions) => {
                  // Ensure dates are Date objects before setting
-                 const validatedTransactions = transactions.map(tx => ({
+                 const validatedTransactions = (transactions || []).map(tx => ({ // Handle potential null/undefined input
                      ...tx,
                      date: tx.date instanceof Date ? tx.date : new Date(tx.date),
                  }));
-                 set({ transactions: sortTransactions(validatedTransactions) });
+                 set({ transactions: sortTransactions(validatedTransactions), isHydrated: true }); // Mark as hydrated
             },
             addTransaction: (transactionData) => {
                 const newTransaction: TransactionWithId = {
@@ -74,6 +112,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                  set((state) => ({ transactions: sortTransactions([...state.transactions, ...newTransactionsWithIds]) }));
                  return newTransactionsWithIds;
             },
+            clearTransactions: () => set({ ...initialState, isHydrated: true }), // Reset to initial state, but keep hydrated flag
             // deleteTransactionsBatch: (ids) => {
             //     const idsSet = new Set(ids);
             //     set((state) => ({ transactions: sortTransactions(state.transactions.filter(d => !idsSet.has(d.id))) }));
@@ -81,19 +120,39 @@ export const useTransactionsStore = create<TransactionsState>()(
         }),
         {
             name: 'ifcGuru_transactions', // Local storage key updated
-            storage: createJSONStorage(() => localStorage),
+            // Use custom sessionStorage with encoding
+            storage: createJSONStorage(() => createSessionStorageWithEncoding()),
+            // Custom hydration logic
+            onRehydrateStorage: () => (state) => {
+                 if (state) {
+                   state.isHydrated = true;
+                 }
+             },
             // Need to handle Date serialization/deserialization
-             serialize: (state) => JSON.stringify(state),
+             serialize: (state) => {
+                 // Custom serialization to handle Dates
+                 const replacer = (key: string, value: any) => {
+                   if (value instanceof Date) {
+                     return { __type: 'Date', value: value.toISOString() };
+                   }
+                   return value;
+                 };
+                 return JSON.stringify({ ...state, state: JSON.parse(JSON.stringify(state.state, replacer)) });
+             },
              deserialize: (str) => {
                 const state = JSON.parse(str);
-                 // Convert date strings back to Date objects
-                state.state.transactions = (state.state.transactions || []).map((tx: any) => ({ // Add default empty array
-                    ...tx,
-                     date: tx.date ? new Date(tx.date) : new Date(), // Handle potential null/undefined dates
-                 }));
-                 // Ensure transactions are sorted after deserialization
-                 state.state.transactions = sortTransactions(state.state.transactions);
-                return state;
+                // Custom deserialization to handle Dates
+                const reviver = (key: string, value: any) => {
+                  if (value && typeof value === 'object' && value.__type === 'Date') {
+                    return new Date(value.value);
+                  }
+                  return value;
+                };
+
+                const parsedState = JSON.parse(JSON.stringify(state.state), reviver);
+                parsedState.transactions = sortTransactions(parsedState.transactions || []); // Sort after loading
+                parsedState.isHydrated = true; // Mark as hydrated after loading
+                return { ...state, state: parsedState };
             },
         }
     )
@@ -111,4 +170,3 @@ export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-

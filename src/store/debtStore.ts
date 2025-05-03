@@ -1,7 +1,8 @@
 // src/store/debtStore.ts
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { DebtItem } from '@/lib/types';
+import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
 
 // Generate unique IDs
 const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -16,6 +17,36 @@ const sortDebts = (debtList: DebtItem[]): DebtItem[] => {
     });
 };
 
+// Custom Session Storage with Base64 encoding (Placeholder for encryption)
+const createSessionStorageWithEncoding = (): StateStorage => {
+  const storage = sessionStorage;
+  return {
+    getItem: (name) => {
+      const str = storage.getItem(name);
+      if (!str) return null;
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const decodedStr = decode(str);
+        return decodedStr;
+      } catch (e) {
+        console.error(`Failed to decode item "${name}" from sessionStorage`, e);
+        return null;
+      }
+    },
+    setItem: (name, value) => {
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const encodedValue = encode(value);
+        storage.setItem(name, encodedValue);
+      } catch (e) {
+         console.error(`Failed to encode item "${name}" for sessionStorage`, e);
+      }
+    },
+    removeItem: (name) => storage.removeItem(name),
+  };
+};
+
+
 interface DebtState {
     debts: DebtItem[];
     setDebts: (debts: DebtItem[]) => void; // Action to overwrite state
@@ -23,13 +54,18 @@ interface DebtState {
     updateDebt: (updatedDebt: DebtItem) => void;
     deleteDebt: (id: string) => void;
     importDebtsBatch: (newDebtsData: Omit<DebtItem, 'id'>[]) => DebtItem[];
+    clearDebts: () => void; // Action to clear state
     // deleteDebtsBatch: (ids: string[]) => void; // Optional for rollback
 }
+
+const initialState = {
+    debts: [],
+};
 
 export const useDebtStore = create<DebtState>()(
     persist(
         (set, get) => ({
-            debts: [], // Initialize with empty array
+            ...initialState,
             // Action to replace the entire debts array
             setDebts: (debts) => {
                  set({ debts: sortDebts(debts || []) }); // Add default empty array
@@ -60,6 +96,7 @@ export const useDebtStore = create<DebtState>()(
                  set((state) => ({ debts: sortDebts([...state.debts, ...newDebtsWithIds]) }));
                  return newDebtsWithIds;
             },
+            clearDebts: () => set(initialState), // Reset to initial state
             // deleteDebtsBatch: (ids) => {
             //     const idsSet = new Set(ids);
             //     set((state) => ({ debts: sortDebts(state.debts.filter(d => !idsSet.has(d.id))) }));
@@ -67,13 +104,15 @@ export const useDebtStore = create<DebtState>()(
         }),
         {
             name: 'ifcGuru_debts', // Local storage key updated
-            storage: createJSONStorage(() => localStorage),
+            storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
              // Ensure debts are sorted after deserialization
              deserialize: (str) => {
                 const state = JSON.parse(str);
                 state.state.debts = sortDebts(state.state.debts || []);
                 return state;
             },
+             // No complex types like Date in DebtItem currently
+             // serialize: (state) => JSON.stringify(state),
         }
     )
 );
@@ -81,4 +120,3 @@ export const useDebtStore = create<DebtState>()(
 // Selector for total debt
 export const selectTotalDebt = (state: DebtState): number =>
     state.debts.reduce((sum, debt) => sum + debt.principal, 0);
-

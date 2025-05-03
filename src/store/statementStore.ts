@@ -1,8 +1,9 @@
 // src/store/statementStore.ts
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { StatementItem, OtherLiabilityItem } from '@/lib/types';
 import { startOfMonth, endOfMonth } from 'date-fns';
+import { encode, decode } from '@/lib/storage-utils'; // Import encoding/decoding utils
 
 // Generate unique IDs
 const generateId = (prefix: 'asset' | 'lia'): string => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -15,6 +16,35 @@ const sortItems = <T extends { description: string }>(items: T[]): T[] => {
 // Define default date range
 const defaultEndDate = endOfMonth(new Date());
 const defaultStartDate = startOfMonth(defaultEndDate);
+
+// Custom Session Storage with Base64 encoding (Placeholder for encryption)
+const createSessionStorageWithEncoding = (): StateStorage => {
+  const storage = sessionStorage;
+  return {
+    getItem: (name) => {
+      const str = storage.getItem(name);
+      if (!str) return null;
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const decodedStr = decode(str);
+        return decodedStr;
+      } catch (e) {
+        console.error(`Failed to decode item "${name}" from sessionStorage`, e);
+        return null;
+      }
+    },
+    setItem: (name, value) => {
+      // IMPORTANT: This is Base64 encoding, NOT real encryption.
+      try {
+        const encodedValue = encode(value);
+        storage.setItem(name, encodedValue);
+      } catch (e) {
+         console.error(`Failed to encode item "${name}" for sessionStorage`, e);
+      }
+    },
+    removeItem: (name) => storage.removeItem(name),
+  };
+};
 
 interface StatementState {
     assetItems: StatementItem[];
@@ -31,15 +61,20 @@ interface StatementState {
     updateOtherLiabilityItem: (updatedItem: OtherLiabilityItem) => void;
     deleteAssetItem: (id: string) => void;
     deleteOtherLiabilityItem: (id: string) => void;
+    clearStatementItems: () => void; // Action to clear state (items only)
 }
+
+const initialState = {
+    assetItems: [],
+    otherLiabilityItems: [],
+    startDate: defaultStartDate,
+    endDate: defaultEndDate,
+};
 
 export const useStatementStore = create<StatementState>()(
     persist(
         (set, get) => ({
-            assetItems: [],
-            otherLiabilityItems: [],
-            startDate: defaultStartDate, // Initialize start date
-            endDate: defaultEndDate,     // Initialize end date
+            ...initialState,
             setStartDate: (date) => set({ startDate: date }), // Implement setStartDate
             setEndDate: (date) => set({ endDate: date }),     // Implement setEndDate
             // Action to replace the entire asset items array
@@ -70,30 +105,49 @@ export const useStatementStore = create<StatementState>()(
             deleteOtherLiabilityItem: (id) => {
                 set((state) => ({ otherLiabilityItems: sortItems(state.otherLiabilityItems.filter(item => item.id !== id)) }));
             },
+             clearStatementItems: () => set({
+                 assetItems: [],
+                 otherLiabilityItems: [],
+                 // Keep dates as they are not typically "cleared" on sign-out, maybe reset?
+                 // Or handle date reset separately if needed.
+                 // startDate: defaultStartDate,
+                 // endDate: defaultEndDate,
+             }),
         }),
         {
             name: 'ifcGuru_statementItems', // Local storage key updated
-            storage: createJSONStorage(() => localStorage),
+            storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use encoded sessionStorage
              // Ensure items are sorted after deserialization
              deserialize: (str) => {
                 const state = JSON.parse(str);
-                state.state.assetItems = sortItems(state.state.assetItems || []);
-                state.state.otherLiabilityItems = sortItems(state.state.otherLiabilityItems || []);
-                 // Deserialize dates properly
-                state.state.startDate = state.state.startDate ? new Date(state.state.startDate) : defaultStartDate;
-                state.state.endDate = state.state.endDate ? new Date(state.state.endDate) : defaultEndDate;
-                return state;
+                 // Custom deserialization to handle Dates
+                 const reviver = (key: string, value: any) => {
+                   if (value && typeof value === 'object' && value.__type === 'Date') {
+                     return new Date(value.value);
+                   }
+                   return value;
+                 };
+
+                 const parsedState = JSON.parse(JSON.stringify(state.state), reviver);
+                 parsedState.assetItems = sortItems(parsedState.assetItems || []);
+                 parsedState.otherLiabilityItems = sortItems(parsedState.otherLiabilityItems || []);
+                 // Ensure dates are Date objects or undefined after loading
+                 parsedState.startDate = parsedState.startDate ? new Date(parsedState.startDate) : defaultStartDate;
+                 parsedState.endDate = parsedState.endDate ? new Date(parsedState.endDate) : defaultEndDate;
+
+                return { ...state, state: parsedState };
             },
             // Need to handle Date serialization for startDate/endDate
-            serialize: (state) => JSON.stringify({
-                ...state,
-                state: {
-                    ...state.state,
-                    // Convert dates to strings for storage if they exist
-                    startDate: state.state.startDate?.toISOString(),
-                    endDate: state.state.endDate?.toISOString(),
-                }
-            }),
+            serialize: (state) => {
+                 // Custom serialization to handle Dates
+                 const replacer = (key: string, value: any) => {
+                   if (value instanceof Date) {
+                     return { __type: 'Date', value: value.toISOString() };
+                   }
+                   return value;
+                 };
+                 return JSON.stringify({ ...state, state: JSON.parse(JSON.stringify(state.state, replacer)) });
+            },
 
         }
     )
@@ -109,4 +163,3 @@ export const selectTotalOtherLiabilities = (state: StatementState): number =>
 // Selectors for dates (optional, but can be useful)
 export const selectStartDate = (state: StatementState): Date | undefined => state.startDate;
 export const selectEndDate = (state: StatementState): Date | undefined => state.endDate;
-

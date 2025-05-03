@@ -30,31 +30,39 @@ export function useSyncManager() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('local'); // Initial status is local
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const initialFetchAttempted = useRef(false); // Track if initial fetch has been done
+  const isSavingRef = useRef(false); // Ref to track save state to avoid race conditions in debounced save
 
-  // Get store setters
+  // Get store setters and clear actions
   const setTransactions = useTransactionsStore(state => state.setTransactions);
+  const clearTransactions = useTransactionsStore(state => state.clearTransactions);
   const setDebts = useDebtStore(state => state.setDebts);
+  const clearDebts = useDebtStore(state => state.clearDebts);
   const setAssetItems = useStatementStore(state => state.setAssetItems);
   const setOtherLiabilityItems = useStatementStore(state => state.setOtherLiabilityItems);
   const setStartDate = useStatementStore(state => state.setStartDate);
   const setEndDate = useStatementStore(state => state.setEndDate);
+  const clearStatementItems = useStatementStore(state => state.clearStatementItems);
   const setBudgetItems = useBudgetStore(state => state.setBudgetItems);
+  const clearBudgetItems = useBudgetStore(state => state.clearBudgetItems);
   const setReviews = useWeeklyReviewStore(state => state.setReviews);
+  const clearReviews = useWeeklyReviewStore(state => state.clearReviews);
 
   // --- Debounced Save Logic ---
   const debounce = <F extends (...args: any[]) => Promise<void>>(func: F, waitFor: number) => {
       let timeout: ReturnType<typeof setTimeout> | null = null;
 
       const debounced = (...args: Parameters<F>): Promise<void> => {
-          return new Promise((resolve) => {
+          return new Promise((resolve, reject) => { // Add reject
               if (timeout !== null) {
                   clearTimeout(timeout);
               }
               timeout = setTimeout(async () => {
                   try {
                       await func(...args);
-                  } finally {
-                      resolve(); // Resolve promise after func execution (or failure)
+                      resolve(); // Resolve on success
+                  } catch (error) {
+                      console.error("Debounced function error:", error);
+                      reject(error); // Reject on error
                   }
               }, waitFor);
           });
@@ -71,13 +79,15 @@ export function useSyncManager() {
        setSyncStatus((prev) => prev === 'error' ? 'error' : 'local'); // Stay error or revert to local
        return;
      }
-     if (isSyncing) { // Prevent concurrent saves/fetches
-        console.log("Save: Operation already in progress, skipping save.");
+     // Use ref to check if already saving to prevent race conditions with debounce
+     if (isSavingRef.current) {
+        console.log("Save: Save operation already in progress, skipping.");
         return;
      }
 
     console.log("Save: Starting save to DB...");
     setIsSyncing(true);
+    isSavingRef.current = true; // Mark as saving
     setSyncStatus('syncing'); // Indicate syncing status
 
     // Get current state from all stores
@@ -118,10 +128,12 @@ export function useSyncManager() {
         description: `Could not save data to the cloud: ${error.message}`,
         variant: 'destructive',
       });
+      throw error; // Re-throw error to be caught by debounced wrapper if needed
     } finally {
       setIsSyncing(false);
+      isSavingRef.current = false; // Mark as not saving anymore
     }
-  }, [isSignedIn, userId, toast, isSyncing]); // Added isSyncing dependency
+  }, [isSignedIn, userId, toast]); // isSyncing removed as dependency, using ref instead
 
   const debouncedSave = useCallback(debounce(saveDataToDB, 3000), [saveDataToDB]);
 
@@ -133,8 +145,13 @@ export function useSyncManager() {
       initialFetchAttempted.current = false; // Reset fetch attempt status if signed out
       return;
     }
-    if (isSyncing && !isRetry) { // Allow retry even if another operation was in progress? Maybe not needed.
-        console.log("Fetch: Operation already in progress, skipping fetch.");
+     // Prevent fetch if a save is in progress
+     if (isSavingRef.current && !isRetry) {
+         console.log("Fetch: Save operation in progress, skipping fetch.");
+         return;
+     }
+    if (isSyncing && !isRetry) { // Prevent concurrent fetches (allow retry)
+        console.log("Fetch: Fetch operation already in progress, skipping.");
         return;
     }
 
@@ -160,7 +177,8 @@ export function useSyncManager() {
                toast({ title: 'No Cloud Data', description: 'No saved data found in the cloud for this user.', variant: 'default' });
                return; // Stop here
           }
-          throw new Error(`Fetch failed: ${response.statusText}`);
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error structure' }));
+          throw new Error(`Fetch failed: ${response.statusText} (${errorData.error || 'No details'})`);
       }
       const data: SyncedData = await response.json();
 
@@ -201,7 +219,31 @@ export function useSyncManager() {
       setIsSyncing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, userId, toast, saveDataToDB, isSyncing]); // Dependencies for fetching
+  }, [isSignedIn, userId, toast, saveDataToDB]); // isSyncing removed, isSavingRef used internally
+
+  // --- Clear Local State Function ---
+   const clearLocalState = useCallback(() => {
+     console.log("Clearing local state (session storage)...");
+     clearTransactions();
+     clearDebts();
+     clearStatementItems();
+     clearBudgetItems();
+     clearReviews();
+     sessionStorage.removeItem('ifcGuru_transactions'); // Explicitly remove persisted state
+     sessionStorage.removeItem('ifcGuru_debts');
+     sessionStorage.removeItem('ifcGuru_statementItems');
+     sessionStorage.removeItem('ifcGuru_budgetItems');
+     sessionStorage.removeItem('ifcGuru_weeklyReviews');
+     setSyncStatus('local'); // Reset status to local
+     setLastSyncTime(null);
+     initialFetchAttempted.current = false;
+   }, [
+     clearTransactions,
+     clearDebts,
+     clearStatementItems,
+     clearBudgetItems,
+     clearReviews,
+   ]);
 
 
   // --- Effects ---
@@ -211,39 +253,64 @@ export function useSyncManager() {
     if (isSignedIn && userId && !initialFetchAttempted.current) {
       fetchDataFromDB();
     } else if (!isSignedIn) {
-      setSyncStatus('local');
-      setLastSyncTime(null);
-      initialFetchAttempted.current = false; // Reset on sign out
+        // User signed out, clear local (session) state
+        clearLocalState();
     }
-  }, [isSignedIn, userId, fetchDataFromDB]);
+  }, [isSignedIn, userId, fetchDataFromDB, clearLocalState]);
 
-   // Subscribe to store changes and trigger debounced save ONLY if signed in
+   // Subscribe to store changes and trigger debounced save ONLY if signed in and not currently fetching
    useEffect(() => {
-       if (!isSignedIn || !userId) {
-           return; // Don't subscribe or save if not signed in
+       if (!isSignedIn || !userId || isSyncing) { // Also check if syncing (fetching)
+           return; // Don't subscribe or save if not signed in or currently fetching
        }
 
+       console.log("Subscribing to store changes for save...");
+
        const unsubscribes = [
-           useTransactionsStore.subscribe(debouncedSave),
-           useDebtStore.subscribe(debouncedSave),
-           useStatementStore.subscribe(debouncedSave),
-           useBudgetStore.subscribe(debouncedSave),
-           useWeeklyReviewStore.subscribe(debouncedSave),
+           useTransactionsStore.subscribe((currentState, prevState) => {
+               // Avoid triggering save immediately after hydration/fetch
+               if (useTransactionsStore.getState().isHydrated && currentState !== prevState) {
+                   console.log("Transaction store changed, triggering save...");
+                   debouncedSave();
+               }
+           }),
+           useDebtStore.subscribe(() => {
+                console.log("Debt store changed, triggering save...");
+                debouncedSave()
+            }),
+           useStatementStore.subscribe(() => {
+                console.log("Statement store changed, triggering save...");
+                debouncedSave()
+            }),
+           useBudgetStore.subscribe(() => {
+                console.log("Budget store changed, triggering save...");
+                debouncedSave()
+            }),
+           useWeeklyReviewStore.subscribe(() => {
+                console.log("Weekly review store changed, triggering save...");
+                debouncedSave()
+            }),
        ];
 
        return () => {
+           console.log("Unsubscribing from store changes.");
            unsubscribes.forEach(unsub => unsub());
        };
-   }, [isSignedIn, userId, debouncedSave]); // Rerun effect if sign-in status changes
+   // Only re-subscribe if sign-in status or the debouncedSave function itself changes
+   }, [isSignedIn, userId, debouncedSave, isSyncing]);
 
 
   // --- Retry Function ---
   const retrySync = useCallback(() => {
-      if (syncStatus === 'error') {
+      if (syncStatus === 'error' && !isSyncing) { // Only retry if in error state and not already syncing
           console.log("Sync: Retrying fetch/sync...");
           fetchDataFromDB(true); // Pass flag to indicate retry
+      } else if (isSyncing) {
+          console.log("Sync: Cannot retry, an operation is already in progress.");
+          toast({title: "Sync Busy", description: "Please wait for the current sync operation to complete.", variant: "default"});
       }
-  }, [syncStatus, fetchDataFromDB]);
+  }, [syncStatus, fetchDataFromDB, isSyncing, toast]);
 
-  return { isSyncing, syncStatus, lastSyncTime, retrySync }; // Return retrySync for the UI
+  // Return sync status and the retry function
+  return { syncStatus, retrySync };
 }
