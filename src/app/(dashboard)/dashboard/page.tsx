@@ -4,7 +4,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle, Banknote, Landmark, Cloud, CloudOff, Lightbulb } from 'lucide-react';
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, Cloud, CloudOff, Lightbulb } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTransactionsStore } from '@/store/transactionsStore';
@@ -98,8 +98,8 @@ export default function DashboardPage() {
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
   const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
   const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
-  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A');
-  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A');
+  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A'); // Renamed state variable
+  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A'); // Renamed state variable
   const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A');
   const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A');
@@ -260,7 +260,7 @@ export default function DashboardPage() {
      value: { label: 'Amount (KES)' },
      Income: { label: 'Income', color: "hsl(var(--accent))" },
      Expenses: { label: 'Expenses', color: "hsl(var(--destructive))" },
-   } satisfies ChartConfig;
+   } satisfies ChartConfig
 
     const trendChartData = useMemo(() => {
          const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
@@ -295,7 +295,7 @@ export default function DashboardPage() {
          income: { label: "Income", color: "hsl(var(--accent))" },
          expense: { label: "Expenses", color: "hsl(var(--destructive))" },
          month: { label: "Month" },
-     } satisfies ChartConfig;
+     } satisfies ChartConfig
 
 
   return (
@@ -557,6 +557,5 @@ export default function DashboardPage() {
      </div>
   );
 }
-
 
     
