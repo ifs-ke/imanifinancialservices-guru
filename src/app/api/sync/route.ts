@@ -82,15 +82,20 @@ async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<s
 }
 
 
-// Helper to get user profile data (including dates and getting started state)
+// Helper function to get user profile data (including dates and getting started state)
 async function getUserProfileData(db: any, userId: string): Promise<{ startDate?: string, endDate?: string, gettingStartedDismissed?: boolean }> {
+    const collectionName = 'userProfiles'; // Define collection name for clarity
+    console.log(`Sync API: Fetching user profile data for user ${userId} from collection '${collectionName}'`);
     try {
-        const collection = db.collection('userProfiles');
-         await collection.createIndex({ userId: 1 });
+        const collection = db.collection(collectionName);
+        await collection.createIndex({ userId: 1 }); // Ensure index exists
+
         const userProfile = await collection.findOne(
             { userId },
             { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1, gettingStartedDismissed: 1 } }
         );
+
+        console.log(`Sync API: Found user profile for user ${userId}:`, userProfile ? 'Yes' : 'No');
 
         // Ensure we return the correct types/defaults
         const startDate = userProfile?.statementStartDate instanceof Date ? userProfile.statementStartDate.toISOString() : undefined;
@@ -99,8 +104,9 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
 
         return { startDate, endDate, gettingStartedDismissed };
     } catch (error) {
-        console.error(`Sync API: Error fetching user profile data for user ${userId}:`, error);
-        throw new Error('Failed to fetch user profile data');
+        console.error(`Sync API: Error fetching user profile data for user ${userId} from collection '${collectionName}':`, error);
+        // Throw a more specific error to help diagnose
+        throw new Error(`Failed to fetch user profile data. DB Error: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -116,10 +122,13 @@ export async function GET() {
   console.log(`Sync API: Initiating sync for user ${userId}`);
 
   try {
+    console.log("Sync API: Connecting to database...");
     const client = await connectToDatabase();
     const db = client.db();
+    console.log("Sync API: Database connection successful.");
 
     // Fetch all data types concurrently
+    console.log("Sync API: Fetching all data collections concurrently...");
     const [
         transactions,
         debts,
@@ -140,7 +149,7 @@ export async function GET() {
         getUserProfileData(db, userId) // Fetch profile data including gettingStartedDismissed
     ]);
 
-    console.log(`Sync API: Fetched data for user ${userId}. Transactions: ${transactions.length}, Debts: ${debts.length}, Assets: ${assetItems.length}, Profile:`, profileData);
+    console.log(`Sync API: Fetched data for user ${userId}. Transactions: ${transactions.length}, Debts: ${debts.length}, Assets: ${assetItems.length}, Owned Reviews: ${Object.keys(ownedReviews).length}, Shared Reviews: ${Object.keys(sharedReviews).length}, Profile:`, profileData);
 
      // Combine all fetched data
      const fetchedData = {
@@ -157,8 +166,10 @@ export async function GET() {
      };
 
       // Prepare data structure for hashing (consistent sorting, date formats)
+      console.log("Sync API: Preparing fetched data for hashing...");
       const preparedData = prepareDataForHashing(fetchedData);
       const dataString = stringify(preparedData); // Use stable stringify for hashing
+      console.log("Sync API: Generating hash for prepared data...");
       const dataHash = await hashData(dataString);
 
       console.log(`Sync API: Generated server hash for user ${userId}: ${dataHash}`);
@@ -170,7 +181,9 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error(`Sync API: Failed to fetch data for user ${userId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data from database';
+    // Return a more specific error message if possible
+    const errorMessage = error.message || 'Failed to fetch data from database';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+
