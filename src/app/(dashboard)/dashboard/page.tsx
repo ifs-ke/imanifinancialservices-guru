@@ -1,12 +1,12 @@
-
+// src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, Cloud, CloudOff, Lightbulb } from 'lucide-react';
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, Cloud, CloudOff, Lightbulb, X } from 'lucide-react'; // Added X
 import Link from 'next/link';
-import Image from 'next/image';
+import Image from 'next/image'; // Keeping Image for potential future use
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
@@ -17,7 +17,6 @@ import { format, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { BudgetItemCategory } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { X } from 'lucide-react';
 import { useSyncManager } from '@/hooks/useSyncManager'; // Import hook to manage getting started state
 
 // Calculation Functions
@@ -54,12 +53,14 @@ export default function DashboardPage() {
   const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
   const budgetItems = useBudgetStore(state => state.budgetItems);
   const { toast } = useToast();
-  const { gettingStartedDismissed, setGettingStartedDismissed } = useSyncManager(); // Use hook for getting started state
+  // Use hook for getting started state AND setter
+  const { gettingStartedDismissed, setGettingStartedDismissed } = useSyncManager();
 
    // Filter transactions based on the global startDate and endDate from the store
    const filteredTransactions = useMemo(() => {
-       const start = startDate ? startDate.getTime() : 0;
-       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now();
+       // Use defaults if dates are undefined
+       const start = startDate ? startDate.getTime() : 0; // Consider transactions from the beginning if no start date
+       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now(); // Use now if no end date
        return allTransactions.filter(tx => {
            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
            if (isNaN(txDate.getTime())) return false;
@@ -115,7 +116,7 @@ export default function DashboardPage() {
     }
 
     if (fundsForDebtPayment <= 0) {
-        setDebtPayoffTimeline("Cannot estimate: Budget doesn't cover expenses.");
+        setDebtPayoffTimeline("Cannot estimate: Budget insufficient.");
         return;
     }
 
@@ -130,7 +131,7 @@ export default function DashboardPage() {
     });
 
     if (fundsForDebtPayment < totalMinPayments) {
-        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments may not cover interest." : "Warning: Funds less than min payments.");
+        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Funds < min payments.");
         return;
     }
 
@@ -142,33 +143,12 @@ export default function DashboardPage() {
         months++;
         let availablePayment = fundsForDebtPayment;
 
-        currentDebts.forEach(debt => {
-            if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12);
-        });
+        currentDebts.forEach(debt => { if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12); });
+        currentDebts.forEach(debt => { if (debt.principal > 0) { const payment = Math.min(debt.minPayment, debt.principal, availablePayment); debt.principal -= payment; availablePayment -= payment; } });
 
-        currentDebts.forEach(debt => {
-            if (debt.principal > 0) {
-                const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
-                debt.principal -= payment;
-                availablePayment -= payment;
-            }
-        });
-
-        if (availablePayment > 0) {
-            currentDebts.sort((a, b) => {
-                 const rateDiff = b.interestRate - a.interestRate;
-                 if (rateDiff !== 0) return rateDiff;
-                 return b.principal - a.principal;
-            });
-
-            for (const debt of currentDebts) {
-                 if (debt.principal > 0 && availablePayment > 0) {
-                     const payment = Math.min(availablePayment, debt.principal);
-                     debt.principal -= payment;
-                     availablePayment -= payment;
-                 }
-                 if(availablePayment <= 0) break;
-            }
+        if (availablePayment > 0.01) { // Use threshold
+            currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; }); // Avalanche method
+            for (const debt of currentDebts) { if (debt.principal > 0.01 && availablePayment > 0.01) { const payment = Math.min(availablePayment, debt.principal); debt.principal -= payment; availablePayment -= payment; } if(availablePayment <= 0.01) break; }
         }
          currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
     }
@@ -180,11 +160,8 @@ export default function DashboardPage() {
         const remainingMonths = months % 12;
          let timelineString = "";
         if (years > 0) timelineString += `${years} year${years > 1 ? 's' : ''}`;
-        if (remainingMonths > 0) {
-             if (years > 0) timelineString += " and ";
-             timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`;
-        }
-         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
+        if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
+        setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
    }, [debts, monthlyBudgetedIncome, monthlyBudgetedExpenses]);
 
@@ -192,12 +169,14 @@ export default function DashboardPage() {
    const budgetVariance = useMemo(() => {
        const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
        const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
+       // Use defaults if dates are undefined
        const start = startDate || startOfMonth(new Date());
        const end = endDate || endOfMonth(new Date());
        const daysInPeriod = differenceInDays(end, start) + 1;
-       const daysInAvgMonth = 30.44;
+       const daysInAvgMonth = 30.44; // Average days in a month
        const budgetMultiplier = daysInPeriod / daysInAvgMonth;
 
+       // Calculate prorated budget based on selected period
        const proratedBudgetedIncome = budgetItems
            .filter(item => item.category === 'income')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
@@ -214,13 +193,13 @@ export default function DashboardPage() {
 
        const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals;
        const netActual = actualIncome - actualExpenses;
-       const variance = netActual - netBudgetedProrated;
-       const threshold = Math.max(Math.abs(netBudgetedProrated * 0.01), 50);
+       const variance = netActual - netBudgetedProrated; // Positive variance means actual net income > budgeted net income (favorable)
+       const threshold = Math.max(Math.abs(netBudgetedProrated * 0.01), 50); // 1% or KES 50 threshold
        let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
 
        if (Math.abs(variance) <= threshold) status = 'on-track';
-       else if (variance > 0) status = 'under-budget';
-       else status = 'over-budget';
+       else if (variance > 0) status = 'under-budget'; // Favorable (spent less or earned more than budgeted net)
+       else status = 'over-budget'; // Unfavorable (spent more or earned less than budgeted net)
 
        return { value: variance, status };
    }, [filteredTransactions, budgetItems, startDate, endDate]);
@@ -242,7 +221,7 @@ export default function DashboardPage() {
   }, [financialData, budgetVariance]);
 
   const handleCloseGettingStarted = () => {
-      setGettingStartedDismissed(true); // Update local state and trigger save via hook
+      setGettingStartedDismissed(true); // Update local state via hook setter
       toast({
           title: "Getting Started Guide Dismissed",
           description: "You can always refer back to the documentation for help.",
@@ -298,7 +277,6 @@ export default function DashboardPage() {
      } satisfies ChartConfig
 
 
-  // Removed the reference to the non-existent `BudgetPage` component
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 bg-background">
       <header className="mb-6">
@@ -558,5 +536,3 @@ export default function DashboardPage() {
      </div>
   );
 }
-
-    

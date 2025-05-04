@@ -1,7 +1,7 @@
 // src/app/(dashboard)/layout.tsx
 'use client'; // Make layout client-side to use hooks
 
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sidebar,
   SidebarInset,
@@ -10,7 +10,8 @@ import {
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { useAuth } from '@clerk/nextjs'; // Import useAuth hook for client-side check
 import { redirect } from 'next/navigation';
-import { useSyncManager } from '@/hooks/useSyncManager'; // Import the sync manager hook
+import { useSyncManager } from '@/hooks/useSyncManager'; // Import the refactored sync manager hook
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
 
 export default function DashboardLayout({
   children,
@@ -23,32 +24,60 @@ export default function DashboardLayout({
     setIsClient(true);
   }, []);
 
-   // Client-side auth check
-   const { userId, isLoaded } = useAuth();
-   // Initialize sync manager - This will trigger initial fetch on load if user is signed in
-   const { syncStatus, retrySync } = useSyncManager(); // Get sync status AND retry function
+  // Client-side auth check
+  const { userId, isLoaded } = useAuth();
+  // Initialize sync manager - This hook now manages its own state and effects
+  const { syncStatus, retrySync } = useSyncManager();
 
-   // Handle loading state from Clerk
-   if (!isLoaded) {
-     // You can return a loading spinner or skeleton here
-     // Adding a simple loading text for now
-     return (
-        <div className="flex justify-center items-center min-h-screen">
-          Loading authentication...
+  // Handle loading state from Clerk
+  if (!isLoaded) {
+    // More robust loading state using Skeleton components
+    return (
+        <div className="flex min-h-screen">
+            {/* Skeleton Sidebar */}
+             <div className="hidden md:flex flex-col w-16 border-r border-border p-2 space-y-4">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-6 w-full" />
+                 <Skeleton className="h-6 w-full" />
+                 <Skeleton className="h-6 w-full mt-auto" />
+                 <Skeleton className="h-6 w-full" />
+                 <Skeleton className="h-6 w-full" />
+            </div>
+             {/* Skeleton Main Content Area */}
+             <div className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+                 <Skeleton className="h-8 w-1/3" />
+                 <Skeleton className="h-4 w-2/3" />
+                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                     <Skeleton className="h-24" />
+                     <Skeleton className="h-24" />
+                     <Skeleton className="h-24" />
+                 </div>
+                 <Skeleton className="h-64" />
+             </div>
         </div>
      );
-   }
+  }
 
-   // Redirect if not logged in after Clerk is loaded
-   if (!userId) {
-     redirect('/sign-in');
-   }
+  // Redirect if not logged in after Clerk is loaded
+  if (isClient && !userId) { // Ensure isClient check to prevent server-side redirect during hydration
+    redirect('/sign-in');
+  }
+
+  // Render layout only if user is logged in or Clerk is still loading (handled above)
+  if (!userId) {
+     // This case should ideally not be reached due to the redirect above,
+     // but serves as a fallback during initial render phases.
+     return null; // Or a minimal loading state if preferred
+  }
+
 
   return (
     <>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
         {/* Pass syncStatus and retrySync to AppSidebar */}
-        <AppSidebar syncStatus={syncStatus} retrySync={retrySync}/>
+        <AppSidebar syncStatus={syncStatus} retrySync={retrySync} />
         <SidebarRail />
       </Sidebar>
       <SidebarInset>

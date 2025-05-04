@@ -19,18 +19,19 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
     return data.map((item: any) => {
         if (item.date && !(item.date instanceof Date)) {
             try {
-                item.date = new Date(item.date);
-                 if (isNaN(item.date.getTime())) throw new Error("Invalid date string from DB");
+                const parsedDate = new Date(item.date); // Try parsing string dates
+                 if (isNaN(parsedDate.getTime())) throw new Error("Invalid date string from DB");
+                 item.date = parsedDate;
             } catch (e) {
-                 console.warn(`Invalid date format encountered in DB for ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting date.`);
+                 console.warn(`Sync API: Invalid date format encountered in DB for ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting date.`);
                  // Handle appropriately - maybe skip item or use default? Using current date for now.
-                 item.date = new Date();
+                 item.date = new Date(); // Default to current date if invalid
             }
         }
         return item as T;
     });
   } catch (error) {
-    console.error(`Error fetching ${collectionName} for user ${userId}:`, error);
+    console.error(`Sync API: Error fetching ${collectionName} for user ${userId}:`, error);
     throw new Error(`Failed to fetch ${collectionName}`); // Re-throw to handle in main function
   }
 }
@@ -51,7 +52,7 @@ async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<st
       }
        return reviewsMap;
     } catch (error) {
-      console.error(`Error fetching owned weeklyReviews for user ${userId}:`, error);
+      console.error(`Sync API: Error fetching owned weeklyReviews for user ${userId}:`, error);
       throw new Error('Failed to fetch owned weekly reviews');
     }
 }
@@ -75,7 +76,7 @@ async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<s
        }
        return reviewsMap;
     } catch (error) {
-      console.error(`Error fetching shared weeklyReviews for user ${userId}:`, error);
+      console.error(`Sync API: Error fetching shared weeklyReviews for user ${userId}:`, error);
       throw new Error('Failed to fetch shared weekly reviews');
     }
 }
@@ -90,13 +91,15 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
             { userId },
             { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1, gettingStartedDismissed: 1 } }
         );
-        return {
-             startDate: userProfile?.statementStartDate instanceof Date ? userProfile.statementStartDate.toISOString() : undefined,
-             endDate: userProfile?.statementEndDate instanceof Date ? userProfile.statementEndDate.toISOString() : undefined,
-             gettingStartedDismissed: userProfile?.gettingStartedDismissed ?? false, // Default to false if undefined
-        };
+
+        // Ensure we return the correct types/defaults
+        const startDate = userProfile?.statementStartDate instanceof Date ? userProfile.statementStartDate.toISOString() : undefined;
+        const endDate = userProfile?.statementEndDate instanceof Date ? userProfile.statementEndDate.toISOString() : undefined;
+        const gettingStartedDismissed = userProfile?.gettingStartedDismissed ?? false; // Default to false if missing
+
+        return { startDate, endDate, gettingStartedDismissed };
     } catch (error) {
-        console.error(`Error fetching user profile data for user ${userId}:`, error);
+        console.error(`Sync API: Error fetching user profile data for user ${userId}:`, error);
         throw new Error('Failed to fetch user profile data');
     }
 }
@@ -106,8 +109,11 @@ export async function GET() {
   const { userId } = auth();
 
   if (!userId) {
+    console.warn("Sync API: Unauthorized access attempt.");
     return NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
   }
+
+  console.log(`Sync API: Initiating sync for user ${userId}`);
 
   try {
     const client = await connectToDatabase();
@@ -131,35 +137,12 @@ export async function GET() {
         getCollectionData<BudgetItem>(db, 'budgetItems', userId),
         getOwnedWeeklyReviews(db, userId),
         getSharedWeeklyReviews(db, userId),
-        getUserProfileData(db, userId)
-    ]).catch(fetchError => {
-         // If any fetch fails, log it and throw a generic error
-         console.error(`Sync fetch failed for user ${userId}:`, fetchError);
-         throw new Error("Failed to fetch all required data from database.");
-     });
+        getUserProfileData(db, userId) // Fetch profile data including gettingStartedDismissed
+    ]);
 
-     // Check if *any* data exists for the user across primary collections.
-     // This helps differentiate a truly new user from one whose profile might be missing.
-     const hasAnyData = transactions.length > 0 || debts.length > 0 || assetItems.length > 0 || otherLiabilityItems.length > 0 || budgetItems.length > 0 || Object.keys(ownedReviews).length > 0;
+    console.log(`Sync API: Fetched data for user ${userId}. Transactions: ${transactions.length}, Debts: ${debts.length}, Assets: ${assetItems.length}, Profile:`, profileData);
 
-      if (!hasAnyData && !profileData.gettingStartedDismissed && profileData.startDate === undefined && profileData.endDate === undefined) {
-           console.log(`Sync: No existing data found for user ${userId}. Client should initiate save if they have local data.`);
-           // Return 404 but include empty structure and a hash for consistency? Or just 404?
-           // Returning empty structure + hash seems safer for client logic.
-            const emptyData = {
-                 transactions: [], debts: [], assetItems: [], otherLiabilityItems: [],
-                 budgetItems: [], ownedReviews: {}, sharedReviews: {},
-                 startDate: undefined, endDate: undefined, gettingStartedDismissed: false
-             };
-             const preparedEmptyData = prepareDataForHashing(emptyData);
-             const emptyDataHash = await hashData(stringify(preparedEmptyData));
-
-            return NextResponse.json({ ...preparedEmptyData, dataHash: emptyDataHash }, { status: 200 }); // Send 200 with empty data + hash
-           // Original 404 logic: return NextResponse.json({ message: 'No data found for user' }, { status: 404 });
-       }
-
-
-     // Combine all fetched data for hashing and response
+     // Combine all fetched data
      const fetchedData = {
        transactions,
        debts,
@@ -170,7 +153,7 @@ export async function GET() {
        sharedReviews,
        startDate: profileData.startDate,
        endDate: profileData.endDate,
-       gettingStartedDismissed: profileData.gettingStartedDismissed,
+       gettingStartedDismissed: profileData.gettingStartedDismissed, // Include the fetched value
      };
 
       // Prepare data structure for hashing (consistent sorting, date formats)
@@ -179,8 +162,6 @@ export async function GET() {
       const dataHash = await hashData(dataString);
 
       console.log(`Sync API: Generated server hash for user ${userId}: ${dataHash}`);
-      // console.log("Sync API: Data used for server hash calculation:", dataString.substring(0, 300) + "..."); // Log truncated data
-
 
     // Return all fetched data (in prepared format) associated with the user, including hash
     return NextResponse.json({
@@ -188,10 +169,8 @@ export async function GET() {
       dataHash,
     });
   } catch (error: any) {
-    console.error(`Failed to fetch data for user ${userId}:`, error);
-    // Use the error message if available, otherwise a generic message
+    console.error(`Sync API: Failed to fetch data for user ${userId}:`, error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data from database';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
-

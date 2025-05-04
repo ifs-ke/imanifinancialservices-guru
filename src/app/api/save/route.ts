@@ -22,16 +22,17 @@ interface SaveDataPayload {
   dataHash: string; // Hash of the prepared data being saved
 }
 
-// Helper function to safely upsert data into a collection for a specific user
+// Helper function to safely replace data in a collection for a specific user
 async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[]) {
   try {
     const collection: Collection = db.collection(collectionName);
     // Data received should already have Dates converted to ISO strings by prepareDataForHashing on client
-    // Convert back to Date objects before saving to MongoDB
+    // Convert back to Date objects before saving to MongoDB where applicable
     const dataWithUserIdAndDates = data.map(item => ({
         ...item,
         userId,
-        ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}), // Convert ISO string back to Date
+        ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}), // Convert 'date' string back to Date
+        // Note: We DO NOT convert startDate/endDate here as they belong in userProfiles
     }));
 
     const session = db.client.startSession();
@@ -44,12 +45,12 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
           await collection.insertMany(dataWithUserIdAndDates, { session });
         }
       });
-       console.log(`Successfully replaced ${collectionName} for user ${userId}`);
+       console.log(`Save API: Successfully replaced ${collectionName} for user ${userId}`);
     } finally {
         await session.endSession();
     }
   } catch (error) {
-    console.error(`Error replacing ${collectionName} for user ${userId}:`, error);
+    console.error(`Save API: Error replacing ${collectionName} for user ${userId}:`, error);
     throw new Error(`Failed to save ${collectionName}`);
   }
 }
@@ -61,42 +62,37 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
         const reviewKeys = Object.keys(ownedReviews);
 
         if (reviewKeys.length === 0) {
-             console.log(`No owned reviews provided to save for user ${userId}.`);
-             // Optionally delete existing owned reviews if the payload is explicitly empty,
-             // but be careful not to accidentally wipe data. Current approach only upserts.
-             // await collection.deleteMany({ userId: userId }); // Uncomment with caution
+             console.log(`Save API: No owned reviews provided to save for user ${userId}.`);
              return;
         }
 
         const bulkOps = reviewKeys.map(weekKey => {
             const reviewData = ownedReviews[weekKey];
-             // CRITICAL: Ensure ownerId in the review data matches the authenticated userId
              if (reviewData.ownerId !== userId) {
-                 console.warn(`SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData.ownerId}). Skipping.`);
-                 return null; // Skip this operation
+                 console.warn(`Save API SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData.ownerId}). Skipping.`);
+                 return null;
              }
-            // Ensure sharedWith is an array or undefined
             const cleanSharedWith = Array.isArray(reviewData.sharedWith) ? reviewData.sharedWith : undefined;
 
             return {
                  updateOne: {
-                     filter: { userId: userId, weekKey: weekKey }, // Ensure we only update reviews owned by this user
-                     update: { $set: { ...reviewData, userId: userId, weekKey: weekKey, sharedWith: cleanSharedWith } }, // Explicitly set userId and weekKey, ensure sharedWith format
+                     filter: { userId: userId, weekKey: weekKey },
+                     update: { $set: { ...reviewData, userId: userId, weekKey: weekKey, sharedWith: cleanSharedWith } },
                      upsert: true
                  }
              };
-         }).filter(op => op !== null); // Filter out skipped operations
+         }).filter(op => op !== null);
 
 
         if (bulkOps.length > 0) {
              await collection.bulkWrite(bulkOps as any);
-             console.log(`Successfully saved/updated ${bulkOps.length} owned weeklyReviews for user ${userId}`);
+             console.log(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews for user ${userId}`);
          } else {
-             console.log(`No valid owned reviews to save for user ${userId}.`);
+             console.log(`Save API: No valid owned reviews to save for user ${userId}.`);
          }
 
     } catch (error) {
-        console.error(`Error saving owned weeklyReviews for user ${userId}:`, error);
+        console.error(`Save API: Error saving owned weeklyReviews for user ${userId}:`, error);
         throw new Error('Failed to save owned weekly reviews');
     }
 }
@@ -104,14 +100,28 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
 
 // Helper function to save statement dates and getting started state for a specific user
 async function saveUserProfileData(db: any, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean) {
-    if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) return;
+     // Only proceed if at least one field is provided
+    if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) {
+        console.log(`Save API: No user profile data fields provided for user ${userId}. Skipping profile update.`);
+        return;
+    }
 
     try {
         const collection: Collection = db.collection('userProfiles');
-        const updateDoc: any = {};
-        if (startDate !== undefined) updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
-        if (endDate !== undefined) updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
-        if (gettingStartedDismissed !== undefined) updateDoc.gettingStartedDismissed = gettingStartedDismissed;
+        const updateDoc: { [key: string]: any } = {}; // Use a more specific type if possible
+
+        // Conditionally add fields to the update document only if they are defined
+        if (startDate !== undefined) {
+            // Store as Date object if valid ISO string, otherwise null
+            updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
+        }
+        if (endDate !== undefined) {
+             // Store as Date object if valid ISO string, otherwise null
+            updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
+        }
+        if (gettingStartedDismissed !== undefined) {
+            updateDoc.gettingStartedDismissed = gettingStartedDismissed;
+        }
 
 
         if (Object.keys(updateDoc).length > 0) {
@@ -120,11 +130,13 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
                  { $set: updateDoc }, // Set only the provided fields
                  { upsert: true } // Create profile if it doesn't exist
              );
-             console.log(`Successfully saved user profile data for user ${userId}`);
+             console.log(`Save API: Successfully saved user profile data for user ${userId}:`, updateDoc);
+         } else {
+              console.log(`Save API: No valid user profile fields to update for user ${userId}.`);
          }
 
     } catch (error) {
-        console.error(`Error saving user profile data for user ${userId}:`, error);
+        console.error(`Save API: Error saving user profile data for user ${userId}:`, error);
         throw new Error('Failed to save user profile data');
     }
 }
@@ -150,31 +162,29 @@ export async function POST(request: Request) {
 
   const { dataHash, ...receivedData } = payload;
 
-   // IMPORTANT: Re-prepare the *received* data for hashing on the server-side
-   // This ensures the data structure and sorting matches exactly what the client hashed.
-   const preparedDataForVerification = prepareDataForHashing(receivedData);
-   const dataString = stringify(preparedDataForVerification); // Use stable stringify
+   // Re-prepare the *received* data for hashing on the server-side
+   const preparedDataForVerification = prepareDataForHashing(receivedData as any); // Cast as any for flexibility if needed
+   const dataString = stringify(preparedDataForVerification);
    const calculatedServerHash = await hashData(dataString);
 
     console.log(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`);
-    // console.log("Save API: Data used for server hash calculation:", JSON.stringify(preparedDataForVerification).substring(0, 300) + "..."); // Log truncated data
 
-   // Verify hash before proceeding
-    const isValid = await verifyHash(dataString, dataHash); // Use verifyHash
+    const isValid = await verifyHash(dataString, dataHash);
 
     if (!isValid) {
-       console.error(`Data integrity check failed for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedServerHash}`);
+       console.error(`Save API: Data integrity check failed for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedServerHash}`);
+       // Optionally log more details about the data being compared (careful with sensitive info)
+       // console.log("Save API: Received Prepared Data:", JSON.stringify(preparedDataForVerification).substring(0, 500));
        return NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
     }
-    console.log(`Data integrity check passed for user ${userId}. Proceeding with save.`);
+    console.log(`Save API: Data integrity check passed for user ${userId}. Proceeding with save.`);
 
 
   try {
     const client = await connectToDatabase();
     const db = client.db();
 
-    // Destructure the *prepared* data for saving (which has dates as strings etc.)
-    // The helper functions will handle converting back to Date objects where needed.
+    // Use the verified prepared data for saving
     const {
       transactions = [],
       debts = [],
@@ -184,11 +194,11 @@ export async function POST(request: Request) {
       ownedReviews = {},
       startDate,
       endDate,
-      gettingStartedDismissed
+      gettingStartedDismissed // Get the state from the verified data
     } = preparedDataForVerification;
 
 
-    // Perform all database operations, passing the userId to each helper
+    // Perform all database operations
     await Promise.all([
       replaceCollectionData(db, 'transactions', userId, transactions),
       replaceCollectionData(db, 'debts', userId, debts),
@@ -196,12 +206,13 @@ export async function POST(request: Request) {
       replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems),
       replaceCollectionData(db, 'budgetItems', userId, budgetItems),
       saveOwnedWeeklyReviews(db, userId, ownedReviews),
-      saveUserProfileData(db, userId, startDate, endDate, gettingStartedDismissed) // Pass gettingStartedDismissed
+      // Pass the gettingStartedDismissed value to the profile update function
+      saveUserProfileData(db, userId, startDate, endDate, gettingStartedDismissed)
     ]);
 
      return NextResponse.json({ message: `Data saved successfully for user ${userId}` });
   } catch (error: any) {
-    console.error(`Failed to save data for user ${userId}:`, error);
+    console.error(`Save API: Failed to save data for user ${userId}:`, error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to save data to database';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
