@@ -298,6 +298,7 @@ export default function DashboardPage() {
      } satisfies ChartConfig
 
 
+  // Removed the reference to the non-existent `BudgetPage` component
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 bg-background">
       <header className="mb-6">
@@ -504,7 +505,7 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                  <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
-              </Title>
+              </CardTitle>
               <CardDescription>Monthly income vs. expenses over time.</CardDescription>
             </CardHeader>
             <CardContent className="pl-2 pr-6 pb-6"> {/* Adjusted padding */}
