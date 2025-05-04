@@ -942,9 +942,9 @@ export default function StatementsPage() {
                          <TableFooter>
                              <TableRow className="bg-muted/30 font-bold text-lg">
                                  <TableCell>Net Totals (Income - Expenses - Goals)</TableCell>
-                                 <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell> {/* Net based on prorated budget */}
+                                 <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell>{/* Net based on prorated budget */}
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netActual)}</TableCell>
-                                  <TableCell className={cn("text-right font-mono text-sm", varianceTotalsByCategory.overallVariance >= 0 ? 'text-accent' : 'text-destructive')}>
+                                 <TableCell className={cn("text-right font-mono text-sm", varianceTotalsByCategory.overallVariance >= 0 ? 'text-accent' : 'text-destructive')}>
                                      {varianceTotalsByCategory.overallVariance >= 0 ? '+' : ''}{formatCurrency(varianceTotalsByCategory.overallVariance)}
                                  </TableCell>
                               </TableRow>
