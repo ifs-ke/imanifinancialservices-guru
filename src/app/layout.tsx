@@ -32,7 +32,8 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider> {/* Wrap with ClerkProvider */}
-      <html lang="en" suppressHydrationWarning>
+      {/* Add suppressHydrationWarning to handle potential mismatches from Clerk/ThemeProvider */}
+      <html lang="en" suppressHydrationWarning={true}>
         <body
           className={cn(
             'min-h-screen bg-background font-sans antialiased',
