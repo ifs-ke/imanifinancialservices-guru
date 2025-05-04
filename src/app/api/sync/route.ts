@@ -90,9 +90,11 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
         const collection = db.collection(collectionName);
         await collection.createIndex({ userId: 1 }); // Ensure index exists
 
+        // Corrected Projection: Use only inclusive fields (1) or omit fields entirely
+        // to get the whole document (excluding _id).
         const userProfile = await collection.findOne(
             { userId },
-            { projection: { _id: 0, userId: 0, statementStartDate: 1, statementEndDate: 1, gettingStartedDismissed: 1 } }
+            { projection: { statementStartDate: 1, statementEndDate: 1, gettingStartedDismissed: 1 } } // Only include fields we need
         );
 
         console.log(`Sync API: Found user profile for user ${userId}:`, userProfile ? 'Yes' : 'No');
@@ -186,4 +188,3 @@ export async function GET() {
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
-
