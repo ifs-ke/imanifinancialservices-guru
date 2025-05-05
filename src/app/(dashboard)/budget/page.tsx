@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/budget/page.tsx
 'use client';
 
@@ -7,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle } from 'lucide-react';
+import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins } from 'lucide-react'; // Added Coins icon for Debt
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore';
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore'; // Added selectTotalBudgetedDebt
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -25,12 +24,13 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-// Category configuration
+// Category configuration - Added Debt
 const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.ElementType }[] = [
     { name: 'Income', key: 'income', icon: DollarSign },
     { name: 'Recurring Expenses', key: 'recurring-expense', icon: TrendingDown },
     { name: 'One-Time Expenses', key: 'one-time-expense', icon: MinusCircle },
     { name: 'Goals', key: 'goal', icon: Target },
+    { name: 'Debt Allocation', key: 'debt', icon: Coins }, // Added Debt category
 ];
 
 export default function BudgetPage() {
@@ -41,6 +41,7 @@ export default function BudgetPage() {
   const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
   const totalGoals = useBudgetStore(selectTotalGoals);
   const totalExpenses = useBudgetStore(selectTotalBudgetedExpenses);
+  const totalDebtAllocation = useBudgetStore(selectTotalBudgetedDebt); // Get total debt allocation
   const netBudgeted = useBudgetStore(selectNetBudgeted);
 
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
@@ -81,6 +82,7 @@ export default function BudgetPage() {
           'recurring-expense': [],
           'one-time-expense': [],
           goal: [],
+          debt: [], // Initialize debt group
       };
       budgetItems.forEach(item => {
           if (groups[item.category]) {
@@ -96,6 +98,7 @@ export default function BudgetPage() {
            'recurring-expense': 0,
            'one-time-expense': 0,
            goal: 0,
+           debt: 0, // Initialize debt total
        };
        Object.entries(groupedBudgetItems).forEach(([category, items]) => {
            totals[category as BudgetItemCategory] = items.reduce((sum, item) => sum + item.amount, 0);
@@ -119,7 +122,8 @@ export default function BudgetPage() {
             <CardTitle>Budget Summary</CardTitle>
             <CardDescription>Overview of your planned budget.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+         {/* Updated grid for 5 columns */}
+         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 text-sm">
              <div className="flex flex-col p-3 rounded-md border bg-accent/10">
                 <span className="text-muted-foreground mb-1">Total Income</span>
                 <span className="font-bold text-lg font-mono text-accent">{formatCurrency(totalIncome)}</span>
@@ -132,6 +136,11 @@ export default function BudgetPage() {
              <div className="flex flex-col p-3 rounded-md border bg-primary/10">
                 <span className="text-muted-foreground mb-1">Total Goals</span>
                 <span className="font-bold text-lg font-mono text-primary">{formatCurrency(totalGoals)}</span>
+            </div>
+            {/* Added Debt Allocation Summary */}
+            <div className="flex flex-col p-3 rounded-md border bg-destructive/5">
+                <span className="text-muted-foreground mb-1">Total Debt Allocation</span>
+                <span className="font-bold text-lg font-mono text-destructive/80">{formatCurrency(totalDebtAllocation)}</span>
             </div>
              <div className="flex flex-col p-3 rounded-md border bg-muted">
                 <span className="text-muted-foreground mb-1">Expected Net</span>
@@ -147,15 +156,16 @@ export default function BudgetPage() {
         </CardContent>
       </Card>
 
-      <main className="flex-1 grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+      {/* Adjusted grid for potentially 5 categories */}
+      <main className="flex-1 grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
          {budgetCategories.map(({ name, key, icon: Icon }) => (
-             <Card key={key} className="flex flex-col shadow-sm">
+             <Card key={key} className={cn("flex flex-col shadow-sm", key === 'debt' && 'lg:col-span-1 xl:col-span-1')}> {/* Assign specific span if needed */}
                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 border-b p-4"> {/* Adjusted padding */}
                      <CardTitle className="text-base font-medium flex items-center gap-2">
                          <Icon className="h-4 w-4" /> {name}
                      </CardTitle>
                      <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleAddClick(key)}>
-                         <PlusCircle className="mr-1 h-3 w-3" /> Add {name}
+                         <PlusCircle className="mr-1 h-3 w-3" /> Add {key === 'debt' ? 'Allocation' : name} {/* Adjust button text */}
                      </Button>
                  </CardHeader>
                  <CardContent className="p-0 flex-grow">
@@ -240,5 +250,3 @@ export default function BudgetPage() {
     </div>
   );
 }
-
-    

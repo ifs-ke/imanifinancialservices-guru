@@ -15,6 +15,7 @@ const sortBudgetItems = (items: BudgetItem[]): BudgetItem[] => {
         'recurring-expense': 2,
         'one-time-expense': 3,
         'goal': 4,
+        'debt': 5, // Add debt to sort order
     };
     return [...items].sort((a, b) => {
         // Primary sort: Category order
@@ -110,7 +111,7 @@ export const useBudgetStore = create<BudgetState>()(
     )
 );
 
-// Selectors remain the same
+// Selectors
 export const selectTotalBudgetedIncome = (state: BudgetState): number =>
     sumByCategory(state.budgetItems, 'income');
 
@@ -123,8 +124,13 @@ export const selectTotalOneTimeExpenses = (state: BudgetState): number =>
 export const selectTotalGoals = (state: BudgetState): number =>
     sumByCategory(state.budgetItems, 'goal');
 
+// New selector for total budgeted debt payments
+export const selectTotalBudgetedDebt = (state: BudgetState): number =>
+    sumByCategory(state.budgetItems, 'debt');
+
 export const selectTotalBudgetedExpenses = (state: BudgetState): number =>
     selectTotalRecurringExpenses(state) + selectTotalOneTimeExpenses(state);
 
+// Update Net Budgeted calculation to include debt allocation
 export const selectNetBudgeted = (state: BudgetState): number =>
-    selectTotalBudgetedIncome(state) - selectTotalBudgetedExpenses(state) - selectTotalGoals(state);
+    selectTotalBudgetedIncome(state) - selectTotalBudgetedExpenses(state) - selectTotalGoals(state) - selectTotalBudgetedDebt(state);

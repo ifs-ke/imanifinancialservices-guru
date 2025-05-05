@@ -6,11 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, Cloud, CloudOff, Lightbulb, X } from 'lucide-react'; // Added X
 import Link from 'next/link';
-import Image from 'next/image'; // Keeping Image for potential future use
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted } from '@/store/budgetStore';
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore'; // Import selectTotalBudgetedDebt
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 import { format, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
@@ -51,6 +50,7 @@ export default function DashboardPage() {
   const monthlyBudgetedGoals = useBudgetStore(selectTotalGoals);
   const monthlyNetBudgeted = useBudgetStore(selectNetBudgeted);
   const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
+  const monthlyBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt); // Get budgeted debt payment
   const budgetItems = useBudgetStore(state => state.budgetItems);
   const { toast } = useToast();
   // Use hook for getting started state AND setter
@@ -107,7 +107,8 @@ export default function DashboardPage() {
 
    // --- Debt Payoff Timeline Calculation ---
    useEffect(() => {
-    const fundsForDebtPayment = monthlyBudgetedIncome - monthlyBudgetedExpenses;
+    // Use the explicitly budgeted amount for debt payments
+    const fundsForDebtPayment = monthlyBudgetedDebtPayment;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
     if (totalDebtPrincipal <= 0) {
@@ -115,8 +116,9 @@ export default function DashboardPage() {
         return;
     }
 
+    // Check if ANY funds are allocated for debt
     if (fundsForDebtPayment <= 0) {
-        setDebtPayoffTimeline("Cannot estimate: Budget insufficient.");
+        setDebtPayoffTimeline("Cannot estimate: No funds budgeted for debt.");
         return;
     }
 
@@ -130,11 +132,13 @@ export default function DashboardPage() {
         }
     });
 
+    // Check if budgeted amount covers minimums
     if (fundsForDebtPayment < totalMinPayments) {
-        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Funds < min payments.");
+        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Budgeted debt funds < min payments.");
         return;
     }
 
+    // Proceed with calculation using the budgeted amount
     let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
     const MAX_MONTHS = 720; // 60 years limit
@@ -143,14 +147,34 @@ export default function DashboardPage() {
         months++;
         let availablePayment = fundsForDebtPayment;
 
+        // Apply interest first
         currentDebts.forEach(debt => { if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12); });
-        currentDebts.forEach(debt => { if (debt.principal > 0) { const payment = Math.min(debt.minPayment, debt.principal, availablePayment); debt.principal -= payment; availablePayment -= payment; } });
 
-        if (availablePayment > 0.01) { // Use threshold
-            currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; }); // Avalanche method
-            for (const debt of currentDebts) { if (debt.principal > 0.01 && availablePayment > 0.01) { const payment = Math.min(availablePayment, debt.principal); debt.principal -= payment; availablePayment -= payment; } if(availablePayment <= 0.01) break; }
+        // Apply minimum payments first (within available funds)
+        currentDebts.forEach(debt => {
+            if (debt.principal > 0 && availablePayment > 0.01) {
+                 const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
+                 debt.principal -= payment;
+                 availablePayment -= payment;
+            }
+        });
+
+
+        // Apply remaining available funds using Avalanche method
+        if (availablePayment > 0.01) {
+            // Sort by interest rate (highest first), then principal (highest first for tie-breaking)
+            currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; });
+
+            for (const debt of currentDebts) {
+                if (debt.principal > 0.01 && availablePayment > 0.01) {
+                    const payment = Math.min(availablePayment, debt.principal);
+                    debt.principal -= payment;
+                    availablePayment -= payment;
+                 }
+                 if(availablePayment <= 0.01) break; // Stop if no more funds
+             }
         }
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); // Remove paid-off debts
     }
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
@@ -163,7 +187,8 @@ export default function DashboardPage() {
         if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
-   }, [debts, monthlyBudgetedIncome, monthlyBudgetedExpenses]);
+   }, [debts, monthlyBudgetedDebtPayment]); // Use monthlyBudgetedDebtPayment as dependency
+
 
    // Calculate Budget Variance
    const budgetVariance = useMemo(() => {
@@ -186,13 +211,19 @@ export default function DashboardPage() {
        const proratedBudgetedGoals = budgetItems
            .filter(item => item.category === 'goal')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
+        // Calculate prorated debt payments (optional, depends if you want variance on debt payments)
+       const proratedBudgetedDebt = budgetItems
+           .filter(item => item.category === 'debt')
+           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
 
-       if ((proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0) || (actualIncome === 0 && actualExpenses === 0)) {
+
+       if ((proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0 && proratedBudgetedDebt === 0) || (actualIncome === 0 && actualExpenses === 0)) {
            return { value: null, status: 'no-data' };
        }
 
-       const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals;
-       const netActual = actualIncome - actualExpenses;
+        // Include debt in net calculation for variance
+        const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals - proratedBudgetedDebt;
+       const netActual = actualIncome - actualExpenses; // Actual expenses include all spending, including debt payments if tracked as transactions
        const variance = netActual - netBudgetedProrated; // Positive variance means actual net income > budgeted net income (favorable)
        const threshold = Math.max(Math.abs(netBudgetedProrated * 0.01), 50); // 1% or KES 50 threshold
        let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';

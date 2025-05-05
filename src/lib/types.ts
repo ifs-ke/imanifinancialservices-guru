@@ -65,8 +65,9 @@ export interface OtherLiabilityItem {
 
 /**
  * Represents the categories for individual budget items.
+ * Added 'debt' category.
  */
-export type BudgetItemCategory = 'income' | 'recurring-expense' | 'one-time-expense' | 'goal';
+export type BudgetItemCategory = 'income' | 'recurring-expense' | 'one-time-expense' | 'goal' | 'debt';
 
 
 /**

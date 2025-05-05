@@ -1,4 +1,3 @@
-
 // src/components/budget/BudgetItemFormSheet.tsx
 'use client';
 
@@ -111,6 +110,7 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
                         <SelectItem value="recurring-expense">Recurring Expense</SelectItem>
                         <SelectItem value="one-time-expense">One-Time Expense</SelectItem>
                         <SelectItem value="goal">Goal</SelectItem>
+                        <SelectItem value="debt">Debt Allocation</SelectItem> {/* Added Debt Allocation */}
                     </SelectContent>
                 </Select>
             </div>
@@ -134,4 +134,3 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
 };
 
 export default BudgetItemFormSheet;
-

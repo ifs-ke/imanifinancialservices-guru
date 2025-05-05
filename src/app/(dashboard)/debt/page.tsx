@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
@@ -11,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle, CalendarClock } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore';
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses } from '@/store/budgetStore';
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedDebt } from '@/store/budgetStore'; // Import selectTotalBudgetedDebt
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -36,8 +35,9 @@ const formatPercentage = (rate: number) => {
 
 export default function DebtPage() {
   const { debts, deleteDebt } = useDebtStore();
-  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
-  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
+  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome); // Keep for AI analysis input
+  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Keep for AI analysis input
+  const totalBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt); // Get budgeted debt payment
   const { toast } = useToast();
 
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
@@ -52,7 +52,8 @@ export default function DebtPage() {
 
    // --- Debt Payoff Timeline Calculation ---
    useEffect(() => {
-    const fundsForDebtPayment = totalBudgetedIncome - totalBudgetedExpenses;
+    // Use the explicitly budgeted amount for debt payments
+    const fundsForDebtPayment = totalBudgetedDebtPayment;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
     if (totalDebtPrincipal <= 0) {
@@ -60,8 +61,9 @@ export default function DebtPage() {
         return;
     }
 
+    // Check if ANY funds are allocated for debt
     if (fundsForDebtPayment <= 0) {
-        setDebtPayoffTimeline("Cannot estimate: Budget insufficient.");
+        setDebtPayoffTimeline("Cannot estimate: No funds budgeted for debt.");
         return;
     }
 
@@ -75,28 +77,51 @@ export default function DebtPage() {
         }
     });
 
+    // Check if budgeted amount covers minimums
     if (fundsForDebtPayment < totalMinPayments) {
-        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Funds < min payments.");
+        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Budgeted debt funds < min payments.");
         return;
     }
 
+    // Proceed with calculation using the budgeted amount
     let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
-    const MAX_MONTHS = 720;
+    const MAX_MONTHS = 720; // 60 years limit
 
     while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
         months++;
         let availablePayment = fundsForDebtPayment;
 
+        // Apply interest first
         currentDebts.forEach(debt => { if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12); });
-        currentDebts.forEach(debt => { if (debt.principal > 0) { const payment = Math.min(debt.minPayment, debt.principal, availablePayment); debt.principal -= payment; availablePayment -= payment; } });
 
-        if (availablePayment > 0) {
-            currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; });
-            for (const debt of currentDebts) { if (debt.principal > 0 && availablePayment > 0) { const payment = Math.min(availablePayment, debt.principal); debt.principal -= payment; availablePayment -= payment; } if(availablePayment <= 0.01) break; } // Use threshold
-        }
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
+        // Apply minimum payments first (within available funds)
+        currentDebts.forEach(debt => {
+             if (debt.principal > 0 && availablePayment > 0.01) {
+                 const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
+                 debt.principal -= payment;
+                 availablePayment -= payment;
+             }
+        });
+
+
+        // Apply remaining available funds using Avalanche method
+        if (availablePayment > 0.01) {
+            // Sort by interest rate (highest first), then principal (highest first for tie-breaking)
+             currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; });
+
+             for (const debt of currentDebts) {
+                 if (debt.principal > 0.01 && availablePayment > 0.01) {
+                    const payment = Math.min(availablePayment, debt.principal);
+                    debt.principal -= payment;
+                    availablePayment -= payment;
+                  }
+                  if(availablePayment <= 0.01) break; // Stop if no more funds
+              }
+         }
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); // Remove paid-off debts
     }
+
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
        setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
@@ -109,7 +134,7 @@ export default function DebtPage() {
         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
 
-   }, [debts, totalBudgetedIncome, totalBudgetedExpenses]);
+   }, [debts, totalBudgetedDebtPayment]); // Dependency is now totalBudgetedDebtPayment
 
 
   // Handlers
@@ -123,6 +148,7 @@ export default function DebtPage() {
   const handleAnalyzeDebt = async () => {
       setIsAnalyzing(true); setAnalysisError(null); setAnalysisResult(null); setIsAnalysisDialogOpen(true);
       if (debts.length === 0) { setAnalysisError("Add debts first."); setIsAnalyzing(false); return; }
+      // AI input still uses total income/expenses as context, not just debt allocation
       const analysisInput: DebtAnalysisInput = { debts, totalBudgetedIncome, totalBudgetedExpenses };
       try {
           console.log("Calling AI flow with input:", analysisInput);
@@ -173,7 +199,8 @@ export default function DebtPage() {
            <div className="flex flex-col p-3 rounded-md border bg-primary/10">
              <span className="text-muted-foreground mb-1 flex items-center gap-1"><CalendarClock size={14}/> Estimated Payoff Timeline</span>
              <span className="font-bold text-lg font-mono text-primary">{debtPayoffTimeline}</span>
-             <span className="text-xs text-muted-foreground">(Based on current budget & avalanche method)</span>
+             {/* Updated description */}
+             <span className="text-xs text-muted-foreground">(Based on budgeted debt payments & avalanche method)</span>
            </div>
         </CardContent>
       </Card>
@@ -237,5 +264,3 @@ export default function DebtPage() {
     </div>
   );
 }
-
-    
