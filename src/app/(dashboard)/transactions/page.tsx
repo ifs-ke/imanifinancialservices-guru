@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Upload, Edit, Trash2, FileUp, FileDown } from 'lucide-react'; // Added FileDown for export
+import { PlusCircle, Edit, Trash2, FileUp, FileDown } from 'lucide-react'; // Removed Upload icon, kept FileUp/Down
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose // Import DialogClose
+  DialogClose
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -30,7 +30,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Import AlertDialogTrigger
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
@@ -38,19 +38,17 @@ import type { TransactionWithId, ModeOfPayment, TransactionFrequency, Transactio
 import Link from 'next/link'; // Import Link
 import { format } from 'date-fns'; // For date formatting
 import { cn } from '@/lib/utils'; // For conditional classes
-
+import EditTransactionDialog from './EditTransactionDialog'; // Import the new Edit Dialog
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
-    // Handle potential string input from form state reset
     const dateObj = typeof date === 'string' ? new Date(date) : date;
     if (isNaN(dateObj.getTime())) {
-        // Return empty string or today's date if input is invalid
         const today = new Date();
         const year = today.getFullYear();
         const month = (today.getMonth() + 1).toString().padStart(2, '0');
         const day = today.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`; // Default to today if invalid
+        return `${year}-${month}-${day}`;
     }
     const year = dateObj.getFullYear();
     const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
@@ -60,43 +58,48 @@ const formatDateForInput = (date: Date | string): string => {
 
 // Initial form data structure including categorization fields
 const initialFormData = {
-    date: formatDateForInput(new Date()), // Default to today
+    date: formatDateForInput(new Date()),
     description: '',
     amount: '',
     modeOfPayment: '' as ModeOfPayment | '',
-    frequency: '' as TransactionFrequency | '', // Add frequency
-    variability: '' as TransactionVariability | '', // Add variability
+    frequency: '' as TransactionFrequency | '',
+    variability: '' as TransactionVariability | '',
 };
 
 export default function TransactionsPage() {
   // Use Zustand store hook for transaction state management
-  const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactionsStore();
+  const { transactions, addTransaction, deleteTransaction } = useTransactionsStore(); // Removed updateTransaction, will be handled by EditTransactionDialog
 
-  // Local state for dialogs, editing, deleting, and form data remains the same
+  // Local state for dialogs, editing, deleting, and form data
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); // State to control edit dialog
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
-  const [formData, setFormData] = useState(initialFormData);
+  const [formData, setFormData] = useState(initialFormData); // Primarily for Add dialog now
   const { toast } = useToast();
 
-  // Reset form data when dialogs close
+  // Reset add form data when add dialog closes
   useEffect(() => {
-    if (!isAddDialogOpen && !isEditDialogOpen) { // Changed condition to !isEditDialogOpen
+    if (!isAddDialogOpen) {
         setFormData(initialFormData);
-        setEditingTransaction(null); // Ensure editing state is also cleared
     }
-  }, [isAddDialogOpen, isEditDialogOpen]);
+  }, [isAddDialogOpen]);
+
+  // Reset editing state when edit dialog closes
+  useEffect(() => {
+      if (!isEditDialogOpen) {
+          setEditingTransaction(null);
+      }
+  }, [isEditDialogOpen]);
 
   // --- CRUD Operations using Zustand Store ---
 
-  // CREATE
+  // CREATE (remains in this component, uses standard Dialog)
   const handleAddTransactionSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const { date, description, amount, modeOfPayment, frequency, variability } = formData;
 
-    // Add validation for new fields if they are mandatory
-    if (!date || !description || !amount || !modeOfPayment /* || !frequency || !variability */) {
+    if (!date || !description || !amount || !modeOfPayment) {
       toast({ title: 'Missing Information', description: 'Please fill out required fields (Date, Desc, Amount, Mode).', variant: 'destructive' });
       return;
     }
@@ -106,87 +109,44 @@ export default function TransactionsPage() {
       return;
     }
 
-    // Use addTransaction action from Zustand store
     addTransaction({
-      date: new Date(date + 'T00:00:00'), // Use local time
+      date: new Date(date + 'T00:00:00'),
       description: description,
       amount: parsedAmount,
-      modeOfPayment: modeOfPayment as ModeOfPayment, // Ensure correct type
-      frequency: frequency || undefined, // Pass undefined if empty
-      variability: variability || undefined, // Pass undefined if empty
+      modeOfPayment: modeOfPayment as ModeOfPayment,
+      frequency: frequency || undefined,
+      variability: variability || undefined,
     });
 
-    setIsAddDialogOpen(false); // Close dialog
+    setIsAddDialogOpen(false);
     toast({ title: 'Transaction Added', description: 'Successfully added.' });
   };
 
-  // UPDATE
+  // UPDATE (moved to EditTransactionDialog, this handler now just opens the dialog)
   const handleEditClick = (transaction: TransactionWithId) => {
     setEditingTransaction(transaction);
-    setFormData({
-      date: formatDateForInput(transaction.date),
-      description: transaction.description,
-      amount: transaction.amount.toString(),
-      modeOfPayment: transaction.modeOfPayment,
-      frequency: transaction.frequency || '', // Handle potentially undefined values
-      variability: transaction.variability || '', // Handle potentially undefined values
-    });
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateTransactionSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!editingTransaction) return;
-
-    const { date, description, amount, modeOfPayment, frequency, variability } = formData;
-    // Add validation for new fields if they are mandatory
-    if (!date || !description || !amount || !modeOfPayment /* || !frequency || !variability */) {
-      toast({ title: 'Missing Information', description: 'Please fill out required fields (Date, Desc, Amount, Mode).', variant: 'destructive' });
-      return;
-    }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount)) {
-      toast({ title: 'Invalid Amount', description: 'Please enter a valid number.', variant: 'destructive' });
-      return;
-    }
-
-    // Use updateTransaction action from Zustand store
-    updateTransaction({
-        ...editingTransaction, // Keep the original ID
-        date: new Date(date + 'T00:00:00'),
-        description,
-        amount: parsedAmount,
-        modeOfPayment: modeOfPayment as ModeOfPayment, // Ensure correct type
-        frequency: frequency || undefined, // Update frequency
-        variability: variability || undefined, // Update variability
-    });
-
-    setIsEditDialogOpen(false); // Close dialog
-    toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
-  };
-
-  // DELETE
+  // DELETE (remains the same)
   const handleDeleteClick = (transaction: TransactionWithId) => {
     setTransactionToDelete(transaction);
-    // AlertDialogTrigger will open the confirmation dialog
   };
 
   const confirmDeleteTransaction = () => {
     if (!transactionToDelete) return;
-    // Use deleteTransaction action from Zustand store
     deleteTransaction(transactionToDelete.id);
-    setTransactionToDelete(null); // Close the dialog implicitly
+    setTransactionToDelete(null);
     toast({ title: 'Transaction Deleted', description: 'Successfully removed.' });
   };
 
-  // --- Other Handlers (remain the same) ---
+  // --- Other Handlers (for Add Dialog) ---
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Updated to handle all select changes
   const handleSelectChange = (name: string, value: string) => {
      setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -203,10 +163,8 @@ export default function TransactionsPage() {
     return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  // Helper to format categorization labels nicely
   const formatCategory = (value: string | undefined) => {
       if (!value) return <span className="text-muted-foreground italic">N/A</span>;
-      // Capitalize first letter
       return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
@@ -218,36 +176,34 @@ export default function TransactionsPage() {
     }
 
     const csvRows = [];
-    // Define explicit headers for CSV
     const headers = ['Date', 'Description', 'Amount (KES)', 'Mode of Payment', 'Frequency', 'Variability'];
     csvRows.push(headers.join(','));
 
     for (const tx of transactions) {
-      // Sanitize description to prevent CSV injection issues (basic example: remove quotes)
       const sanitizedDescription = tx.description.replace(/"/g, "''");
-       const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date); // Ensure Date object
+       const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date);
 
       const values = [
-        isNaN(dateObj.getTime()) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'), // Format the date consistently
-        `"${sanitizedDescription}"`, // Enclose description in quotes
+        isNaN(dateObj.getTime()) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'),
+        `"${sanitizedDescription}"`,
         tx.amount,
         tx.modeOfPayment,
-        tx.frequency || '', // Handle undefined
-        tx.variability || '' // Handle undefined
+        tx.frequency || '',
+        tx.variability || ''
       ].join(',');
       csvRows.push(values);
     }
 
     const csvData = csvRows.join('\n');
-    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); // Specify charset
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'transactions_export.csv'; // Use a more descriptive name
-    document.body.appendChild(link); // Needed for Firefox
+    link.download = 'transactions_export.csv';
+    document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url); // Clean up the object URL
+    URL.revokeObjectURL(url);
 
     toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
   }, [transactions, toast]);
@@ -264,8 +220,8 @@ export default function TransactionsPage() {
             View, import, and manage your financial transactions.
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap"> {/* Added flex-wrap for smaller screens */}
-          {/* Add Transaction Dialog */}
+        <div className="flex gap-2 flex-wrap"> {/* Added flex-wrap */}
+          {/* Add Transaction Dialog (Standard Dialog) */}
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -277,7 +233,6 @@ export default function TransactionsPage() {
                 <DialogTitle>Add New Transaction</DialogTitle>
                 <DialogDescription>Manually enter details below.</DialogDescription>
               </DialogHeader>
-              {/* Changed form onSubmit handler */}
               <form onSubmit={handleAddTransactionSubmit} className="grid gap-4 py-4">
                 {/* Input Fields */}
                 <div className="grid grid-cols-4 items-center gap-4">
@@ -331,7 +286,6 @@ export default function TransactionsPage() {
                   </Select>
                 </div>
                 <DialogFooter>
-                    {/* Use DialogClose for cancellation */}
                    <DialogClose asChild>
                         <Button type="button" variant="outline">Cancel</Button>
                    </DialogClose>
@@ -341,12 +295,13 @@ export default function TransactionsPage() {
             </DialogContent>
           </Dialog>
 
-           {/* Import Button - Links to Import Page */}
+           {/* Import Button */}
            <Button asChild variant="default">
              <Link href="/transactions/import">
                <FileUp className="mr-2 h-4 w-4" /> Import File
              </Link>
            </Button>
+            {/* Export Button */}
             <Button variant="secondary" onClick={handleExportCsv}>
               <FileDown className="mr-2 h-4 w-4" /> Export CSV
             </Button>
@@ -386,7 +341,7 @@ export default function TransactionsPage() {
                           {formatCurrency(tx.amount)}
                         </TableCell>
                         <TableCell className="text-right">
-                           {/* Edit Button - Opens Edit Dialog */}
+                           {/* Edit Button - Triggers Edit Dialog */}
                            <Button variant="ghost" size="icon" className="mr-1 h-7 w-7" onClick={() => handleEditClick(tx)}>
                              <Edit className="h-4 w-4" />
                              <span className="sr-only">Edit</span>
@@ -400,7 +355,7 @@ export default function TransactionsPage() {
                                </Button>
                              </AlertDialogTrigger>
                              <AlertDialogContent>
-                               {transactionToDelete && ( // Only render content if transactionToDelete is set
+                               {transactionToDelete && transactionToDelete.id === tx.id && ( // Ensure correct transaction is targeted
                                  <>
                                    <AlertDialogHeader>
                                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -422,7 +377,6 @@ export default function TransactionsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      {/* Adjust colspan */}
                       <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
@@ -435,77 +389,14 @@ export default function TransactionsPage() {
         </Card>
       </main>
 
-      {/* Edit Transaction Dialog */}
-      {/* Use controlled Dialog component */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-         <DialogContent className="sm:max-w-[425px]">
-           <DialogHeader>
-             <DialogTitle>Edit Transaction</DialogTitle>
-             <DialogDescription>Update the details below.</DialogDescription>
-           </DialogHeader>
-           {/* Changed form onSubmit handler */}
-           <form onSubmit={handleUpdateTransactionSubmit} className="grid gap-4 py-4">
-            {/* Input Fields */}
-             <div className="grid grid-cols-4 items-center gap-4">
-               <Label htmlFor="edit-date" className="text-right">Date</Label>
-               <Input id="edit-date" name="date" type="date" value={formData.date} onChange={handleInputChange} className="col-span-3" required />
-             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
-               <Label htmlFor="edit-description" className="text-right">Description</Label>
-               <Input id="edit-description" name="description" value={formData.description} onChange={handleInputChange} className="col-span-3" required />
-             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
-               <Label htmlFor="edit-amount" className="text-right">Amount (KES)</Label>
-               <Input id="edit-amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleInputChange} className="col-span-3" required />
-             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-modeOfPayment" className="text-right">Payment Mode</Label>
-              <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={(value) => handleSelectChange('modeOfPayment', value)} required>
-                <SelectTrigger id="edit-modeOfPayment" className="col-span-3">
-                  <SelectValue placeholder="Select mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Cash">Cash</SelectItem>
-                  <SelectItem value="Bank">Bank</SelectItem>
-                  <SelectItem value="Mpesa">Mpesa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {/* Categorization Selects */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-frequency" className="text-right">Frequency</Label>
-               <Select name="frequency" value={formData.frequency} onValueChange={(value) => handleSelectChange('frequency', value)}>
-                <SelectTrigger id="edit-frequency" className="col-span-3">
-                  <SelectValue placeholder="Optional: Select frequency" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recurring">Recurring</SelectItem>
-                  <SelectItem value="one-time">One-time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-variability" className="text-right">Variability</Label>
-               <Select name="variability" value={formData.variability} onValueChange={(value) => handleSelectChange('variability', value)}>
-                <SelectTrigger id="edit-variability" className="col-span-3">
-                  <SelectValue placeholder="Optional: Select variability" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fixed">Fixed</SelectItem>
-                  <SelectItem value="variable">Variable</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-             <DialogFooter>
-                {/* Use DialogClose for cancellation */}
-                <DialogClose asChild>
-                    <Button type="button" variant="outline">Cancel</Button>
-                </DialogClose>
-               <Button type="submit">Save Changes</Button>
-             </DialogFooter>
-           </form>
-         </DialogContent>
-       </Dialog>
+      {/* Edit Transaction Dialog Component */}
+      {editingTransaction && (
+          <EditTransactionDialog
+              isOpen={isEditDialogOpen}
+              onClose={() => setIsEditDialogOpen(false)}
+              transaction={editingTransaction}
+          />
+      )}
 
     </div>
   );
