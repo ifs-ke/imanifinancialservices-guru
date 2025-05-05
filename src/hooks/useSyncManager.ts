@@ -242,17 +242,13 @@ export function useSyncManager() {
 
       // **Handle API response**
       if (!response.ok) {
-         // Handle specific case where user has no data yet (404 could be used, or just check response body)
-         // Let's assume a 200 OK with potentially empty data is the standard success case
-         // Need to handle non-200 errors robustly
         const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
         console.error(`Fetch API Error ${response.status}: ${response.statusText}`, errorData);
-        // Handle specific error for profile data failure
-        if (errorData.error?.includes('Failed to fetch user profile data')) {
-           throw new Error('Failed to fetch user profile data. Please check server logs.');
-        }
-        throw new Error(`Fetch failed: ${response.statusText} (${errorData.error || 'No server details'})`);
+        // Use the error message from the server if available, otherwise a generic one
+        const serverErrorMessage = errorData.error || `Fetch failed: ${response.statusText}`;
+        throw new Error(serverErrorMessage);
       }
+
 
       // **Process successful response**
       const data: SyncedData & { dataHash?: string } = await response.json();
@@ -306,12 +302,22 @@ export function useSyncManager() {
 
     } catch (error: any) {
       console.error('Fetch Error:', error);
-      setSyncStatus('error'); // Set error status
-      toast({
-        title: 'Sync Load Failed',
-        description: `Could not load data: ${error.message}. Using local data if available.`,
-        variant: 'destructive',
-      });
+       // Specifically check if the error is due to profile fetching
+       if (error.message?.includes('Failed to fetch user profile data')) {
+           setSyncStatus('local'); // Treat as local data if profile fails, as other data might load
+           toast({
+             title: 'Profile Load Failed',
+             description: `Could not load profile settings: ${error.message}. Other data may have loaded.`,
+             variant: 'destructive',
+           });
+       } else {
+           setSyncStatus('error'); // Set general error status for other fetch failures
+           toast({
+             title: 'Sync Load Failed',
+             description: `Could not load data: ${error.message}. Using local data if available.`,
+             variant: 'destructive',
+           });
+       }
        // Mark initial fetch as done even on error to prevent repeated fetches on load
        // unless it was specifically a fetch error that should be retried.
        // For now, we mark it done to avoid fetch loops if the server keeps erroring.
@@ -335,8 +341,10 @@ export function useSyncManager() {
           return;
       }
 
-      // Indicate that local changes are pending sync
-      setSyncStatus('local');
+      // Indicate that local changes are pending sync ONLY if not already in error state
+      if (syncStatus !== 'error') {
+          setSyncStatus('local');
+      }
 
       // Clear any existing save timeout
       if (saveTimeoutRef.current) {
@@ -353,7 +361,7 @@ export function useSyncManager() {
           });
       }, SAVE_DEBOUNCE_DELAY);
 
-  }, [isSignedIn, userId, saveDataToDB]); // Dependencies for the debouncer
+  }, [isSignedIn, userId, saveDataToDB, syncStatus]); // Add syncStatus dependency
 
 
   // --- Effects ---
@@ -390,6 +398,7 @@ export function useSyncManager() {
       initialFetchDoneRef.current = false; // Reset fetch flag
       // Cancel any pending save
        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+       setSyncStatus('local'); // Explicitly set status to local on logout
     }
     // **Scenario 3: Initial Load (Not Signed In)**
     else if (!currentUserId && previousUserIdRef.current === undefined) {
@@ -398,7 +407,11 @@ export function useSyncManager() {
         previousUserIdRef.current = null; // Mark initial state as logged out
     }
      // **Scenario 4: Already logged in, state hasn't changed (e.g., page refresh)**
-     // No immediate action needed here, let other effects handle data consistency if required.
+     // Fetch data on initial load if user is already logged in and fetch hasn't happened
+      else if (currentUserId && currentUserId === previousUserIdRef.current && !initialFetchDoneRef.current) {
+          console.log("Auth Effect: Already logged in, triggering initial fetch...");
+          fetchDataFromDB();
+      }
      // else {
      //    console.log(`Auth Effect: State unchanged (User: ${currentUserId}, Clerk Loaded: ${isClerkLoaded})`);
      // }

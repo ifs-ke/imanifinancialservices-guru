@@ -52,9 +52,8 @@ const menuItems = [
   { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck },
 ];
 
-const adminMenuItems = [
-    { href: '/logger', label: 'Logger', icon: ListTree }, // Add Logger menu item
-];
+// Define Admin Logger Item Separately
+const adminLoggerItem = { href: '/logger', label: 'Logger', icon: ListTree };
 
 interface AppSidebarProps {
     syncStatus: SyncStatus;
@@ -126,33 +125,34 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                  </SidebarMenuItem>
              );
           })}
-           {userRole === 'admin' && (
-               <>
-                  <Separator className="my-2" />
-                   {adminMenuItems.map((item) => { // Map through admin menu items
-                       const isActive = pathname === item.href || pathname.startsWith(item.href);
-                       return (
-                           <SidebarMenuItem key={item.href}>
-                               <SidebarMenuButton asChild isActive={isActive} tooltip={item.label} variant={isActive ? "active" : "ghost"}>
-                                   <Link href={item.href} className="flex items-center gap-2">
-                                       <item.icon className="h-4 w-4 flex-shrink-0" />
-                                       <span className={cn(
-                                            "group-data-[state=expanded]/sidebar-wrapper:inline",
-                                            "group-data-[state=collapsed]/sidebar-wrapper:hidden"
-                                       )}>
-                                           {item.label}
-                                       </span>
-                                   </Link>
-                               </SidebarMenuButton>
-                           </SidebarMenuItem>
-                       );
-                    })}
-               </>
-           )}
         </SidebarMenu>
       </SidebarContent>
 
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
+
+           {/* Admin Logger Link (conditional) */}
+           {userRole === 'admin' && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton
+                        asChild
+                        isActive={pathname === adminLoggerItem.href}
+                        tooltip={adminLoggerItem.label}
+                        variant={pathname === adminLoggerItem.href ? "active" : "ghost"}
+                    >
+                        <Link href={adminLoggerItem.href} className="flex items-center gap-2 w-full justify-start p-2 h-9">
+                            <adminLoggerItem.icon className="h-4 w-4 flex-shrink-0" />
+                             <span className={cn(
+                                "group-data-[state=expanded]/sidebar-wrapper:inline",
+                                "group-data-[state=collapsed]/sidebar-wrapper:hidden"
+                             )}>
+                                {adminLoggerItem.label}
+                             </span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            )}
+
+
           {/* Notifications Button */}
            <SidebarMenuItem>
              <SidebarMenuButton asChild tooltip="Notifications" variant={pathname === '/notifications' ? "active" : "ghost"}>
