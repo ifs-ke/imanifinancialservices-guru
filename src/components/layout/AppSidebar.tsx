@@ -39,7 +39,6 @@ import { UserButton, useAuth } from '@clerk/nextjs';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { SyncStatus } from '@/hooks/useSyncManager';
-import type { AppRole } from '@/lib/roles';
 import { useNotificationStore } from '@/store/notificationStore'; // Import notification store
 
 const menuItems = [
@@ -52,8 +51,8 @@ const menuItems = [
   { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck },
 ];
 
-// Define Admin Logger Item Separately
-const adminLoggerItem = { href: '/logger', label: 'Logger', icon: ListTree };
+// Define Logger Item Separately
+const loggerItem = { href: '/logger', label: 'Logger', icon: ListTree };
 
 interface AppSidebarProps {
     syncStatus: SyncStatus;
@@ -63,14 +62,8 @@ interface AppSidebarProps {
 export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
   const pathname = usePathname();
   const { isMobile, state } = useSidebar();
-  const { sessionClaims } = useAuth();
-  const [userRole, setUserRole] = useState<AppRole | null>(null);
   // Subscribe to the unread count selector
   const unreadCount = useNotificationStore(state => state.unreadCount());
-
-   useEffect(() => {
-       setUserRole(sessionClaims?.publicMetadata?.role as AppRole || null);
-   }, [sessionClaims]);
 
     let PersistenceIcon = CloudOff;
     let persistenceStatusText = 'Local Data';
@@ -102,7 +95,9 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
             </Link>
          </div>
          {/* SidebarTrigger remains the same */}
-         <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")} />
+          <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")}>
+             {isMobile ? <Menu className="h-5 w-5" /> : state === 'expanded' ? <PanelLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </SidebarTrigger>
       </SidebarHeader>
 
       <SidebarContent className="flex-1 overflow-y-auto p-2">
@@ -130,27 +125,25 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
 
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
 
-           {/* Admin Logger Link (conditional) */}
-           {userRole === 'admin' && (
-                <SidebarMenuItem>
-                    <SidebarMenuButton
-                        asChild
-                        isActive={pathname === adminLoggerItem.href}
-                        tooltip={adminLoggerItem.label}
-                        variant={pathname === adminLoggerItem.href ? "active" : "ghost"}
-                    >
-                        <Link href={adminLoggerItem.href} className="flex items-center gap-2 w-full justify-start p-2 h-9">
-                            <adminLoggerItem.icon className="h-4 w-4 flex-shrink-0" />
-                             <span className={cn(
-                                "group-data-[state=expanded]/sidebar-wrapper:inline",
-                                "group-data-[state=collapsed]/sidebar-wrapper:hidden"
-                             )}>
-                                {adminLoggerItem.label}
-                             </span>
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-            )}
+            {/* Logger Link - Always visible for authenticated users */}
+            <SidebarMenuItem>
+                <SidebarMenuButton
+                    asChild
+                    isActive={pathname === loggerItem.href}
+                    tooltip={loggerItem.label}
+                    variant={pathname === loggerItem.href ? "active" : "ghost"}
+                >
+                    <Link href={loggerItem.href} className="flex items-center gap-2 w-full justify-start p-2 h-9">
+                        <loggerItem.icon className="h-4 w-4 flex-shrink-0" />
+                         <span className={cn(
+                            "group-data-[state=expanded]/sidebar-wrapper:inline",
+                            "group-data-[state=collapsed]/sidebar-wrapper:hidden"
+                         )}>
+                            {loggerItem.label}
+                         </span>
+                    </Link>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
 
 
           {/* Notifications Button */}
