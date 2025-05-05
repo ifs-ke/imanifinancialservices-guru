@@ -202,30 +202,26 @@ export default function StatementsPage() {
    // --- Budget Variance Calculation Refactor (Aligns with Dashboard) ---
    // Group actual transactions by description for comparison with budget items
    const actualSpendingByCategory = useMemo(() => {
-       const actuals: Record<BudgetItemCategory, { [description: string]: { amount: number; count: number } }> = {
-           income: {},
-           'recurring-expense': {},
-           'one-time-expense': {},
-           goal: {},
-       };
+       const actuals: Record<string, { amount: number; count: number }> = {}; // Key: category-description
 
        filteredTransactions.forEach(tx => {
-           // Simplified mapping based on transaction amount/type
+           // Map transaction type to budget category (simplified)
            const category: BudgetItemCategory | null =
                tx.amount > 0 ? 'income' :
                tx.frequency === 'recurring' ? 'recurring-expense' :
                tx.frequency === 'one-time' ? 'one-time-expense' :
-               null; // Treat un-categorized expenses as 'one-time' for variance, adjust if needed
+               null; // Ignore if uncategorized for variance
 
            if (category) {
                const descKey = tx.description.toLowerCase();
+               const groupKey = `${category}-${descKey}`;
                const amount = Math.abs(tx.amount);
 
-               if (!actuals[category][descKey]) {
-                   actuals[category][descKey] = { amount: 0, count: 0 };
+               if (!actuals[groupKey]) {
+                   actuals[groupKey] = { amount: 0, count: 0 };
                }
-               actuals[category][descKey].amount += amount;
-               actuals[category][descKey].count += 1;
+               actuals[groupKey].amount += amount;
+               actuals[groupKey].count += 1;
            }
        });
        return actuals;
@@ -233,13 +229,15 @@ export default function StatementsPage() {
 
    // Generate Variance Data (includes category grouping and prorated budget)
    const varianceDataByCategory = useMemo(() => {
-       const varianceByCategory: Record<BudgetItemCategory, { description: string; budgeted: number; actual: number | null }[]> = {
-           income: [],
-           'recurring-expense': [],
-           'one-time-expense': [],
-           goal: [],
-       };
-       const actualsTracked: Set<string> = new Set(); // Keep track of actuals already listed
+        // Initialize with all categories, including 'debt'
+        const varianceByCategory: Record<BudgetItemCategory, { description: string; budgeted: number; actual: number | null }[]> = {
+            income: [],
+            'recurring-expense': [],
+            'one-time-expense': [],
+            goal: [],
+            debt: [], // Ensure 'debt' category exists
+        };
+        const actualsTracked: Set<string> = new Set(); // Keep track of actuals already listed
 
        // Calculate duration of the selected period in days
        const start = startDate || startOfMonth(new Date());
@@ -251,37 +249,54 @@ export default function StatementsPage() {
        // 1. Iterate through budgeted items and prorate budget
        budgetItems.forEach(item => {
            const descKey = item.description.toLowerCase();
-           const actualGroup = actualSpendingByCategory[item.category]?.[descKey];
-           const actualAmount = actualGroup ? actualGroup.amount : null; // Use null if no actuals
+           const groupKey = `${item.category}-${descKey}`;
+           const actualGroup = actualSpendingByCategory[groupKey];
+           const actualAmount = actualGroup ? actualGroup.amount : null;
            const proratedBudget = item.amount * budgetMultiplier;
+
+            // Ensure the category array exists before pushing
+            if (!varianceByCategory[item.category]) {
+                console.warn(`Unexpected budget item category found: ${item.category}. Skipping for variance calculation.`);
+                return; // Skip this item if the category is somehow invalid
+            }
 
            varianceByCategory[item.category].push({
                description: item.description,
                budgeted: proratedBudget,
                actual: actualAmount,
            });
-           if (actualGroup) actualsTracked.add(`${item.category}-${descKey}`);
+           if (actualGroup) actualsTracked.add(groupKey);
        });
 
        // 2. Add actual transactions that didn't match a budget item description
-       Object.entries(actualSpendingByCategory).forEach(([category, descriptions]) => {
-           Object.entries(descriptions).forEach(([descKey, data]) => {
-               const trackerKey = `${category}-${descKey}`;
-               if (!actualsTracked.has(trackerKey)) {
-                    // Find the original transaction to get the exact description casing
-                   const originalTx = filteredTransactions.find(tx =>
-                       tx.description.toLowerCase() === descKey &&
-                       (tx.amount > 0 ? 'income' : (tx.frequency === 'recurring' ? 'recurring-expense' : 'one-time-expense')) === category
-                   );
-                    const displayDescription = originalTx ? originalTx.description : descKey; // Use original casing if found
+       Object.entries(actualSpendingByCategory).forEach(([groupKey, data]) => {
+           if (!actualsTracked.has(groupKey)) {
+                const [categoryStr, descKey] = groupKey.split(/-(.*)/s); // Split only on the first hyphen
+                const category = categoryStr as BudgetItemCategory;
 
-                   varianceByCategory[category as BudgetItemCategory].push({
-                       description: `* ${displayDescription}`, // Mark unbudgeted
-                       budgeted: 0, // No budget for this item
-                       actual: data.amount,
-                   });
-               }
-           });
+                 // Ensure the category array exists before pushing
+                if (!varianceByCategory[category]) {
+                    console.warn(`Unexpected actual spending category found: ${category}. Skipping for variance calculation.`);
+                    return; // Skip this item
+                }
+
+                // Find the original transaction to get the exact description casing
+                const originalTx = filteredTransactions.find(tx => {
+                    const txCategory: BudgetItemCategory | null =
+                        tx.amount > 0 ? 'income' :
+                        tx.frequency === 'recurring' ? 'recurring-expense' :
+                        tx.frequency === 'one-time' ? 'one-time-expense' :
+                        null;
+                    return tx.description.toLowerCase() === descKey && txCategory === category;
+                });
+                const displayDescription = originalTx ? originalTx.description : descKey;
+
+                varianceByCategory[category].push({
+                    description: `* ${displayDescription}`, // Mark unbudgeted
+                    budgeted: 0, // No budget for this item
+                    actual: data.amount,
+                });
+           }
        });
 
        // Sort within each category (unbudgeted at the bottom)
@@ -301,19 +316,21 @@ export default function StatementsPage() {
 
    // Calculate totals based on the categorized variance data (uses prorated budget)
    const varianceTotalsByCategory = useMemo(() => {
-       const totals: Record<BudgetItemCategory, { budgeted: number; actual: number }> = {
-           income: { budgeted: 0, actual: 0 },
-           'recurring-expense': { budgeted: 0, actual: 0 },
-           'one-time-expense': { budgeted: 0, actual: 0 },
-           goal: { budgeted: 0, actual: 0 },
-       };
+        const totals: Record<BudgetItemCategory, { budgeted: number; actual: number }> = {
+            income: { budgeted: 0, actual: 0 },
+            'recurring-expense': { budgeted: 0, actual: 0 },
+            'one-time-expense': { budgeted: 0, actual: 0 },
+            goal: { budgeted: 0, actual: 0 },
+            debt: { budgeted: 0, actual: 0 }, // Initialize debt totals
+        };
 
-       Object.entries(varianceDataByCategory).forEach(([category, items]) => {
-           items.forEach(item => {
-               totals[category as BudgetItemCategory].budgeted += item.budgeted; // Summing prorated budgets
-               totals[category as BudgetItemCategory].actual += item.actual ?? 0; // Summing actuals (treat null as 0)
-           });
-       });
+        Object.entries(varianceDataByCategory).forEach(([category, items]) => {
+            const catKey = category as BudgetItemCategory;
+            items.forEach(item => {
+                totals[catKey].budgeted += item.budgeted; // Summing prorated budgets
+                totals[catKey].actual += item.actual ?? 0; // Summing actuals (treat null as 0)
+            });
+        });
 
        // Calculate overall totals based on prorated figures
        const totalBudgetedIncome = totals.income.budgeted;
@@ -322,6 +339,9 @@ export default function StatementsPage() {
        const totalActualExpenses = totals['recurring-expense'].actual + totals['one-time-expense'].actual;
        const totalBudgetedGoals = totals.goal.budgeted;
        const totalActualGoals = totals.goal.actual; // Actual for goals might often be 0 unless tracked via transactions
+       const totalBudgetedDebt = totals.debt.budgeted; // Get total budgeted debt
+       const totalActualDebt = totals.debt.actual; // Actual debt payments (if tracked as such)
+
 
        return {
            ...totals,
@@ -331,9 +351,12 @@ export default function StatementsPage() {
            totalActualExpenses,
            totalBudgetedGoals,
            totalActualGoals,
-           netBudgeted: totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals, // Net based on prorated budget
-           netActual: totalActualIncome - totalActualExpenses - totalActualGoals,
-           overallVariance: (totalActualIncome - totalActualExpenses - totalActualGoals) - (totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals),
+           totalBudgetedDebt,
+           totalActualDebt,
+            // Update net calculation to include debt
+            netBudgeted: totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals - totalBudgetedDebt,
+            netActual: totalActualIncome - totalActualExpenses - totalActualGoals - totalActualDebt, // Subtract actual debt payments if tracked
+            overallVariance: (totalActualIncome - totalActualExpenses - totalActualGoals - totalActualDebt) - (totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals - totalBudgetedDebt),
        };
    }, [varianceDataByCategory]);
 
@@ -499,6 +522,8 @@ export default function StatementsPage() {
          // Determine category based on which group it's in
          const isIncome = varianceDataByCategory.income.some(i => i.description === item.description || `* ${i.description}` === item.description);
          const isGoal = varianceDataByCategory.goal.some(g => g.description === item.description || `* ${g.description}` === item.description);
+         const isDebt = varianceDataByCategory.debt.some(d => d.description === item.description || `* ${d.description}` === item.description); // Check if it's debt
+
 
          let variance: number;
          let statusText = '-';
@@ -508,7 +533,7 @@ export default function StatementsPage() {
          if (isIncome) {
              variance = actualValue - budgetedValue; // Actual > Budget is favorable
              isFavorable = variance > 0;
-         } else { // Expense or Goal
+          } else { // Expense, Goal, or Debt
              variance = budgetedValue - actualValue; // Budget > Actual is favorable
              isFavorable = variance > 0;
          }
@@ -517,11 +542,11 @@ export default function StatementsPage() {
           if (item.actual === null && budgetedValue === 0) {
              statusText = '-'; // No data
          } else if (isUnbudgetedActual) {
-             // Unbudgeted income is favorable, unbudgeted expense/goal is unfavorable
+             // Unbudgeted income is favorable, unbudgeted expense/goal/debt is unfavorable
              statusText = `${isIncome ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`;
              statusColor = isIncome ? 'text-accent' : 'text-destructive';
          } else if (item.actual === null) {
-             // Budgeted income not received is unfavorable, budgeted expense/goal not spent is favorable
+             // Budgeted income not received is unfavorable, budgeted expense/goal/debt not spent is favorable
              statusText = `${isIncome ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncome ? 'Received' : 'Spent'})`;
              statusColor = isIncome ? 'text-destructive' : 'text-accent';
          } else { // Both budgeted and actual exist
@@ -904,7 +929,7 @@ export default function StatementsPage() {
 
 
                      {/* Goals Variance Accordion */}
-                     <AccordionItem value="goals-variance" className="border-b-0">
+                     <AccordionItem value="goals-variance">
                           <AccordionTriggerWithSum
                              label="Goals"
                              sum={varianceTotalsByCategory.goal.actual} // Actual might be 0
@@ -934,6 +959,38 @@ export default function StatementsPage() {
                              )}
                          </AccordionContent>
                      </AccordionItem>
+
+                      {/* Debt Allocation Variance Accordion */}
+                       <AccordionItem value="debt-variance" className="border-b-0">
+                         <AccordionTriggerWithSum
+                             label="Debt Allocation"
+                             sum={varianceTotalsByCategory.totalActualDebt} // Actual debt payments (if tracked)
+                             budgetedSum={varianceTotalsByCategory.totalBudgetedDebt} // Prorated budget sum
+                             variance={varianceTotalsByCategory.totalBudgetedDebt - varianceTotalsByCategory.totalActualDebt} // Favorable if actual <= budget
+                             className="text-destructive/80"
+                         />
+                         <AccordionContent>
+                             {varianceDataByCategory.debt.length > 0 ? (
+                                 <ScrollArea className="h-[150px] w-full pr-3">
+                                     <Table>
+                                         <TableHeader className="sticky top-0 bg-background z-10">
+                                             <TableRow>
+                                                 <TableHead>Item / Description</TableHead>
+                                                 <TableHead className="text-right">Prorated Budget</TableHead>
+                                                 <TableHead className="text-right">Actual</TableHead>
+                                                 <TableHead className="text-right w-[150px]">Variance</TableHead>
+                                             </TableRow>
+                                         </TableHeader>
+                                         <TableBody>
+                                             {varianceDataByCategory.debt.map(renderVarianceRow)}
+                                         </TableBody>
+                                     </Table>
+                                 </ScrollArea>
+                             ) : (
+                                 <p className="text-center text-muted-foreground py-4 text-sm">No debt allocation budgeted or recorded in this period.</p>
+                             )}
+                         </AccordionContent>
+                     </AccordionItem>
                  </Accordion>
 
                   {/* Grand Totals Footer */}
@@ -941,7 +998,7 @@ export default function StatementsPage() {
                      <Table>
                          <TableFooter>
                              <TableRow className="bg-muted/30 font-bold text-lg">
-                                 <TableCell>Net Totals (Income - Expenses - Goals)</TableCell>
+                                 <TableCell>Net Totals (Income - Exp. - Goals - Debt)</TableCell>
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell>{/* Net based on prorated budget */}
                                  <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netActual)}</TableCell>
                                  <TableCell className={cn("text-right font-mono text-sm", varianceTotalsByCategory.overallVariance >= 0 ? 'text-accent' : 'text-destructive')}>
