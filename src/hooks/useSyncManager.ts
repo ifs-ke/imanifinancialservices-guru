@@ -66,8 +66,8 @@ export function useSyncManager() {
   // --- Clear Local State Function ---
   const clearLocalState = useCallback(() => {
     if (isClearingRef.current) return;
-    console.log("SyncManager: Clearing local state (session storage)...");
     isClearingRef.current = true;
+    console.log("SyncManager: Clearing local state (session storage)...");
 
     clearTransactions();
     clearDebts();
@@ -96,6 +96,7 @@ export function useSyncManager() {
     clearBudgetItems,
     clearReviews,
     clearNotifications,
+    setGettingStartedDismissedState,
   ]);
 
   // --- Save Data Function ---
@@ -251,6 +252,7 @@ export function useSyncManager() {
     setTransactions, setDebts, setAssetItems, setOtherLiabilityItems,
     setBudgetItems, setOwnedReviews, setSharedReviews, setNotifications, // Add setNotifications
     setStartDate, setEndDate,
+    setGettingStartedDismissedState,
   ]);
 
   // --- Debounced Save Wrapper ---
@@ -274,33 +276,27 @@ export function useSyncManager() {
     if (!isLoaded) return;
 
     const currentUserId = userId;
-    const prevUserId = previousUserIdRef.current;
 
-    console.log(`Auth Effect: Current User ID: ${currentUserId}, Previous User ID: ${prevUserId}, SignedIn: ${isSignedIn}`);
+    // **Crucial Security Fix:**  Clear data if the user ID has changed
+    if (currentUserId !== previousUserIdRef.current) {
+      console.log(`Auth Effect: User signed in or changed (${previousUserIdRef.current ?? 'none'} -> ${currentUserId}). Clearing local state and fetching data.`);
+      clearLocalState(); // Clear *before* fetching to prevent mixing data
+      previousUserIdRef.current = currentUserId;
+      initialFetchDoneRef.current = false; // Reset fetch flag
+    }
 
-    if (isSignedIn && currentUserId) {
-      if (currentUserId !== prevUserId) {
-        console.log(`Auth Effect: User signed in or changed (${prevUserId ?? 'none'} -> ${currentUserId}). Fetching data.`);
-        initialFetchDoneRef.current = false;
-        if (prevUserId !== undefined) {
-           clearLocalState();
-        }
-        fetchDataFromDB();
-        previousUserIdRef.current = currentUserId;
-      } else if (!initialFetchDoneRef.current) {
-        console.log("Auth Effect: User already signed in, attempting initial fetch.");
-        fetchDataFromDB();
-      }
-    } else if (!isSignedIn) {
-       if (prevUserId !== null && prevUserId !== undefined) {
-            console.log(`Auth Effect: User signed out (${prevUserId}). Clearing local state.`);
-            clearLocalState();
-            previousUserIdRef.current = null;
-       } else if (prevUserId === undefined) {
-            console.log("Auth Effect: Initial load, not signed in.");
-            setSyncStatus('local');
-            previousUserIdRef.current = null;
-       }
+    if (isSignedIn && currentUserId && !initialFetchDoneRef.current) {
+      console.log("Auth Effect: Fetching data for signed-in user.");
+      fetchDataFromDB();
+      initialFetchDoneRef.current = true;
+    } else if (!isSignedIn && previousUserIdRef.current !== null && previousUserIdRef.current !== undefined) {
+      //Clear local state when the user signs out
+      console.log(`Auth Effect: User signed out (${previousUserIdRef.current}). Clearing local state.`);
+      clearLocalState();
+      previousUserIdRef.current = null;
+    } else if (!isSignedIn && previousUserIdRef.current === undefined) {
+        console.log("Auth Effect: Initial load, not signed in.");
+        setSyncStatus('local');
     }
   }, [isSignedIn, userId, isLoaded, fetchDataFromDB, clearLocalState]);
 
