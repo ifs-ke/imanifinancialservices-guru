@@ -157,7 +157,8 @@ export async function POST(request: Request) {
 
   const { dataHash, ...receivedData } = payload;
 
-   const preparedDataForVerification = prepareDataForHashing(receivedData as any);
+   // Re-prepare the *received* data for hashing on the server-side
+   const preparedDataForVerification = prepareDataForHashing(receivedData as any); // Cast as any for flexibility if needed
    const dataString = stringify(preparedDataForVerification);
    const calculatedServerHash = await hashData(dataString);
 
@@ -167,6 +168,8 @@ export async function POST(request: Request) {
 
     if (!isValid) {
        console.error(`Save API: Data integrity check failed for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedServerHash}`);
+       // Optionally log more details about the data being compared (careful with sensitive info)
+       // console.log("Save API: Received Prepared Data:", JSON.stringify(preparedDataForVerification).substring(0, 500));
        return NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
     }
     console.log(`Save API: Data integrity check passed for user ${userId}. Proceeding with save.`);
