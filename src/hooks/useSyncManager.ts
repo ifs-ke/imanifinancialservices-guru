@@ -160,17 +160,26 @@ export function useSyncManager() {
         ownedReviews: useWeeklyReviewStore.getState().ownedReviews,
         // Note: Shared reviews are received from sync, not saved by the client directly
         notifications: useNotificationStore.getState().notifications,
-        startDate: useStatementStore.getState().startDate?.toISOString(), // Send as ISO string
-        endDate: useStatementStore.getState().endDate?.toISOString(),     // Send as ISO string
+        startDate: useStatementStore.getState().startDate, // Keep as Date object for preparation
+        endDate: useStatementStore.getState().endDate,     // Keep as Date object for preparation
         gettingStartedDismissed: gettingStartedDismissed, // Use local state value
       };
 
       // **Prepare data for hashing** (ensures consistent sorting and date formats)
       const preparedData = prepareDataForHashing(currentState);
+
+       // --- Debugging: Log prepared data before hashing ---
+       try {
+           console.log("Save Client: Client-side prepared data for hashing (sample):", JSON.stringify(preparedData, null, 2).substring(0, 1000)); // Log first 1000 chars
+       } catch (logError) {
+           console.error("Save Client: Error logging prepared data for hashing:", logError);
+       }
+       // --- End Debugging ---
+
       const dataString = stringify(preparedData); // Use stable stringify
       const dataHash = await hashData(dataString); // Calculate hash
 
-      console.log(`Save: Calculated client hash: ${dataHash.substring(0, 10)}...`);
+      console.log(`Save Client: Calculated client hash: ${dataHash}`);
 
       // **Send data to the save API endpoint**
       const response = await fetch('/api/save', {
@@ -233,31 +242,15 @@ export function useSyncManager() {
 
       // **Handle API response**
       if (!response.ok) {
-         // Handle specific case where user has no data yet (404)
-        if (response.status === 404) {
-           console.log(`Fetch: No data found in DB for user ${userId}. Initializing fresh state.`);
-           // No need to clearLocalState here as it should be empty if user just signed in
-           setSyncStatus('synced'); // Consider it synced (empty state matches DB)
-           initialFetchDoneRef.current = true;
-           setLastSyncTime(new Date());
-           // Ensure local state reflects this initial empty state if needed
-           // (e.g., if stores weren't cleared properly on user change)
-           setTransactions([]);
-           setDebts([]);
-           setAssetItems([]);
-           setOtherLiabilityItems([]);
-           setBudgetItems([]);
-           setOwnedReviews({});
-           setSharedReviews({});
-           setNotifications([]);
-           setStartDate(undefined); // Reset dates to default if desired
-           setEndDate(undefined);
-           setGettingStartedDismissedState(false);
-           return;
-        }
-         // Handle other errors
+         // Handle specific case where user has no data yet (404 could be used, or just check response body)
+         // Let's assume a 200 OK with potentially empty data is the standard success case
+         // Need to handle non-200 errors robustly
         const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
         console.error(`Fetch API Error ${response.status}: ${response.statusText}`, errorData);
+        // Handle specific error for profile data failure
+        if (errorData.error?.includes('Failed to fetch user profile data')) {
+           throw new Error('Failed to fetch user profile data. Please check server logs.');
+        }
         throw new Error(`Fetch failed: ${response.statusText} (${errorData.error || 'No server details'})`);
       }
 
@@ -275,7 +268,7 @@ export function useSyncManager() {
         // Prepare received data for hashing (ensure consistency)
         const preparedDataToVerify = prepareDataForHashing(fetchedData as SyncedData);
         const dataString = stringify(preparedDataToVerify);
-        console.log(`Fetch: Verifying received hash: ${dataHash.substring(0, 10)}...`);
+        console.log(`Fetch: Verifying received hash: ${dataHash}`);
 
         const isValid = await verifyHash(dataString, dataHash);
         if (!isValid) {

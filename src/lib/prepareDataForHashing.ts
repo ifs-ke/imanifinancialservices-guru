@@ -9,10 +9,10 @@ interface SyncData {
   otherLiabilityItems: OtherLiabilityItem[];
   budgetItems: BudgetItem[];
   ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews?: Record<string, WeeklyReviewData>;
-  notifications: NotificationItem[]; // Add notifications
-  startDate?: string;
-  endDate?: string;
+  sharedReviews?: Record<string, WeeklyReviewData>; // Make sharedReviews optional
+  notifications: NotificationItem[];
+  startDate?: Date; // Use Date objects internally before converting
+  endDate?: Date;
   gettingStartedDismissed?: boolean;
 }
 
@@ -21,11 +21,11 @@ interface SyncData {
  * - Sorting arrays consistently.
  * - Converting Dates to ISO strings.
  * - Ensuring consistent order of keys (handled by stringify).
- * - Handling potential null/undefined arrays defensively.
+ * - Handling potential null/undefined arrays/objects defensively.
  */
 export function prepareDataForHashing(data: SyncData): any {
 
-    // Ensure arrays exist before sorting/mapping
+    // Ensure arrays/objects exist or default to empty structures
     const transactions = Array.isArray(data.transactions) ? data.transactions : [];
     const debts = Array.isArray(data.debts) ? data.debts : [];
     const assetItems = Array.isArray(data.assetItems) ? data.assetItems : [];
@@ -36,11 +36,10 @@ export function prepareDataForHashing(data: SyncData): any {
     const sharedReviews = typeof data.sharedReviews === 'object' && data.sharedReviews !== null ? data.sharedReviews : {}; // Handle optional sharedReviews
 
     const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
-        // Defensive check inside sort as well
         if (!Array.isArray(txs)) return [];
         return [...txs].sort((a, b) => {
-            const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-            const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+            const dateA = a.date instanceof Date ? a.date : new Date(a.date || 0);
+            const dateB = b.date instanceof Date ? b.date : new Date(b.date || 0);
             const timeA = !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
             const timeB = !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
             const dateDiff = timeA - timeB;
@@ -69,8 +68,8 @@ export function prepareDataForHashing(data: SyncData): any {
     const sortNotifications = (items: NotificationItem[]): NotificationItem[] => {
          if (!Array.isArray(items)) return [];
         return [...items].sort((a, b) => {
-             const timeA = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp);
-             const timeB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp);
+             const timeA = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp || 0);
+             const timeB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp || 0);
              const tsA = !isNaN(timeA.getTime()) ? timeA.getTime() : 0;
              const tsB = !isNaN(timeB.getTime()) ? timeB.getTime() : 0;
              return tsA - tsB; // Sort by timestamp ascending
@@ -126,9 +125,11 @@ export function prepareDataForHashing(data: SyncData): any {
              // Ensure timestamp is valid before calling toISOString
              timestamp: (n.timestamp instanceof Date && !isNaN(n.timestamp.getTime()) ? n.timestamp : new Date(0)).toISOString(),
          })),
-        ...(Object.keys(sharedReviews).length > 0 && { sharedReviews: formatReviewData(sharedReviews) }), // Conditionally include sharedReviews only if present
-        startDate: data.startDate,
-        endDate: data.endDate,
+        // Conditionally include sharedReviews only if it exists and has entries
+        ...(Object.keys(sharedReviews).length > 0 && { sharedReviews: formatReviewData(sharedReviews) }),
+        // Convert dates to ISO strings only if they are valid Date objects
+        startDate: data.startDate instanceof Date && !isNaN(data.startDate.getTime()) ? data.startDate.toISOString() : undefined,
+        endDate: data.endDate instanceof Date && !isNaN(data.endDate.getTime()) ? data.endDate.toISOString() : undefined,
         gettingStartedDismissed: data.gettingStartedDismissed ?? false, // Default to false if undefined
     };
 }

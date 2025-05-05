@@ -29,7 +29,7 @@ import {
   CalendarCheck,
   RefreshCw,
   AlertTriangle,
-  ListTree,
+  ListTree, // Import ListTree for Logger
   Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -53,7 +53,7 @@ const menuItems = [
 ];
 
 const adminMenuItems = [
-    { href: '/logger', label: 'Logger', icon: ListTree },
+    { href: '/logger', label: 'Logger', icon: ListTree }, // Add Logger menu item
 ];
 
 interface AppSidebarProps {
@@ -66,7 +66,8 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
   const { isMobile, state } = useSidebar();
   const { sessionClaims } = useAuth();
   const [userRole, setUserRole] = useState<AppRole | null>(null);
-  const unreadCount = useNotificationStore(state => state.unreadCount()); // Get unread count
+  // Subscribe to the unread count selector
+  const unreadCount = useNotificationStore(state => state.unreadCount());
 
    useEffect(() => {
        setUserRole(sessionClaims?.publicMetadata?.role as AppRole || null);
@@ -101,6 +102,7 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
               </span>
             </Link>
          </div>
+         {/* SidebarTrigger remains the same */}
          <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")} />
       </SidebarHeader>
 
@@ -127,7 +129,7 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
            {userRole === 'admin' && (
                <>
                   <Separator className="my-2" />
-                   {adminMenuItems.map((item) => {
+                   {adminMenuItems.map((item) => { // Map through admin menu items
                        const isActive = pathname === item.href || pathname.startsWith(item.href);
                        return (
                            <SidebarMenuItem key={item.href}>
@@ -163,9 +165,14 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                         Notifications
                     </span>
                      {unreadCount > 0 && (
-                        <SidebarMenuBadge className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center bg-destructive text-destructive-foreground text-[10px] rounded-full">
-                          {unreadCount > 9 ? '9+' : unreadCount}
-                        </SidebarMenuBadge>
+                         <SidebarMenuBadge
+                           className={cn(
+                             "absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center bg-destructive text-destructive-foreground text-[10px] rounded-full",
+                             state === 'collapsed' && "right-1 top-1 h-3 w-3 p-0 text-[8px]" // Smaller badge when collapsed
+                           )}
+                         >
+                           {unreadCount > 9 ? '9+' : unreadCount}
+                         </SidebarMenuBadge>
                      )}
                  </Link>
              </SidebarMenuButton>

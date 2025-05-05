@@ -159,20 +159,31 @@ export async function POST(request: Request) {
 
    // Re-prepare the *received* data for hashing on the server-side
    const preparedDataForVerification = prepareDataForHashing(receivedData as any); // Cast as any for flexibility if needed
+
+   // --- Debugging: Log prepared data before hashing ---
+   try {
+       console.log("Save API: Server-side prepared data for verification (sample):", JSON.stringify(preparedDataForVerification, null, 2).substring(0, 1000)); // Log first 1000 chars
+   } catch (logError) {
+        console.error("Save API: Error logging prepared data for verification:", logError);
+   }
+   // --- End Debugging ---
+
    const dataString = stringify(preparedDataForVerification);
    const calculatedServerHash = await hashData(dataString);
 
-    console.log(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`);
+    console.log(`Save API: Received client hash: ${dataHash}`);
+    console.log(`Save API: Calculated server hash: ${calculatedServerHash}`);
+
 
     const isValid = await verifyHash(dataString, dataHash);
 
     if (!isValid) {
-       console.error(`Save API: Data integrity check failed for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedServerHash}`);
+       console.error(`Save API: Data integrity check FAILED for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedServerHash}`);
        // Optionally log more details about the data being compared (careful with sensitive info)
-       // console.log("Save API: Received Prepared Data:", JSON.stringify(preparedDataForVerification).substring(0, 500));
+       // console.log("Save API: Received Prepared Data (Full on Fail):", JSON.stringify(preparedDataForVerification));
        return NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
     }
-    console.log(`Save API: Data integrity check passed for user ${userId}. Proceeding with save.`);
+    console.log(`Save API: Data integrity check PASSED for user ${userId}. Proceeding with save.`);
 
 
   try {

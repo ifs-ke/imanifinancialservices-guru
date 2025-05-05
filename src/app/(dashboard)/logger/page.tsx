@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/logger/page.tsx
 'use client';
 
