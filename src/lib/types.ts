@@ -100,3 +100,22 @@ export interface UserShareInfo {
     email: string; // Primary email for identification
     name?: string; // Optional user's name
 }
+
+/**
+ * Represents the type of notification.
+ */
+export type NotificationType = 'info' | 'warning' | 'error' | 'success' | 'budget' | 'collaboration' | 'update';
+
+
+/**
+ * Represents a single notification item.
+ */
+export interface NotificationItem {
+    id: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    timestamp: Date;
+    read: boolean;
+    link?: string; // Optional link for navigation (e.g., to a specific review or budget page)
+}

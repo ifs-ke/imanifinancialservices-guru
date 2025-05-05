@@ -1,5 +1,5 @@
 // src/lib/prepareDataForHashing.ts
-import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
+import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types';
 
 interface SyncData {
   transactions: TransactionWithId[];
@@ -8,10 +8,11 @@ interface SyncData {
   otherLiabilityItems: OtherLiabilityItem[];
   budgetItems: BudgetItem[];
   ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews?: Record<string, WeeklyReviewData>; // Optional for client-side preparation
+  sharedReviews?: Record<string, WeeklyReviewData>;
+  notifications: NotificationItem[]; // Add notifications
   startDate?: string;
   endDate?: string;
-  gettingStartedDismissed?: boolean; // Keep track if user dismissed guide
+  gettingStartedDismissed?: boolean;
 }
 
 /**
@@ -25,9 +26,8 @@ export function prepareDataForHashing(data: SyncData): any {
         return [...txs].sort((a, b) => {
             const dateA = a.date instanceof Date ? a.date : new Date(a.date);
             const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-            const dateDiff = dateA.getTime() - dateB.getTime(); // Sort by date ascending for consistency
+            const dateDiff = dateA.getTime() - dateB.getTime();
             if (dateDiff !== 0) return dateDiff;
-            // Secondary sort by description then amount for tie-breaking
             const descDiff = a.description.localeCompare(b.description);
             if (descDiff !== 0) return descDiff;
             return a.amount - b.amount;
@@ -46,6 +46,15 @@ export function prepareDataForHashing(data: SyncData): any {
         return [...items].sort((a, b) => a.description.localeCompare(b.description));
     };
 
+    const sortNotifications = (items: NotificationItem[]): NotificationItem[] => {
+        return [...items].sort((a, b) => {
+             const timeA = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp);
+             const timeB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp);
+             return timeA.getTime() - timeB.getTime(); // Sort by timestamp ascending
+         });
+     };
+
+
     const formatReviewData = (reviews: Record<string, WeeklyReviewData>): Record<string, WeeklyReviewData> => {
         const sortedKeys = Object.keys(reviews).sort();
         const sortedReviews: Record<string, WeeklyReviewData> = {};
@@ -53,7 +62,6 @@ export function prepareDataForHashing(data: SyncData): any {
             const review = reviews[key];
             sortedReviews[key] = {
                 ...review,
-                // Sort transaction comments by transaction ID for consistency
                 transactionComments: review.transactionComments
                     ? Object.keys(review.transactionComments)
                           .sort()
@@ -62,7 +70,6 @@ export function prepareDataForHashing(data: SyncData): any {
                               return acc;
                           }, {} as Record<string, string>)
                     : undefined,
-                 // Sort sharedWith array for consistency
                 sharedWith: review.sharedWith ? [...review.sharedWith].sort() : undefined,
             };
         }
@@ -73,17 +80,21 @@ export function prepareDataForHashing(data: SyncData): any {
     return {
         transactions: sortTransactions(data.transactions).map(tx => ({
             ...tx,
-            date: (tx.date instanceof Date ? tx.date : new Date(tx.date)).toISOString(), // Always convert to ISO string
+            date: (tx.date instanceof Date ? tx.date : new Date(tx.date)).toISOString(),
         })),
         debts: sortDebts(data.debts),
         assetItems: sortStatementItems(data.assetItems),
         otherLiabilityItems: sortStatementItems(data.otherLiabilityItems),
         budgetItems: sortBudgetItems(data.budgetItems),
         ownedReviews: formatReviewData(data.ownedReviews),
-        // Include sharedReviews only if they exist (for server-side hashing)
+        // Sort and format notifications
+        notifications: sortNotifications(data.notifications).map(n => ({
+             ...n,
+             timestamp: (n.timestamp instanceof Date ? n.timestamp : new Date(n.timestamp)).toISOString(), // Convert to ISO string
+         })),
         ...(data.sharedReviews && { sharedReviews: formatReviewData(data.sharedReviews) }),
-        startDate: data.startDate, // Already string or undefined
-        endDate: data.endDate, // Already string or undefined
+        startDate: data.startDate,
+        endDate: data.endDate,
         gettingStartedDismissed: data.gettingStartedDismissed,
     };
 }

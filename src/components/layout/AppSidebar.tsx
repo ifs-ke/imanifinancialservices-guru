@@ -1,4 +1,4 @@
-
+// src/components/layout/AppSidebar.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -11,6 +11,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuBadge, // Import SidebarMenuBadge
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -18,12 +19,10 @@ import {
   LayoutDashboard,
   ReceiptText,
   FileText,
-  FileUp,
   Coins,
   TrendingUp,
-  Menu, // Use Menu for mobile/collapsed
-  PanelLeft, // Use PanelLeft for expanded desktop
-  Settings,
+  Menu,
+  PanelLeft,
   Landmark,
   PieChart,
   CloudOff, Cloud,
@@ -31,7 +30,7 @@ import {
   RefreshCw,
   AlertTriangle,
   ListTree,
-  Bell, // Import Bell icon for Notifications
+  Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -41,10 +40,11 @@ import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { SyncStatus } from '@/hooks/useSyncManager';
 import type { AppRole } from '@/lib/roles';
+import { useNotificationStore } from '@/store/notificationStore'; // Import notification store
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/transactions', label: 'Transactions', icon: ReceiptText }, // Removed secondaryIcon logic for simplicity here, added back below.
+  { href: '/transactions', label: 'Transactions', icon: ReceiptText },
   { href: '/income-expenses', label: 'Income/Expenses', icon: TrendingUp },
   { href: '/debt', label: 'Debts', icon: Coins },
   { href: '/statements', label: 'Statements', icon: FileText },
@@ -63,16 +63,17 @@ interface AppSidebarProps {
 
 export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
   const pathname = usePathname();
-  const { isMobile, state } = useSidebar(); // Get state ('expanded' or 'collapsed')
+  const { isMobile, state } = useSidebar();
   const { sessionClaims } = useAuth();
   const [userRole, setUserRole] = useState<AppRole | null>(null);
+  const unreadCount = useNotificationStore(state => state.unreadCount()); // Get unread count
 
    useEffect(() => {
        setUserRole(sessionClaims?.publicMetadata?.role as AppRole || null);
    }, [sessionClaims]);
 
     let PersistenceIcon = CloudOff;
-    let persistenceStatusText = 'Local Data'; // Simplified text
+    let persistenceStatusText = 'Local Data';
     let persistenceTooltipText = "Data saved locally in browser.";
     let iconColor = 'text-muted-foreground';
     let isClickable = false;
@@ -88,11 +89,9 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
   return (
     <>
       <SidebarHeader className="flex items-center justify-between p-2 border-b border-sidebar-border h-14">
-        {/* Title and logo link */}
         <div className={cn("flex items-center gap-2 flex-shrink-0 overflow-hidden", state === 'collapsed' && 'justify-center w-full')}>
             <Link href="/dashboard" className="flex items-center gap-2 flex-shrink-0">
               <Landmark className="w-6 h-6 text-primary flex-shrink-0" />
-               {/* Title hidden when collapsed using group-data */}
                <span className={cn(
                    "font-semibold text-lg text-sidebar-foreground whitespace-nowrap",
                    "group-data-[state=expanded]/sidebar-wrapper:inline",
@@ -102,8 +101,6 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
               </span>
             </Link>
          </div>
-         {/* Sidebar Trigger Button */}
-         {/* Hide trigger on mobile as Sheet handles its own trigger/close */}
          <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")} />
       </SidebarHeader>
 
@@ -113,11 +110,9 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
              const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
              return (
                  <SidebarMenuItem key={item.href}>
-                     {/* Pass tooltip content directly */}
                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.label} variant={isActive ? "active" : "ghost"}>
-                        <Link href={item.href} className="flex items-center gap-2"> {/* Added flex and gap */}
+                        <Link href={item.href} className="flex items-center gap-2">
                             <item.icon className="h-4 w-4 flex-shrink-0" />
-                            {/* Label hidden when collapsed using group-data */}
                              <span className={cn(
                                 "group-data-[state=expanded]/sidebar-wrapper:inline",
                                 "group-data-[state=collapsed]/sidebar-wrapper:hidden"
@@ -137,9 +132,8 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                        return (
                            <SidebarMenuItem key={item.href}>
                                <SidebarMenuButton asChild isActive={isActive} tooltip={item.label} variant={isActive ? "active" : "ghost"}>
-                                   <Link href={item.href} className="flex items-center gap-2"> {/* Added flex and gap */}
+                                   <Link href={item.href} className="flex items-center gap-2">
                                        <item.icon className="h-4 w-4 flex-shrink-0" />
-                                       {/* Label hidden when collapsed */}
                                        <span className={cn(
                                             "group-data-[state=expanded]/sidebar-wrapper:inline",
                                             "group-data-[state=collapsed]/sidebar-wrapper:hidden"
@@ -159,9 +153,8 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
           {/* Notifications Button */}
            <SidebarMenuItem>
-             <SidebarMenuButton asChild tooltip="Notifications" variant={"ghost"}>
-                {/* Placeholder link or Button action */}
-                <Button variant="ghost" className="flex items-center gap-2 w-full justify-start p-2 h-9">
+             <SidebarMenuButton asChild tooltip="Notifications" variant={pathname === '/notifications' ? "active" : "ghost"}>
+                <Link href="/notifications" className="flex items-center gap-2 w-full justify-start p-2 h-9 relative"> {/* Ensure relative positioning */}
                     <Bell className="h-4 w-4 flex-shrink-0" />
                     <span className={cn(
                         "group-data-[state=expanded]/sidebar-wrapper:inline",
@@ -169,7 +162,12 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                     )}>
                         Notifications
                     </span>
-                 </Button>
+                     {unreadCount > 0 && (
+                        <SidebarMenuBadge className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center bg-destructive text-destructive-foreground text-[10px] rounded-full">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </SidebarMenuBadge>
+                     )}
+                 </Link>
              </SidebarMenuButton>
            </SidebarMenuItem>
 
@@ -179,7 +177,6 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
           {/* User Button and Account Text */}
           <div className={cn("flex items-center w-full", state === 'collapsed' ? 'justify-center' : 'justify-start pl-1')}>
              <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { userButtonAvatarBox: "w-7 h-7" }}} />
-              {/* Account text hidden when collapsed */}
              <span className={cn(
                  "text-xs text-muted-foreground ml-2",
                  "group-data-[state=expanded]/sidebar-wrapper:inline",
@@ -199,14 +196,13 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                         variant="ghost"
                         className={cn(
                             "flex items-center w-full justify-start px-2 py-1 h-9",
-                            state === 'collapsed' && 'justify-center', // Center content when collapsed
+                            state === 'collapsed' && 'justify-center',
                             !isClickable && "cursor-default pointer-events-none"
                         )}
                         onClick={isClickable ? retrySync : undefined}
                         disabled={!isClickable && syncStatus !== 'error'}
                      >
                          <PersistenceIcon className={cn("h-[1.1rem] w-[1.1rem] flex-shrink-0", iconColor)} />
-                         {/* Status text hidden when collapsed */}
                          <span className={cn(
                              "ml-2 text-xs text-muted-foreground",
                              "group-data-[state=expanded]/sidebar-wrapper:inline",
@@ -217,7 +213,6 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                          <span className="sr-only">Data Sync Status</span>
                      </Button>
                  </TooltipTrigger>
-                  {/* Tooltip always shows, content differs */}
                  <TooltipContent side="right" align="center" sideOffset={state === 'collapsed' ? 10 : 4} className="text-xs max-w-[150px]">
                      <p>{persistenceTooltipText}</p>
                  </TooltipContent>

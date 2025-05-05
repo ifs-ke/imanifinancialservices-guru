@@ -6,11 +6,12 @@ import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useBudgetStore } from '@/store/budgetStore';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
+import { useNotificationStore } from '@/store/notificationStore'; // Import notification store
 import { useToast } from '@/hooks/use-toast';
-import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
+import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types'; // Import NotificationItem
 import { hashData, verifyHash } from '@/lib/storage-utils';
-import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; // Import preparation helper
-import stringify from 'fast-json-stable-stringify'; // Import stable stringify
+import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
+import stringify from 'fast-json-stable-stringify';
 
 // Define the structure of the synced data (as expected from the API)
 interface SyncedData {
@@ -21,9 +22,10 @@ interface SyncedData {
   budgetItems: BudgetItem[];
   ownedReviews: Record<string, WeeklyReviewData>;
   sharedReviews: Record<string, WeeklyReviewData>;
+  notifications: NotificationItem[]; // Add notifications
   startDate?: string;
   endDate?: string;
-  gettingStartedDismissed: boolean; // Include getting started state
+  gettingStartedDismissed: boolean;
 }
 
 // Define the possible sync statuses
@@ -32,14 +34,13 @@ export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'local' | 'error';
 export function useSyncManager() {
   const { isSignedIn, userId, isLoaded } = useAuth();
   const { toast } = useToast();
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle'); // Initial status
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-  const [gettingStartedDismissed, setGettingStartedDismissedState] = useState(false); // Local state for this hook
+  const [gettingStartedDismissed, setGettingStartedDismissedState] = useState(false);
 
-  // Refs to manage operation states and prevent race conditions/loops
   const isFetchingRef = useRef(false);
   const isSavingRef = useRef(false);
-  const isClearingRef = useRef(false); // Prevent saving during clear
+  const isClearingRef = useRef(false);
   const initialFetchDoneRef = useRef(false);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -59,30 +60,32 @@ export function useSyncManager() {
   const setOwnedReviews = useWeeklyReviewStore(state => state.setOwnedReviews);
   const setSharedReviews = useWeeklyReviewStore(state => state.setSharedReviews);
   const clearReviews = useWeeklyReviewStore(state => state.clearReviews);
+  const setNotifications = useNotificationStore(state => state.setNotifications); // Add notification setter
+  const clearNotifications = useNotificationStore(state => state.clearAllNotifications); // Add notification clearer
 
   // --- Clear Local State Function ---
   const clearLocalState = useCallback(() => {
-    if (isClearingRef.current) return; // Prevent recursive clear
+    if (isClearingRef.current) return;
     console.log("SyncManager: Clearing local state (session storage)...");
     isClearingRef.current = true;
 
-    // Clear Zustand stores first
     clearTransactions();
     clearDebts();
     clearStatementItems();
     clearBudgetItems();
     clearReviews();
-    setGettingStartedDismissedState(false); // Reset local state
+    clearNotifications(); // Clear notifications
+    setGettingStartedDismissedState(false);
 
-    // Explicitly remove persisted state from sessionStorage
     sessionStorage.removeItem('ifcGuru_transactions');
     sessionStorage.removeItem('ifcGuru_debts');
     sessionStorage.removeItem('ifcGuru_statementItems');
     sessionStorage.removeItem('ifcGuru_budgetItems');
     sessionStorage.removeItem('ifcGuru_weeklyReviews');
+    sessionStorage.removeItem('ifcGuru_notifications'); // Remove notifications from storage
 
     console.log("SyncManager: Local state (sessionStorage) cleared.");
-    setSyncStatus('local'); // Reset status
+    setSyncStatus('local');
     setLastSyncTime(null);
     initialFetchDoneRef.current = false;
     isClearingRef.current = false;
@@ -92,6 +95,7 @@ export function useSyncManager() {
     clearStatementItems,
     clearBudgetItems,
     clearReviews,
+    clearNotifications,
   ]);
 
   // --- Save Data Function ---
@@ -119,9 +123,10 @@ export function useSyncManager() {
         otherLiabilityItems: useStatementStore.getState().otherLiabilityItems,
         budgetItems: useBudgetStore.getState().budgetItems,
         ownedReviews: useWeeklyReviewStore.getState().ownedReviews,
+        notifications: useNotificationStore.getState().notifications, // Add notifications
         startDate: useStatementStore.getState().startDate?.toISOString(),
         endDate: useStatementStore.getState().endDate?.toISOString(),
-        gettingStartedDismissed: gettingStartedDismissed, // Use the local state managed by the hook
+        gettingStartedDismissed: gettingStartedDismissed,
       };
 
       const preparedData = prepareDataForHashing(currentState);
@@ -154,11 +159,10 @@ export function useSyncManager() {
         description: `Could not save data: ${error.message}. Data remains local.`,
         variant: 'destructive',
       });
-      // Don't re-throw, allow UI to reflect error state
     } finally {
       isSavingRef.current = false;
     }
-  }, [isSignedIn, userId, toast, gettingStartedDismissed]); // Ensure gettingStartedDismissed is a dependency
+  }, [isSignedIn, userId, toast, gettingStartedDismissed]); // Add gettingStartedDismissed dependency
 
   // --- Fetch Data Function ---
   const fetchDataFromDB = useCallback(async (isRetry = false) => {
@@ -182,11 +186,10 @@ export function useSyncManager() {
       if (!response.ok) {
         if (response.status === 404) {
            console.log("Fetch: No data found in DB for user.");
-           // Clear local state to ensure consistency if cloud is empty
            clearLocalState();
-           setSyncStatus('synced'); // Consider it synced as there's nothing remote to sync from
+           setSyncStatus('synced');
            initialFetchDoneRef.current = true;
-           return; // No data to process
+           return;
         }
         const errorData = await response.json().catch(() => ({ error: 'Unknown error structure' }));
         throw new Error(`Fetch failed: ${response.statusText} (${errorData.error || 'No details'})`);
@@ -210,7 +213,6 @@ export function useSyncManager() {
         console.log("Fetch: Data integrity check passed.");
       }
 
-      // --- Update Stores with Fetched Data ---
       console.log("Fetch: Overwriting local state with fetched data...");
       setTransactions(data.transactions ?? []);
       setDebts(data.debts ?? []);
@@ -219,9 +221,10 @@ export function useSyncManager() {
       setBudgetItems(data.budgetItems ?? []);
       setOwnedReviews(data.ownedReviews ?? {});
       setSharedReviews(data.sharedReviews ?? {});
+      setNotifications(data.notifications ?? []); // Set notifications
       setStartDate(data.startDate ? new Date(data.startDate) : undefined);
       setEndDate(data.endDate ? new Date(data.endDate) : undefined);
-      setGettingStartedDismissedState(data.gettingStartedDismissed ?? false); // Update local state
+      setGettingStartedDismissedState(data.gettingStartedDismissed ?? false);
 
       setLastSyncTime(new Date());
       setSyncStatus('synced');
@@ -239,35 +242,36 @@ export function useSyncManager() {
         description: `Could not load data: ${error.message}. Using local data if available.`,
         variant: 'destructive',
       });
-      initialFetchDoneRef.current = true; // Mark as attempted even on error
+      initialFetchDoneRef.current = true;
     } finally {
       isFetchingRef.current = false;
     }
   }, [
     isSignedIn, userId, isLoaded, toast, clearLocalState,
     setTransactions, setDebts, setAssetItems, setOtherLiabilityItems,
-    setBudgetItems, setOwnedReviews, setSharedReviews, setStartDate, setEndDate,
+    setBudgetItems, setOwnedReviews, setSharedReviews, setNotifications, // Add setNotifications
+    setStartDate, setEndDate,
   ]);
 
   // --- Debounced Save Wrapper ---
   const triggerDebouncedSave = useCallback(() => {
-      if (!isSignedIn || !userId) return; // Don't save if not signed in
-      if (isFetchingRef.current || isSavingRef.current || isClearingRef.current) return; // Don't save during other operations
+      if (!isSignedIn || !userId) return;
+      if (isFetchingRef.current || isSavingRef.current || isClearingRef.current) return;
 
-      setSyncStatus('local'); // Mark as needing sync
+      setSyncStatus('local');
       if (saveTimeoutRef.current) {
           clearTimeout(saveTimeoutRef.current);
       }
       saveTimeoutRef.current = setTimeout(() => {
           saveDataToDB().catch(err => console.error("Debounced save failed:", err));
-      }, 3000); // 3-second debounce
+      }, 3000);
   }, [isSignedIn, userId, saveDataToDB]);
 
   // --- Effects ---
 
   // Initial Fetch on Load / User Change
   useEffect(() => {
-    if (!isLoaded) return; // Wait for Clerk
+    if (!isLoaded) return;
 
     const currentUserId = userId;
     const prevUserId = previousUserIdRef.current;
@@ -277,8 +281,8 @@ export function useSyncManager() {
     if (isSignedIn && currentUserId) {
       if (currentUserId !== prevUserId) {
         console.log(`Auth Effect: User signed in or changed (${prevUserId ?? 'none'} -> ${currentUserId}). Fetching data.`);
-        initialFetchDoneRef.current = false; // Reset fetch flag
-        if (prevUserId !== undefined) { // Clear state only if switching from another user or undefined
+        initialFetchDoneRef.current = false;
+        if (prevUserId !== undefined) {
            clearLocalState();
         }
         fetchDataFromDB();
@@ -291,7 +295,7 @@ export function useSyncManager() {
        if (prevUserId !== null && prevUserId !== undefined) {
             console.log(`Auth Effect: User signed out (${prevUserId}). Clearing local state.`);
             clearLocalState();
-            previousUserIdRef.current = null; // Mark as signed out
+            previousUserIdRef.current = null;
        } else if (prevUserId === undefined) {
             console.log("Auth Effect: Initial load, not signed in.");
             setSyncStatus('local');
@@ -303,7 +307,7 @@ export function useSyncManager() {
   // Subscribe to Store Changes for Saving
   useEffect(() => {
     if (!isSignedIn || !userId || !isLoaded || !initialFetchDoneRef.current) {
-      return; // Only subscribe when logged in, loaded, and initial fetch is done
+      return;
     }
 
     console.log("Save Subscription: Subscribing to store changes...");
@@ -314,11 +318,11 @@ export function useSyncManager() {
       useStatementStore,
       useBudgetStore,
       useWeeklyReviewStore,
+      useNotificationStore, // Subscribe to notification changes too
     ];
 
     const unsubscribes = stores.map(useStore =>
       useStore.subscribe(
-          // Only trigger save if not fetching/saving/clearing
           () => {
               if (!isFetchingRef.current && !isSavingRef.current && !isClearingRef.current) {
                   triggerDebouncedSave();
@@ -338,8 +342,6 @@ export function useSyncManager() {
 
   // Effect to save gettingStartedDismissed state when it changes locally
   useEffect(() => {
-    // Only trigger save if the initial fetch is done (to avoid saving default false on load)
-    // and the user is signed in.
     if (initialFetchDoneRef.current && isSignedIn && userId) {
         console.log("Getting Started State Changed: Triggering save...");
         triggerDebouncedSave();
@@ -354,7 +356,7 @@ export function useSyncManager() {
     }
     if (syncStatus === 'error' && !isFetchingRef.current && !isSavingRef.current) {
       console.log("Sync: Retrying fetch...");
-      fetchDataFromDB(true); // Pass true to indicate retry
+      fetchDataFromDB(true);
     } else if (isFetchingRef.current || isSavingRef.current) {
       toast({ title: "Sync Busy", description: "Please wait for the current operation.", variant: "default" });
     } else {
@@ -367,6 +369,6 @@ export function useSyncManager() {
       syncStatus,
       retrySync,
       gettingStartedDismissed,
-      setGettingStartedDismissed: setGettingStartedDismissedState, // Expose the local state setter
+      setGettingStartedDismissed: setGettingStartedDismissedState,
   };
 }

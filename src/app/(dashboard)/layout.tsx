@@ -13,6 +13,7 @@ import { redirect } from 'next/navigation';
 import { useSyncManager } from '@/hooks/useSyncManager'; // Import the refactored sync manager hook
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
 import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Import the new component
+import { useBudgetNotifications } from '@/services/notificationService'; // Import the budget notification hook
 
 export default function DashboardLayout({
   children,
@@ -29,6 +30,9 @@ export default function DashboardLayout({
   const { userId, isLoaded } = useAuth();
   // Initialize sync manager - This hook now manages its own state and effects
   const { syncStatus, retrySync } = useSyncManager();
+  // Initialize budget notifications (this hook runs the checks)
+  useBudgetNotifications();
+
 
   // Handle loading state from Clerk
   if (!isLoaded) {
