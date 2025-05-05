@@ -4,7 +4,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, Cloud, CloudOff, Lightbulb, X } from 'lucide-react'; // Added X
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, Cloud, CloudOff, Lightbulb, X, BookOpen } from 'lucide-react'; // Added BookOpen
 import Link from 'next/link';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
@@ -259,6 +259,10 @@ export default function DashboardPage() {
       });
   };
 
+  const handleShowGettingStarted = () => {
+      setGettingStartedDismissed(false); // Set state to false to show the card again
+  };
+
 
   // --- Chart Data and Config ---
   const cashFlowChartData = useMemo(() => [
@@ -310,21 +314,36 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 bg-background">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Executive Summary
-        </h1>
-         <p className="text-sm text-muted-foreground">
-           High-level overview. Budget Variance uses range:
-           {startDate || endDate ? (
-                <span className='font-semibold ml-1'>
-                    {startDate ? format(startDate, 'PP') : 'Start'} - {endDate ? format(endDate, 'PP') : 'End'}
-                </span>
-            ) : (
-                <span className='font-semibold ml-1'>All Time</span>
+       {/* Header Section with Right-aligned Button */}
+       <header className="mb-6 flex justify-between items-start">
+            {/* Left-aligned Title and Description */}
+           <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                    Executive Summary
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                    High-level overview. Budget Variance uses range:
+                    {startDate || endDate ? (
+                        <span className='font-semibold ml-1'>
+                            {startDate ? format(startDate, 'PP') : 'Start'} - {endDate ? format(endDate, 'PP') : 'End'}
+                        </span>
+                    ) : (
+                        <span className='font-semibold ml-1'>All Time</span>
+                    )}
+                </p>
+            </div>
+            {/* Right-aligned "Show Getting Started" Button */}
+            {gettingStartedDismissed && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleShowGettingStarted}
+                    className="ml-auto" // Aligns button to the right
+                >
+                    <BookOpen className="mr-2 h-4 w-4" /> Show Getting Started
+                </Button>
             )}
-         </p>
-      </header>
+        </header>
 
        {/* Getting Started Section */}
         {!gettingStartedDismissed && ( // Show only if not dismissed
