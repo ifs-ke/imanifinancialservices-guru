@@ -30,7 +30,8 @@ import {
   CalendarCheck,
   RefreshCw,
   AlertTriangle,
-  ListTree
+  ListTree,
+  Bell, // Import Bell icon for Notifications
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -94,7 +95,8 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                {/* Title hidden when collapsed using group-data */}
                <span className={cn(
                    "font-semibold text-lg text-sidebar-foreground whitespace-nowrap",
-                   "group-data-[state=collapsed]/sidebar-wrapper:hidden" // Use group-data for hiding
+                   "group-data-[state=expanded]/sidebar-wrapper:inline",
+                   "group-data-[state=collapsed]/sidebar-wrapper:hidden"
                    )}>
                    IFC - Guru
               </span>
@@ -116,7 +118,12 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                         <Link href={item.href} className="flex items-center gap-2"> {/* Added flex and gap */}
                             <item.icon className="h-4 w-4 flex-shrink-0" />
                             {/* Label hidden when collapsed using group-data */}
-                             <span className="group-data-[state=collapsed]/sidebar-wrapper:hidden">{item.label}</span>
+                             <span className={cn(
+                                "group-data-[state=expanded]/sidebar-wrapper:inline",
+                                "group-data-[state=collapsed]/sidebar-wrapper:hidden"
+                             )}>
+                                {item.label}
+                             </span>
                          </Link>
                     </SidebarMenuButton>
                  </SidebarMenuItem>
@@ -133,7 +140,12 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                                    <Link href={item.href} className="flex items-center gap-2"> {/* Added flex and gap */}
                                        <item.icon className="h-4 w-4 flex-shrink-0" />
                                        {/* Label hidden when collapsed */}
-                                       <span className="group-data-[state=collapsed]/sidebar-wrapper:hidden">{item.label}</span>
+                                       <span className={cn(
+                                            "group-data-[state=expanded]/sidebar-wrapper:inline",
+                                            "group-data-[state=collapsed]/sidebar-wrapper:hidden"
+                                       )}>
+                                           {item.label}
+                                       </span>
                                    </Link>
                                </SidebarMenuButton>
                            </SidebarMenuItem>
@@ -145,13 +157,33 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
       </SidebarContent>
 
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
+          {/* Notifications Button */}
+           <SidebarMenuItem>
+             <SidebarMenuButton asChild tooltip="Notifications" variant={"ghost"}>
+                {/* Placeholder link or Button action */}
+                <Button variant="ghost" className="flex items-center gap-2 w-full justify-start p-2 h-9">
+                    <Bell className="h-4 w-4 flex-shrink-0" />
+                    <span className={cn(
+                        "group-data-[state=expanded]/sidebar-wrapper:inline",
+                        "group-data-[state=collapsed]/sidebar-wrapper:hidden"
+                    )}>
+                        Notifications
+                    </span>
+                 </Button>
+             </SidebarMenuButton>
+           </SidebarMenuItem>
+
+           {/* Separator before User Button */}
+           <Separator className="my-1"/>
+
           {/* User Button and Account Text */}
           <div className={cn("flex items-center w-full", state === 'collapsed' ? 'justify-center' : 'justify-start pl-1')}>
              <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { userButtonAvatarBox: "w-7 h-7" }}} />
               {/* Account text hidden when collapsed */}
              <span className={cn(
                  "text-xs text-muted-foreground ml-2",
-                 "group-data-[state=collapsed]/sidebar-wrapper:hidden" // Use group-data for hiding
+                 "group-data-[state=expanded]/sidebar-wrapper:inline",
+                 "group-data-[state=collapsed]/sidebar-wrapper:hidden"
                  )}>
                  Account
              </span>
@@ -177,7 +209,8 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                          {/* Status text hidden when collapsed */}
                          <span className={cn(
                              "ml-2 text-xs text-muted-foreground",
-                             "group-data-[state=collapsed]/sidebar-wrapper:hidden" // Use group-data for hiding
+                             "group-data-[state=expanded]/sidebar-wrapper:inline",
+                             "group-data-[state=collapsed]/sidebar-wrapper:hidden"
                             )}>
                              {persistenceStatusText}
                          </span>
