@@ -12,6 +12,7 @@ import { useAuth } from '@clerk/nextjs'; // Import useAuth hook for client-side 
 import { redirect } from 'next/navigation';
 import { useSyncManager } from '@/hooks/useSyncManager'; // Import the refactored sync manager hook
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
+import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Import the new component
 
 export default function DashboardLayout({
   children,
@@ -82,6 +83,8 @@ export default function DashboardLayout({
       </Sidebar>
       <SidebarInset>
         {children}
+        {/* Add the Floating Chat Button here */}
+        <FloatingChatButton />
       </SidebarInset>
     </>
   );
