@@ -19,8 +19,8 @@ This is a Next.js personal finance management application built in Firebase Stud
     ```env
     # Clerk Environment Variables (Required for Authentication)
     # Get these from your Clerk Dashboard: https://dashboard.clerk.com
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-    CLERK_SECRET_KEY=sk_test_...
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_... # Replace with your actual publishable key
+    CLERK_SECRET_KEY=sk_test_... # Replace with your actual secret key
 
     # MongoDB Connection String (Required for Data Persistence)
     # Replace with your actual MongoDB connection string
@@ -31,6 +31,7 @@ This is a Next.js personal finance management application built in Firebase Stud
     # Get this from Google AI Studio: https://aistudio.google.com/app/apikey
     GOOGLE_GENAI_API_KEY=
     ```
+    **Important:** Ensure your `.env` file is added to your `.gitignore` file to prevent accidental exposure of secrets.
 
 3.  **Run the Development Server:**
     ```bash
@@ -48,6 +49,7 @@ This is a Next.js personal finance management application built in Firebase Stud
     - Add, edit, and delete data in each section.
     - Import/Export data using CSV files.
     - Use the weekly review feature to add comments to transactions and journal entries.
+    - Share weekly reviews with other users for collaboration.
 
 ## Features
 
@@ -55,21 +57,80 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Transactions:** View, add, edit, delete, and import/export financial transactions. Categorize transactions by frequency and variability.
 - **Income/Expenses Analysis:** Detailed breakdown of income and expenses based on categories.
 - **Debt Management:** Track debts (long-term/short-term), view amortization schedules, import/export debt data, and get AI-powered payoff strategies (optional).
-- **Financial Statements:** View Cash Flow and Net Worth statements based on your data and selected date ranges. Edit Assets and Other Liabilities directly. Includes a Budget Variance report.
-- **Budgeting:** Create and manage budgets item by item (Income, Recurring/One-Time Expenses, Goals).
-- **Weekly Review:** Review transactions week by week, add comments to specific transactions, and maintain a weekly financial journal.
+- **Financial Statements:** View Cash Flow and Net Worth statements based on your data and selected date ranges. Edit Assets and Other Liabilities directly. Includes a Budget Variance report based on the selected period.
+- **Budgeting:** Create and manage budgets item by item (Income, Recurring/One-Time Expenses, Goals, Debt Allocation).
+- **Weekly Review:** Review transactions week by week, add comments to specific transactions, and maintain a weekly financial journal. Includes collaboration features (sharing reviews).
 - **Authentication:** Secure user authentication powered by Clerk.
-- **Data Persistence:** Data is saved locally in the browser using Zustand persist middleware and can be synced to MongoDB if configured.
+- **Data Persistence & Sync:** Data is cached locally in Session Storage using Zustand persist middleware and synced securely to MongoDB for authenticated users. Includes data integrity checks.
 - **Dark/Light Mode:** Theme toggle for user preference.
 - **Responsive Design:** Adapts to different screen sizes.
+- **Notifications:** In-app notifications for budget alerts, collaboration updates, and application info.
+- **Admin Logger:** (Admin Role Only) Basic page structure for viewing application logs (requires backend integration).
 
 ## Tech Stack
 
 - **Framework:** Next.js (App Router)
 - **Styling:** Tailwind CSS, ShadCN UI
-- **State Management:** Zustand
+- **State Management:** Zustand (with persist middleware)
 - **Authentication:** Clerk
-- **Database:** MongoDB (via Mongoose)
+- **Database:** MongoDB (via official Node.js driver)
 - **AI (Optional):** Genkit (for Debt Analysis)
+- **Data Handling:** `fast-json-stable-stringify` (for hashing), Node.js `crypto` (for hashing)
 - **Linting/Formatting:** ESLint, Prettier (implicitly via Next.js defaults)
 - **Deployment:** Vercel (configured via `vercel.json`)
+
+## Data Handling, Security & GDPR/DPA Compliance Review
+
+This application handles sensitive personal financial data. The following measures are in place:
+
+**Data Collected:**
+*   User authentication details (managed by Clerk).
+*   Financial data: Transactions, Debts, Assets, Liabilities, Budgets, Goals.
+*   Weekly review data: Journal entries, transaction comments, list of users a review is shared with.
+*   Application state: Statement date ranges, getting started guide dismissal status.
+
+**Data Storage & Security:**
+*   **Authentication:** Handled securely by Clerk, following industry best practices.
+*   **Server-Side Storage (MongoDB):**
+    *   Accessed via secure API routes (`/api/save`, `/api/sync`) and server actions (`/actions/shareActions`).
+    *   Connection uses `MONGODB_URI` stored securely as an environment variable.
+    *   Data access is strictly scoped to the authenticated user (`userId`) in API routes and server actions.
+    *   MongoDB Atlas typically provides encryption at rest and in transit (verify your Atlas configuration).
+*   **Client-Side Storage (Session Storage via Zustand Persist):**
+    *   Used for caching data to improve performance and provide limited offline access during a session.
+    *   **Encoding (Not Encryption):** Data in sessionStorage is encoded using Base64 via `storage-utils.ts`. **Base64 is easily reversible and does NOT provide confidentiality.** This is a known limitation.
+    *   **Session Lifetime:** Session Storage is cleared automatically by the browser when the session ends (tab/window closed).
+    *   **Logout/User Change:** The `useSyncManager` hook explicitly calls `clearLocalState` upon user sign-out or if the `userId` changes, removing persisted data from sessionStorage to prevent data leakage between users on the same browser.
+*   **Data Integrity:**
+    *   Data synced between the client and server (`/api/save`, `/api/sync`) is hashed using SHA-256 (`storage-utils.ts`).
+    *   The server verifies the received hash against a recalculated hash of the received data before saving (`/api/save`).
+    *   The client verifies the hash received from the server during sync (`/api/sync`) before applying the data (implicit via `useSyncManager` structure).
+    *   `fast-json-stable-stringify` is used before hashing to ensure consistent JSON stringification for accurate hash comparison.
+*   **Transport Security:** HTTPS is assumed (typically handled by Vercel deployment).
+
+**GDPR/DPA Compliance Considerations:**
+*   **Lawfulness, Fairness, Transparency:** Requires a clear Privacy Policy explaining data collection, storage, processing, and user rights. Consent should be obtained appropriately (Clerk handles auth consent, app-specific processing might need more).
+*   **Purpose Limitation:** Data collected appears limited to the app's financial management purpose.
+*   **Data Minimisation:** Data collected seems relevant and necessary for the app's features.
+*   **Accuracy:** Users can edit their financial data (transactions, debts, assets, etc.).
+*   **Storage Limitation:** No automatic data deletion for inactive users is implemented. Data persists until manually deleted or account closure (requires implementation). A data retention policy should be defined.
+*   **Integrity & Confidentiality:**
+    *   Integrity is addressed via hashing.
+    *   Confidentiality is strong server-side (scoped access, DB encryption).
+    *   **Client-side confidentiality is weak due to the use of Base64 instead of encryption in sessionStorage.** This is the main area needing improvement for full compliance regarding sensitive data caching.
+*   **Accountability:** This README and code comments document practices. Formal documentation (Privacy Policy, Data Processing Agreement if applicable) is needed.
+*   **User Rights:**
+    *   Access/Rectification: Provided via UI.
+    *   Portability: Provided via CSV export for transactions/debts.
+    *   Erasure: Requires implementation (account deletion feature + backend data removal).
+*   **Collaboration Feature:** Sharing requires user action. Clarity on what is shared and recipient notification is handled.
+
+**Recommendations for Improvement:**
+1.  **Encrypt Client-Side Cache:** Replace Base64 encoding in `storage-utils.ts` and the Zustand `persist` middleware storage adapter with actual encryption (e.g., using `SubtleCrypto`) if sensitive data *must* be cached client-side. Alternatively, redesign to minimize sensitive client-side caching.
+2.  **Implement User Data Deletion:** Create a mechanism for users to request deletion of their account and associated data from MongoDB.
+3.  **Formal Documentation:** Create and link a comprehensive Privacy Policy and Terms of Service.
+4.  **Data Retention Policy:** Define and implement how long inactive user data is kept.
+5.  **Review Third-Party Services:** Ensure Clerk, MongoDB Atlas, and Vercel configurations align with GDPR/DPA requirements.
+6.  **Audit Logs:** Implement server-side audit logging for sensitive actions (data modifications, sharing).
+
+**Conclusion:** The application has implemented several key security measures, including user-scoped data access, integrity checks via hashing, and session clearing on logout. The main compliance gap regarding sensitive data handling is the lack of **encryption** for client-side caching in Session Storage. Address this and add formal documentation/policies to significantly improve compliance posture.
