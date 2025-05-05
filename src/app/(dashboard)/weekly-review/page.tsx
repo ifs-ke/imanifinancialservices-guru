@@ -16,22 +16,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId, BudgetItemCategory, BudgetItem, WeeklyReviewData, UserShareInfo } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils'; // Import cn and formatCurrency from utils
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs
 import ShareReviewDialog from './ShareReviewDialog'; // Import the new dialog component
 
-// Formatting Functions (remain the same)
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
+// Formatting Functions (formatCurrency moved to utils)
 const formatDate = (date: Date | string) => {
      const dateObj = typeof date === 'string' ? new Date(date) : date;
       if (isNaN(dateObj.getTime())) return 'Invalid Date';
@@ -66,13 +58,14 @@ const calculateBudgetVariance = (
     const actualExpenses = transactions.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     const netActual = actualIncome - actualExpenses;
     const WEEKS_IN_MONTH_ESTIMATE = 4.33;
-    const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = { income: 0, 'recurring-expense': 0, 'one-time-expense': 0, goal: 0 };
+    const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = { income: 0, 'recurring-expense': 0, 'one-time-expense': 0, goal: 0, debt: 0 }; // Added debt
     budgetItems.forEach(item => { budgetedTotalsByCategory[item.category] += item.amount / WEEKS_IN_MONTH_ESTIMATE; });
     const totalBudgetedIncome = budgetedTotalsByCategory.income;
     const totalBudgetedExpenses = budgetedTotalsByCategory['recurring-expense'] + budgetedTotalsByCategory['one-time-expense'];
     const totalBudgetedGoals = budgetedTotalsByCategory.goal;
-    const netBudgeted = totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals;
-    if (totalBudgetedIncome === 0 && totalBudgetedExpenses === 0 && totalBudgetedGoals === 0 && actualIncome === 0 && actualExpenses === 0) return { netBudgeted, netActual, variance: 0, status: 'no-data' };
+    const totalBudgetedDebt = budgetedTotalsByCategory.debt; // Added debt total
+    const netBudgeted = totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals - totalBudgetedDebt; // Include debt in calculation
+    if (totalBudgetedIncome === 0 && totalBudgetedExpenses === 0 && totalBudgetedGoals === 0 && totalBudgetedDebt === 0 && actualIncome === 0 && actualExpenses === 0) return { netBudgeted, netActual, variance: 0, status: 'no-data' };
     const variance = netActual - netBudgeted;
     let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
     if (variance > 0.01) status = 'under-budget';

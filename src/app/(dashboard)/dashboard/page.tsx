@@ -13,7 +13,7 @@ import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 import { format, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils'; // Import cn and formatCurrency from utils
 import type { BudgetItemCategory } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useSyncManager } from '@/hooks/useSyncManager'; // Import hook to manage getting started state
@@ -23,17 +23,7 @@ const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item)
 const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
 const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0); // Use amount for other liabilities
 
-// Formatting Functions
-const formatCurrency = (amount: number | undefined) => {
-   if (amount === undefined || isNaN(amount)) return 'N/A';
-  return new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
+// Formatting Functions (formatCurrency moved to utils)
 const formatMonthYear = (date: Date) => format(date, 'MMM yyyy');
 
 export default function DashboardPage() {

@@ -5,7 +5,7 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useBudgetStore, selectTotalBudgetedExpenses, selectNetBudgeted } from "@/store/budgetStore";
 import { useTransactionsStore } from "@/store/transactionsStore";
 import { useEffect, useMemo } from "react";
-import { formatCurrency } from "@/lib/utils"; // Assuming formatCurrency is moved/available here
+import { formatCurrency } from "@/lib/utils"; // Import the shared utility function
 import { startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import type { TransactionWithId, BudgetItem, BudgetItemCategory } from "@/lib/types";
 
