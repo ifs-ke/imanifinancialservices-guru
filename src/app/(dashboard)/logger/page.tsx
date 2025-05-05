@@ -1,12 +1,12 @@
 // src/app/(dashboard)/logger/page.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal, ListTree } from 'lucide-react'; // Import Terminal for Alert
+import { ListTree, Info } from 'lucide-react'; // Import ListTree and Info
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 export default function LoggerPage() {
@@ -36,7 +36,7 @@ export default function LoggerPage() {
                 <ListTree className="h-6 w-6 text-primary" /> Application Logger
             </h1>
             <p className="text-muted-foreground text-sm">
-                View client-side and server-side application logs.
+                View client-side and server-side application logs (requires integration).
             </p>
         </header>
 
@@ -47,19 +47,23 @@ export default function LoggerPage() {
                     <CardDescription>Logs captured from the browser.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Alert>
-                        <Terminal className="h-4 w-4" />
-                        <AlertTitle>Feature Not Implemented</AlertTitle>
-                        <AlertDescription>
-                             Displaying live client-side logs requires integrating a dedicated logging library (e.g., Logtail, Sentry RUM) or building a custom solution.
-                        </AlertDescription>
-                    </Alert>
-                    {/* Placeholder for future log display component */}
-                    <div className="mt-4 p-4 border rounded h-64 overflow-auto bg-muted/50 text-xs font-mono">
-                        [Timestamp] INFO: Application initialized...<br />
-                        [Timestamp] WARN: Sync process started...<br />
-                        [Timestamp] ERROR: Failed to fetch data...<br />
-                        {/* Log entries would appear here */}
+                     {/* Explanation Alert */}
+                     <Alert variant="default" className="mb-4">
+                         <Info className="h-4 w-4" />
+                         <AlertTitle>Client Log Integration</AlertTitle>
+                         <AlertDescription>
+                            Displaying live client-side logs requires integrating a dedicated logging library (e.g., Logtail, Sentry RUM, Axiom) or building a custom solution to capture and forward browser console output.
+                         </AlertDescription>
+                     </Alert>
+                    {/* Placeholder for log display */}
+                    <div className="p-4 border rounded h-64 overflow-auto bg-muted/50 text-xs font-mono text-muted-foreground italic">
+                       [Client logs would appear here after integration...]
+                       <br />
+                       Example: [Timestamp] INFO: Application initialized...
+                       <br />
+                       Example: [Timestamp] WARN: Sync process started...
+                       <br />
+                       Example: [Timestamp] ERROR: Failed to save data locally...
                     </div>
                 </CardContent>
             </Card>
@@ -70,20 +74,24 @@ export default function LoggerPage() {
                     <CardDescription>Logs captured from API routes and server actions.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                     <Alert>
-                        <Terminal className="h-4 w-4" />
-                        <AlertTitle>Requires Backend Integration</AlertTitle>
+                    {/* Explanation Alert */}
+                    <Alert variant="default" className="mb-4">
+                        <Info className="h-4 w-4" />
+                        <AlertTitle>Server Log Integration</AlertTitle>
                         <AlertDescription>
-                             Displaying server-side logs requires fetching them from your deployment platform (e.g., Vercel Logs) or a dedicated logging service.
+                           Displaying server-side logs requires fetching them from your deployment platform (e.g., Vercel Log Drains) or a dedicated logging service (e.g., Logtail, Datadog, Axiom). Configure your hosting provider or chosen service to forward logs.
                         </AlertDescription>
                     </Alert>
-                    {/* Placeholder for future log display component */}
-                     <div className="mt-4 p-4 border rounded h-64 overflow-auto bg-muted/50 text-xs font-mono">
-                        [Timestamp] INFO: API route /api/sync called by user: user_xyz...<br />
-                        [Timestamp] INFO: Database connection established...<br />
-                        [Timestamp] ERROR: Failed to save data for user: user_abc...<br />
-                        {/* Log entries would appear here */}
-                    </div>
+                    {/* Placeholder for log display */}
+                     <div className="p-4 border rounded h-64 overflow-auto bg-muted/50 text-xs font-mono text-muted-foreground italic">
+                         [Server logs would appear here after integration...]
+                         <br />
+                         Example: [Timestamp] INFO: API route /api/sync called by user: user_xyz...
+                         <br />
+                         Example: [Timestamp] INFO: Database connection established...
+                         <br />
+                         Example: [Timestamp] ERROR: Failed to save data for user: user_abc... MongoDB Error: ...
+                     </div>
                 </CardContent>
             </Card>
         </main>
