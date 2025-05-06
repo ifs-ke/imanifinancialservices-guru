@@ -56,22 +56,13 @@ export function useSyncManager() {
   const hasLocalChangesRef = useRef(false);
 
   // --- Get Store Setters and Clear Actions ---
-  const setTransactions = useTransactionsStore(state => state.setTransactions);
-  const clearTransactions = useTransactionsStore(state => state.clearTransactions);
-  const setDebts = useDebtStore(state => state.setDebts);
-  const clearDebts = useDebtStore(state => state.clearDebts);
-  const setAssetItems = useStatementStore(state => state.setAssetItems);
-  const setOtherLiabilityItems = useStatementStore(state => state.setOtherLiabilityItems);
-  const setStartDate = useStatementStore(state => state.setStartDate);
-  const setEndDate = useStatementStore(state => state.setEndDate);
-  const clearStatementItems = useStatementStore(state => state.clearStatementItems);
-  const setBudgetItems = useBudgetStore(state => state.setBudgetItems);
-  const clearBudgetItems = useBudgetStore(state => state.clearBudgetItems);
-  const setOwnedReviews = useWeeklyReviewStore(state => state.setOwnedReviews);
-  const setSharedReviews = useWeeklyReviewStore(state => state.setSharedReviews);
-  const clearReviews = useWeeklyReviewStore(state => state.clearReviews);
-  const setNotifications = useNotificationStore(state => state.setNotifications);
-  const clearNotifications = useNotificationStore(state => state.clearAllNotifications);
+  // Using static getState() methods within callbacks to ensure access to latest state
+  const getTransactionsState = useTransactionsStore.getState;
+  const getDebtState = useDebtStore.getState;
+  const getStatementState = useStatementStore.getState;
+  const getBudgetState = useBudgetStore.getState;
+  const getWeeklyReviewState = useWeeklyReviewStore.getState;
+  const getNotificationState = useNotificationStore.getState;
 
   // --- Clear Local State Function ---
   const clearLocalState = useCallback(() => {
@@ -79,12 +70,12 @@ export function useSyncManager() {
     isClearingRef.current = true;
     console.log("SyncManager: Clearing local state...");
     try {
-        clearTransactions();
-        clearDebts();
-        clearStatementItems();
-        clearBudgetItems();
-        clearReviews();
-        clearNotifications();
+        getTransactionsState().clearTransactions();
+        getDebtState().clearDebts();
+        getStatementState().clearStatementItems();
+        getBudgetState().clearBudgetItems();
+        getWeeklyReviewState().clearReviews();
+        getNotificationState().clearAllNotifications();
         setGettingStartedDismissedState(false);
         const storeKeys = ['ifcGuru_transactions', 'ifcGuru_debts', 'ifcGuru_statementItems', 'ifcGuru_budgetItems', 'ifcGuru_weeklyReviews', 'ifcGuru_notifications'];
         storeKeys.forEach(key => { try { sessionStorage.removeItem(key); } catch (e) { console.warn(`Failed to remove ${key} from sessionStorage:`, e); } });
@@ -97,8 +88,8 @@ export function useSyncManager() {
     } catch (error) { console.error("Error during clearLocalState:", error); }
     finally { isClearingRef.current = false; }
   }, [
-    clearTransactions, clearDebts, clearStatementItems, clearBudgetItems,
-    clearReviews, clearNotifications, setGettingStartedDismissedState
+      getTransactionsState, getDebtState, getStatementState, getBudgetState,
+      getWeeklyReviewState, getNotificationState, setGettingStartedDismissedState
   ]);
 
   // --- Save Data Function (used internally and for force save) ---
@@ -112,19 +103,20 @@ export function useSyncManager() {
     setHashMismatch(false); // Assume mismatch is resolved when attempting save
 
     try {
+      // Access latest state using getState() within the callback
       const currentState = {
-        transactions: useTransactionsStore.getState().transactions,
-        debts: useDebtStore.getState().debts,
-        assetItems: useStatementStore.getState().assetItems,
-        otherLiabilityItems: useStatementStore.getState().otherLiabilityItems,
-        budgetItems: useBudgetStore.getState().budgetItems,
-        ownedReviews: useWeeklyReviewStore.getState().ownedReviews,
-        notifications: useNotificationStore.getState().notifications,
-        startDate: useStatementStore.getState().startDate,
-        endDate: useStatementStore.getState().endDate,
-        gettingStartedDismissed: get().gettingStartedDismissed, // Use get() to access latest state within callback
+        transactions: getTransactionsState().transactions,
+        debts: getDebtState().debts,
+        assetItems: getStatementState().assetItems,
+        otherLiabilityItems: getStatementState().otherLiabilityItems,
+        budgetItems: getBudgetState().budgetItems,
+        ownedReviews: getWeeklyReviewState().ownedReviews,
+        notifications: getNotificationState().notifications,
+        startDate: getStatementState().startDate, // Access latest dates
+        endDate: getStatementState().endDate,
+        gettingStartedDismissed: gettingStartedDismissed, // Access latest local state
       };
-      const preparedData = prepareDataForHashing(currentState);
+      const preparedData = prepareDataForHashing(currentState as SyncData); // Cast to SyncData for preparation
       const dataString = stringify(preparedData);
       const dataHash = await hashData(dataString);
       console.log(`Save Client: Calculated client hash: ${dataHash}`);
@@ -160,7 +152,11 @@ export function useSyncManager() {
     } finally {
       isSavingRef.current = false;
     }
-  }, [isSignedIn, userId, toast, get]); // Add get from Zustand to access latest state
+  }, [
+      isSignedIn, userId, toast, gettingStartedDismissed,
+      getTransactionsState, getDebtState, getStatementState, getBudgetState,
+      getWeeklyReviewState, getNotificationState
+  ]); // Include local state and getState refs
 
   // --- Fetch Data Function (used internally and for force fetch) ---
   const fetchData = useCallback(async (isRetry = false, skipHashCheck = false) => {
@@ -212,16 +208,17 @@ export function useSyncManager() {
 
 
       console.log("Fetch: Overwriting local stores with fetched data...");
-      setTransactions(fetchedData.transactions ?? []);
-      setDebts(fetchedData.debts ?? []);
-      setAssetItems(fetchedData.assetItems ?? []);
-      setOtherLiabilityItems(fetchedData.otherLiabilityItems ?? []);
-      setBudgetItems(fetchedData.budgetItems ?? []);
-      setOwnedReviews(fetchedData.ownedReviews ?? {});
-      setSharedReviews(fetchedData.sharedReviews ?? {});
-      setNotifications(fetchedData.notifications ?? []);
-      setStartDate(fetchedData.startDate ? new Date(fetchedData.startDate) : undefined);
-      setEndDate(fetchedData.endDate ? new Date(fetchedData.endDate) : undefined);
+      // Use the setters from getState()
+      getTransactionsState().setTransactions(fetchedData.transactions ?? []);
+      getDebtState().setDebts(fetchedData.debts ?? []);
+      getStatementState().setAssetItems(fetchedData.assetItems ?? []);
+      getStatementState().setOtherLiabilityItems(fetchedData.otherLiabilityItems ?? []);
+      getBudgetState().setBudgetItems(fetchedData.budgetItems ?? []);
+      getWeeklyReviewState().setOwnedReviews(fetchedData.ownedReviews ?? {});
+      getWeeklyReviewState().setSharedReviews(fetchedData.sharedReviews ?? {});
+      getNotificationState().setNotifications(fetchedData.notifications ?? []);
+      getStatementState().setStartDate(fetchedData.startDate ? new Date(fetchedData.startDate) : undefined);
+      getStatementState().setEndDate(fetchedData.endDate ? new Date(fetchedData.endDate) : undefined);
       setGettingStartedDismissedState(fetchedData.gettingStartedDismissed ?? false);
 
       setLastSyncTime(new Date());
@@ -247,9 +244,8 @@ export function useSyncManager() {
     }
   }, [
     isSignedIn, userId, isClerkLoaded, toast, clearLocalState,
-    setTransactions, setDebts, setAssetItems, setOtherLiabilityItems,
-    setBudgetItems, setOwnedReviews, setSharedReviews, setNotifications,
-    setStartDate, setEndDate, setGettingStartedDismissedState
+    getTransactionsState, getDebtState, getStatementState, getBudgetState,
+    getWeeklyReviewState, getNotificationState, setGettingStartedDismissedState
   ]);
 
   // --- Debounced Save Wrapper ---
@@ -324,11 +320,12 @@ export function useSyncManager() {
     ];
 
     const handleChange = () => {
+        // Access current state within the handler using refs or direct state access
         if (initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && !isClearingRef.current && !hashMismatch) {
             console.log("Save Subscription: Store change detected, triggering debounced save.");
             triggerDebouncedSave();
         } else {
-            console.log("Save Subscription: Store change detected, but conditions not met (fetch done, no ops, no mismatch). Save deferred.");
+            console.log("Save Subscription: Store change detected, but conditions not met. Save deferred.");
         }
     };
 
@@ -343,6 +340,7 @@ export function useSyncManager() {
 
   // Effect 3: Save gettingStartedDismissed state change
   useEffect(() => {
+    // Only trigger save if the app has finished its initial load/sync
     if (initialFetchDoneRef.current && isSignedIn && userId && !hashMismatch) { // Check mismatch
       console.log("Getting Started State Change: Triggering debounced save...");
       triggerDebouncedSave();
@@ -416,3 +414,4 @@ export function useSyncManager() {
   };
 }
 
+    
