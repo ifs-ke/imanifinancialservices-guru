@@ -33,7 +33,7 @@ export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'local' | 'error';
 
 // Constants
 const SAVE_DEBOUNCE_DELAY = 3000; // ms
-const RETRY_DELAY = 60000; // 1 minute in ms
+// Removed RETRY_DELAY as retry is now manual
 
 /**
  * Custom hook to manage data synchronization between Zustand stores and a backend API.
@@ -53,7 +53,7 @@ export function useSyncManager() {
   const initialFetchDoneRef = useRef(false);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Track retry timeout
+  // Removed retryTimeoutRef
   // Ref to track if a local change has occurred *after* the initial sync
   const hasLocalChangesRef = useRef(false);
 
@@ -153,7 +153,7 @@ export function useSyncManager() {
       setSyncStatus('error');
       toast({
         title: 'Sync Save Failed',
-        description: `Could not save data: ${error.message}. Your changes remain locally.`,
+        description: `Could not save data: ${error.message}. Your changes remain locally. Click the cloud icon to retry saving.`,
         variant: 'destructive',
       });
     } finally {
@@ -212,27 +212,18 @@ export function useSyncManager() {
       hasLocalChangesRef.current = false; // Reset local changes flag after successful fetch
       console.log(`Fetch: Successfully synced with DB for user ${userId}.`);
       if (isRetry) { toast({ title: 'Sync Successful', description: 'Data successfully synced with the cloud.' }); }
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current); // Clear any pending retry
-        retryTimeoutRef.current = null;
-      }
+      // Removed retry timeout logic
 
     } catch (error: any) {
       console.error('Fetch Error:', error);
        setSyncStatus('error');
         toast({
           title: 'Sync Load Failed',
-          description: `Could not load data: ${error.message}. Using local data if available. Retrying in 1 minute.`,
+          description: `Could not load data: ${error.message}. Using local data if available. Click the cloud icon to retry.`, // Updated message
           variant: 'destructive',
         });
 
-       // Schedule a retry if not already scheduled
-       if (!retryTimeoutRef.current) {
-           retryTimeoutRef.current = setTimeout(() => {
-                console.log("SyncManager: Auto-retrying sync after error...");
-                fetchDataFromDB(true);
-            }, RETRY_DELAY);
-       }
+       // Removed retry scheduling logic
       initialFetchDoneRef.current = true;
     } finally {
       isFetchingRef.current = false;
@@ -248,10 +239,8 @@ export function useSyncManager() {
   const triggerDebouncedSave = useCallback(() => {
       if (!isSignedIn || !userId || isFetchingRef.current || isSavingRef.current || isClearingRef.current) { console.log("Debounced Save Skipped: User/Operation state prevents save."); return; }
 
-      // If the initial fetch is done, mark that local changes exist
       if (initialFetchDoneRef.current) {
          hasLocalChangesRef.current = true;
-          // Update status to 'local' only if not already 'syncing' or 'error'
           if (syncStatus !== 'syncing' && syncStatus !== 'error') {
              setSyncStatus('local');
           }
@@ -265,7 +254,7 @@ export function useSyncManager() {
           saveDataToDB().catch(err => { console.error("Error during debounced save execution:", err); });
       }, SAVE_DEBOUNCE_DELAY);
 
-  }, [isSignedIn, userId, saveDataToDB, syncStatus]); // Removed hasLocalChangesRef from deps
+  }, [isSignedIn, userId, saveDataToDB, syncStatus]);
 
   // --- Effects ---
 
@@ -300,13 +289,8 @@ export function useSyncManager() {
 
   // Effect 2: Subscribe to Store Changes to Trigger Debounced Save
   useEffect(() => {
-    // Subscribe only after Clerk is loaded and user is signed in.
-    // We now allow subscribing *before* initial fetch completes.
-    // This ensures that if a user makes changes *before* the first fetch finishes,
-    // those changes still trigger a save *after* the fetch completes.
     if (!isSignedIn || !userId || !isClerkLoaded) {
         console.log("Save Subscription: Conditions not met (User/Clerk state).");
-        // Clear any pending save timeout if user signs out
         if (saveTimeoutRef.current) {
             console.log("Save Subscription: Clearing pending save timeout due to user state change.");
             clearTimeout(saveTimeoutRef.current);
@@ -321,7 +305,6 @@ export function useSyncManager() {
     ];
 
     const handleChange = () => {
-        // Only trigger save if initial fetch is done and no critical operation is running.
         if (initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && !isClearingRef.current) {
             console.log("Save Subscription: Store change detected, triggering debounced save.");
             triggerDebouncedSave();
@@ -339,12 +322,8 @@ export function useSyncManager() {
         console.log("Save Subscription: Clearing pending save timeout on cleanup.");
         clearTimeout(saveTimeoutRef.current);
       }
-      if (retryTimeoutRef.current) {
-           clearTimeout(retryTimeoutRef.current);
-           retryTimeoutRef.current = null;
-       }
+      // No need to clear retry timeout here as it's removed
     };
-    // Depend on initialFetchDoneRef now as well
   }, [isSignedIn, userId, isClerkLoaded, initialFetchDoneRef, triggerDebouncedSave]);
 
 
@@ -361,35 +340,24 @@ export function useSyncManager() {
     if (!isSignedIn || !userId) { toast({ title: "Cannot Sync", description: "Please sign in first.", variant: "destructive" }); return; }
     if (syncStatus === 'error' && !isFetchingRef.current && !isSavingRef.current) {
       console.log("Sync Retry: Attempting fetch from DB...");
-      fetchDataFromDB(true);
-       if (retryTimeoutRef.current) { // Clear retry if manually retrying
-            clearTimeout(retryTimeoutRef.current);
-            retryTimeoutRef.current = null;
-        }
+      fetchDataFromDB(true); // Trigger fetch on retry
+       // Removed retry timeout clearing logic
     } else if (isFetchingRef.current || isSavingRef.current) {
        toast({ title: "Sync Busy", description: "Wait for current operation.", variant: "default" });
     } else if (syncStatus === 'syncing') {
         toast({ title: "Already Syncing", description: "Sync in progress.", variant: "default" });
     } else if (hasLocalChangesRef.current) {
-        // If not in error, but local changes exist, try saving directly
         console.log("Sync Retry: Local changes detected, attempting immediate save...");
-        saveDataToDB();
-    } else {
+        saveDataToDB(); // Try saving local changes if not in error state
+    } else if (syncStatus !== 'error') {
        toast({ title: "No Sync Error", description: "Data appears up-to-date.", variant: "default" });
-       // Optionally trigger a fresh fetch:
+       // Optionally trigger a fresh fetch even if not in error:
        // console.log("Sync Retry: Forcing re-fetch...");
        // fetchDataFromDB(true);
     }
   }, [syncStatus, fetchDataFromDB, saveDataToDB, toast, isSignedIn, userId]);
 
-    // Effect 4: Clear the retry timeout when the component unmounts
-   useEffect(() => {
-        return () => {
-            if (retryTimeoutRef.current) {
-                clearTimeout(retryTimeoutRef.current);
-            }
-        };
-    }, []);
+    // Removed effect for clearing retry timeout on unmount
 
   return {
       syncStatus,
