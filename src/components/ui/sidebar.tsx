@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -27,14 +26,16 @@ const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
+type SidebarState = "expanded" | "collapsed";
+
 type SidebarContext = {
-  state: "expanded" | "collapsed"
-  open: boolean
-  setOpen: (open: boolean) => void
-  openMobile: boolean
-  setOpenMobile: (open: boolean) => void
-  isMobile: boolean
-  toggleSidebar: () => void
+  state: SidebarState;
+  open: boolean; // Derived from state for simplicity
+  setOpen: (open: boolean) => void;
+  openMobile: boolean;
+  setOpenMobile: (open: boolean) => void;
+  isMobile: boolean | undefined; // Allow undefined initially
+  toggleSidebar: () => void;
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -51,14 +52,14 @@ function useSidebar() {
 const SidebarProvider = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
-    defaultOpen?: boolean
-    open?: boolean
+    defaultOpen?: boolean // Default state *before* hydration
+    open?: boolean // Controlled state
     onOpenChange?: (open: boolean) => void
   }
 >(
   (
     {
-      defaultOpen = false, // Default to collapsed on desktop
+      defaultOpen = false, // Server renders based on this
       open: openProp,
       onOpenChange: setOpenProp,
       className,
@@ -68,57 +69,89 @@ const SidebarProvider = React.forwardRef<
     },
     ref
   ) => {
-    const isMobile = useIsMobile()
-    const [openMobile, setOpenMobile] = React.useState(false)
+    const isMobile = useIsMobile(); // Checks client-side
+    const [isMounted, setIsMounted] = React.useState(false);
+    const [openMobile, setOpenMobile] = React.useState(false);
 
-    // Read initial state from cookie if available, else use defaultOpen
-    const initialOpen = React.useMemo(() => {
-        if (typeof window === 'undefined') return defaultOpen;
-        const cookieValue = document.cookie
-            .split('; ')
-            .find(row => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
-            ?.split('=')[1];
-        return cookieValue ? cookieValue === 'true' : defaultOpen;
-    }, [defaultOpen]);
+    // Initial state reflects server render (based on defaultOpen)
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>(defaultOpen ? "expanded" : "collapsed");
 
-    const [_open, _setOpen] = React.useState(initialOpen)
-    const open = openProp ?? _open
-    const setOpen = React.useCallback(
-      (value: boolean | ((value: boolean) => boolean)) => {
-        const openState = typeof value === "function" ? value(open) : value
+    // Handle controlled state if provided
+    const effectiveState = openProp !== undefined ? (openProp ? "expanded" : "collapsed") : sidebarState;
+    const open = effectiveState === "expanded";
+
+    // Effect to read cookie and update state *after* hydration
+    React.useEffect(() => {
+      setIsMounted(true); // Mark as mounted on the client
+
+      // Only read cookie if not controlled
+      if (openProp === undefined) {
+          const cookieValue = document.cookie
+              .split('; ')
+              .find(row => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+              ?.split('=')[1];
+          const cookieState = cookieValue ? (cookieValue === 'true' ? "expanded" : "collapsed") : (defaultOpen ? "expanded" : "collapsed");
+          setSidebarState(cookieState); // Update state based on cookie
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [defaultOpen, openProp]); // Only run once after mount based on initial props
+
+    const handleSetOpen = React.useCallback(
+      (newOpenValue: boolean) => {
+        const newState = newOpenValue ? "expanded" : "collapsed";
+        // Update cookie
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${newOpenValue}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+
+        // Update internal state or call prop setter
         if (setOpenProp) {
-          setOpenProp(openState)
+          setOpenProp(newOpenValue);
         } else {
-          _setOpen(openState)
+          setSidebarState(newState);
         }
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
       },
-      [setOpenProp, open]
-    )
+      [setOpenProp]
+    );
 
     const toggleSidebar = React.useCallback(() => {
-      return isMobile
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open)
-    }, [isMobile, setOpen, setOpenMobile])
+        // Logic now depends on client-side check *after* mount
+        if (isMounted) {
+            if (isMobile) {
+                setOpenMobile((current) => !current);
+            } else {
+                handleSetOpen(!open); // Use handleSetOpen to manage state/cookie
+            }
+        }
+        // Do nothing server-side or before mount
+    }, [isMounted, isMobile, handleSetOpen, open]);
 
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
-          event.preventDefault()
-          toggleSidebar()
+          event.preventDefault();
+          toggleSidebar();
         }
-      }
-      window.addEventListener("keydown", handleKeyDown)
-      return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [toggleSidebar])
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [toggleSidebar]);
 
-    const state = open ? "expanded" : "collapsed"
+
+    // Determine the final state to use for rendering attributes.
+    // Use internal state unless controlled, use server default before mount.
+    const renderedState = isMounted ? effectiveState : (defaultOpen ? "expanded" : "collapsed");
 
     const contextValue = React.useMemo<SidebarContext>(
-      () => ({ state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
-    )
+      () => ({
+        state: renderedState, // Use the correctly determined state
+        open: renderedState === "expanded", // Derive open from state
+        setOpen: handleSetOpen,
+        isMobile, // Pass the mobile check result
+        openMobile,
+        setOpenMobile,
+        toggleSidebar,
+      }),
+      [renderedState, handleSetOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    );
 
     return (
       <SidebarContext.Provider value={contextValue}>
@@ -127,8 +160,8 @@ const SidebarProvider = React.forwardRef<
             style={
               { "--sidebar-width": SIDEBAR_WIDTH, "--sidebar-width-icon": SIDEBAR_WIDTH_ICON, ...style } as React.CSSProperties
             }
-            // Apply the state as a data attribute for group styling
-            data-state={state}
+            // Apply the determined state as a data attribute
+            data-state={renderedState}
             className={cn("group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar", className)}
             ref={ref}
             {...props}
@@ -137,9 +170,9 @@ const SidebarProvider = React.forwardRef<
           </div>
         </TooltipProvider>
       </SidebarContext.Provider>
-    )
+    );
   }
-)
+);
 SidebarProvider.displayName = "SidebarProvider"
 
 const Sidebar = React.forwardRef<
@@ -154,7 +187,8 @@ const Sidebar = React.forwardRef<
     { side = "left", variant = "sidebar", collapsible = "icon", className, children, ...props },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    // Use context to get the *current* state for rendering logic
+    const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
     if (collapsible === "none") {
       return (
@@ -164,7 +198,7 @@ const Sidebar = React.forwardRef<
       )
     }
 
-    if (isMobile) {
+    if (isMobile === true) { // Explicitly check for true after mount
       return (
         <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
           <SheetContent data-sidebar="sidebar" data-mobile="true" className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden" style={{ "--sidebar-width": SIDEBAR_WIDTH_MOBILE } as React.CSSProperties} side={side}>
@@ -174,8 +208,14 @@ const Sidebar = React.forwardRef<
       )
     }
 
+    // Render placeholder or default state server-side / before hydration
+    if (isMobile === undefined) {
+        // Render nothing or a skeleton during SSR / initial client render before mobile check
+        return null; // Or a placeholder/skeleton if preferred
+    }
+
+    // Desktop rendering (uses the state from context)
     return (
-      // Apply group-data-[state=...] for direct state styling
       <div ref={ref} className="group/sidebar peer hidden md:block text-sidebar-foreground" data-state={state} data-collapsible={collapsible} data-variant={variant} data-side={side}>
         <div
           className={cn(
@@ -183,7 +223,7 @@ const Sidebar = React.forwardRef<
             state === 'expanded' ? "w-[--sidebar-width]" :
             collapsible === 'icon' ? (variant === "floating" || variant === "inset" ? "w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]" : "w-[--sidebar-width-icon]") :
             collapsible === 'offcanvas' ? "w-0" : "w-[--sidebar-width]",
-            "group-data-[side=right]/sidebar:rotate-180" // Target group/sidebar specifically
+            "group-data-[side=right]/sidebar:rotate-180"
           )}
         />
         <div
@@ -198,7 +238,7 @@ const Sidebar = React.forwardRef<
           )}
           {...props}
         >
-          <div data-sidebar="sidebar" className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]/sidebar:rounded-lg group-data-[variant=floating]/sidebar:border group-data-[variant=floating]/sidebar:border-sidebar-border group-data-[variant=floating]/sidebar:shadow"> {/* Target group/sidebar */}
+          <div data-sidebar="sidebar" className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]/sidebar:rounded-lg group-data-[variant=floating]/sidebar:border group-data-[variant=floating]/sidebar:border-sidebar-border group-data-[variant=floating]/sidebar:shadow">
             {children}
           </div>
         </div>
@@ -210,20 +250,26 @@ Sidebar.displayName = "Sidebar"
 
 const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
-  Omit<React.ComponentProps<typeof Button>, "children"> & { children?: React.ReactNode } // Added children back
->(({ className, onClick, children, ...props }, ref) => { // Added children back
+  Omit<React.ComponentProps<typeof Button>, "children"> & { children?: React.ReactNode }
+>(({ className, onClick, children, ...props }, ref) => {
   const { toggleSidebar, state, isMobile } = useSidebar();
+  const [isMounted, setIsMounted] = React.useState(false);
 
-  // Ensure there's default content if children isn't provided
-  const content = children ?? (
-    <>
-      {isMobile ? <Menu className="h-5 w-5" /> :
-       state === 'expanded' ? <PanelLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Default content logic now depends on isMounted and isMobile
+  const defaultContent = React.useMemo(() => {
+      if (!isMounted) {
+          // Render a consistent icon server-side (or null/skeleton)
+          return <Menu className="h-5 w-5" />;
       }
-      <span className="sr-only">Toggle Sidebar</span>
-    </>
-  );
+      return isMobile ? <Menu className="h-5 w-5" /> :
+             state === 'expanded' ? <PanelLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />;
+  }, [isMounted, isMobile, state]);
 
+  const content = children ?? defaultContent;
 
   return (
      <Button
@@ -231,11 +277,12 @@ const SidebarTrigger = React.forwardRef<
         data-sidebar="trigger"
         variant="ghost"
         size="icon"
-        className={cn("h-8 w-8 shrink-0", className)} // Consistent size
+        className={cn("h-8 w-8 shrink-0", isMobile && "md:hidden", className)} // Hide on desktop if mobile trigger
         onClick={(event) => { onClick?.(event); toggleSidebar(); }}
         {...props}
      >
-        {content} {/* Render content */}
+        {content}
+        <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
 })
@@ -280,9 +327,10 @@ const SidebarInset = React.forwardRef<
       ref={ref}
       className={cn(
         "relative flex min-h-svh flex-1 flex-col bg-background transition-[margin-left,margin-right] duration-200 ease-linear", // Added transition
-         "md:peer-data-[state=expanded]/sidebar:peer-data-[variant=inset]/sidebar:ml-[--sidebar-width]", // Target group/sidebar
-         "md:peer-data-[state=collapsed]/sidebar:peer-data-[collapsible=icon]/sidebar:peer-data-[variant=inset]/sidebar:ml-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]", // Target group/sidebar
-         "md:peer-data-[variant=inset]/sidebar:m-2 md:peer-data-[variant=inset]/sidebar:rounded-xl md:peer-data-[variant=inset]/sidebar:shadow", // Target group/sidebar
+         // Use group-data-[state=...] selector to target based on parent SidebarProvider state
+         "group-data-[state=expanded]/sidebar-wrapper:peer-data-[variant=inset]/sidebar:md:ml-[--sidebar-width]",
+         "group-data-[state=collapsed]/sidebar-wrapper:peer-data-[collapsible=icon]/sidebar:peer-data-[variant=inset]/sidebar:md:ml-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]",
+         "md:peer-data-[variant=inset]/sidebar:m-2 md:peer-data-[variant=inset]/sidebar:rounded-xl md:peer-data-[variant=inset]/sidebar:shadow", // Original inset styles
         className
       )}
       {...props}
@@ -502,11 +550,11 @@ const SidebarMenuButton = React.forwardRef<
   React.ComponentProps<"button"> & {
     asChild?: boolean
     isActive?: boolean
-    tooltip?: string | React.ReactNode // Changed type to ReactNode
+    tooltip?: string | React.ReactNode
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
   (
-    { asChild = false, isActive = false, variant = "default", size = "default", tooltip, className, children, ...props }, // Added children to props
+    { asChild = false, isActive = false, variant = "default", size = "default", tooltip, className, children, ...props },
     ref
   ) => {
     const Comp = asChild ? Slot : "button";
@@ -519,24 +567,25 @@ const SidebarMenuButton = React.forwardRef<
       </Comp>
     );
 
-    if (!tooltip || state === 'expanded') {
-      return buttonContent; // No tooltip needed if expanded or no tooltip prop
+    // Show tooltip only when collapsed, not mobile, and tooltip is provided
+    const shouldShowTooltip = tooltip && state === 'collapsed' && isMobile === false;
+
+    if (!shouldShowTooltip) {
+      return buttonContent;
     }
 
-     // Ensure tooltip content is valid
     const tooltipContent = typeof tooltip === 'string' ? <p>{tooltip}</p> : tooltip;
 
     return (
       <Tooltip>
         <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
-        {/* Ensure tooltip only shows when collapsed and not on mobile */}
-        <TooltipContent side="right" align="center" sideOffset={10} hidden={isMobile}>
+        <TooltipContent side="right" align="center" sideOffset={10}>
             {tooltipContent}
         </TooltipContent>
       </Tooltip>
-    )
+    );
   }
-)
+);
 SidebarMenuButton.displayName = "SidebarMenuButton"
 
 const SidebarMenuAction = React.forwardRef<
