@@ -31,27 +31,19 @@ export default function DashboardLayout({
   // Client-side auth check
   const { userId, isLoaded } = useAuth();
   // Initialize sync manager - This hook now manages its own state and effects
-  const {
-      syncStatus,
-      retrySync,
-      hashMismatch,
-      forceSaveLocal,
-      forceFetchServer,
-      gettingStartedDismissed,
-      setGettingStartedDismissed
-  } = useSyncManager();
+  const syncManager = useSyncManager(); // Get the whole syncManager object
 
   // Initialize budget notifications (this hook runs the checks)
   useBudgetNotifications();
 
    // Effect to control dialog visibility based on hashMismatch from the hook
    useEffect(() => {
-       if (hashMismatch) {
+       if (syncManager.hashMismatch) { // Access hashMismatch from syncManager object
            setIsMismatchDialogOpen(true);
        } else {
            setIsMismatchDialogOpen(false); // Close if mismatch resolves
        }
-   }, [hashMismatch]);
+   }, [syncManager.hashMismatch]); // Depend on the object property
 
 
   // Handle loading state from Clerk
@@ -101,12 +93,9 @@ export default function DashboardLayout({
   return (
     <>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
-        {/* Pass syncStatus, retrySync, and mismatch state/actions to AppSidebar */}
-        {/* Ensure the functions are correctly passed */}
+        {/* Pass the entire syncManager object */}
         <AppSidebar
-            syncStatus={syncStatus}
-            retrySync={retrySync}
-            hashMismatch={hashMismatch} // Pass boolean state
+            syncManager={syncManager}
             openMismatchDialog={() => setIsMismatchDialogOpen(true)} // Pass function to open dialog
         />
         <SidebarRail />
@@ -120,8 +109,8 @@ export default function DashboardLayout({
        <DataSyncMismatchDialog
            isOpen={isMismatchDialogOpen}
            onClose={() => setIsMismatchDialogOpen(false)} // Allow closing
-           onForceSave={forceSaveLocal} // Pass the function from hook
-           onForceFetch={forceFetchServer} // Pass the function from hook
+           onForceSave={syncManager.forceSaveLocal} // Pass the function from hook
+           onForceFetch={syncManager.forceFetchServer} // Pass the function from hook
        />
     </>
   );

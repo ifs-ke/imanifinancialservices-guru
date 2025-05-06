@@ -37,9 +37,8 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { UserButton } from '@clerk/nextjs';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { SyncStatus } from '@/hooks/useSyncManager';
+import type { SyncStatus, useSyncManager } from '@/hooks/useSyncManager'; // Import useSyncManager type
 import { useNotificationStore } from '@/store/notificationStore';
-// Removed DataSyncMismatchDialog import, as it's now managed in the layout
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -49,27 +48,23 @@ const menuItems = [
   { href: '/statements', label: 'Statements', icon: FileText },
   { href: '/budget', label: 'Budget', icon: PieChart },
   { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck },
+  { href: '/logger', label: 'Logger', icon: ListTree },
 ];
 
-const loggerItem = { href: '/logger', label: 'Logger', icon: ListTree };
-
 interface AppSidebarProps {
-    syncStatus: SyncStatus;
-    retrySync?: () => void;
-    hashMismatch: boolean; // Receive mismatch status
+    syncManager: ReturnType<typeof useSyncManager>; // Use the return type of the hook
     openMismatchDialog: () => void; // Function to open the dialog in the parent
 }
 
 export function AppSidebar({
-    syncStatus,
-    retrySync,
-    hashMismatch,
+    syncManager, // Accept the entire syncManager object
     openMismatchDialog, // Receive function to open dialog
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { isMobile, state } = useSidebar();
   const unreadCount = useNotificationStore(state => state.unreadCount());
-  // Removed isMismatchDialogOpen state, managed by parent layout now
+
+    const { syncStatus, retrySync, hashMismatch } = syncManager; // Destructure properties inside the component
 
     let PersistenceIcon = CloudOff;
     let persistenceStatusText = 'Local Data';
@@ -84,7 +79,6 @@ export function AppSidebar({
         case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local Data'; persistenceTooltipText = "Data saved locally. Sign in to sync."; iconColor = 'text-muted-foreground'; break;
      }
 
-     // Removed effect related to dialog visibility, parent handles it
 
      const handleStatusClick = () => {
          console.log("AppSidebar: Status icon clicked. Mismatch:", hashMismatch, "Clickable:", isClickable);
@@ -114,7 +108,6 @@ export function AppSidebar({
          </div>
           <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")}>
              {/* Icon changes based on state, ensured via useSidebar hook */}
-             {/* No need to pass children here, default icon logic in SidebarTrigger */}
           </SidebarTrigger>
       </SidebarHeader>
 
@@ -142,24 +135,6 @@ export function AppSidebar({
       </SidebarContent>
 
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
-            <SidebarMenuItem>
-                <SidebarMenuButton
-                    asChild
-                    isActive={pathname === loggerItem.href}
-                    tooltip={loggerItem.label}
-                    variant={pathname === loggerItem.href ? "active" : "ghost"}
-                >
-                    <Link href={loggerItem.href} className="flex items-center gap-2 w-full justify-start p-2 h-9">
-                        <loggerItem.icon className="h-4 w-4 flex-shrink-0" />
-                         <span className={cn(
-                            "group-data-[state=expanded]/sidebar-wrapper:inline",
-                            "group-data-[state=collapsed]/sidebar-wrapper:hidden"
-                         )}>
-                            {loggerItem.label}
-                         </span>
-                    </Link>
-                </SidebarMenuButton>
-            </SidebarMenuItem>
            <SidebarMenuItem>
              <SidebarMenuButton asChild tooltip="Notifications" variant={pathname === '/notifications' ? "active" : "ghost"}>
                 <Link href="/notifications" className="flex items-center gap-2 w-full justify-start p-2 h-9 relative">
@@ -226,9 +201,6 @@ export function AppSidebar({
                  </TooltipContent>
              </Tooltip>
            </TooltipProvider>
-
-           {/* Removed Data Sync Mismatch Dialog - Managed in layout */}
-
       </SidebarFooter>
     </>
   );
