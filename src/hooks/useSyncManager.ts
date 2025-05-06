@@ -33,6 +33,7 @@ export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'local' | 'error';
 
 // Constants
 const SAVE_DEBOUNCE_DELAY = 3000; // ms
+const RETRY_DELAY = 60000; // 1 minute in ms
 
 /**
  * Custom hook to manage data synchronization between Zustand stores and a backend API.
@@ -52,6 +53,7 @@ export function useSyncManager() {
   const initialFetchDoneRef = useRef(false);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Track retry timeout
   // Ref to track if a local change has occurred *after* the initial sync
   const hasLocalChangesRef = useRef(false);
 
@@ -210,20 +212,28 @@ export function useSyncManager() {
       hasLocalChangesRef.current = false; // Reset local changes flag after successful fetch
       console.log(`Fetch: Successfully synced with DB for user ${userId}.`);
       if (isRetry) { toast({ title: 'Sync Successful', description: 'Data successfully synced with the cloud.' }); }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current); // Clear any pending retry
+        retryTimeoutRef.current = null;
+      }
 
     } catch (error: any) {
       console.error('Fetch Error:', error);
-       if (error.message?.includes('Failed to fetch user profile data')) {
-           setSyncStatus('error'); // Set error status for profile fetch failure
-           toast({ title: 'Profile Load Failed', description: `Could not load profile settings: ${error.message}. Other data may have loaded.`, variant: 'destructive' });
-       } else if (error.message?.includes('Data integrity check failed')) {
-           setSyncStatus('error'); // Critical error, stop sync
-           toast({ title: 'Sync Failed: Integrity Check', description: error.message, variant: 'destructive' });
-       } else {
-           setSyncStatus('error');
-           toast({ title: 'Sync Load Failed', description: `Could not load data: ${error.message}. Using local data if available.`, variant: 'destructive' });
+       setSyncStatus('error');
+        toast({
+          title: 'Sync Load Failed',
+          description: `Could not load data: ${error.message}. Using local data if available. Retrying in 1 minute.`,
+          variant: 'destructive',
+        });
+
+       // Schedule a retry if not already scheduled
+       if (!retryTimeoutRef.current) {
+           retryTimeoutRef.current = setTimeout(() => {
+                console.log("SyncManager: Auto-retrying sync after error...");
+                fetchDataFromDB(true);
+            }, RETRY_DELAY);
        }
-      initialFetchDoneRef.current = true; // Mark fetch as attempted even on error
+      initialFetchDoneRef.current = true;
     } finally {
       isFetchingRef.current = false;
     }
@@ -329,6 +339,10 @@ export function useSyncManager() {
         console.log("Save Subscription: Clearing pending save timeout on cleanup.");
         clearTimeout(saveTimeoutRef.current);
       }
+      if (retryTimeoutRef.current) {
+           clearTimeout(retryTimeoutRef.current);
+           retryTimeoutRef.current = null;
+       }
     };
     // Depend on initialFetchDoneRef now as well
   }, [isSignedIn, userId, isClerkLoaded, initialFetchDoneRef, triggerDebouncedSave]);
@@ -348,6 +362,10 @@ export function useSyncManager() {
     if (syncStatus === 'error' && !isFetchingRef.current && !isSavingRef.current) {
       console.log("Sync Retry: Attempting fetch from DB...");
       fetchDataFromDB(true);
+       if (retryTimeoutRef.current) { // Clear retry if manually retrying
+            clearTimeout(retryTimeoutRef.current);
+            retryTimeoutRef.current = null;
+        }
     } else if (isFetchingRef.current || isSavingRef.current) {
        toast({ title: "Sync Busy", description: "Wait for current operation.", variant: "default" });
     } else if (syncStatus === 'syncing') {
@@ -362,7 +380,16 @@ export function useSyncManager() {
        // console.log("Sync Retry: Forcing re-fetch...");
        // fetchDataFromDB(true);
     }
-  }, [syncStatus, fetchDataFromDB, saveDataToDB, toast, isSignedIn, userId]); // Added saveDataToDB
+  }, [syncStatus, fetchDataFromDB, saveDataToDB, toast, isSignedIn, userId]);
+
+    // Effect 4: Clear the retry timeout when the component unmounts
+   useEffect(() => {
+        return () => {
+            if (retryTimeoutRef.current) {
+                clearTimeout(retryTimeoutRef.current);
+            }
+        };
+    }, []);
 
   return {
       syncStatus,
@@ -371,4 +398,3 @@ export function useSyncManager() {
       setGettingStartedDismissed: setGettingStartedDismissedState,
   };
 }
-    
