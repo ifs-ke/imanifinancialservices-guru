@@ -56,17 +56,17 @@ const loggerItem = { href: '/logger', label: 'Logger', icon: ListTree };
 interface AppSidebarProps {
     syncStatus: SyncStatus;
     retrySync?: () => void;
-    hashMismatch: boolean; // <-- Add hashMismatch prop
-    forceSaveLocal: () => Promise<boolean>; // <-- Add forceSaveLocal prop
-    forceFetchServer: () => Promise<boolean>; // <-- Add forceFetchServer prop
+    hashMismatch: boolean;
+    forceSaveLocal: () => Promise<boolean>; // Function prop
+    forceFetchServer: () => Promise<boolean>; // Function prop
 }
 
 export function AppSidebar({
     syncStatus,
     retrySync,
-    hashMismatch, // <-- Receive hashMismatch
-    forceSaveLocal, // <-- Receive forceSaveLocal
-    forceFetchServer, // <-- Receive forceFetchServer
+    hashMismatch,
+    forceSaveLocal, // Receive function
+    forceFetchServer, // Receive function
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { isMobile, state } = useSidebar();
@@ -88,15 +88,18 @@ export function AppSidebar({
 
      // Effect to open the dialog when a hash mismatch occurs
      useEffect(() => {
-         if (hashMismatch) {
+         if (hashMismatch && !isMismatchDialogOpen) { // Open only if not already open
+             console.log("AppSidebar: Hash mismatch detected, opening dialog.");
              setIsMismatchDialogOpen(true);
          }
-     }, [hashMismatch]);
+     }, [hashMismatch, isMismatchDialogOpen]);
 
      const handleStatusClick = () => {
+         console.log("AppSidebar: Status icon clicked. Mismatch:", hashMismatch, "Clickable:", isClickable);
          if (hashMismatch) {
              setIsMismatchDialogOpen(true); // Open dialog if mismatch
          } else if (isClickable && retrySync) {
+             console.log("AppSidebar: Retrying sync...");
              retrySync(); // Call retry only if error and no mismatch
          }
      }
@@ -208,11 +211,11 @@ export function AppSidebar({
                         className={cn(
                             "flex items-center w-full justify-start px-2 py-1 h-9",
                             state === 'collapsed' && 'justify-center',
-                            !isClickable && "cursor-default pointer-events-none" // Keep non-clickable if not error
+                            !isClickable && "cursor-default" // Simplified: Always allow click to potentially open dialog
                         )}
                         onClick={handleStatusClick} // Use updated handler
-                        // Disable only if syncing or explicitly not clickable (e.g., synced/local)
-                        disabled={syncStatus === 'syncing' || (!isClickable && syncStatus !== 'error')}
+                        // Disable only if syncing
+                        disabled={syncStatus === 'syncing'}
                      >
                          <PersistenceIcon className={cn("h-[1.1rem] w-[1.1rem] flex-shrink-0", iconColor)} />
                          <span className={cn(
@@ -231,7 +234,7 @@ export function AppSidebar({
              </Tooltip>
            </TooltipProvider>
 
-           {/* Data Sync Mismatch Dialog */}
+           {/* Data Sync Mismatch Dialog - Passed correct functions */}
            <DataSyncMismatchDialog
                isOpen={isMismatchDialogOpen}
                onClose={() => setIsMismatchDialogOpen(false)}

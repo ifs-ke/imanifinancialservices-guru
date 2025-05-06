@@ -95,8 +95,8 @@ export default function DashboardLayout({
             syncStatus={syncStatus}
             retrySync={retrySync}
             hashMismatch={hashMismatch}
-            forceSaveLocal={forceSaveLocal}
-            forceFetchServer={forceFetchServer}
+            forceSaveLocal={forceSaveLocal} // Pass the function
+            forceFetchServer={forceFetchServer} // Pass the function
         />
         <SidebarRail />
       </Sidebar>
