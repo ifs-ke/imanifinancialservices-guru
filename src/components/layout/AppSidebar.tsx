@@ -1,7 +1,7 @@
 // src/components/layout/AppSidebar.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -34,12 +34,12 @@ import {
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { UserButton, useAuth } from '@clerk/nextjs';
+import { UserButton } from '@clerk/nextjs';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { SyncStatus } from '@/hooks/useSyncManager';
 import { useNotificationStore } from '@/store/notificationStore';
-import DataSyncMismatchDialog from './DataSyncMismatchDialog'; // <-- Import the new dialog
+// Removed DataSyncMismatchDialog import, as it's now managed in the layout
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -56,22 +56,20 @@ const loggerItem = { href: '/logger', label: 'Logger', icon: ListTree };
 interface AppSidebarProps {
     syncStatus: SyncStatus;
     retrySync?: () => void;
-    hashMismatch: boolean;
-    forceSaveLocal: () => Promise<boolean>; // Function prop
-    forceFetchServer: () => Promise<boolean>; // Function prop
+    hashMismatch: boolean; // Receive mismatch status
+    openMismatchDialog: () => void; // Function to open the dialog in the parent
 }
 
 export function AppSidebar({
     syncStatus,
     retrySync,
     hashMismatch,
-    forceSaveLocal, // Receive function
-    forceFetchServer, // Receive function
+    openMismatchDialog, // Receive function to open dialog
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { isMobile, state } = useSidebar();
   const unreadCount = useNotificationStore(state => state.unreadCount());
-  const [isMismatchDialogOpen, setIsMismatchDialogOpen] = useState(false); // State for dialog visibility
+  // Removed isMismatchDialogOpen state, managed by parent layout now
 
     let PersistenceIcon = CloudOff;
     let persistenceStatusText = 'Local Data';
@@ -86,21 +84,15 @@ export function AppSidebar({
         case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local Data'; persistenceTooltipText = "Data saved locally. Sign in to sync."; iconColor = 'text-muted-foreground'; break;
      }
 
-     // Effect to open the dialog when a hash mismatch occurs
-     useEffect(() => {
-         if (hashMismatch && !isMismatchDialogOpen) { // Open only if not already open
-             console.log("AppSidebar: Hash mismatch detected, opening dialog.");
-             setIsMismatchDialogOpen(true);
-         }
-     }, [hashMismatch, isMismatchDialogOpen]);
+     // Removed effect related to dialog visibility, parent handles it
 
      const handleStatusClick = () => {
          console.log("AppSidebar: Status icon clicked. Mismatch:", hashMismatch, "Clickable:", isClickable);
          if (hashMismatch) {
-             setIsMismatchDialogOpen(true); // Open dialog if mismatch
-         } else if (isClickable && retrySync) {
+             openMismatchDialog(); // Call the function passed from the parent to open the dialog
+         } else if (isClickable && retrySync && syncStatus === 'error') { // Only retry if in error state and no mismatch
              console.log("AppSidebar: Retrying sync...");
-             retrySync(); // Call retry only if error and no mismatch
+             retrySync();
          }
      }
 
@@ -122,6 +114,7 @@ export function AppSidebar({
          </div>
           <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")}>
              {/* Icon changes based on state, ensured via useSidebar hook */}
+             {/* No need to pass children here, default icon logic in SidebarTrigger */}
           </SidebarTrigger>
       </SidebarHeader>
 
@@ -211,7 +204,7 @@ export function AppSidebar({
                         className={cn(
                             "flex items-center w-full justify-start px-2 py-1 h-9",
                             state === 'collapsed' && 'justify-center',
-                            !isClickable && "cursor-default" // Simplified: Always allow click to potentially open dialog
+                            !isClickable && !hashMismatch && "cursor-default" // Only make clickable if error or mismatch
                         )}
                         onClick={handleStatusClick} // Use updated handler
                         // Disable only if syncing
@@ -234,13 +227,7 @@ export function AppSidebar({
              </Tooltip>
            </TooltipProvider>
 
-           {/* Data Sync Mismatch Dialog - Passed correct functions */}
-           <DataSyncMismatchDialog
-               isOpen={isMismatchDialogOpen}
-               onClose={() => setIsMismatchDialogOpen(false)}
-               onForceSave={forceSaveLocal}
-               onForceFetch={forceFetchServer}
-           />
+           {/* Removed Data Sync Mismatch Dialog - Managed in layout */}
 
       </SidebarFooter>
     </>

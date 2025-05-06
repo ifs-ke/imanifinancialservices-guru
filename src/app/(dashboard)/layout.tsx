@@ -14,6 +14,7 @@ import { useSyncManager } from '@/hooks/useSyncManager'; // Import the refactore
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
 import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Import the new component
 import { useBudgetNotifications } from '@/services/notificationService'; // Import the budget notification hook
+import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Ensure dialog is imported
 
 export default function DashboardLayout({
   children,
@@ -21,6 +22,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [isClient, setIsClient] = useState(false);
+  const [isMismatchDialogOpen, setIsMismatchDialogOpen] = useState(false); // Manage dialog state here
 
   useEffect(() => {
     setIsClient(true);
@@ -32,15 +34,24 @@ export default function DashboardLayout({
   const {
       syncStatus,
       retrySync,
-      hashMismatch, // <-- Get hashMismatch state
-      forceSaveLocal, // <-- Get forceSaveLocal action
-      forceFetchServer, // <-- Get forceFetchServer action
+      hashMismatch,
+      forceSaveLocal,
+      forceFetchServer,
       gettingStartedDismissed,
       setGettingStartedDismissed
   } = useSyncManager();
 
   // Initialize budget notifications (this hook runs the checks)
   useBudgetNotifications();
+
+   // Effect to control dialog visibility based on hashMismatch from the hook
+   useEffect(() => {
+       if (hashMismatch) {
+           setIsMismatchDialogOpen(true);
+       } else {
+           setIsMismatchDialogOpen(false); // Close if mismatch resolves
+       }
+   }, [hashMismatch]);
 
 
   // Handle loading state from Clerk
@@ -91,12 +102,12 @@ export default function DashboardLayout({
     <>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
         {/* Pass syncStatus, retrySync, and mismatch state/actions to AppSidebar */}
+        {/* Ensure the functions are correctly passed */}
         <AppSidebar
             syncStatus={syncStatus}
             retrySync={retrySync}
-            hashMismatch={hashMismatch}
-            forceSaveLocal={forceSaveLocal} // Pass the function
-            forceFetchServer={forceFetchServer} // Pass the function
+            hashMismatch={hashMismatch} // Pass boolean state
+            openMismatchDialog={() => setIsMismatchDialogOpen(true)} // Pass function to open dialog
         />
         <SidebarRail />
       </Sidebar>
@@ -104,6 +115,14 @@ export default function DashboardLayout({
         {children}
         <FloatingChatButton />
       </SidebarInset>
+
+       {/* Data Sync Mismatch Dialog - Rendered here, controlled by local state */}
+       <DataSyncMismatchDialog
+           isOpen={isMismatchDialogOpen}
+           onClose={() => setIsMismatchDialogOpen(false)} // Allow closing
+           onForceSave={forceSaveLocal} // Pass the function from hook
+           onForceFetch={forceFetchServer} // Pass the function from hook
+       />
     </>
   );
 }
