@@ -116,7 +116,7 @@ export function useSyncManager() {
         endDate: getStatementState().endDate,
         gettingStartedDismissed: gettingStartedDismissed, // Access latest local state
       };
-      const preparedData = prepareDataForHashing(currentState as SyncData); // Cast to SyncData for preparation
+      const preparedData = prepareDataForHashing(currentState as SyncedData); // Cast to SyncData for preparation
       const dataString = stringify(preparedData);
       const dataHash = await hashData(dataString);
       console.log(`Save Client: Calculated client hash: ${dataHash}`);

@@ -36,15 +36,15 @@ body {
     --chart-4: 260 70% 60%; /* Purple */
     --chart-5: 0 70% 65%;   /* Coral */
 
-    /* Sidebar specific theme (Light) */
-    --sidebar-background: 240 4.8% 97.9%; /* Slightly different Light Gray */
-    --sidebar-foreground: 240 10% 3.9%;
-    --sidebar-primary: 198 77% 53%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 5.9% 90%; /* Slightly darker hover */
-    --sidebar-accent-foreground: 240 10% 3.9%;
-    --sidebar-border: 240 5.9% 88%; /* Slightly darker border */
-    --sidebar-ring: 198 77% 53%;
+    /* Sidebar specific theme (Light) - Refined */
+    --sidebar-background: 240 4.8% 97.9%; /* Light Gray Background */
+    --sidebar-foreground: 240 10% 15%; /* Darker Gray Foreground for better contrast */
+    --sidebar-primary: 198 77% 48%; /* Slightly darker primary for active state */
+    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
+    --sidebar-accent: 240 5.9% 92%; /* Lighter Gray for Hover/Accent */
+    --sidebar-accent-foreground: 240 10% 3.9%; /* Dark Gray text on hover */
+    --sidebar-border: 240 5.9% 88%; /* Subtle border */
+    --sidebar-ring: 198 77% 53%; /* Primary color for focus rings */
   }
 
   .dark {
@@ -76,15 +76,15 @@ body {
     --chart-4: 260 65% 65%; /* Purple (Brighter) */
     --chart-5: 0 65% 70%;   /* Coral (Brighter) */
 
-     /* Sidebar specific theme (Dark) */
-    --sidebar-background: 240 6% 10%; /* Slightly darker than main background */
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 198 77% 53%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 20%; /* Slightly lighter dark hover */
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 240 3.7% 13%; /* Slightly darker border */
-    --sidebar-ring: 198 77% 53%;
+     /* Sidebar specific theme (Dark) - Refined */
+    --sidebar-background: 240 6% 8%; /* Dark Background */
+    --sidebar-foreground: 0 0% 95%; /* Light Gray Foreground */
+    --sidebar-primary: 198 77% 53%; /* Primary color for active state */
+    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
+    --sidebar-accent: 240 3.7% 18%; /* Slightly Lighter Dark for Hover/Accent */
+    --sidebar-accent-foreground: 0 0% 98%; /* Near White text on hover */
+    --sidebar-border: 240 3.7% 13%; /* Darker Subtle Border */
+    --sidebar-ring: 198 77% 53%; /* Primary color for focus rings */
   }
 }
 
