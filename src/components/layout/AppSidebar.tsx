@@ -12,6 +12,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuBadge,
+  SidebarTrigger, // Added import
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import {
