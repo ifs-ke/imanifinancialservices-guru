@@ -11,8 +11,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuBadge, // Import SidebarMenuBadge
-  SidebarTrigger,
+  SidebarMenuBadge,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,7 +28,7 @@ import {
   CalendarCheck,
   RefreshCw,
   AlertTriangle,
-  ListTree, // Import ListTree for Logger
+  ListTree,
   Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -39,7 +38,8 @@ import { UserButton, useAuth } from '@clerk/nextjs';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { SyncStatus } from '@/hooks/useSyncManager';
-import { useNotificationStore } from '@/store/notificationStore'; // Import notification store
+import { useNotificationStore } from '@/store/notificationStore';
+import DataSyncMismatchDialog from './DataSyncMismatchDialog'; // <-- Import the new dialog
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -51,19 +51,27 @@ const menuItems = [
   { href: '/weekly-review', label: 'Weekly Review', icon: CalendarCheck },
 ];
 
-// Define Logger Item Separately
 const loggerItem = { href: '/logger', label: 'Logger', icon: ListTree };
 
 interface AppSidebarProps {
     syncStatus: SyncStatus;
     retrySync?: () => void;
+    hashMismatch: boolean; // <-- Add hashMismatch prop
+    forceSaveLocal: () => Promise<boolean>; // <-- Add forceSaveLocal prop
+    forceFetchServer: () => Promise<boolean>; // <-- Add forceFetchServer prop
 }
 
-export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
+export function AppSidebar({
+    syncStatus,
+    retrySync,
+    hashMismatch, // <-- Receive hashMismatch
+    forceSaveLocal, // <-- Receive forceSaveLocal
+    forceFetchServer, // <-- Receive forceFetchServer
+}: AppSidebarProps) {
   const pathname = usePathname();
   const { isMobile, state } = useSidebar();
-  // Subscribe to the unread count selector
   const unreadCount = useNotificationStore(state => state.unreadCount());
+  const [isMismatchDialogOpen, setIsMismatchDialogOpen] = useState(false); // State for dialog visibility
 
     let PersistenceIcon = CloudOff;
     let persistenceStatusText = 'Local Data';
@@ -74,8 +82,23 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
     switch (syncStatus) {
         case 'syncing': PersistenceIcon = RefreshCw; persistenceStatusText = 'Syncing...'; persistenceTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary animate-spin'; break;
         case 'synced': PersistenceIcon = Cloud; persistenceStatusText = 'Synced'; persistenceTooltipText = 'Data synced with cloud.'; iconColor = 'text-accent'; break;
-        case 'error': PersistenceIcon = AlertTriangle; persistenceStatusText = 'Sync Error'; persistenceTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; isClickable = true; break;
+        case 'error': PersistenceIcon = AlertTriangle; persistenceStatusText = hashMismatch ? 'Conflict' : 'Sync Error'; persistenceTooltipText = hashMismatch ? 'Data mismatch detected. Click to resolve.' : 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; isClickable = true; break; // Update text for error
         case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local Data'; persistenceTooltipText = "Data saved locally. Sign in to sync."; iconColor = 'text-muted-foreground'; break;
+     }
+
+     // Effect to open the dialog when a hash mismatch occurs
+     useEffect(() => {
+         if (hashMismatch) {
+             setIsMismatchDialogOpen(true);
+         }
+     }, [hashMismatch]);
+
+     const handleStatusClick = () => {
+         if (hashMismatch) {
+             setIsMismatchDialogOpen(true); // Open dialog if mismatch
+         } else if (isClickable && retrySync) {
+             retrySync(); // Call retry only if error and no mismatch
+         }
      }
 
 
@@ -94,9 +117,8 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
               </span>
             </Link>
          </div>
-         {/* SidebarTrigger remains the same */}
           <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")}>
-             {isMobile ? <Menu className="h-5 w-5" /> : state === 'expanded' ? <PanelLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+             {/* Icon changes based on state, ensured via useSidebar hook */}
           </SidebarTrigger>
       </SidebarHeader>
 
@@ -124,8 +146,6 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
       </SidebarContent>
 
        <SidebarFooter className="p-2 mt-auto border-t border-sidebar-border space-y-2">
-
-            {/* Logger Link - Always visible for authenticated users */}
             <SidebarMenuItem>
                 <SidebarMenuButton
                     asChild
@@ -144,12 +164,9 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                     </Link>
                 </SidebarMenuButton>
             </SidebarMenuItem>
-
-
-          {/* Notifications Button */}
            <SidebarMenuItem>
              <SidebarMenuButton asChild tooltip="Notifications" variant={pathname === '/notifications' ? "active" : "ghost"}>
-                <Link href="/notifications" className="flex items-center gap-2 w-full justify-start p-2 h-9 relative"> {/* Ensure relative positioning */}
+                <Link href="/notifications" className="flex items-center gap-2 w-full justify-start p-2 h-9 relative">
                     <Bell className="h-4 w-4 flex-shrink-0" />
                     <span className={cn(
                         "group-data-[state=expanded]/sidebar-wrapper:inline",
@@ -161,7 +178,7 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                          <SidebarMenuBadge
                            className={cn(
                              "absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center bg-destructive text-destructive-foreground text-[10px] rounded-full",
-                             state === 'collapsed' && "right-1 top-1 h-3 w-3 p-0 text-[8px]" // Smaller badge when collapsed
+                             state === 'collapsed' && "right-1 top-1 h-3 w-3 p-0 text-[8px]"
                            )}
                          >
                            {unreadCount > 9 ? '9+' : unreadCount}
@@ -170,11 +187,7 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                  </Link>
              </SidebarMenuButton>
            </SidebarMenuItem>
-
-           {/* Separator before User Button */}
            <Separator className="my-1"/>
-
-          {/* User Button and Account Text */}
           <div className={cn("flex items-center w-full", state === 'collapsed' ? 'justify-center' : 'justify-start pl-1')}>
              <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { userButtonAvatarBox: "w-7 h-7" }}} />
              <span className={cn(
@@ -186,9 +199,7 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
              </span>
          </div>
           <Separator className="my-1"/>
-          {/* Theme Toggle */}
           <ThemeToggle />
-           {/* Sync Status with Tooltip */}
            <TooltipProvider delayDuration={100}>
              <Tooltip>
                  <TooltipTrigger asChild>
@@ -197,10 +208,11 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                         className={cn(
                             "flex items-center w-full justify-start px-2 py-1 h-9",
                             state === 'collapsed' && 'justify-center',
-                            !isClickable && "cursor-default pointer-events-none"
+                            !isClickable && "cursor-default pointer-events-none" // Keep non-clickable if not error
                         )}
-                        onClick={isClickable ? retrySync : undefined}
-                        disabled={!isClickable && syncStatus !== 'error'}
+                        onClick={handleStatusClick} // Use updated handler
+                        // Disable only if syncing or explicitly not clickable (e.g., synced/local)
+                        disabled={syncStatus === 'syncing' || (!isClickable && syncStatus !== 'error')}
                      >
                          <PersistenceIcon className={cn("h-[1.1rem] w-[1.1rem] flex-shrink-0", iconColor)} />
                          <span className={cn(
@@ -218,6 +230,15 @@ export function AppSidebar({ syncStatus, retrySync }: AppSidebarProps) {
                  </TooltipContent>
              </Tooltip>
            </TooltipProvider>
+
+           {/* Data Sync Mismatch Dialog */}
+           <DataSyncMismatchDialog
+               isOpen={isMismatchDialogOpen}
+               onClose={() => setIsMismatchDialogOpen(false)}
+               onForceSave={forceSaveLocal}
+               onForceFetch={forceFetchServer}
+           />
+
       </SidebarFooter>
     </>
   );

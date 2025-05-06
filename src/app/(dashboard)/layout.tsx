@@ -29,7 +29,16 @@ export default function DashboardLayout({
   // Client-side auth check
   const { userId, isLoaded } = useAuth();
   // Initialize sync manager - This hook now manages its own state and effects
-  const { syncStatus, retrySync } = useSyncManager();
+  const {
+      syncStatus,
+      retrySync,
+      hashMismatch, // <-- Get hashMismatch state
+      forceSaveLocal, // <-- Get forceSaveLocal action
+      forceFetchServer, // <-- Get forceFetchServer action
+      gettingStartedDismissed,
+      setGettingStartedDismissed
+  } = useSyncManager();
+
   // Initialize budget notifications (this hook runs the checks)
   useBudgetNotifications();
 
@@ -81,13 +90,18 @@ export default function DashboardLayout({
   return (
     <>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
-        {/* Pass syncStatus and retrySync to AppSidebar */}
-        <AppSidebar syncStatus={syncStatus} retrySync={retrySync} />
+        {/* Pass syncStatus, retrySync, and mismatch state/actions to AppSidebar */}
+        <AppSidebar
+            syncStatus={syncStatus}
+            retrySync={retrySync}
+            hashMismatch={hashMismatch}
+            forceSaveLocal={forceSaveLocal}
+            forceFetchServer={forceFetchServer}
+        />
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
         {children}
-        {/* Add the Floating Chat Button here */}
         <FloatingChatButton />
       </SidebarInset>
     </>
