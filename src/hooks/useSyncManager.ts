@@ -45,7 +45,7 @@ export function useSyncManager() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [gettingStartedDismissed, setGettingStartedDismissedState] = useState(false);
-  const [hashMismatch, setHashMismatch] = useState(false); // <-- New state for hash mismatch
+  const [hashMismatch, setHashMismatch] = useState(false); // State for hash mismatch
 
   const isFetchingRef = useRef(false);
   const isSavingRef = useRef(false);
@@ -56,7 +56,6 @@ export function useSyncManager() {
   const hasLocalChangesRef = useRef(false);
 
   // --- Get Store Setters and Clear Actions ---
-  // Using static getState() methods within callbacks to ensure access to latest state
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
   const getStatementState = useStatementStore.getState;
@@ -92,71 +91,6 @@ export function useSyncManager() {
       getWeeklyReviewState, getNotificationState, setGettingStartedDismissedState
   ]);
 
-  // --- Save Data Function (used internally and for force save) ---
-  const saveData = useCallback(async (isForceSave = false) => {
-    if (!isSignedIn || !userId) { console.log("Save Aborted: User not signed in."); setSyncStatus('local'); return false; }
-    if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) { console.log("Save Debounced/Aborted: Operation in progress."); return false; }
-
-    console.log(`Save Triggered for user ${userId}${isForceSave ? ' (Force)' : ''}...`);
-    isSavingRef.current = true;
-    setSyncStatus('syncing');
-    setHashMismatch(false); // Assume mismatch is resolved when attempting save
-
-    try {
-      // Access latest state using getState() within the callback
-      const currentState = {
-        transactions: getTransactionsState().transactions,
-        debts: getDebtState().debts,
-        assetItems: getStatementState().assetItems,
-        otherLiabilityItems: getStatementState().otherLiabilityItems,
-        budgetItems: getBudgetState().budgetItems,
-        ownedReviews: getWeeklyReviewState().ownedReviews,
-        notifications: getNotificationState().notifications,
-        startDate: getStatementState().startDate, // Access latest dates
-        endDate: getStatementState().endDate,
-        gettingStartedDismissed: gettingStartedDismissed, // Access latest local state
-      };
-      const preparedData = prepareDataForHashing(currentState as SyncedData); // Cast to SyncData for preparation
-      const dataString = stringify(preparedData);
-      const dataHash = await hashData(dataString);
-      console.log(`Save Client: Calculated client hash: ${dataHash}`);
-
-      const response = await fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...preparedData, dataHash }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
-        console.error(`Save API Error ${response.status}: ${response.statusText}`, errorData);
-        throw new Error(`Save failed: ${response.statusText} (${errorData.error || 'No server details'})`);
-      }
-
-      const result = await response.json();
-      setLastSyncTime(new Date());
-      setSyncStatus('synced');
-      hasLocalChangesRef.current = false;
-      console.log(`Save Successful for user ${userId}. Server: ${result.message}`);
-      return true; // Indicate success
-
-    } catch (error: any) {
-      console.error('Save Error:', error);
-      setSyncStatus('error');
-      toast({
-        title: 'Sync Save Failed',
-        description: `Could not save data: ${error.message}. Your changes remain locally. ${isForceSave ? '' : 'Click the cloud icon to retry saving.'}`,
-        variant: 'destructive',
-      });
-      return false; // Indicate failure
-    } finally {
-      isSavingRef.current = false;
-    }
-  }, [
-      isSignedIn, userId, toast, gettingStartedDismissed,
-      getTransactionsState, getDebtState, getStatementState, getBudgetState,
-      getWeeklyReviewState, getNotificationState
-  ]); // Include local state and getState refs
 
   // --- Fetch Data Function (used internally and for force fetch) ---
   const fetchData = useCallback(async (isRetry = false, skipHashCheck = false) => {
@@ -190,11 +124,11 @@ export function useSyncManager() {
           const isValid = await verifyHash(dataString, dataHash);
           if (!isValid) {
              console.error("Fetch Error: Data integrity check failed!");
-             setHashMismatch(true); // <-- Set hash mismatch state
+             setHashMismatch(true); // Set hash mismatch state
              setSyncStatus('error');
              toast({
                title: 'Data Sync Mismatch',
-               description: "Local data and server data don't match. Resolve the conflict.",
+               description: "Local data and server data don't match. Resolve the conflict using the cloud icon.", // Point user to resolution UI
                variant: 'destructive',
              });
              isFetchingRef.current = false; // Ensure fetching stops
@@ -208,7 +142,6 @@ export function useSyncManager() {
 
 
       console.log("Fetch: Overwriting local stores with fetched data...");
-      // Use the setters from getState()
       getTransactionsState().setTransactions(fetchedData.transactions ?? []);
       getDebtState().setDebts(fetchedData.debts ?? []);
       getStatementState().setAssetItems(fetchedData.assetItems ?? []);
@@ -234,7 +167,7 @@ export function useSyncManager() {
        setSyncStatus('error');
         toast({
           title: 'Sync Load Failed',
-          description: `Could not load data: ${error.message}. Using local data if available. Click the cloud icon to retry.`,
+          description: `Could not load data: ${error.message}. Using local data if available. Click the cloud icon to retry loading.`, // Updated message for retry
           variant: 'destructive',
         });
       initialFetchDoneRef.current = true; // Mark initial fetch done even on error
@@ -248,6 +181,86 @@ export function useSyncManager() {
     getWeeklyReviewState, getNotificationState, setGettingStartedDismissedState
   ]);
 
+  // --- Save Data Function (used internally and for force save) ---
+  const saveData = useCallback(async (isForceSave = false) => {
+    if (!isSignedIn || !userId) { console.log("Save Aborted: User not signed in."); setSyncStatus('local'); return false; }
+    if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) { console.log("Save Debounced/Aborted: Operation in progress."); return false; }
+
+    console.log(`Save Triggered for user ${userId}${isForceSave ? ' (Force)' : ''}...`);
+    setSyncStatus('syncing');
+    isSavingRef.current = true; // Set saving flag early
+    // If not forcing save, fetch first to potentially resolve conflicts
+    if (!isForceSave) {
+      console.log("Save: Fetching latest data before saving...");
+      const fetchSuccess = await fetchData(false, false); // Fetch, check hash
+       if (!fetchSuccess) {
+          console.error("Save Aborted: Fetch failed before save. Hash mismatch or other fetch error.");
+          // Note: fetchData already sets syncStatus to 'error' and shows a toast on failure/mismatch
+          isSavingRef.current = false; // Reset saving flag
+          return false; // Abort save
+      }
+      console.log("Save: Pre-save fetch successful.");
+    }
+
+    // Proceed with saving
+    setHashMismatch(false); // Assume mismatch is resolved by fetch or is being forced
+
+    try {
+      const currentState = {
+        transactions: getTransactionsState().transactions,
+        debts: getDebtState().debts,
+        assetItems: getStatementState().assetItems,
+        otherLiabilityItems: getStatementState().otherLiabilityItems,
+        budgetItems: getBudgetState().budgetItems,
+        ownedReviews: getWeeklyReviewState().ownedReviews,
+        notifications: getNotificationState().notifications,
+        startDate: getStatementState().startDate,
+        endDate: getStatementState().endDate,
+        gettingStartedDismissed: gettingStartedDismissed,
+      };
+      const preparedData = prepareDataForHashing(currentState as SyncedData);
+      const dataString = stringify(preparedData);
+      const dataHash = await hashData(dataString);
+      console.log(`Save Client: Calculated client hash: ${dataHash}`);
+
+      const response = await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...preparedData, dataHash }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+        console.error(`Save API Error ${response.status}: ${response.statusText}`, errorData);
+        throw new Error(`Save failed: ${response.statusText} (${errorData.error || 'No server details'})`);
+      }
+
+      const result = await response.json();
+      setLastSyncTime(new Date());
+      setSyncStatus('synced');
+      hasLocalChangesRef.current = false;
+      console.log(`Save Successful for user ${userId}. Server: ${result.message}`);
+      toast({ title: 'Data Saved', description: 'Your changes have been saved to the cloud.' }); // Success toast
+      return true; // Indicate success
+
+    } catch (error: any) {
+      console.error('Save Error:', error);
+      setSyncStatus('error');
+      toast({
+        title: 'Sync Save Failed',
+        description: `Could not save data: ${error.message}. Your changes remain locally. Click the cloud icon to retry saving.`, // Updated message, user needs to manually retry
+        variant: 'destructive',
+      });
+      return false; // Indicate failure
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, [
+      isSignedIn, userId, toast, gettingStartedDismissed,
+      getTransactionsState, getDebtState, getStatementState, getBudgetState,
+      getWeeklyReviewState, getNotificationState, fetchData // Add fetchData dependency
+  ]);
+
   // --- Debounced Save Wrapper ---
   const triggerDebouncedSave = useCallback(() => {
       if (!isSignedIn || !userId || isFetchingRef.current || isSavingRef.current || isClearingRef.current) { console.log("Debounced Save Skipped: User/Operation state prevents save."); return; }
@@ -255,7 +268,7 @@ export function useSyncManager() {
 
       if (initialFetchDoneRef.current) {
          hasLocalChangesRef.current = true;
-          if (syncStatus === 'synced') { // Only change to 'local' if previously 'synced'
+          if (syncStatus === 'synced') {
              setSyncStatus('local');
              console.log("Debounced Save: Status changed to 'local' due to changes.");
           }
@@ -264,7 +277,8 @@ export function useSyncManager() {
       if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); }
       console.log(`Debounced Save: Scheduling save in ${SAVE_DEBOUNCE_DELAY}ms...`);
       saveTimeoutRef.current = setTimeout(() => {
-          saveData().catch(err => { console.error("Error during debounced save execution:", err); }); // Use saveData
+          // The actual save logic now handles the pre-fetch
+          saveData().catch(err => { console.error("Error during debounced save execution:", err); });
       }, SAVE_DEBOUNCE_DELAY);
 
   }, [isSignedIn, userId, saveData, syncStatus, hashMismatch]); // Add hashMismatch dependency
@@ -282,7 +296,7 @@ export function useSyncManager() {
       initialFetchDoneRef.current = false;
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       console.log("Auth Effect: Triggering initial fetch...");
-      fetchData(); // Use fetchData
+      fetchData();
     } else if (!currentUserId && previousUserIdRef.current) {
       console.log(`Auth Effect: User signed out (was ${previousUserIdRef.current}). Clearing local state.`);
       clearLocalState();
@@ -296,7 +310,7 @@ export function useSyncManager() {
       previousUserIdRef.current = null;
     } else if (currentUserId && currentUserId === previousUserIdRef.current && !initialFetchDoneRef.current) {
       console.log("Auth Effect: Already logged in, triggering initial fetch...");
-      fetchData(); // Use fetchData
+      fetchData();
     }
   }, [userId, isSignedIn, isClerkLoaded, fetchData, clearLocalState]);
 
@@ -320,7 +334,6 @@ export function useSyncManager() {
     ];
 
     const handleChange = () => {
-        // Access current state within the handler using refs or direct state access
         if (initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && !isClearingRef.current && !hashMismatch) {
             console.log("Save Subscription: Store change detected, triggering debounced save.");
             triggerDebouncedSave();
@@ -340,7 +353,6 @@ export function useSyncManager() {
 
   // Effect 3: Save gettingStartedDismissed state change
   useEffect(() => {
-    // Only trigger save if the app has finished its initial load/sync
     if (initialFetchDoneRef.current && isSignedIn && userId && !hashMismatch) { // Check mismatch
       console.log("Getting Started State Change: Triggering debounced save...");
       triggerDebouncedSave();
@@ -352,7 +364,7 @@ export function useSyncManager() {
        if (!hashMismatch) return false;
        console.log("SyncManager: User chose to force save local data.");
        setSyncStatus('syncing'); // Show syncing state during force save
-       const success = await saveData(true); // Force save
+       const success = await saveData(true); // Force save (skips pre-fetch)
        if (success) {
            setHashMismatch(false); // Reset mismatch on successful force save
            toast({ title: 'Conflict Resolved', description: 'Local data was saved to the cloud.' });
@@ -379,28 +391,36 @@ export function useSyncManager() {
    }, [hashMismatch, fetchData, toast]);
 
 
-  // --- Retry Function ---
+  // --- Retry Function (Manual Trigger by User) ---
   const retrySync = useCallback(() => {
     if (!isSignedIn || !userId) { toast({ title: "Cannot Sync", description: "Please sign in first.", variant: "destructive" }); return; }
+
     if (syncStatus === 'error' && !hashMismatch && !isFetchingRef.current && !isSavingRef.current) {
-      console.log("Sync Retry: Attempting fetch from DB...");
-      fetchData(true);
-    } else if (hashMismatch) {
-        toast({ title: "Resolve Conflict", description: "Please resolve the data mismatch first.", variant: "warning" });
+      // If it was a fetch error, retry fetching
+      console.log("Sync Retry (Manual): Attempting fetch from DB...");
+      fetchData(true); // Pass true to indicate it's a retry
+    } else if (syncStatus === 'error' && hashMismatch) {
+      // If it's a hash mismatch error, inform user to use the resolution dialog (already handled by UI)
+       toast({ title: "Resolve Conflict", description: "Click the cloud icon to resolve the data mismatch.", variant: "warning" });
+    } else if (hasLocalChangesRef.current && !isSavingRef.current && !isFetchingRef.current) {
+      // If there are local changes unsaved (due to a previous save failure)
+      console.log("Sync Retry (Manual): Local changes detected, attempting immediate save...");
+      saveData(); // Attempt to save the pending local changes
     } else if (isFetchingRef.current || isSavingRef.current) {
        toast({ title: "Sync Busy", description: "Wait for current operation.", variant: "default" });
     } else if (syncStatus === 'syncing') {
         toast({ title: "Already Syncing", description: "Sync in progress.", variant: "default" });
-    } else if (hasLocalChangesRef.current) {
-        console.log("Sync Retry: Local changes detected, attempting immediate save...");
-        saveData();
-    } else if (syncStatus !== 'error') {
-       toast({ title: "No Sync Error", description: "Data appears up-to-date.", variant: "default" });
-       // Optionally trigger a fresh fetch even if not in error:
-       // console.log("Sync Retry: Forcing re-fetch...");
+    } else if (syncStatus === 'synced') {
+       toast({ title: "Already Synced", description: "Data is up-to-date.", variant: "default" });
+       // Optionally trigger a fresh fetch for verification:
+       // console.log("Sync Retry: Forcing re-fetch for verification...");
        // fetchData(true);
+    } else {
+         // Default case (e.g., 'idle' or 'local' with no changes pending) - maybe try a fetch
+         console.log("Sync Retry (Manual): Attempting fetch...");
+         fetchData(true);
     }
-  }, [syncStatus, hashMismatch, fetchData, saveData, toast, isSignedIn, userId]);
+  }, [syncStatus, hashMismatch, hasLocalChangesRef, fetchData, saveData, toast, isSignedIn, userId]);
 
 
   return {
@@ -413,5 +433,3 @@ export function useSyncManager() {
       forceFetchServer, // Expose action to resolve by fetching server
   };
 }
-
-    

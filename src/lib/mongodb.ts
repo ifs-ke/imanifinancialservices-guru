@@ -80,6 +80,27 @@ const connectToDatabase = async (): Promise<MongoClient> => {
            client = new MongoClient(uri, options);
            clientPromise = client.connect();
            console.log("MongoDB: Establishing new connection (production)...");
+
+           // Optimization Opportunity: Apply schema validation on connect (or separately)
+           // clientPromise.then(async (connectedClient) => {
+           //   try {
+           //     const db = connectedClient.db();
+           //     await db.command({
+           //       collMod: 'transactions',
+           //       validator: { $jsonSchema: { /* Define your transaction schema rules here */ } }
+           //     });
+           //      await db.command({
+           //       collMod: 'debts',
+           //       validator: { $jsonSchema: { /* Define your debt schema rules here */ } }
+           //     });
+           //     // Add validation for other collections...
+           //     console.log("MongoDB: Schema validation applied/checked.");
+           //   } catch (validationError) {
+           //     console.error("MongoDB: Failed to apply schema validation:", validationError);
+           //     // Decide if this should be a fatal error or just a warning
+           //   }
+           // });
+
        } catch (error) {
            console.error("MongoDB: Failed to create client (production):", error);
            clientPromise = null; // Clear the promise
@@ -107,5 +128,3 @@ const connectToDatabase = async (): Promise<MongoClient> => {
 };
 
 export default connectToDatabase;
-
-    
