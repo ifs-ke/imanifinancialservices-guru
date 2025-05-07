@@ -2,13 +2,12 @@
 'use client';
 
 import React from 'react';
-// Clerk imports commented out as it's disabled
-// import { useAuth } from '@clerk/nextjs';
-// import { redirect } from 'next/navigation';
-// import { hasRole } from '@/lib/roles';
+import { useAuth } from '@clerk/nextjs'; // Re-enabled Clerk
+import { redirect } from 'next/navigation';
+import { hasRole } from '@/lib/roles'; // Import role check utility
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ListTree, Info, Terminal, Trash2, ExternalLink } from 'lucide-react';
+import { ListTree, Info, Terminal, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClientLogStore, type CapturedLog } from '@/store/clientLogStore';
 import { Button } from '@/components/ui/button';
@@ -16,12 +15,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 // Import client-side logger for logging actions on this page
-import { logInfo, logWarn } from '@/lib/client-logger';
+import { logInfo, logWarn } from '@/lib/logger';
 
-// Placeholder for Clerk data when disabled
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
-const CLERK_DISABLED_IS_LOADED = true;
-const CLERK_DISABLED_HAS_ROLE = false; // Assume not admin when Clerk is disabled
+// No longer need placeholder IDs as Clerk is enabled
+// const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// const CLERK_DISABLED_IS_LOADED = true;
+// const CLERK_DISABLED_HAS_ROLE = false;
 
 const getLogLevelColor = (level: CapturedLog['level']): string => {
   switch (level) {
@@ -59,10 +58,9 @@ const formatLogMessage = (messages: any[]): string => {
 
 
 export default function LoggerPage() {
-  // Mock Clerk state
-  const isLoaded = CLERK_DISABLED_IS_LOADED;
-  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID;
-  const isAdmin = CLERK_DISABLED_HAS_ROLE;
+  // Use actual Clerk state
+  const { isLoaded, userId, sessionId, orgId } = useAuth();
+  const isAdmin = hasRole('admin'); // Check if user has admin role
 
   const { logs: clientLogs, clearLogs: clearClientLogsStore } = useClientLogStore();
 
@@ -71,7 +69,7 @@ export default function LoggerPage() {
       clearClientLogsStore();
   };
 
-  // Basic loading state check (might be redundant if Clerk is fully disabled)
+  // Loading state check
   if (!isLoaded) {
     return (
       <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-4">
@@ -82,32 +80,32 @@ export default function LoggerPage() {
     );
   }
 
-  // Redirect logic (commented out as Clerk is disabled)
-  // if (!userId) {
-  //   redirect('/sign-in');
-  // }
+  // Redirect if not signed in
+  if (!userId) {
+     redirect('/sign-in');
+  }
 
-  // Admin role check (commented out as Clerk is disabled)
-  // if (!isAdmin) {
-  //    logWarn('Unauthorized access attempt to Logger page.', { attemptedUserId: userId });
-  //    return (
-  //        <div className="p-4 md:p-6 lg:p-8">
-  //           <Alert variant="destructive">
-  //               <AlertTriangle className="h-4 w-4" />
-  //               <AlertTitle>Access Denied</AlertTitle>
-  //               <AlertDescription>
-  //                   This page is restricted to administrators only.
-  //               </AlertDescription>
-  //           </Alert>
-  //        </div>
-  //    );
-  // }
+  // Admin role check - GUARD IMPLEMENTATION
+  if (!isAdmin) {
+     logWarn('Unauthorized access attempt to Logger page.', { attemptedUserId: userId });
+     return (
+         <div className="p-4 md:p-6 lg:p-8">
+            <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Access Denied</AlertTitle>
+                <AlertDescription>
+                    This page is restricted to administrators only.
+                </AlertDescription>
+            </Alert>
+         </div>
+     );
+  }
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
       <header>
         <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <ListTree className="h-6 w-6 text-primary" /> Application Logger
+          <ListTree className="h-6 w-6 text-primary" /> Application Logger (Admin)
         </h1>
         <p className="text-muted-foreground text-sm">
           View client-side console activity captured in your browser session. Server logs are viewed via hosting provider (e.g., Vercel).
@@ -166,13 +164,13 @@ export default function LoggerPage() {
                 Server-side logs are managed by your hosting provider or viewed in the server console during local development.
                 <ul className="list-disc pl-5 mt-2 space-y-1 text-xs">
                   <li>
-                    <strong>Vercel:</strong> Access logs via the Vercel Dashboard under your project's "Logs" tab (Runtime Logs). These include output from `console.log`, `console.warn`, and logs sent via the Winston server logger (`logInfo`, `logError`, etc. in API routes/server actions).
+                    <strong>Vercel:</strong> Access logs via the Vercel Dashboard under your project's "Logs" tab (Runtime Logs). These include output from `console.log`, `console.warn`, and logs sent via the server logger (`logInfo`, `logError`, etc. in API routes/server actions).
                     <Button variant="link" size="sm" asChild className="p-0 h-auto ml-1 text-xs">
                         <a href="https://vercel.com/docs/observability/runtime-logs" target="_blank" rel="noopener noreferrer">Vercel Runtime Logs <ExternalLink size={12} className="inline ml-0.5"/></a>
                     </Button>
                   </li>
                   <li>
-                    <strong>Local Development (`pnpm dev`):</strong> Server logs (Winston output) will appear directly in the terminal where you started the development server.
+                    <strong>Local Development (`pnpm dev`):</strong> Server logs will appear directly in the terminal where you started the development server.
                   </li>
                   <li>
                     <strong>Other Providers:</strong> Refer to your hosting provider's documentation for log access instructions.
