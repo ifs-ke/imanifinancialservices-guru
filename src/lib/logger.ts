@@ -4,7 +4,7 @@ import { Logtail } from '@logtail/browser';
 // import { auth } from '@clerk/nextjs/client'; // Clerk disabled
 
 const LOGTAIL_SOURCE_TOKEN = process.env.NEXT_PUBLIC_LOGTAIL_SOURCE_TOKEN;
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'local-user-wo-clerk'; // Placeholder
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y'; // Placeholder
 
 let log: Logtail | null = null;
 
@@ -20,6 +20,7 @@ if (typeof window !== 'undefined' && LOGTAIL_SOURCE_TOKEN) {
 }
 
 const getContext = () => {
+
   // Mock Clerk data when disabled
   const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID;
   const sessionId = 'mock-session-id';
@@ -54,39 +55,20 @@ export const logWarn = (message: string, context?: Record<string, any>) => {
   }
 };
 
-export const logError = (message: string, error?: Error | any, context?: Record<string, any>) => {
-  const errorContext = error instanceof Error ? { error: { message: error.message, stack: error.stack } } : { error: error };
+export const logError = (message: string, error?: any, context?: Record<string, any>) => {
   if (log) {
-    log.error(message, { ...getContext(), ...errorContext, ...context });
+    log.error(message, error, { ...getContext(), ...context });
   } else {
-    console.error(`[Logtail Disabled] ERROR: ${message}`, error || '', context || '');
+    console.error(`[Logtail Disabled] ERROR: ${message}`, error, context || '');
   }
 };
 
-// Generic log function for console overrides
-export const captureLog = (level: 'log' | 'info' | 'warn' | 'error' | 'debug', messages: any[]) => {
-    const messageString = messages.map(msg => typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)).join(' ');
-    const logContext = getContext();
-
-    if (log) {
-        switch (level) {
-            case 'info':
-            case 'log':
-            case 'debug': // Log debug messages as info to Logtail
-                log.info(messageString, logContext);
-                break;
-            case 'warn':
-                log.warn(messageString, logContext);
-                break;
-            case 'error':
-                log.error(messageString, logContext);
-                break;
-        }
-    } else {
-         // Keep original console behavior when Logtail is disabled
-         const originalMethod = console[level] || console.log;
-         originalMethod(`[Logtail Disabled] CAPTURED ${level.toUpperCase()}:`, ...messages);
-    }
+export const logDebug = (message: string, context?: Record<string, any>) => {
+  if (log) {
+    log.debug(message, { ...getContext(), ...context });
+  } else {
+    console.debug(`[Logtail Disabled] DEBUG: ${message}`, context || '');
+  }
 };
 
 export { log as logtailClient };
