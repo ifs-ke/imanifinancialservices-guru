@@ -6,7 +6,7 @@ import { encode, decode } from '@/lib/storage-utils';
 import type { WeeklyReviewData, UserShareInfo } from '@/lib/types';
 import { getISOWeek, getYear } from 'date-fns';
 import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
-import { auth } from '@clerk/nextjs/client'; // Use client-side auth
+// import { auth } from '@clerk/nextjs/client'; // Clerk disabled - Comment out client-side auth import
 // No longer importing custom logger
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
@@ -76,8 +76,9 @@ export const getWeekKey = (date: Date): string => {
 
 // Helper to get current user ID using client-side auth hook
 const getCurrentUserId = (): string | null => {
-    const { userId } = auth(); // Use Clerk client hook
-    return userId || CLERK_DISABLED_PLACEHOLDER_USER_ID; // Return placeholder if no user (shouldn't happen in protected routes)
+    // const { userId } = auth(); // Clerk disabled - Comment out useAuth
+    // Always return placeholder when Clerk is disabled
+    return CLERK_DISABLED_PLACEHOLDER_USER_ID;
 };
 
 
