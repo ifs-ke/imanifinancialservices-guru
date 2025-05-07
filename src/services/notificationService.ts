@@ -8,11 +8,8 @@ import { useEffect, useMemo } from "react";
 import { formatCurrency } from "@/lib/utils"; // Assuming formatCurrency is moved/available here
 import { startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import type { TransactionWithId, BudgetItem, BudgetItemCategory } from "@/lib/types";
-// Import the NEW client-side logger functions
-import { logInfo, logWarn, logError } from '@/lib/logger'; // Use client logger
-// import { useAuth } from "@clerk/nextjs/client"; // Clerk disabled
-
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// Logger removed
+import { useAuth } from "@clerk/nextjs"; // Re-enabled Clerk
 
 const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
 const OVERBUDGET_THRESHOLD_PERCENT = 1.0;
@@ -21,8 +18,7 @@ export function useBudgetNotifications() {
     const addNotification = useNotificationStore(state => state.addNotification);
     const budgetItems = useBudgetStore(state => state.budgetItems);
     const allTransactions = useTransactionsStore(state => state.transactions);
-    // const { userId } = useAuth(); // Clerk disabled
-    const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+    const { userId } = useAuth(); // Use actual Clerk hook
 
     const monthlyAnalysis = useMemo(() => {
         const now = new Date();
@@ -97,7 +93,7 @@ export function useBudgetNotifications() {
                         link: '/budget',
                     });
                     if (!loggedNotificationKeys.has(notifKey)) {
-                        logError(`Over budget for "${description}"`, undefined, logContext); // Use client-side logger
+                        console.error(`Over budget for "${description}"`, logContext); // Replaced logError
                         loggedNotificationKeys.add(notifKey);
                     }
                 }
@@ -115,7 +111,7 @@ export function useBudgetNotifications() {
                         link: '/budget',
                     });
                     if (!loggedNotificationKeys.has(notifKey)) {
-                        logWarn(`Budget warning for "${description}"`, logContext); // Use client-side logger
+                        console.warn(`Budget warning for "${description}"`, logContext); // Replaced logWarn
                         loggedNotificationKeys.add(notifKey);
                     }
                 }
@@ -135,8 +131,8 @@ export function triggerCollaborationNotification(sharerName: string, weekKey: st
         message: `${sharerName || 'A user'} shared their weekly review (${weekKey}) with you.`,
         link: '/weekly-review?tab=shared', // Link to the shared tab
     });
-    // Log this event using the general logger
-    logInfo(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, { // Use client-side logger
+    // Log this event using console
+    console.log(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, { // Replaced logInfo
         sharerName,
         weekKey,
         recipientUserId,
@@ -153,5 +149,5 @@ export function triggerAppUpdateNotification(title: string, message: string, lin
         message: message,
         link: link,
     });
-    logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }); // Use client-side logger
+    console.log(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }); // Replaced logInfo
 }

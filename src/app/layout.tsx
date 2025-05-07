@@ -6,8 +6,8 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
-// import { ClerkProvider } from '@clerk/nextjs'; // Clerk disabled
-import ClientLogCaptureProvider from '@/components/providers/ClientLogCaptureProvider'; // Ensure log provider is still active
+import { ClerkProvider } from '@clerk/nextjs'; // Re-enabled Clerk
+// import ClientLogCaptureProvider from '@/components/providers/ClientLogCaptureProvider'; // Removed import
 
 // Initialize Inter font for sans-serif
 const inter = Inter({
@@ -32,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // <ClerkProvider> // Clerk disabled
+    <ClerkProvider>
       <html lang="en" suppressHydrationWarning={true}>
         <body
           className={cn(
@@ -41,23 +41,21 @@ export default function RootLayout({
             roboto_mono.variable
           )}
         >
-           {/* ClientLogCaptureProvider wraps ThemeProvider and SidebarProvider */}
-           <ClientLogCaptureProvider>
-                <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-                >
-                {/* SidebarProvider needs to wrap the layout that uses the sidebar */}
-                <SidebarProvider>
-                    {children}
-                    <Toaster />
-                </SidebarProvider>
-                </ThemeProvider>
-            </ClientLogCaptureProvider>
+           {/* ClientLogCaptureProvider removed */}
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {/* SidebarProvider needs to wrap the layout that uses the sidebar */}
+              <SidebarProvider>
+                  {children}
+                  <Toaster />
+              </SidebarProvider>
+            </ThemeProvider>
         </body>
       </html>
-    // </ClerkProvider> // Clerk disabled
+    </ClerkProvider>
   );
 }

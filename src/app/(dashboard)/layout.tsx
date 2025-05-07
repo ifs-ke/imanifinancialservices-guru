@@ -14,11 +14,9 @@ import {
 import { useSyncManager } from '@/hooks/useSyncManager'; // Import the sync manager hook
 import { useBudgetNotifications } from '@/services/notificationService'; // Import the budget notification hook
 import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
-import ClientLogCaptureProvider from '@/components/providers/ClientLogCaptureProvider'; // Import the log provider
+// import ClientLogCaptureProvider from '@/components/providers/ClientLogCaptureProvider'; // Removed Log provider import
 import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Import the chat button
-
-// Placeholder for Clerk data when disabled
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+import { useAuth } from "@clerk/nextjs";
 
 
 export default function DashboardLayout({
@@ -26,10 +24,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Mock Clerk state when disabled
-  const isClerkLoaded = true; // Assume loaded
-  const isSignedIn = true; // Assume signed in
-  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+  // Use actual Clerk state
+  const { isLoaded: isClerkLoaded, isSignedIn, userId } = useAuth();
 
   const syncManager = useSyncManager();
 
@@ -40,11 +36,9 @@ export default function DashboardLayout({
 
 
   return (
-     // ClientLogCaptureProvider should wrap the part of the app where logs need capturing
-     // Placing it here wraps the entire dashboard layout
-      <ClientLogCaptureProvider>
-          {/* SidebarProvider manages the state */}
-          {/* <SidebarProvider> */}
+     // ClientLogCaptureProvider removed
+     // <ClientLogCaptureProvider>
+          // <SidebarProvider> // Provider is usually at a higher level, but fine here too
               <div className="flex min-h-screen">
                   {/* Sidebar component handles rendering itself and the SheetTrigger for mobile */}
                   <Sidebar />
@@ -66,7 +60,7 @@ export default function DashboardLayout({
                     onForceFetch={syncManager.forceFetchServer}
                   />
               </div>
-          {/* </SidebarProvider> */}
-      </ClientLogCaptureProvider>
+          // </SidebarProvider>
+     // </ClientLogCaptureProvider>
   );
 }

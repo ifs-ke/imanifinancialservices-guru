@@ -26,7 +26,7 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ListTree, // Changed from Logger to ListTree
+  ListTree, // Keeping ListTree as it was recently added, but logger link removed below
   RefreshCw,
   Menu,
   UserCircle // Placeholder for UserButton
@@ -36,18 +36,9 @@ import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-// import { UserButton, useUser } from "@clerk/nextjs"; // Clerk disabled
+import { UserButton, useUser } from "@clerk/nextjs"; // Re-enabled Clerk
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area"; // Import ScrollArea
-
-// Temporary placeholder for Clerk's UserButton and useUser
-const UserButtonPlaceholder = () => (
-  <div className="h-8 w-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs text-sidebar-accent-foreground">
-    <UserCircle size={20} />
-  </div>
-);
-// Mock useUser hook
-const useUser = () => ({ isSignedIn: true, user: { id: "user_2wXc4D8KBDKGhxagoRStZOXnP2Y", fullName: "Local User" } });
 
 
 interface SidebarMenuItem {
@@ -56,6 +47,7 @@ interface SidebarMenuItem {
   icon: React.ReactNode; // Lucide icons are ReactNode
 }
 
+// Removed logger link
 const menuItems: SidebarMenuItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
   { href: "/transactions", label: "Transactions", icon: <ReceiptText size={18} /> },
@@ -65,7 +57,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/budget", label: "Budget", icon: <TrendingUp size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  { href: '/logger', label: 'Logger', icon: <ListTree size={18} /> }, // Changed icon to ListTree
+  // { href: '/logger', label: 'Logger', icon: <ListTree size={18} /> }, // Removed logger link
 ];
 
 type SidebarState = "collapsed" | "expanded";
@@ -134,7 +126,7 @@ const SidebarBase = React.forwardRef<
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const unreadCount = useNotificationStore(state => state.unreadCount());
-  const { user } = useUser(); // Using placeholder hook
+  const { user } = useUser(); // Using actual Clerk hook
   const syncManager = useSyncManager();
   const { syncStatus, retrySync, hashMismatch } = syncManager;
 
@@ -266,15 +258,15 @@ const SidebarBase = React.forwardRef<
           </Tooltip>
         </TooltipProvider>
 
-         {/* Use placeholder when Clerk is disabled */}
+         {/* Use actual Clerk UserButton */}
          <div className={cn(
              "flex items-center",
              state === 'collapsed' ? "justify-center py-1" : "p-1"
          )}>
-           <UserButtonPlaceholder /> {/* Using placeholder */}
+           <UserButton afterSignOutUrl="/sign-in"/>
            {state === 'expanded' && (
-              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={"Local User"}>
-                  Local User
+              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user?.fullName ?? user?.primaryEmailAddress?.emailAddress}>
+                   {user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? 'User'}
               </span>
            )}
         </div>
