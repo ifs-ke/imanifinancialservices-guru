@@ -1,3 +1,4 @@
+
 // src/components/layout/AppSidebar.tsx
 'use client';
 
@@ -21,8 +22,8 @@ import {
   FileText,
   Coins,
   TrendingUp,
-  Menu,
-  PanelLeft,
+  // Menu, // No longer directly used here
+  // PanelLeft, // No longer directly used here
   Landmark,
   PieChart,
   CloudOff, Cloud,
@@ -35,10 +36,10 @@ import {
 import { cn } from '@/lib/utils';
 import { useSidebar } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
-import { UserButton } from '@clerk/nextjs';
+// import { UserButton } from '@clerk/nextjs'; // Clerk disabled
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { SyncStatus, useSyncManager } from '@/hooks/useSyncManager';
+import type { useSyncManager } from '@/hooks/useSyncManager'; // Corrected import type
 import { useNotificationStore } from '@/store/notificationStore';
 
 const menuItems = [
@@ -77,14 +78,14 @@ export function AppSidebar({
         case 'syncing': PersistenceIcon = RefreshCw; persistenceStatusText = 'Syncing...'; persistenceTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary animate-spin'; break;
         case 'synced': PersistenceIcon = Cloud; persistenceStatusText = 'Synced'; persistenceTooltipText = 'Data synced with cloud.'; iconColor = 'text-accent'; break;
         case 'error': PersistenceIcon = AlertTriangle; persistenceStatusText = hashMismatch ? 'Conflict' : 'Sync Error'; persistenceTooltipText = hashMismatch ? 'Data mismatch detected. Click to resolve.' : 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; isClickable = true; break;
-        case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local Data'; persistenceTooltipText = "Data saved locally. Sign in to sync."; iconColor = 'text-muted-foreground'; break;
+        case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local'; persistenceTooltipText = "Data local. Sync to cloud."; iconColor = 'text-muted-foreground'; isClickable = true; break; // Make local clickable to attempt sync
      }
 
 
      const handleStatusClick = () => {
          if (hashMismatch) {
              openMismatchDialog();
-         } else if (isClickable && retrySync && syncStatus === 'error') {
+         } else if (isClickable && retrySync) { // Removed syncStatus === 'error' check to allow retry from 'local'
              retrySync();
          }
      }
@@ -92,38 +93,31 @@ export function AppSidebar({
 
   return (
     <>
-      {/* Header: App Name and Toggle Button */}
-      <SidebarHeader className="flex h-14 items-center justify-between border-b border-sidebar-border p-2">
-         {/* Logo and App Name Link */}
+      <SidebarHeader>
          <Link href="/dashboard" className="flex flex-shrink-0 items-center gap-2 overflow-hidden" aria-label="Go to dashboard">
             <Landmark className="h-6 w-6 flex-shrink-0 text-primary" />
-             {/* App Name - Hides when collapsed */}
              <span
                 className={cn(
                     "whitespace-nowrap text-lg font-semibold text-sidebar-foreground",
-                    "group-data-[state=expanded]/sidebar-wrapper:inline", // Use group-data for hiding
+                    "group-data-[state=expanded]/sidebar-wrapper:inline",
                     "group-data-[state=collapsed]/sidebar-wrapper:hidden"
                 )}
              >
                 IFC - Guru
              </span>
          </Link>
-          {/* Sidebar Toggle Button */}
           <SidebarTrigger className={cn("h-8 w-8", isMobile && "hidden")} />
       </SidebarHeader>
 
-      {/* Main Navigation Menu */}
       <SidebarContent className="flex-1 overflow-y-auto p-2">
         <SidebarMenu>
            {menuItems.map((item) => {
              const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
              return (
                  <SidebarMenuItem key={item.href}>
-                     {/* Use SidebarMenuButton for consistent styling and tooltip */}
                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.label} variant={isActive ? "active" : "ghost"}>
                         <Link href={item.href} className="flex items-center gap-2">
                             <item.icon className="h-4 w-4 flex-shrink-0" />
-                             {/* Menu Item Label - Hides when collapsed */}
                              <span className={cn(
                                 "group-data-[state=expanded]/sidebar-wrapper:inline",
                                 "group-data-[state=collapsed]/sidebar-wrapper:hidden"
@@ -138,9 +132,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarContent>
 
-       {/* Footer Section */}
        <SidebarFooter className="mt-auto space-y-2 border-t border-sidebar-border p-2">
-           {/* Notifications Link */}
            <SidebarMenuItem>
              <SidebarMenuButton asChild tooltip="Notifications" variant={pathname === '/notifications' ? "active" : "ghost"}>
                 <Link href="/notifications" className="relative flex h-9 w-full items-center justify-start gap-2 p-2">
@@ -151,7 +143,6 @@ export function AppSidebar({
                     )}>
                         Notifications
                     </span>
-                     {/* Unread Count Badge */}
                      {unreadCount > 0 && (
                          <SidebarMenuBadge
                            className={cn(
@@ -168,10 +159,10 @@ export function AppSidebar({
 
            <Separator className="my-1"/>
 
-           {/* User Account Button */}
-           <div className={cn("flex w-full items-center", state === 'collapsed' ? 'justify-center' : 'justify-start pl-1')}>
+            {/* User Account Button - Clerk Disabled */}
+            {/*
+            <div className={cn("flex w-full items-center", state === 'collapsed' ? 'justify-center' : 'justify-start pl-1')}>
               <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { userButtonAvatarBox: "w-7 h-7" }}} />
-              {/* Hidden text for accessibility/tooltip when collapsed */}
               <span className={cn(
                   "ml-2 text-xs text-muted-foreground",
                   "group-data-[state=expanded]/sidebar-wrapper:inline",
@@ -179,23 +170,21 @@ export function AppSidebar({
                   )}>
                   Account
               </span>
-          </div>
+            </div>
+            <Separator className="my-1"/>
+            */}
 
-           <Separator className="my-1"/>
 
-           {/* Theme Toggle */}
            <ThemeToggle />
 
-           {/* Sync Status Indicator */}
            <TooltipProvider delayDuration={100}>
              <Tooltip>
                  <TooltipTrigger asChild>
-                     {/* Use SidebarMenuButton for styling consistency */}
                      <SidebarMenuButton
                          variant="ghost"
                          className={cn(
                              "flex w-full items-center",
-                             state === 'expanded' ? 'justify-start' : 'justify-center', // Adjust alignment based on state
+                             state === 'expanded' ? 'justify-start' : 'justify-center',
                              !isClickable && !hashMismatch && "cursor-default"
                          )}
                          onClick={handleStatusClick}
@@ -204,12 +193,13 @@ export function AppSidebar({
                      >
                          <PersistenceIcon className={cn("h-[1.1rem] w-[1.1rem] flex-shrink-0", iconColor)} />
                          <span className={cn(
-                             "ml-2 text-xs", // Adjusted margin and removed text-muted-foreground
+                             "ml-2 text-xs",
                              "group-data-[state=expanded]/sidebar-wrapper:inline",
                              "group-data-[state=collapsed]/sidebar-wrapper:hidden",
-                             syncStatus === 'error' && !hashMismatch && 'text-destructive', // Error text color
-                             syncStatus === 'error' && hashMismatch && 'text-destructive', // Conflict text color
-                             syncStatus === 'synced' && 'text-accent' // Synced text color
+                             syncStatus === 'error' && !hashMismatch && 'text-destructive',
+                             syncStatus === 'error' && hashMismatch && 'text-destructive',
+                             syncStatus === 'synced' && 'text-accent',
+                             syncStatus === 'local' && 'text-muted-foreground' // Added local status color
                             )}>
                              {persistenceStatusText}
                          </span>

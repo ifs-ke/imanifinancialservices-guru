@@ -1,10 +1,10 @@
-// src/lib/logger.ts
-'use client'; // This file will be used by client components
+'use client';
 
 import { Logtail } from '@logtail/browser';
-import { auth } from '@clerk/nextjs/client'; // Use client-side auth
+// import { auth } from '@clerk/nextjs/client'; // Clerk disabled
 
 const LOGTAIL_SOURCE_TOKEN = process.env.NEXT_PUBLIC_LOGTAIL_SOURCE_TOKEN;
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'local-user-wo-clerk'; // Placeholder
 
 let log: Logtail | null = null;
 
@@ -20,7 +20,12 @@ if (typeof window !== 'undefined' && LOGTAIL_SOURCE_TOKEN) {
 }
 
 const getContext = () => {
-  const { userId, sessionId, orgId, actor } = auth();
+  // Mock Clerk data when disabled
+  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID;
+  const sessionId = 'mock-session-id';
+  const orgId = undefined; // Or 'mock-org-id' if needed
+  const actor = undefined;
+
   return {
     clerk: {
       userId: userId || undefined,
@@ -59,7 +64,7 @@ export const logError = (message: string, error?: Error | any, context?: Record<
 };
 
 // Generic log function for console overrides
-export const captureLog = (level: 'log' | 'info' | 'warn' | 'error', messages: any[]) => {
+export const captureLog = (level: 'log' | 'info' | 'warn' | 'error' | 'debug', messages: any[]) => {
     const messageString = messages.map(msg => typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)).join(' ');
     const logContext = getContext();
 
@@ -67,6 +72,7 @@ export const captureLog = (level: 'log' | 'info' | 'warn' | 'error', messages: a
         switch (level) {
             case 'info':
             case 'log':
+            case 'debug': // Log debug messages as info to Logtail
                 log.info(messageString, logContext);
                 break;
             case 'warn':
@@ -77,9 +83,10 @@ export const captureLog = (level: 'log' | 'info' | 'warn' | 'error', messages: a
                 break;
         }
     } else {
-         console.log(`[Logtail Disabled] CAPTURED ${level.toUpperCase()}:`, ...messages);
+         // Keep original console behavior when Logtail is disabled
+         const originalMethod = console[level] || console.log;
+         originalMethod(`[Logtail Disabled] CAPTURED ${level.toUpperCase()}:`, ...messages);
     }
 };
 
-// Export the raw log instance if needed for direct use (e.g., in Logtail specific features)
 export { log as logtailClient };

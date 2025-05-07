@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/layout.tsx
 'use client';
 
@@ -8,14 +9,16 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { useAuth } from '@clerk/nextjs/client'; // Use client-side auth
-import { redirect } from 'next/navigation';
+// import { useAuth } from '@clerk/nextjs/client'; // Clerk disabled
+// import { redirect } from 'next/navigation'; // Clerk disabled, no redirect needed here
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { Skeleton } from '@/components/ui/skeleton';
 import FloatingChatButton from '@/components/layout/FloatingChatButton';
 import { useBudgetNotifications } from '@/services/notificationService';
 import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
-import { logInfo, logError } from '@/lib/logger'; // Import logger
+import { logInfo, logWarn, logError } from '@/lib/logger';
+
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'local-user-wo-clerk';
 
 export default function DashboardLayout({
   children,
@@ -30,7 +33,10 @@ export default function DashboardLayout({
     logInfo('DashboardLayout mounted', { component: 'DashboardLayout' });
   }, []);
 
-  const { userId, isLoaded: isClerkLoaded } = useAuth();
+  // const { userId, isLoaded: isClerkLoaded } = useAuth(); // Clerk disabled
+  const isClerkLoaded = true; // Assume loaded when Clerk is disabled
+  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder when Clerk is disabled
+
   const syncManager = useSyncManager();
 
   useBudgetNotifications();
@@ -42,9 +48,9 @@ export default function DashboardLayout({
     } else {
       setIsMismatchDialogOpen(false);
     }
-  }, [syncManager.hashMismatch, userId]); // Added userId to context if needed
+  }, [syncManager.hashMismatch, userId]);
 
-  if (!isClerkLoaded) {
+  if (!isClerkLoaded) { // This condition will likely not be met if Clerk is fully disabled
     return (
       <div className="flex min-h-screen">
         <div className="hidden md:flex flex-col w-16 border-r border-border p-2 space-y-4">
@@ -71,14 +77,14 @@ export default function DashboardLayout({
     );
   }
 
-  if (isClient && !userId) {
-    logInfo('User not signed in, redirecting to /sign-in', { component: 'DashboardLayout' });
-    redirect('/sign-in');
-  }
+  // if (isClient && !userId) { // Clerk disabled, userId is now a placeholder
+  //   logInfo('User not signed in, redirecting to /sign-in', { component: 'DashboardLayout' });
+  //   redirect('/sign-in');
+  // }
 
-  if (!userId) {
-    return null;
-  }
+  // if (!userId) { // Clerk disabled
+  //   return null;
+  // }
 
   return (
     <>
@@ -102,13 +108,13 @@ export default function DashboardLayout({
         onForceSave={async () => {
           logWarn('User initiated Force Save from mismatch dialog.', { component: 'DashboardLayout', userId });
           const success = await syncManager.forceSaveLocal();
-          if (success) setIsMismatchDialogOpen(false); // Close on success
+          if (success) setIsMismatchDialogOpen(false);
           return success;
         }}
         onForceFetch={async () => {
           logWarn('User initiated Force Fetch from mismatch dialog.', { component: 'DashboardLayout', userId });
           const success = await syncManager.forceFetchServer();
-          if (success) setIsMismatchDialogOpen(false); // Close on success
+          if (success) setIsMismatchDialogOpen(false);
           return success;
         }}
       />

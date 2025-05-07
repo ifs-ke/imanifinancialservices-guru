@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/weekly-review/page.tsx
 'use client';
 
@@ -7,41 +8,42 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
-import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore'; // Use updated store
-import { useBudgetStore } from '@/store/budgetStore'; // Import budget store
-import { useAuth } from '@clerk/nextjs'; // Import useAuth for user ID
+import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
+import { useBudgetStore } from '@/store/budgetStore';
+// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, parseISO, startOfISOWeek, endOfISOWeek, getYear, getISOWeek } from 'date-fns';
-import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react'; // Added Share2, Users
+import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId, BudgetItemCategory, BudgetItem, WeeklyReviewData, UserShareInfo } from '@/lib/types';
-import { cn, formatCurrency } from '@/lib/utils'; // Import cn and formatCurrency from utils
+import { cn, formatCurrency } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs
-import ShareReviewDialog from './ShareReviewDialog'; // Import the new dialog component
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ShareReviewDialog from './ShareReviewDialog';
 
-// Formatting Functions (formatCurrency moved to utils)
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'local-user-wo-clerk';
+
 const formatDate = (date: Date | string) => {
      const dateObj = typeof date === 'string' ? new Date(date) : date;
       if (isNaN(dateObj.getTime())) return 'Invalid Date';
     return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-// Helper to get date range (remains the same)
 const getWeekDateRange = (weekKey: string): { start: Date, end: Date } | null => {
     const [yearStr, weekStr] = weekKey.split('-');
     const year = parseInt(yearStr, 10);
     const week = parseInt(weekStr, 10);
     if (isNaN(year) || isNaN(week) || week < 1 || week > 53) return null;
     try {
-        const refDateStr = `${year}-01-04`;
-        let dateInYear = parseISO(refDateStr);
-        const targetDate = addWeeks(dateInYear, week - getISOWeek(dateInYear));
-        const start = startOfISOWeek(targetDate);
-        const end = endOfISOWeek(targetDate);
+        // Using a reference date known to be in week 1 according to ISO 8601 (Jan 4th is always in week 1)
+        const refDate = new Date(year, 0, 4); // January 4th of the year
+        const firstDayOfYear = startOfISOWeek(refDate); // Get the Monday of week 1
+        const targetMonday = addWeeks(firstDayOfYear, week - 1); // Add weeks to get the Monday of the target week
+        const start = targetMonday;
+        const end = endOfISOWeek(targetMonday); // Get the Sunday of that week
         return { start, end };
     } catch (error) {
         console.error("Error parsing week key:", weekKey, error);
@@ -49,7 +51,6 @@ const getWeekDateRange = (weekKey: string): { start: Date, end: Date } | null =>
     }
 };
 
-// Calculate budget variance (remains the same)
 const calculateBudgetVariance = (
     transactions: TransactionWithId[],
     budgetItems: BudgetItem[]
@@ -58,26 +59,31 @@ const calculateBudgetVariance = (
     const actualExpenses = transactions.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     const netActual = actualIncome - actualExpenses;
     const WEEKS_IN_MONTH_ESTIMATE = 4.33;
-    const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = { income: 0, 'recurring-expense': 0, 'one-time-expense': 0, goal: 0, debt: 0 }; // Added debt
+    const budgetedTotalsByCategory: Record<BudgetItemCategory, number> = { income: 0, 'recurring-expense': 0, 'one-time-expense': 0, goal: 0, debt: 0 };
     budgetItems.forEach(item => { budgetedTotalsByCategory[item.category] += item.amount / WEEKS_IN_MONTH_ESTIMATE; });
     const totalBudgetedIncome = budgetedTotalsByCategory.income;
     const totalBudgetedExpenses = budgetedTotalsByCategory['recurring-expense'] + budgetedTotalsByCategory['one-time-expense'];
     const totalBudgetedGoals = budgetedTotalsByCategory.goal;
-    const totalBudgetedDebt = budgetedTotalsByCategory.debt; // Added debt total
-    const netBudgeted = totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals - totalBudgetedDebt; // Include debt in calculation
+    const totalBudgetedDebt = budgetedTotalsByCategory.debt;
+    const netBudgeted = totalBudgetedIncome - totalBudgetedExpenses - totalBudgetedGoals - totalBudgetedDebt;
     if (totalBudgetedIncome === 0 && totalBudgetedExpenses === 0 && totalBudgetedGoals === 0 && totalBudgetedDebt === 0 && actualIncome === 0 && actualExpenses === 0) return { netBudgeted, netActual, variance: 0, status: 'no-data' };
     const variance = netActual - netBudgeted;
     let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
-    if (variance > 0.01) status = 'under-budget';
-    else if (variance < -0.01) status = 'over-budget';
-    else status = 'on-track';
+    // Use a small threshold to avoid floating point issues classifying as over/under
+    const threshold = 0.01;
+    if (Math.abs(variance) <= threshold) status = 'on-track';
+    else if (variance > 0) status = 'under-budget'; // Favorable variance (actual net > budgeted net)
+    else status = 'over-budget'; // Unfavorable variance
+
     return { netBudgeted, netActual, variance, status };
 };
 
 
 export default function WeeklyReviewPage() {
   const { toast } = useToast();
-  const { userId } = useAuth(); // Get current user ID
+  // const { userId } = useAuth(); // Clerk disabled
+  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+
   const allTransactions = useTransactionsStore((state) => state.transactions);
   const budgetItems = useBudgetStore((state) => state.budgetItems);
   const { ownedReviews, sharedReviews, setJournalEntry, getReviewForWeek, setTransactionComment, deleteTransactionComment, getTransactionComment } = useWeeklyReviewStore();
@@ -87,16 +93,13 @@ export default function WeeklyReviewPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [currentCommentText, setCurrentCommentText] = useState('');
-  const [commentToDelete, setCommentToDelete] = useState<{ weekKey: string, transactionId: string, ownerId: string } | null>(null); // Include ownerId
+  const [commentToDelete, setCommentToDelete] = useState<{ weekKey: string, transactionId: string, ownerId: string } | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const [selectedWeekKeyForSharing, setSelectedWeekKeyForSharing] = useState<string | null>(null); // Track which week to share
+  const [selectedWeekKeyForSharing, setSelectedWeekKeyForSharing] = useState<string | null>(null);
 
   const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
   const currentWeekKey = useMemo(() => getWeekKey(currentWeekStart), [currentWeekStart]);
 
-  // Get the ownerId for the currently viewed week (could be current user or owner of shared review)
-  // For simplicity, we'll assume the "current week" view always pertains to the logged-in user's data unless explicitly viewing shared data elsewhere.
-  // If shared reviews could be selected in the calendar, this logic would need adjustment.
   const currentOwnerId = userId; // Assume viewing own data in the main table
 
   useEffect(() => {
@@ -116,10 +119,8 @@ export default function WeeklyReviewPage() {
   }, [allTransactions, searchTerm]);
 
   const weeklyTransactionsToDisplay = useMemo(() => {
-    if (!userId) return []; // Don't show transactions if not logged in
-    // Filter transactions owned by the current user for the selected week
+    if (!userId) return [];
     return filteredTransactionsForAllTime.filter((tx) => {
-        // TODO: Add ownerId check if transactions are also user-scoped in the store/db
         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
         if (isNaN(txDate.getTime())) return false;
         return txDate >= currentWeekStart && txDate <= currentWeekEnd;
@@ -133,15 +134,14 @@ export default function WeeklyReviewPage() {
   }, [filteredTransactionsForAllTime, currentWeekStart, currentWeekEnd, userId]);
 
 
-  // Process owned reviews for the Journal History section
   const processedOwnedReviews = useMemo(() => {
       if (!userId) return [];
     return Object.entries(ownedReviews)
-        .filter(([key, review]) => review.ownerId === userId) // Ensure only owned reviews are processed here
+        .filter(([key, review]) => review.ownerId === userId)
         .map(([weekKey, reviewData]) => {
             const dateRange = getWeekDateRange(weekKey);
             if (!dateRange) return null;
-            const weeklyTxs = allTransactions.filter(tx => { // Filter ALL transactions for metrics
+            const weeklyTxs = allTransactions.filter(tx => {
                 const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
                 return !isNaN(txDate.getTime()) && txDate >= dateRange.start && txDate <= dateRange.end;
             });
@@ -150,7 +150,7 @@ export default function WeeklyReviewPage() {
             return {
                 weekKey,
                 journal: reviewData.journal,
-                sharedWith: reviewData.sharedWith, // Include sharedWith list
+                sharedWith: reviewData.sharedWith,
                 ownerId: reviewData.ownerId,
                 dateRange,
                 transactionCount: weeklyTxs.length,
@@ -164,33 +164,27 @@ export default function WeeklyReviewPage() {
   }, [ownedReviews, allTransactions, budgetItems, userId]);
 
 
-   // Process shared reviews for the "Shared With Me" tab
   const processedSharedReviews = useMemo(() => {
       if (!userId) return [];
     return Object.entries(sharedReviews)
-        // No need to filter by ownerId here, as sharedReviews already excludes owned ones (based on store logic)
         .map(([weekKey, reviewData]) => {
             const dateRange = getWeekDateRange(weekKey);
             if (!dateRange) return null;
-            // Note: To calculate metrics for shared reviews, we'd need access to the OWNER's transactions.
-            // This is complex and might require separate API calls or adjusted data structures.
-            // For now, we'll just display the journal and comments if available, without owner's metrics.
             return {
                 weekKey,
                 journal: reviewData.journal,
-                ownerId: reviewData.ownerId, // Include ownerId
-                transactionComments: reviewData.transactionComments, // Include comments
+                ownerId: reviewData.ownerId,
+                transactionComments: reviewData.transactionComments,
                 dateRange,
-                // Metrics might be unavailable or inaccurate without owner's full data
-                transactionCount: Object.keys(reviewData.transactionComments || {}).length, // Estimate count from comments
-                netFlow: NaN, // Indicate unavailable
-                budgetVariance: NaN, // Indicate unavailable
+                transactionCount: Object.keys(reviewData.transactionComments || {}).length,
+                netFlow: NaN,
+                budgetVariance: NaN,
                 varianceStatus: 'no-data' as const,
             };
         })
         .filter(review => review !== null)
         .sort((a, b) => b!.dateRange.start.getTime() - a!.dateRange.start.getTime());
-  }, [sharedReviews, userId]); // Dependency on sharedReviews and userId
+  }, [sharedReviews, userId]);
 
 
   const goToPreviousWeek = () => setCurrentWeekStart(subWeeks(currentWeekStart, 1));
@@ -202,7 +196,6 @@ export default function WeeklyReviewPage() {
     }
   };
 
-  // --- Comment Handlers ---
    const handleEditCommentClick = (transactionId: string) => {
       if (!currentOwnerId) return;
       setEditingCommentId(transactionId);
@@ -233,56 +226,45 @@ export default function WeeklyReviewPage() {
       } catch (error) { console.error("Error deleting comment:", error); toast({ title: 'Delete Failed', description: 'Could not delete comment.', variant: 'destructive' }); setCommentToDelete(null); }
   };
 
-  // --- Journal Handler ---
    const handleSaveJournalForWeek = (weekKey: string, journalText: string) => {
-       if (!userId) return; // Ensure user is logged in
+       if (!userId) return;
        try {
-           setJournalEntry(weekKey, journalText, userId); // Pass current userId as ownerId
+           setJournalEntry(weekKey, journalText, userId);
            toast({ title: 'Journal Saved', description: `Saved entry for week ${weekKey}.` });
        } catch (error) { console.error("Error saving journal:", error); toast({ title: 'Save Failed', description: 'Could not save journal entry.', variant: 'destructive' }); }
    };
 
-   // --- Sharing Handlers ---
     const handleOpenShareDialog = (weekKey: string) => {
         setSelectedWeekKeyForSharing(weekKey);
         setIsShareDialogOpen(true);
     };
 
 
-   // --- Journal Card Component ---
     const JournalCard = ({ review, isShared = false }: { review: NonNullable<(typeof processedOwnedReviews | typeof processedSharedReviews)[number]>, isShared?: boolean }) => {
         const [journalText, setJournalText] = useState(review.journal);
         const [isSaving, setIsSaving] = useState(false);
-        const [isFetchingOwner, setIsFetchingOwner] = useState(false); // State for fetching owner info
+        const [isFetchingOwner, setIsFetchingOwner] = useState(false);
         const [ownerInfo, setOwnerInfo] = useState<UserShareInfo | null>(null);
         const dateRangeStr = `${format(review.dateRange.start, 'MMM d')} - ${format(review.dateRange.end, 'MMM d, yyyy')}`;
         const isOwnedByCurrentUser = userId === review.ownerId;
 
         useEffect(() => { setJournalText(review.journal); }, [review.journal]);
 
-         // Fetch owner info if it's a shared review
          useEffect(() => {
             if (isShared && review.ownerId && userId && review.ownerId !== userId) {
                 setIsFetchingOwner(true);
-                // TODO: Implement an API action to get user info by ID
-                // For now, placeholder or skip fetching
-                // Example:
-                // getUserInfoByIdApi(review.ownerId)
-                //   .then(info => setOwnerInfo(info))
-                //   .catch(err => console.error("Failed to fetch owner info", err))
-                //   .finally(() => setIsFetchingOwner(false));
-                 console.warn(`Need to fetch owner info for ID: ${review.ownerId}`);
-                 // Placeholder:
-                 setOwnerInfo({ userId: review.ownerId, email: `owner_${review.ownerId.substring(0,5)}@...`, name: `Owner ${review.ownerId.substring(0,5)}` });
+                // Mock fetching owner info when Clerk is disabled
+                 console.warn(`Need to fetch owner info for ID: ${review.ownerId} (Clerk Disabled - Mocking)`);
+                 setOwnerInfo({ userId: review.ownerId, email: `owner_${review.ownerId.substring(0,5)}@mock.com`, name: `Owner ${review.ownerId.substring(0,5)}` });
                  setIsFetchingOwner(false);
             } else {
-                setOwnerInfo(null); // Clear owner info if not shared or owner is current user
+                setOwnerInfo(null);
             }
         }, [isShared, review.ownerId, userId]);
 
 
         const handleLocalSave = () => {
-            if (!isOwnedByCurrentUser) return; // Only owner can save journal
+            if (!isOwnedByCurrentUser) return;
             setIsSaving(true);
             handleSaveJournalForWeek(review.weekKey, journalText);
             setIsSaving(false);
@@ -291,7 +273,8 @@ export default function WeeklyReviewPage() {
         let varianceBadgeVariant: 'default' | 'destructive' | 'outline' = 'outline';
         let varianceBadgeText = 'No Data';
         let varianceColorClass = 'text-muted-foreground';
-        if (review.varianceStatus === 'on-track' || review.varianceStatus === 'under-budget') { varianceBadgeVariant = 'default'; varianceBadgeText = review.varianceStatus === 'on-track' ? 'On Track' : 'Favorable'; varianceColorClass = 'text-accent'; }
+        if (review.varianceStatus === 'on-track') { varianceBadgeVariant = 'default'; varianceBadgeText = 'On Track'; varianceColorClass = 'text-accent'; }
+        else if (review.varianceStatus === 'under-budget') { varianceBadgeVariant = 'default'; varianceBadgeText = 'Favorable'; varianceColorClass = 'text-accent'; }
         else if (review.varianceStatus === 'over-budget') { varianceBadgeVariant = 'destructive'; varianceBadgeText = 'Unfavorable'; varianceColorClass = 'text-destructive'; }
 
         return (
@@ -314,7 +297,6 @@ export default function WeeklyReviewPage() {
                                       </Badge>
                                   )}
                              </CardTitle>
-                             {/* Metrics - Only show if not shared or if data is available */}
                              {!isShared && (
                                  <div className="text-xs text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1">
                                      <span>Transactions: <span className="font-medium text-foreground">{review.transactionCount}</span></span>
@@ -329,7 +311,6 @@ export default function WeeklyReviewPage() {
                                      {isSaving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />} {isSaving ? 'Saving...' : 'Save'}
                                  </Button>
                              )}
-                             {/* Share Button - Only for owned reviews */}
                               {isOwnedByCurrentUser && (
                                   <Button size="sm" variant="outline" onClick={() => handleOpenShareDialog(review.weekKey)} className="h-8 px-3">
                                       <Share2 className="mr-1 h-4 w-4" /> Share
@@ -343,7 +324,7 @@ export default function WeeklyReviewPage() {
                          placeholder={isOwnedByCurrentUser ? "Write your reflections..." : "Journal entry (view only)"}
                          value={journalText}
                          onChange={(e) => isOwnedByCurrentUser && setJournalText(e.target.value)}
-                         readOnly={!isOwnedByCurrentUser} // Make read-only if not the owner
+                         readOnly={!isOwnedByCurrentUser}
                          className={cn(
                              "min-h-[150px] w-full border rounded-md p-3 focus:outline-none text-sm",
                              isOwnedByCurrentUser && "focus:ring-2 focus:ring-ring focus:ring-offset-2",
@@ -381,14 +362,12 @@ export default function WeeklyReviewPage() {
          <CardContent className="p-4"><div className="relative"><Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-8 h-9 w-full"/></div></CardContent>
        </Card>
 
-        {/* Tabs for Owned vs Shared */}
         <Tabs defaultValue="owned" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="owned">My Reviews & Transactions</TabsTrigger>
                 <TabsTrigger value="shared">Shared With Me</TabsTrigger>
             </TabsList>
 
-             {/* Owned Reviews Tab */}
             <TabsContent value="owned" className="mt-4 space-y-6">
                 <Card className="flex flex-col">
                     <CardHeader className="p-4 border-b">
@@ -404,7 +383,7 @@ export default function WeeklyReviewPage() {
                                <TableBody>
                                    {weeklyTransactionsToDisplay.length > 0 ? (
                                        weeklyTransactionsToDisplay.map((tx) => {
-                                           const existingComment = getTransactionComment(currentWeekKey, tx.id, currentOwnerId!); // Assert non-null owner
+                                           const existingComment = getTransactionComment(currentWeekKey, tx.id, currentOwnerId!);
                                            const isEditingThis = editingCommentId === tx.id;
                                            return (
                                                <TableRow key={tx.id}>
@@ -445,12 +424,11 @@ export default function WeeklyReviewPage() {
                     </CardContent>
                   </Card>
 
-                  {/* Owned Journal History */}
                   <Card>
                      <CardHeader className='p-4 border-b'><CardTitle className='text-lg flex items-center gap-2'><BookOpen className='h-5 w-5'/> My Journal History</CardTitle><CardDescription className='text-sm'>View and edit your past weekly reflections.</CardDescription></CardHeader>
                      <CardContent className='p-4'>
                          {processedOwnedReviews.length > 0 ? (
-                              <ScrollArea className="h-[calc(100vh-350px)] w-full pr-4"> {/* Adjust height */}
+                              <ScrollArea className="h-[calc(100vh-350px)] w-full pr-4">
                                   <div className="space-y-4">
                                      {processedOwnedReviews.map(review => review && <JournalCard key={review.weekKey} review={review} isShared={false}/>)}
                                   </div>
@@ -460,7 +438,6 @@ export default function WeeklyReviewPage() {
                   </Card>
              </TabsContent>
 
-            {/* Shared Reviews Tab */}
              <TabsContent value="shared" className="mt-4 space-y-6">
                 <Card>
                      <CardHeader className='p-4 border-b'><CardTitle className='text-lg flex items-center gap-2'><Users className='h-5 w-5'/> Reviews Shared With Me</CardTitle><CardDescription className='text-sm'>View journal entries shared by other users.</CardDescription></CardHeader>
@@ -483,8 +460,6 @@ export default function WeeklyReviewPage() {
 
         </Tabs>
 
-
-        {/* Share Dialog */}
         {selectedWeekKeyForSharing && (
              <ShareReviewDialog
                  isOpen={isShareDialogOpen}

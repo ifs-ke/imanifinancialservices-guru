@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/weekly-review/ShareReviewDialog.tsx
 'use client';
 
@@ -16,10 +17,17 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { X, UserPlus, Trash2, Loader2, Search, CheckCircle, AlertTriangle } from 'lucide-react';
+import { X, UserPlus, Trash2, Loader2, Search, CheckCircle } from 'lucide-react'; // Removed AlertTriangle as it wasn't used directly for UI state here
 import type { UserShareInfo } from '@/lib/types';
-import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import store hooks
-import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
+import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
+import { getSharedWithUsersApi } from '@/app/actions/shareActions';
+import { triggerCollaborationNotification } from '@/services/notificationService';
+// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
+
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'local-user-wo-clerk';
+const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
+const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
+
 
 interface ShareReviewDialogProps {
   isOpen: boolean;
@@ -29,7 +37,14 @@ interface ShareReviewDialogProps {
 
 const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, weekKey }) => {
   const { toast } = useToast();
-  const { shareWeekReview, revokeWeekShare, searchUserToShareWith } = useWeeklyReviewStore(); // Get actions from store
+  const { shareWeekReview, revokeWeekShare, searchUserToShareWith } = useWeeklyReviewStore();
+  // const { user } = useAuth(); // Clerk disabled
+  // Mock user object when Clerk is disabled
+  const user = {
+      id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
+      fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
+      primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL }
+  };
 
   const [emailToShare, setEmailToShare] = useState('');
   const [searchResult, setSearchResult] = useState<UserShareInfo | null>(null);
@@ -38,13 +53,13 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   const [sharedWithList, setSharedWithList] = useState<UserShareInfo[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [isRevoking, setIsRevoking] = useState<string | null>(null); // Store userId being revoked
+  const [isRevoking, setIsRevoking] = useState<string | null>(null);
 
-  // Fetch the list of users already shared with when the dialog opens
   const fetchSharedList = useCallback(async () => {
     if (!isOpen || !weekKey) return;
     setIsLoadingList(true);
     try {
+      // API action should handle auth internally or use placeholder when disabled
       const users = await getSharedWithUsersApi(weekKey);
       setSharedWithList(users);
     } catch (error: any) {
@@ -57,16 +72,15 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
 
   useEffect(() => {
     fetchSharedList();
-  }, [fetchSharedList]); // Rerun when fetchSharedList changes (which depends on isOpen, weekKey)
+  }, [fetchSharedList]);
 
-  // Reset search state when dialog closes or weekKey changes
   useEffect(() => {
       if (!isOpen) {
           setEmailToShare('');
           setSearchResult(null);
           setIsSearching(false);
           setSearchError(null);
-          setSharedWithList([]); // Clear list on close
+          setSharedWithList([]);
           setIsLoadingList(false);
           setIsSharing(false);
           setIsRevoking(null);
@@ -83,9 +97,10 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
     setSearchError(null);
     setSearchResult(null);
     try {
-      const user = await searchUserToShareWith(emailToShare.trim());
-      if (user) {
-        setSearchResult(user);
+      // API action handles auth check or mock
+      const userResult = await searchUserToShareWith(emailToShare.trim());
+      if (userResult) {
+        setSearchResult(userResult);
       } else {
         setSearchError('User not found or cannot be shared with.');
       }
@@ -97,14 +112,18 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   };
 
   const handleShareClick = async () => {
-    if (!searchResult) return;
+    if (!searchResult || !user) return;
     setIsSharing(true);
     try {
+      // Store action calls server action which handles auth or mock
       await shareWeekReview(weekKey, searchResult.userId);
       toast({ title: 'Success', description: `Review shared with ${searchResult.name || searchResult.email}.` });
-      // Add to local list optimistically or refetch
+
+      // Trigger notification for the recipient (still best effort client-side)
+      const sharerName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Someone';
+      triggerCollaborationNotification(sharerName, weekKey, searchResult.userId);
+
       setSharedWithList(prev => [...prev, searchResult]);
-      // Clear search
       setEmailToShare('');
       setSearchResult(null);
       setSearchError(null);
@@ -116,18 +135,17 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   };
 
   const handleRevokeClick = async (targetUserId: string) => {
-    setIsRevoking(targetUserId); // Set the user being revoked
+    setIsRevoking(targetUserId);
     try {
+       // Store action calls server action which handles auth or mock
       await revokeWeekShare(weekKey, targetUserId);
-       // Find user details for toast message
        const revokedUser = sharedWithList.find(u => u.userId === targetUserId);
       toast({ title: 'Access Revoked', description: `Sharing revoked from ${revokedUser?.name || revokedUser?.email || targetUserId}.` });
-      // Remove from local list optimistically
       setSharedWithList(prev => prev.filter(user => user.userId !== targetUserId));
     } catch (error: any) {
       toast({ title: 'Error Revoking', description: error.message, variant: 'destructive' });
     } finally {
-      setIsRevoking(null); // Clear revoking state
+      setIsRevoking(null);
     }
   };
 
@@ -142,7 +160,6 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Search Section */}
           <div className="space-y-2">
             <Label htmlFor="share-email">Share with (Email)</Label>
             <div className="flex gap-2">
@@ -153,7 +170,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
                 value={emailToShare}
                 onChange={(e) => {
                     setEmailToShare(e.target.value);
-                    setSearchResult(null); // Clear previous result on input change
+                    setSearchResult(null);
                     setSearchError(null);
                 }}
               />
@@ -165,7 +182,6 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
              {searchError && <p className="text-xs text-destructive">{searchError}</p>}
           </div>
 
-          {/* Search Result & Share Button */}
           {searchResult && (
             <div className="p-3 border rounded-md bg-accent/10 flex items-center justify-between">
               <div className="text-sm">
@@ -179,7 +195,6 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
             </div>
           )}
 
-           {/* List of Shared Users */}
             <div className="space-y-2">
                 <Label>Currently Shared With</Label>
                 {isLoadingList ? (
@@ -189,20 +204,20 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
                 ) : sharedWithList.length > 0 ? (
                     <ScrollArea className="h-[150px] border rounded-md p-2">
                          <ul className="space-y-2">
-                             {sharedWithList.map(user => (
-                                 <li key={user.userId} className="flex items-center justify-between text-sm p-1.5 hover:bg-muted/50 rounded">
+                             {sharedWithList.map(sharedUser => ( // Renamed variable
+                                 <li key={sharedUser.userId} className="flex items-center justify-between text-sm p-1.5 hover:bg-muted/50 rounded">
                                      <div>
-                                         <span className="font-medium">{user.name}</span>
-                                         <span className="text-xs text-muted-foreground ml-2">({user.email})</span>
+                                         <span className="font-medium">{sharedUser.name}</span>
+                                         <span className="text-xs text-muted-foreground ml-2">({sharedUser.email})</span>
                                      </div>
                                      <Button
                                          variant="ghost"
                                          size="icon"
                                          className="h-6 w-6 text-destructive hover:text-destructive"
-                                         onClick={() => handleRevokeClick(user.userId)}
-                                         disabled={isRevoking === user.userId}
+                                         onClick={() => handleRevokeClick(sharedUser.userId)}
+                                         disabled={isRevoking === sharedUser.userId}
                                      >
-                                          {isRevoking === user.userId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                          {isRevoking === sharedUser.userId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                                           <span className="sr-only">Revoke Access</span>
                                       </Button>
                                   </li>
