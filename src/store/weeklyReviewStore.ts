@@ -6,10 +6,10 @@ import { encode, decode } from '@/lib/storage-utils';
 import type { WeeklyReviewData, UserShareInfo } from '@/lib/types';
 import { getISOWeek, getYear } from 'date-fns';
 import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
-// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
-import { logWarn } from '@/lib/logger'; // Import logger
+import { auth } from '@clerk/nextjs/client'; // Use client-side auth
+// No longer importing custom logger
 
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'local-user-wo-clerk';
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
 const createSessionStorageWithEncoding = (): StateStorage => {
   const storage = sessionStorage;
@@ -74,9 +74,10 @@ export const getWeekKey = (date: Date): string => {
   }
 };
 
-// Helper to get current user ID (mocked when Clerk is disabled)
+// Helper to get current user ID using client-side auth hook
 const getCurrentUserId = (): string | null => {
-    return CLERK_DISABLED_PLACEHOLDER_USER_ID;
+    const { userId } = auth(); // Use Clerk client hook
+    return userId || CLERK_DISABLED_PLACEHOLDER_USER_ID; // Return placeholder if no user (shouldn't happen in protected routes)
 };
 
 
@@ -97,11 +98,11 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       setJournalEntry: (weekKey, journal, ownerId) => {
          const currentUserId = getCurrentUserId();
          if (ownerId !== currentUserId) {
-             logWarn(`Security Warning: Attempted client-side journal update for non-owned review.`, { weekKey, ownerId, currentUserId });
+             console.warn(`Security Warning: Attempted client-side journal update for non-owned review.`, { weekKey, ownerId, currentUserId });
              return;
          }
          if (!currentUserId) {
-             logWarn("Cannot set journal entry: User not available.");
+             console.warn("Cannot set journal entry: User not available.");
              return;
          }
         set((state) => {
@@ -116,7 +117,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       setTransactionComment: (weekKey, transactionId, comment, ownerId) => {
          const currentUserId = getCurrentUserId();
          if (!currentUserId) {
-             logWarn("Cannot set transaction comment: User not available.");
+             console.warn("Cannot set transaction comment: User not available.");
              return;
          }
          set((state) => {
@@ -129,22 +130,25 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
              } else if (state.sharedReviews[weekKey]?.ownerId === ownerId) {
                  reviewToUpdate = state.sharedReviews[weekKey];
                  reviewsMapKey = 'sharedReviews';
+                 // Check if current user is allowed to comment (either owner or in sharedWith)
                  if (ownerId !== currentUserId && !(reviewToUpdate?.sharedWith?.includes(currentUserId))) {
-                     logWarn(`Permission Denied: User cannot comment on review.`, { currentUserId, weekKey, ownerId });
+                     console.warn(`Permission Denied: User cannot comment on review.`, { currentUserId, weekKey, ownerId });
                      return state;
                  }
              }
 
+             // If no existing review found, and the owner is the current user, create a new owned review shell
              if (!reviewToUpdate && ownerId === currentUserId) {
                   reviewToUpdate = { ownerId, journal: '', transactionComments: {}, sharedWith: [] };
                   reviewsMapKey = 'ownedReviews';
              } else if (!reviewToUpdate) {
-                  console.error(`Cannot set comment: Review not found.`, { weekKey, ownerId });
+                  // If no review found and owner isn't current user, cannot proceed
+                  console.error(`Cannot set comment: Review not found or permission denied.`, { weekKey, ownerId, currentUserId });
                   return state;
              }
 
              const newComments = { ...(reviewToUpdate.transactionComments || {}), [transactionId]: comment };
-             if (comment.trim() === '') delete newComments[transactionId];
+             if (comment.trim() === '') delete newComments[transactionId]; // Remove comment if empty
              const updatedReview = { ...reviewToUpdate, transactionComments: Object.keys(newComments).length > 0 ? newComments : undefined };
 
              if (reviewsMapKey === 'ownedReviews') return { ownedReviews: { ...state.ownedReviews, [weekKey]: updatedReview } };
@@ -156,7 +160,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       deleteTransactionComment: (weekKey, transactionId, ownerId) => {
           const currentUserId = getCurrentUserId();
           if (!currentUserId) {
-              logWarn("Cannot delete transaction comment: User not available.");
+              console.warn("Cannot delete transaction comment: User not available.");
               return;
           }
          set((state) => {
@@ -169,16 +173,17 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
              } else if (state.sharedReviews[weekKey]?.ownerId === ownerId) {
                  reviewToUpdate = state.sharedReviews[weekKey];
                  reviewsMapKey = 'sharedReviews';
+                  // Check if current user is allowed to delete comment (either owner or in sharedWith)
                   if (ownerId !== currentUserId && !(reviewToUpdate?.sharedWith?.includes(currentUserId))) {
-                     logWarn(`Permission Denied: User cannot delete comments.`, { currentUserId, weekKey, ownerId });
+                     console.warn(`Permission Denied: User cannot delete comments.`, { currentUserId, weekKey, ownerId });
                      return state;
                  }
              } else {
-                 console.error(`Cannot delete comment: Review not found.`, { weekKey, ownerId });
+                 console.error(`Cannot delete comment: Review not found or permission denied.`, { weekKey, ownerId, currentUserId });
                  return state;
              }
 
-             if (!reviewToUpdate || !reviewToUpdate.transactionComments) return state;
+             if (!reviewToUpdate || !reviewToUpdate.transactionComments) return state; // No comments to delete from
              const newComments = { ...reviewToUpdate.transactionComments };
              delete newComments[transactionId];
              const updatedReview = { ...reviewToUpdate, transactionComments: Object.keys(newComments).length > 0 ? newComments : undefined };
@@ -193,19 +198,22 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
            const currentUserId = getCurrentUserId();
            if (!currentUserId) return undefined;
 
+           // Check owned reviews first
            if (ownerId === currentUserId && get().ownedReviews[weekKey]) {
                return get().ownedReviews[weekKey];
            }
+           // Then check shared reviews
            const sharedReview = get().sharedReviews[weekKey];
+           // Ensure the requested owner matches and the current user has permission
            if (sharedReview && sharedReview.ownerId === ownerId) {
-                if (ownerId === currentUserId || sharedReview.sharedWith?.includes(currentUserId)) {
+                if (sharedReview.sharedWith?.includes(currentUserId)) {
                     return sharedReview;
                 } else {
-                    logWarn(`Access Denied: Attempt to access shared review without permission.`, { currentUserId, weekKey, ownerId });
+                    console.warn(`Access Denied: Attempt to access shared review without permission.`, { currentUserId, weekKey, ownerId });
                     return undefined;
                 }
            }
-           return undefined;
+           return undefined; // Not found or no permission
       },
 
       getTransactionComment: (weekKey, transactionId, ownerId) => {
@@ -223,86 +231,98 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
           if (!currentUserId) throw new Error("User not available to share.");
           if (currentUserId === targetUserId) throw new Error("Cannot share review with yourself.");
 
+          // Optimistically update the local state
           set((state) => {
              const review = state.ownedReviews[weekKey];
+             // Ensure the review exists and is owned by the current user before updating
              if (!review || review.ownerId !== currentUserId) {
-                  console.error(`Share failed: Review not found or not owned.`, { weekKey, currentUserId });
-                 return state;
+                  console.error(`Share failed: Review not found or not owned. Cannot update state.`, { weekKey, currentUserId });
+                 return state; // Return current state without modification
              }
              const updatedSharedWith = Array.from(new Set([...(review.sharedWith || []), targetUserId])).sort();
              return { ownedReviews: { ...state.ownedReviews, [weekKey]: { ...review, sharedWith: updatedSharedWith } } };
           });
 
+          // Call the server action
           try {
-             await shareReviewApi(weekKey, targetUserId); // Server action handles real auth/mock
+             await shareReviewApi(weekKey, targetUserId);
              console.log(`Successfully initiated share for review ${weekKey} with ${targetUserId}.`);
           } catch (error) {
              console.error("Failed to share review via API:", error);
+             // Rollback the optimistic update if the API call fails
              set((state) => {
                  const review = state.ownedReviews[weekKey];
-                 if (!review || review.ownerId !== currentUserId) return state;
+                 if (!review || review.ownerId !== currentUserId) return state; // Should still exist
                  const originalSharedWith = (review.sharedWith || []).filter(id => id !== targetUserId);
                  return { ownedReviews: { ...state.ownedReviews, [weekKey]: { ...review, sharedWith: originalSharedWith.length > 0 ? originalSharedWith : undefined } } };
              });
-             throw error;
+             throw error; // Re-throw the error to be caught by the caller
           }
       },
 
       revokeWeekShare: async (weekKey, targetUserId) => {
           const currentUserId = getCurrentUserId();
           if (!currentUserId) throw new Error("User not available to revoke share.");
-          const originalSharedWith = get().ownedReviews[weekKey]?.sharedWith;
+          const originalSharedWith = get().ownedReviews[weekKey]?.sharedWith; // Store original state for rollback
 
+          // Optimistically update local state
           set((state) => {
              const review = state.ownedReviews[weekKey];
-             if (!review || !review.sharedWith || review.ownerId !== currentUserId) {
-                  console.error(`Revoke failed: Review not found, not shared, or not owned.`, { weekKey, currentUserId });
-                  return state;
+             // Ensure review exists, is owned, and actually shared with the target before updating
+             if (!review || !review.sharedWith || review.ownerId !== currentUserId || !review.sharedWith.includes(targetUserId)) {
+                  console.error(`Revoke failed: Review not found, not shared with target, or not owned. Cannot update state.`, { weekKey, targetUserId, currentUserId });
+                  return state; // Return current state without modification
              }
              const updatedSharedWith = review.sharedWith.filter(id => id !== targetUserId);
              return { ownedReviews: { ...state.ownedReviews, [weekKey]: { ...review, sharedWith: updatedSharedWith.length > 0 ? updatedSharedWith : undefined } } };
           });
 
+          // Call the server action
           try {
-             await revokeShareApi(weekKey, targetUserId); // Server action handles real auth/mock
+             await revokeShareApi(weekKey, targetUserId);
               console.log(`Successfully initiated revoke share for review ${weekKey} from ${targetUserId}.`);
           } catch (error) {
              console.error("Failed to revoke share via API:", error);
+             // Rollback the optimistic update
              set((state) => {
                  const review = state.ownedReviews[weekKey];
+                 // Check ownership again for safety during rollback
                  if (!review || review.ownerId !== currentUserId) return state;
+                 // Restore the original sharedWith array
                  return { ownedReviews: { ...state.ownedReviews, [weekKey]: { ...review, sharedWith: originalSharedWith } } };
               });
-             throw error;
+             throw error; // Re-throw for caller
           }
       },
 
       searchUserToShareWith: async (email: string): Promise<UserShareInfo | null> => {
            try {
-               // Server action handles real auth/mock
+               // Call the server action
                const user = await searchUserByEmailApi(email);
                return user;
            } catch (error) {
                console.error("Error searching for user via API:", error);
-               return null;
+               return null; // Indicate failure
            }
        },
 
     }),
     {
-      name: 'ifcGuru_weeklyReviews',
-      storage: createJSONStorage(() => createSessionStorageWithEncoding()),
+      name: 'ifcGuru_weeklyReviews', // Persistence key
+      storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use session storage with encoding
       onRehydrateStorage: () => (state) => {
            if (state) {
              state.isHydrated = true;
              console.log("Weekly review store rehydrated.");
            }
        },
+       // No custom serializer/deserializer needed if no complex types like Date are directly stored
        deserialize: (str) => {
          const state = JSON.parse(str);
+         // Ensure nested objects exist or default to empty
          state.state.ownedReviews = state.state.ownedReviews || {};
          state.state.sharedReviews = state.state.sharedReviews || {};
-         state.state.isHydrated = true;
+         state.state.isHydrated = true; // Mark as hydrated
          return state;
        },
     }

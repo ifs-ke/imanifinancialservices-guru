@@ -21,7 +21,7 @@ import type { UserShareInfo } from '@/lib/types';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import store hooks
 import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
 import { triggerCollaborationNotification } from '@/services/notificationService'; // Import notification trigger
-import { useAuth } from '@clerk/nextjs'; // Import useAuth to get current user info
+import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk useAuth hook
 
 interface ShareReviewDialogProps {
   isOpen: boolean;
@@ -32,7 +32,7 @@ interface ShareReviewDialogProps {
 const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, weekKey }) => {
   const { toast } = useToast();
   const { shareWeekReview, revokeWeekShare, searchUserToShareWith } = useWeeklyReviewStore(); // Get actions from store
-  const { user } = useAuth(); // Get current user object
+  const { user } = useAuth(); // Get current user object from Clerk
 
   const [emailToShare, setEmailToShare] = useState('');
   const [searchResult, setSearchResult] = useState<UserShareInfo | null>(null);
@@ -112,7 +112,9 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
       // Note: This notification will only appear in the *recipient's* browser session
       // if they happen to be online when this action runs. A robust system would
       // store notifications server-side. For now, we trigger it for the sharer as a confirmation.
-       triggerCollaborationNotification(sharerName, weekKey); // Consider if this should notify the sharer or attempt to notify recipient
+       // TODO: Implement server-side notification trigger for reliability
+       // triggerCollaborationNotification(sharerName, weekKey, searchResult.userId); // Pass recipient ID
+       console.info(`Client-side notification trigger placeholder for sharing review ${weekKey} by ${sharerName} with ${searchResult.userId}`);
 
       // Add to local list optimistically or refetch
       setSharedWithList(prev => [...prev, searchResult]);
