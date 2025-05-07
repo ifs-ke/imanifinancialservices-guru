@@ -1,11 +1,14 @@
 // src/lib/logger.ts
+// This logger is primarily for server-side. Client logs are sent via API.
 
 import winston, { format, Logger as WinstonLogger } from 'winston';
+// To re-enable Logtail for server logs, uncomment and install @logtail/winston
+// import { WinstonLogtail } from '@logtail/winston';
 
+// const LOGTAIL_SOURCE_TOKEN = process.env.LOGTAIL_SOURCE_TOKEN; // For server-side Logtail
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug';
 
-// Define log levels type
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'verbose';
 
 let logger: WinstonLogger | null = null;
@@ -16,11 +19,11 @@ const logFormat = format.combine(
     }),
     format.errors({ stack: true }), // This will automatically include stack traces for Error objects
     format.splat(),
-    format.json()
+    format.json() // Use JSON format for structured logging
 );
 
 if (!logger) {
-    const transports = [];
+    const transports: winston.transport[] = [];
 
     // Console transport for all environments
     transports.push(new winston.transports.Console({
@@ -31,6 +34,19 @@ if (!logger) {
         level: LOG_LEVEL, // Respect configured log level for console
     }));
 
+    // Example: Add Logtail transport for server logs (if token is provided)
+    // if (LOGTAIL_SOURCE_TOKEN && typeof window === 'undefined') { // Ensure it runs only on server
+    //     try {
+    //         transports.push(new WinstonLogtail({
+    //             sourceToken: LOGTAIL_SOURCE_TOKEN,
+    //             format: logFormat, // Apply the base JSON format
+    //         }));
+    //         console.log("Logtail transport configured for Winston (server-side).");
+    //     } catch (e) {
+    //         console.error("Failed to configure Logtail transport for Winston:", e);
+    //     }
+    // }
+
     logger = winston.createLogger({
         level: LOG_LEVEL, // Set the base logging level for the logger instance
         format: logFormat, // Default format for the logger
@@ -38,17 +54,17 @@ if (!logger) {
         exitOnError: false, // Do not exit on handled exceptions
     });
 
-    logger.info(`Logger initialized. Level: ${LOG_LEVEL}. NODE_ENV: ${process.env.NODE_ENV}.`);
+    logger.info(`Winston Logger initialized. Level: ${LOG_LEVEL}. NODE_ENV: ${process.env.NODE_ENV}.`);
 }
 
-const getBaseContext = () => {
-  // Mock Clerk data when disabled
-  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID;
-  // Add other general context if needed (e.g., application version)
+// Base context, potentially including user ID if available server-side
+const getBaseContext = (userIdOverride?: string) => {
+  // For server-side calls (e.g., from API routes), auth() would be available if Clerk is used.
+  // For client-side logs forwarded via API, userIdOverride will be used.
+  const userId = userIdOverride || CLERK_DISABLED_PLACEHOLDER_USER_ID; // Fallback or placeholder
   return {
     userId: userId,
     environment: process.env.NODE_ENV,
-    // Consider adding application name/version here
     // appName: 'IFC-Guru',
     // appVersion: process.env.npm_package_version, // If available
   };
@@ -71,35 +87,36 @@ export const withRequestContext = (req: Request, context: Record<string, any> = 
     };
 };
 
-
-const logWithContext = (level: LogLevel, message: string, context: Record<string, any> = {}) => {
+// Internal logging function using Winston
+const logWithWinston = (level: LogLevel, message: string, context: Record<string, any> = {}, userIdForContext?: string) => {
     if (!logger) {
-        // Fallback if logger somehow isn't initialized (should not happen with the above structure)
-        const fallbackMessage = `[${level.toUpperCase()}] ${message}`;
+        // Fallback if logger somehow isn't initialized
+        const fallbackMessage = `[WINSTON FALLBACK - ${level.toUpperCase()}] ${message}`;
         if (level === 'error') console.error(fallbackMessage, context);
         else if (level === 'warn') console.warn(fallbackMessage, context);
         else console.log(fallbackMessage, context);
         return;
     }
 
-    const fullContext = { ...getBaseContext(), ...context };
+    const fullContext = { ...getBaseContext(userIdForContext), ...context };
     logger.log(level, message, fullContext);
 };
 
-export const logInfo = (message: string, context?: Record<string, any>) => {
-    logWithContext('info', message, context);
+// Exported logging functions
+export const logInfo = (message: string, context?: Record<string, any>, userIdForContext?: string) => {
+    logWithWinston('info', message, context, userIdForContext);
 };
 
-export const logWarn = (message: string, context?: Record<string, any>) => {
-    logWithContext('warn', message, context);
+export const logWarn = (message: string, context?: Record<string, any>, userIdForContext?: string) => {
+    logWithWinston('warn', message, context, userIdForContext);
 };
 
-export const logError = (message: string, error?: unknown, context?: Record<string, any>) => {
+export const logError = (message: string, error?: unknown, context?: Record<string, any>, userIdForContext?: string) => {
     let errorDetails: Record<string, any> = {};
     if (error instanceof Error) {
         errorDetails = {
             errorMessage: error.message,
-            errorName: error.name, // Include error name
+            errorName: error.name,
             // Winston's format.errors({ stack: true }) should handle stack
         };
     } else if (error !== undefined && error !== null) {
@@ -107,16 +124,15 @@ export const logError = (message: string, error?: unknown, context?: Record<stri
     }
 
     const fullContext = { ...context, ...errorDetails };
-    logWithContext('error', message, fullContext);
+    logWithWinston('error', message, fullContext, userIdForContext);
 };
 
-export const logDebug = (message: string, context?: Record<string, any>) => {
-    logWithContext('debug', message, context);
+export const logDebug = (message: string, context?: Record<string, any>, userIdForContext?: string) => {
+    logWithWinston('debug', message, context, userIdForContext);
 };
 
-export const logVerbose = (message: string, context?: Record<string, any>) => {
-    logWithContext('verbose', message, context);
+export const logVerbose = (message: string, context?: Record<string, any>, userIdForContext?: string) => {
+    logWithWinston('verbose', message, context, userIdForContext);
 };
-
 
 export { logger as winstonLogger }; // Export the winston instance if direct access is needed

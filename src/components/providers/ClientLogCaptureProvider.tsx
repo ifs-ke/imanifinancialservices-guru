@@ -3,8 +3,11 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useClientLogStore } from '@/store/clientLogStore';
-import { logInfo, logWarn, logError, logDebug } from '@/lib/logger'; // Use the existing logger methods which now use Winston
-import type { LogLevel, CapturedLog } from '@/store/clientLogStore'; // Import LogLevel type
+import type { LogLevel as ClientLogLevel } from '@/store/clientLogStore'; // Renamed to avoid conflict
+
+// import { useAuth } from '@clerk/nextjs/client'; // Clerk disabled
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+
 
 interface ClientLogCaptureProviderProps {
   children: React.ReactNode;
@@ -13,6 +16,47 @@ interface ClientLogCaptureProviderProps {
 const ClientLogCaptureProvider: React.FC<ClientLogCaptureProviderProps> = ({ children }) => {
   const addLogToStore = useClientLogStore((state) => state.addLog);
   const originalConsoleMethodsRef = useRef<any>(null);
+  // const { userId: clerkUserId } = useAuth(); // Clerk disabled
+
+  // Function to send log to backend API
+  const sendLogToBackend = async (level: ClientLogLevel, messages: any[], context?: Record<string, any>) => {
+    try {
+      const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder when Clerk is disabled
+
+      // Format message for backend
+      const messageString = messages.map(arg => {
+        if (arg instanceof Error) return `${arg.name}: ${arg.message}${arg.stack ? `\nStack: ${arg.stack}` : ''}`;
+        try { return typeof arg === 'object' ? JSON.stringify(arg) : String(arg); }
+        catch { return '[Unserializable Object]' }
+      }).join(' ');
+
+      const payload = {
+        level,
+        message: messageString,
+        context: {
+          ...context,
+          source: 'client-console',
+          userId: userId, // Add userId to context for backend logging
+          url: typeof window !== 'undefined' ? window.location.href : undefined,
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+        },
+      };
+
+      await fetch('/api/client-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      // Use original console.error to avoid loop if this itself fails
+      if (originalConsoleMethodsRef.current?.error) {
+        originalConsoleMethodsRef.current.error('Failed to send client log to backend:', error);
+      } else {
+        console.error('Failed to send client log to backend (original console unavailable):', error);
+      }
+    }
+  };
+
 
   useEffect(() => {
     if (typeof window !== 'undefined' && console && !originalConsoleMethodsRef.current) {
@@ -24,36 +68,11 @@ const ClientLogCaptureProvider: React.FC<ClientLogCaptureProviderProps> = ({ chi
         debug: console.debug,
       };
 
-      const createLogHandler = (level: LogLevel, originalMethod: (...args: any[]) => void) => {
+      const createLogHandler = (level: ClientLogLevel, originalMethod: (...args: any[]) => void) => {
         return (...args: any[]) => {
-          // 1. Call the original console method
-          originalMethod(...args);
-
-          // 2. Add the log to the Zustand store for the UI Logger page
-          addLogToStore(level, args);
-
-          // 3. Format and send the log to the Winston backend via logger functions
-          const message = args.map(arg => {
-            if (arg instanceof Error) return `${arg.name}: ${arg.message}${arg.stack ? `\nStack: ${arg.stack}` : ''}`;
-            if (typeof arg === 'object') {
-              try { return JSON.stringify(arg); } catch { return '[Unserializable Object]'; }
-            }
-            return String(arg);
-          }).join(' ');
-
-          const context = { source: 'client-console' }; // Add context
-
-          // Use the appropriate Winston-backed logger function
-          switch (level) {
-              case 'log': logInfo(`Client Console Log: ${message}`, context); break;
-              case 'info': logInfo(`Client Console Info: ${message}`, context); break;
-              case 'warn': logWarn(`Client Console Warn: ${message}`, context); break;
-              case 'error':
-                  const errorArg = args.find(arg => arg instanceof Error);
-                  logError(`Client Console Error: ${message}`, errorArg, context);
-                  break;
-              case 'debug': logDebug(`Client Console Debug: ${message}`, context); break;
-          }
+          originalMethod(...args); // Call original console method
+          addLogToStore(level, args); // Add to Zustand store for UI display
+          sendLogToBackend(level, args); // Send to backend API
         };
       };
 
@@ -63,11 +82,18 @@ const ClientLogCaptureProvider: React.FC<ClientLogCaptureProviderProps> = ({ chi
       console.error = createLogHandler('error', originalConsoleMethodsRef.current.error);
       console.debug = createLogHandler('debug', originalConsoleMethodsRef.current.debug);
 
+      // Initial log to confirm setup (will also be sent to backend)
+      // Use a slight delay to ensure fetch is available and original console methods are stored
+      setTimeout(() => {
+        if (console.info === createLogHandler('info', originalConsoleMethodsRef.current.info)) { // Check if still overridden
+            console.info('ClientLogCaptureProvider: Console methods overridden and connected to backend logger API.');
+        }
+      }, 100);
 
-      logInfo('ClientLogCaptureProvider: Console methods overridden and connected to Winston logger.');
     }
 
-    // Cleanup function is generally not needed here.
+    // No cleanup needed for console override as it should persist for the app lifetime
+    // unless the component unmounts and we want to restore, but for a provider, this is usually not the case.
   }, [addLogToStore]);
 
   return <>{children}</>;
