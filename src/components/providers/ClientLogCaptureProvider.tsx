@@ -85,7 +85,7 @@ const ClientLogCaptureProvider: React.FC<ClientLogCaptureProviderProps> = ({ chi
       // Initial log to confirm setup (will also be sent to backend)
       // Use a slight delay to ensure fetch is available and original console methods are stored
       setTimeout(() => {
-        if (console.info === createLogHandler('info', originalConsoleMethodsRef.current.info)) { // Check if still overridden
+        if (originalConsoleMethodsRef.current && console.info === createLogHandler('info', originalConsoleMethodsRef.current.info)) { // Check if still overridden
             console.info('ClientLogCaptureProvider: Console methods overridden and connected to backend logger API.');
         }
       }, 100);

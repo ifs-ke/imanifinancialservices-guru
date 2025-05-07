@@ -153,7 +153,7 @@ export default function LoggerPage() {
                     </Button>
                   </li>
                   <li>
-                    <strong>Local Development:</strong> Server logs will appear in the terminal where you run `pnpm dev`.
+                    <strong>Local Development:</strong> Server logs will appear in the terminal where you run `npm run dev`.
                   </li>
                   <li>
                     <strong>Other Providers:</strong> Consult your hosting provider's documentation for instructions on accessing server logs.
