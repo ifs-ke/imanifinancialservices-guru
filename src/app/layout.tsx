@@ -7,7 +7,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 // import { ClerkProvider } from '@clerk/nextjs'; // Clerk disabled
-import ClientLogCaptureProvider from '@/components/providers/ClientLogCaptureProvider';
+// ClientLogCaptureProvider removed from here, will be used in DashboardLayout
 
 // Initialize Inter font for sans-serif
 const inter = Inter({
@@ -41,19 +41,19 @@ export default function RootLayout({
             roboto_mono.variable
           )}
         >
-          <ClientLogCaptureProvider>
+           {/* ClientLogCaptureProvider removed from here */}
             <ThemeProvider
               attribute="class"
               defaultTheme="system"
               enableSystem
               disableTransitionOnChange
             >
+              {/* SidebarProvider needs to wrap the layout that uses the sidebar */}
               <SidebarProvider>
                 {children}
                 <Toaster />
               </SidebarProvider>
             </ThemeProvider>
-          </ClientLogCaptureProvider>
         </body>
       </html>
     // </ClerkProvider> // Clerk disabled

@@ -1,7 +1,7 @@
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
 // Import the SERVER-SIDE logger functions from the refactored logger.ts
-import { logInfo, logWarn, logError, logDebug, type LogLevel as ServerLogLevel } from '@/lib/logger'; // Correct path
+import { logInfo, logWarn, logError, logDebug, type LogLevel as ServerLogLevel } from '@/lib/logger';
 // Clerk is disabled, so we won't import auth
 
 // Consistent placeholder ID

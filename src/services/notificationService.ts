@@ -5,10 +5,11 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useBudgetStore } from "@/store/budgetStore";
 import { useTransactionsStore } from "@/store/transactionsStore";
 import { useEffect, useMemo } from "react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils"; // Assuming formatCurrency is moved/available here
 import { startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import type { TransactionWithId, BudgetItem, BudgetItemCategory } from "@/lib/types";
-import { logInfo, logWarn, logError } from '@/lib/logger';
+// Import the NEW client-side logger functions
+import { logInfo, logWarn, logError } from '@/lib/client-logger';
 // import { useAuth } from "@clerk/nextjs/client"; // Clerk disabled
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
@@ -96,7 +97,7 @@ export function useBudgetNotifications() {
                         link: '/budget',
                     });
                     if (!loggedNotificationKeys.has(notifKey)) {
-                        logError(`Over budget for "${description}"`, undefined, logContext);
+                        logError(`Over budget for "${description}"`, undefined, logContext); // Use client-side logger
                         loggedNotificationKeys.add(notifKey);
                     }
                 }
@@ -114,7 +115,7 @@ export function useBudgetNotifications() {
                         link: '/budget',
                     });
                     if (!loggedNotificationKeys.has(notifKey)) {
-                        logWarn(`Budget warning for "${description}"`, logContext);
+                        logWarn(`Budget warning for "${description}"`, logContext); // Use client-side logger
                         loggedNotificationKeys.add(notifKey);
                     }
                 }
@@ -135,7 +136,7 @@ export function triggerCollaborationNotification(sharerName: string, weekKey: st
         link: '/weekly-review?tab=shared', // Link to the shared tab
     });
     // Log this event using the general logger
-    logInfo(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, {
+    logInfo(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, { // Use client-side logger
         sharerName,
         weekKey,
         recipientUserId,
@@ -152,5 +153,5 @@ export function triggerAppUpdateNotification(title: string, message: string, lin
         message: message,
         link: link,
     });
-    logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link });
+    logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }); // Use client-side logger
 }

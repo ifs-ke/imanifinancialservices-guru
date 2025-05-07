@@ -18,6 +18,16 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  webpack: (config, {isServer}) => {
+    if (isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false, // Fix: Tell webpack not to resolve 'fs'
+      };
+    }
+
+    return config;
+  },
 };
 
 export default nextConfig;

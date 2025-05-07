@@ -1,45 +1,55 @@
 // src/lib/logger.ts
-// This logger is primarily for server-side. Client logs are sent via API.
+// SERVER-SIDE ONLY LOGGER using Winston
 
-import winston, { format, Logger as WinstonLogger } from 'winston';
-// To re-enable Logtail for server logs, uncomment and install @logtail/winston
+import winston, { format, Logger as WinstonLogger, transports } from 'winston';
+// To re-enable Logtail for server logs, uncomment the line below and ensure @logtail/winston is installed
 // import { WinstonLogtail } from '@logtail/winston';
 
-// const LOGTAIL_SOURCE_TOKEN = process.env.LOGTAIL_SOURCE_TOKEN; // For server-side Logtail
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
-const LOG_LEVEL = process.env.LOG_LEVEL || 'debug';
+// const LOGTAIL_SOURCE_TOKEN = process.env.LOGTAIL_SOURCE_TOKEN; // For server-side Logtail integration if needed
+const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // Default log level
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y'; // Use the consistent placeholder
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'verbose';
 
-let logger: WinstonLogger | null = null;
+let loggerInstance: WinstonLogger | null = null;
 
+// Centralized format for consistency
 const logFormat = format.combine(
-    format.timestamp({
-        format: 'YYYY-MM-DD HH:mm:ss'
-    }),
-    format.errors({ stack: true }), // This will automatically include stack traces for Error objects
+    format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    format.errors({ stack: true }), // Include stack traces for Error objects
     format.splat(),
-    format.json() // Use JSON format for structured logging
+    format.json() // Structured JSON format is good for log aggregators
 );
 
-if (!logger) {
-    const transports: winston.transport[] = [];
+function initializeLogger(): WinstonLogger {
+    if (loggerInstance) {
+        return loggerInstance;
+    }
 
-    // Console transport for all environments
-    transports.push(new winston.transports.Console({
+    // Ensure this runs ONLY on the server
+    if (typeof window !== 'undefined') {
+         console.warn("Winston logger initialization attempted on client-side. Skipping.");
+         // Return a dummy logger or throw error if needed
+         return winston.createLogger({ silent: true }); // Or create a no-op logger
+    }
+
+    const configuredTransports: winston.transport[] = [];
+
+    // Always add Console transport for server environments
+    configuredTransports.push(new transports.Console({
         format: format.combine(
-            format.colorize(),
-            format.simple() // More readable console output
+            format.colorize(), // Make console output colorful
+            format.simple() // Simple format for readability in console
         ),
-        level: LOG_LEVEL, // Respect configured log level for console
+        level: LOG_LEVEL, // Respect configured level for console output
     }));
 
-    // Example: Add Logtail transport for server logs (if token is provided)
-    // if (LOGTAIL_SOURCE_TOKEN && typeof window === 'undefined') { // Ensure it runs only on server
+    // Example: Add Logtail transport if configured (SERVER-SIDE ONLY)
+    // if (LOGTAIL_SOURCE_TOKEN) { // No need for typeof window check here, as we already checked above
     //     try {
-    //         transports.push(new WinstonLogtail({
+    //         configuredTransports.push(new WinstonLogtail({
     //             sourceToken: LOGTAIL_SOURCE_TOKEN,
-    //             format: logFormat, // Apply the base JSON format
+    //             format: logFormat, // Use the base JSON format
     //         }));
     //         console.log("Logtail transport configured for Winston (server-side).");
     //     } catch (e) {
@@ -47,62 +57,49 @@ if (!logger) {
     //     }
     // }
 
-    logger = winston.createLogger({
-        level: LOG_LEVEL, // Set the base logging level for the logger instance
-        format: logFormat, // Default format for the logger
-        transports: transports,
-        exitOnError: false, // Do not exit on handled exceptions
+    loggerInstance = winston.createLogger({
+        level: LOG_LEVEL, // Base logging level for the instance
+        format: logFormat, // Default format for all transports unless overridden
+        transports: configuredTransports,
+        exitOnError: false, // Prevent crashing on logging errors
     });
 
-    logger.info(`Winston Logger initialized. Level: ${LOG_LEVEL}. NODE_ENV: ${process.env.NODE_ENV}.`);
+    // Log initialization details (only runs once)
+    loggerInstance.info(`Server Winston Logger initialized. Level: ${LOG_LEVEL}. NODE_ENV: ${process.env.NODE_ENV}.`);
+
+    return loggerInstance;
 }
 
-// Base context, potentially including user ID if available server-side
+// Get the logger instance (creates if it doesn't exist)
+const getLogger = (): WinstonLogger => {
+    // Ensure logger is initialized (safe to call multiple times)
+    return loggerInstance || initializeLogger();
+};
+
+// Helper to get base context, including potential user ID (primarily for server requests)
 const getBaseContext = (userIdOverride?: string) => {
-  // For server-side calls (e.g., from API routes), auth() would be available if Clerk is used.
-  // For client-side logs forwarded via API, userIdOverride will be used.
-  const userId = userIdOverride || CLERK_DISABLED_PLACEHOLDER_USER_ID; // Fallback or placeholder
+  // In a real server context (API route, Server Action), you might get userId differently if Clerk was enabled
+  const userId = userIdOverride || CLERK_DISABLED_PLACEHOLDER_USER_ID;
   return {
     userId: userId,
-    environment: process.env.NODE_ENV,
-    // appName: 'IFC-Guru',
-    // appVersion: process.env.npm_package_version, // If available
+    environment: process.env.NODE_ENV || 'development',
+    source: 'server', // Indicate log source is server-side
+    // Add other common context fields if needed
   };
 };
 
-// Helper to add request context (primarily for server-side API routes/actions)
-export const withRequestContext = (req: Request, context: Record<string, any> = {}): Record<string, any> => {
-    const headersObject: Record<string, string> = {};
-    req.headers.forEach((value, key) => {
-        headersObject[key] = value;
-    });
-
-    return {
-        ...context,
-        requestId: headersObject['x-request-id'] || headersObject['x-vercel-id'], // Common request ID headers
-        path: req.url ? new URL(req.url).pathname : undefined,
-        method: req.method,
-        userAgent: headersObject['user-agent'],
-        ip: headersObject['x-forwarded-for'] || headersObject['x-real-ip'], // Common IP headers
-    };
-};
-
-// Internal logging function using Winston
+// Internal function to handle logging with Winston
 const logWithWinston = (level: LogLevel, message: string, context: Record<string, any> = {}, userIdForContext?: string) => {
-    if (!logger) {
-        // Fallback if logger somehow isn't initialized
-        const fallbackMessage = `[WINSTON FALLBACK - ${level.toUpperCase()}] ${message}`;
-        if (level === 'error') console.error(fallbackMessage, context);
-        else if (level === 'warn') console.warn(fallbackMessage, context);
-        else console.log(fallbackMessage, context);
-        return;
-    }
+    const logger = getLogger();
+    // Ensure logger wasn't skipped on client-side attempt
+    if (logger.silent) return;
 
     const fullContext = { ...getBaseContext(userIdForContext), ...context };
     logger.log(level, message, fullContext);
 };
 
-// Exported logging functions
+// --- Exported Server-Side Logging Functions ---
+
 export const logInfo = (message: string, context?: Record<string, any>, userIdForContext?: string) => {
     logWithWinston('info', message, context, userIdForContext);
 };
@@ -111,20 +108,24 @@ export const logWarn = (message: string, context?: Record<string, any>, userIdFo
     logWithWinston('warn', message, context, userIdForContext);
 };
 
+// Updated logError to better handle the error object for Winston
 export const logError = (message: string, error?: unknown, context?: Record<string, any>, userIdForContext?: string) => {
-    let errorDetails: Record<string, any> = {};
-    if (error instanceof Error) {
-        errorDetails = {
-            errorMessage: error.message,
-            errorName: error.name,
-            // Winston's format.errors({ stack: true }) should handle stack
-        };
-    } else if (error !== undefined && error !== null) {
-        errorDetails = { error: String(error) }; // Convert unknown error to string
-    }
+    const logger = getLogger();
+     // Ensure logger wasn't skipped on client-side attempt
+    if (logger.silent) return;
 
-    const fullContext = { ...context, ...errorDetails };
-    logWithWinston('error', message, fullContext, userIdForContext);
+    const fullContext = { ...getBaseContext(userIdForContext), ...context };
+
+    // Pass the error object directly to Winston if it's an Error instance
+    if (error instanceof Error) {
+        logger.error(message, { ...fullContext, error: error }); // Winston handles the Error object correctly
+    } else if (error !== undefined && error !== null) {
+        // Log non-Error types as part of the context
+        logger.error(message, { ...fullContext, errorDetails: String(error) });
+    } else {
+        // Log only the message and context if no error object provided
+        logger.error(message, fullContext);
+    }
 };
 
 export const logDebug = (message: string, context?: Record<string, any>, userIdForContext?: string) => {
@@ -135,4 +136,5 @@ export const logVerbose = (message: string, context?: Record<string, any>, userI
     logWithWinston('verbose', message, context, userIdForContext);
 };
 
-export { logger as winstonLogger }; // Export the winston instance if direct access is needed
+// Export the Winston instance itself only if absolutely necessary for advanced configuration elsewhere
+// export { getLogger as getServerLoggerInstance };

@@ -3,10 +3,10 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useClientLogStore } from '@/store/clientLogStore';
-import type { LogLevel as ClientLogLevel } from '@/store/clientLogStore'; // Renamed to avoid conflict
-
-// import { useAuth } from '@clerk/nextjs/client'; // Clerk disabled
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+import type { LogLevel as ClientStoreLogLevel } from '@/store/clientLogStore'; // Renamed to avoid conflict
+// Import the NEW client-side logger functions
+import * as clientLogger from '@/lib/client-logger';
+import type { ClientLogLevel } from '@/lib/client-logger';
 
 
 interface ClientLogCaptureProviderProps {
@@ -16,50 +16,11 @@ interface ClientLogCaptureProviderProps {
 const ClientLogCaptureProvider: React.FC<ClientLogCaptureProviderProps> = ({ children }) => {
   const addLogToStore = useClientLogStore((state) => state.addLog);
   const originalConsoleMethodsRef = useRef<any>(null);
-  // const { userId: clerkUserId } = useAuth(); // Clerk disabled
-
-  // Function to send log to backend API
-  const sendLogToBackend = async (level: ClientLogLevel, messages: any[], context?: Record<string, any>) => {
-    try {
-      const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder when Clerk is disabled
-
-      // Format message for backend
-      const messageString = messages.map(arg => {
-        if (arg instanceof Error) return `${arg.name}: ${arg.message}${arg.stack ? `\nStack: ${arg.stack}` : ''}`;
-        try { return typeof arg === 'object' ? JSON.stringify(arg) : String(arg); }
-        catch { return '[Unserializable Object]' }
-      }).join(' ');
-
-      const payload = {
-        level,
-        message: messageString,
-        context: {
-          ...context,
-          source: 'client-console',
-          userId: userId, // Add userId to context for backend logging
-          url: typeof window !== 'undefined' ? window.location.href : undefined,
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-        },
-      };
-
-      await fetch('/api/client-log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    } catch (error) {
-      // Use original console.error to avoid loop if this itself fails
-      if (originalConsoleMethodsRef.current?.error) {
-        originalConsoleMethodsRef.current.error('Failed to send client log to backend:', error);
-      } else {
-        console.error('Failed to send client log to backend (original console unavailable):', error);
-      }
-    }
-  };
-
 
   useEffect(() => {
+    // Only run in the browser environment
     if (typeof window !== 'undefined' && console && !originalConsoleMethodsRef.current) {
+      // Store original methods before overriding
       originalConsoleMethodsRef.current = {
         log: console.log,
         info: console.info,
@@ -68,33 +29,60 @@ const ClientLogCaptureProvider: React.FC<ClientLogCaptureProviderProps> = ({ chi
         debug: console.debug,
       };
 
-      const createLogHandler = (level: ClientLogLevel, originalMethod: (...args: any[]) => void) => {
+      // Map console methods to our client logger and Zustand store
+      const createLogHandler = (level: ClientLogLevel, storeLevel: ClientStoreLogLevel, originalMethod: (...args: any[]) => void) => {
         return (...args: any[]) => {
-          originalMethod(...args); // Call original console method
-          addLogToStore(level, args); // Add to Zustand store for UI display
-          sendLogToBackend(level, args); // Send to backend API
+          try {
+            // 1. Call the original console method to maintain default browser behavior
+            originalMethod.apply(console, args);
+
+            // 2. Add the log entry to the Zustand store for UI display
+            addLogToStore(storeLevel, args);
+
+            // 3. Send the log to the backend via the client logger utility
+            // Dynamically call the correct function from clientLogger based on level
+            const loggerFunc = clientLogger[level] || clientLogger.logInfo; // Default to logInfo if level mismatch
+            loggerFunc('Console Capture:', ...args); // Pass arguments to the client logger
+
+          } catch (error) {
+              // Use original console.error to report issues with the logging interception itself
+              const originalError = originalConsoleMethodsRef.current?.error || console.error;
+              originalError("Error within ClientLogCaptureProvider log handler:", error, { originalArgs: args });
+          }
         };
       };
 
-      console.log = createLogHandler('log', originalConsoleMethodsRef.current.log);
-      console.info = createLogHandler('info', originalConsoleMethodsRef.current.info);
-      console.warn = createLogHandler('warn', originalConsoleMethodsRef.current.warn);
-      console.error = createLogHandler('error', originalConsoleMethodsRef.current.error);
-      console.debug = createLogHandler('debug', originalConsoleMethodsRef.current.debug);
+      // Override console methods
+      console.log = createLogHandler('log', 'log', originalConsoleMethodsRef.current.log);
+      console.info = createLogHandler('info', 'info', originalConsoleMethodsRef.current.info);
+      console.warn = createLogHandler('warn', 'warn', originalConsoleMethodsRef.current.warn);
+      console.error = createLogHandler('error', 'error', originalConsoleMethodsRef.current.error);
+      console.debug = createLogHandler('debug', 'debug', originalConsoleMethodsRef.current.debug);
 
-      // Initial log to confirm setup (will also be sent to backend)
-      // Use a slight delay to ensure fetch is available and original console methods are stored
-      setTimeout(() => {
-        if (originalConsoleMethodsRef.current && console.info === createLogHandler('info', originalConsoleMethodsRef.current.info)) { // Check if still overridden
-            console.info('ClientLogCaptureProvider: Console methods overridden and connected to backend logger API.');
-        }
-      }, 100);
+       // Log initialization success (uses the new overridden console.info)
+       // Use a timeout to ensure the override is fully established
+       setTimeout(() => {
+           console.info('ClientLogCaptureProvider initialized: Console logs are now captured.');
+       }, 50);
 
     }
 
-    // No cleanup needed for console override as it should persist for the app lifetime
-    // unless the component unmounts and we want to restore, but for a provider, this is usually not the case.
-  }, [addLogToStore]);
+    // Cleanup function (optional but good practice if needed):
+    // Restore original console methods if the provider were to unmount.
+    // For a root provider, this might not be strictly necessary.
+    // return () => {
+    //   if (originalConsoleMethodsRef.current) {
+    //     console.log = originalConsoleMethodsRef.current.log;
+    //     console.info = originalConsoleMethodsRef.current.info;
+    //     console.warn = originalConsoleMethodsRef.current.warn;
+    //     console.error = originalConsoleMethodsRef.current.error;
+    //     console.debug = originalConsoleMethodsRef.current.debug;
+    //     originalConsoleMethodsRef.current = null; // Clear ref
+    //     console.info("ClientLogCaptureProvider cleaned up: Console methods restored.");
+    //   }
+    // };
+
+  }, [addLogToStore]); // Dependency array
 
   return <>{children}</>;
 };
