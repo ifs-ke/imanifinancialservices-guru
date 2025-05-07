@@ -21,7 +21,11 @@ import type { UserShareInfo } from '@/lib/types';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import store hooks
 import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
 import { triggerCollaborationNotification } from '@/services/notificationService'; // Import notification trigger
-import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk useAuth hook
+// import { useAuth } from '@clerk/nextjs/client'; // Re-enable Clerk useAuth hook // Clerk disabled
+
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
+const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
 
 interface ShareReviewDialogProps {
   isOpen: boolean;
@@ -32,7 +36,13 @@ interface ShareReviewDialogProps {
 const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, weekKey }) => {
   const { toast } = useToast();
   const { shareWeekReview, revokeWeekShare, searchUserToShareWith } = useWeeklyReviewStore(); // Get actions from store
-  const { user } = useAuth(); // Get current user object from Clerk
+  // const { user } = useAuth(); // Clerk disabled
+  // Mock user object when Clerk is disabled
+  const user = {
+      id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
+      fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
+      primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL },
+  };
 
   const [emailToShare, setEmailToShare] = useState('');
   const [searchResult, setSearchResult] = useState<UserShareInfo | null>(null);

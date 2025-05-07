@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/utils"; // Assuming formatCurrency is move
 import { startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
 import type { TransactionWithId, BudgetItem, BudgetItemCategory } from "@/lib/types";
 // Import the NEW client-side logger functions
-import { logInfo, logWarn, logError } from '@/lib/client-logger';
+import { logInfo, logWarn, logError } from '@/lib/logger'; // Use client logger
 // import { useAuth } from "@clerk/nextjs/client"; // Clerk disabled
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
@@ -29,7 +29,7 @@ export function useBudgetNotifications() {
         const start = startOfMonth(now);
         const end = endOfMonth(now);
         const daysInPeriod = differenceInDays(end, start) + 1;
-        const budgetMultiplier = 1;
+        const budgetMultiplier = 1; // Using full month budget for checks
 
         const actualSpendingByCategory: Record<string, number> = {};
         const transactionsThisMonth = allTransactions.filter(tx => {

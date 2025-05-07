@@ -20,6 +20,7 @@ import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Impo
 // Placeholder for Clerk data when disabled
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
+
 export default function DashboardLayout({
   children,
 }: {
@@ -69,4 +70,3 @@ export default function DashboardLayout({
       </ClientLogCaptureProvider>
   );
 }
-```

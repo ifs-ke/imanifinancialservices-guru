@@ -46,6 +46,7 @@ const UserButtonPlaceholder = () => (
     <UserCircle size={20} />
   </div>
 );
+// Mock useUser hook
 const useUser = () => ({ isSignedIn: true, user: { id: "user_2wXc4D8KBDKGhxagoRStZOXnP2Y", fullName: "Local User" } });
 
 
@@ -79,7 +80,7 @@ interface SidebarContextProps {
 
 const SidebarContext = createContext<SidebarContextProps>({
   isMobile: undefined, // Start as undefined
-  state: "expanded", // Default to expanded on desktop
+  state: "collapsed", // Default to collapsed
   collapseSidebar: () => {},
   expandSidebar: () => {},
   toggleSidebar: () => {},
@@ -96,9 +97,7 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
 }) => {
   const isMobile = useIsMobile();
   // Initialize state based on isMobile only when it's defined
-  const [state, setState] = useState<SidebarState>(
-      isMobile === undefined ? "collapsed" : (isMobile ? "collapsed" : "collapsed") // Start collapsed by default
-  );
+  const [state, setState] = useState<SidebarState>("collapsed"); // Start collapsed by default
 
   const collapseSidebar = () => setState("collapsed");
   const expandSidebar = () => setState("expanded");
@@ -107,8 +106,8 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   // Update state when isMobile value becomes available or changes
   React.useEffect(() => {
     if (isMobile !== undefined) {
-      // Keep collapsed state on mobile, reset to collapsed on desktop if becoming non-mobile
-      setState(isMobile ? "collapsed" : "collapsed");
+      // Always start collapsed on mobile, stay collapsed on desktop initially
+      setState("collapsed");
     }
   }, [isMobile]);
 
@@ -372,4 +371,3 @@ export const SidebarInset = React.forwardRef<
    );
 });
 SidebarInset.displayName = "SidebarInset";
-    

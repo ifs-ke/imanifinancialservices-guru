@@ -1,4 +1,3 @@
-
 // src/store/weeklyReviewStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
@@ -7,7 +6,7 @@ import type { WeeklyReviewData, UserShareInfo } from '@/lib/types';
 import { getISOWeek, getYear } from 'date-fns';
 import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
 // import { auth } from '@clerk/nextjs/client'; // Clerk disabled - Comment out client-side auth import
-// No longer importing custom logger
+import { logInfo, logWarn, logError } from '@/lib/logger'; // Use client logger
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
@@ -69,7 +68,7 @@ export const getWeekKey = (date: Date): string => {
       }
       return `${year}-${weekNumber.toString().padStart(2, '0')}`;
   } catch (error) {
-       console.error("Error generating week key:", error);
+       logError("Error generating week key:", error);
        return "invalid-week-key";
   }
 };
@@ -99,11 +98,11 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       setJournalEntry: (weekKey, journal, ownerId) => {
          const currentUserId = getCurrentUserId();
          if (ownerId !== currentUserId) {
-             console.warn(`Security Warning: Attempted client-side journal update for non-owned review.`, { weekKey, ownerId, currentUserId });
+             logWarn(`Security Warning: Attempted client-side journal update for non-owned review.`, { weekKey, ownerId, currentUserId });
              return;
          }
          if (!currentUserId) {
-             console.warn("Cannot set journal entry: User not available.");
+             logWarn("Cannot set journal entry: User not available.");
              return;
          }
         set((state) => {
@@ -118,7 +117,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       setTransactionComment: (weekKey, transactionId, comment, ownerId) => {
          const currentUserId = getCurrentUserId();
          if (!currentUserId) {
-             console.warn("Cannot set transaction comment: User not available.");
+             logWarn("Cannot set transaction comment: User not available.");
              return;
          }
          set((state) => {
@@ -133,7 +132,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                  reviewsMapKey = 'sharedReviews';
                  // Check if current user is allowed to comment (either owner or in sharedWith)
                  if (ownerId !== currentUserId && !(reviewToUpdate?.sharedWith?.includes(currentUserId))) {
-                     console.warn(`Permission Denied: User cannot comment on review.`, { currentUserId, weekKey, ownerId });
+                     logWarn(`Permission Denied: User cannot comment on review.`, { currentUserId, weekKey, ownerId });
                      return state;
                  }
              }
@@ -144,7 +143,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                   reviewsMapKey = 'ownedReviews';
              } else if (!reviewToUpdate) {
                   // If no review found and owner isn't current user, cannot proceed
-                  console.error(`Cannot set comment: Review not found or permission denied.`, { weekKey, ownerId, currentUserId });
+                  logError(`Cannot set comment: Review not found or permission denied.`, undefined, { weekKey, ownerId, currentUserId });
                   return state;
              }
 
@@ -161,7 +160,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       deleteTransactionComment: (weekKey, transactionId, ownerId) => {
           const currentUserId = getCurrentUserId();
           if (!currentUserId) {
-              console.warn("Cannot delete transaction comment: User not available.");
+              logWarn("Cannot delete transaction comment: User not available.");
               return;
           }
          set((state) => {
@@ -176,11 +175,11 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                  reviewsMapKey = 'sharedReviews';
                   // Check if current user is allowed to delete comment (either owner or in sharedWith)
                   if (ownerId !== currentUserId && !(reviewToUpdate?.sharedWith?.includes(currentUserId))) {
-                     console.warn(`Permission Denied: User cannot delete comments.`, { currentUserId, weekKey, ownerId });
+                     logWarn(`Permission Denied: User cannot delete comments.`, { currentUserId, weekKey, ownerId });
                      return state;
                  }
              } else {
-                 console.error(`Cannot delete comment: Review not found or permission denied.`, { weekKey, ownerId, currentUserId });
+                 logError(`Cannot delete comment: Review not found or permission denied.`, undefined, { weekKey, ownerId, currentUserId });
                  return state;
              }
 
@@ -210,7 +209,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                 if (sharedReview.sharedWith?.includes(currentUserId)) {
                     return sharedReview;
                 } else {
-                    console.warn(`Access Denied: Attempt to access shared review without permission.`, { currentUserId, weekKey, ownerId });
+                    logWarn(`Access Denied: Attempt to access shared review without permission.`, { currentUserId, weekKey, ownerId });
                     return undefined;
                 }
            }
@@ -223,7 +222,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       },
 
       clearReviews: () => {
-          console.log("Clearing weekly review store state.");
+          logInfo("Clearing weekly review store state.");
           set({ ...initialState, isHydrated: true });
       },
 
@@ -237,7 +236,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
              const review = state.ownedReviews[weekKey];
              // Ensure the review exists and is owned by the current user before updating
              if (!review || review.ownerId !== currentUserId) {
-                  console.error(`Share failed: Review not found or not owned. Cannot update state.`, { weekKey, currentUserId });
+                  logError(`Share failed: Review not found or not owned. Cannot update state.`, undefined, { weekKey, currentUserId });
                  return state; // Return current state without modification
              }
              const updatedSharedWith = Array.from(new Set([...(review.sharedWith || []), targetUserId])).sort();
@@ -247,9 +246,9 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
           // Call the server action
           try {
              await shareReviewApi(weekKey, targetUserId);
-             console.log(`Successfully initiated share for review ${weekKey} with ${targetUserId}.`);
+             logInfo(`Successfully initiated share for review ${weekKey} with ${targetUserId}.`);
           } catch (error) {
-             console.error("Failed to share review via API:", error);
+             logError("Failed to share review via API:", error);
              // Rollback the optimistic update if the API call fails
              set((state) => {
                  const review = state.ownedReviews[weekKey];
@@ -271,7 +270,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
              const review = state.ownedReviews[weekKey];
              // Ensure review exists, is owned, and actually shared with the target before updating
              if (!review || !review.sharedWith || review.ownerId !== currentUserId || !review.sharedWith.includes(targetUserId)) {
-                  console.error(`Revoke failed: Review not found, not shared with target, or not owned. Cannot update state.`, { weekKey, targetUserId, currentUserId });
+                  logError(`Revoke failed: Review not found, not shared with target, or not owned. Cannot update state.`, undefined, { weekKey, targetUserId, currentUserId });
                   return state; // Return current state without modification
              }
              const updatedSharedWith = review.sharedWith.filter(id => id !== targetUserId);
@@ -281,9 +280,9 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
           // Call the server action
           try {
              await revokeShareApi(weekKey, targetUserId);
-              console.log(`Successfully initiated revoke share for review ${weekKey} from ${targetUserId}.`);
+              logInfo(`Successfully initiated revoke share for review ${weekKey} from ${targetUserId}.`);
           } catch (error) {
-             console.error("Failed to revoke share via API:", error);
+             logError("Failed to revoke share via API:", error);
              // Rollback the optimistic update
              set((state) => {
                  const review = state.ownedReviews[weekKey];
@@ -302,7 +301,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                const user = await searchUserByEmailApi(email);
                return user;
            } catch (error) {
-               console.error("Error searching for user via API:", error);
+               logError("Error searching for user via API:", error);
                return null; // Indicate failure
            }
        },
@@ -314,7 +313,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
       onRehydrateStorage: () => (state) => {
            if (state) {
              state.isHydrated = true;
-             console.log("Weekly review store rehydrated.");
+             logInfo("Weekly review store rehydrated.");
            }
        },
        // No custom serializer/deserializer needed if no complex types like Date are directly stored
