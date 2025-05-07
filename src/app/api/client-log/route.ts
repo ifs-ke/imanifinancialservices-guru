@@ -1,7 +1,8 @@
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
 // Import the SERVER-SIDE logger functions from the refactored logger.ts
-import { logInfo, logWarn, logError, logDebug, type LogLevel as ServerLogLevel } from '@/lib/logger'; // Correct path
+// Logger removed
+// import { logInfo, logWarn, logError, logDebug, type LogLevel as ServerLogLevel } from '@/lib/logger'; // Correct path
 // Clerk is disabled, so we won't import auth
 
 // Consistent placeholder ID
@@ -26,47 +27,61 @@ export async function POST(request: Request) {
         source: 'client-log-api', // Explicitly mark source as this API endpoint
     };
 
-    // Map client log level to server log level ('log' maps to 'info')
-    const serverLevel: ServerLogLevel = payload.level === 'log' ? 'info' : payload.level;
+    // Log using console since Winston is removed
+     const serverLevel: string = payload.level === 'log' ? 'info' : payload.level;
+     const logMessage = `[${serverLevel.toUpperCase()}] ${payload.message}`;
+     switch (serverLevel) {
+         case 'info':
+             // console.info(logMessage, contextForServerLog);
+             break;
+         case 'warn':
+             // console.warn(logMessage, contextForServerLog);
+             break;
+         case 'error':
+             // console.error(logMessage, contextForServerLog);
+             break;
+         case 'debug':
+             // console.debug(logMessage, contextForServerLog);
+             break;
+         default:
+             // console.log(`[Client ${payload.level.toUpperCase()}] ${payload.message}`, contextForServerLog);
+     }
+
 
     // Use the appropriate server-side logger function based on the level
-    switch (serverLevel) {
-      case 'info':
-        logInfo(payload.message, contextForServerLog, effectiveUserId);
-        break;
-      case 'warn':
-        logWarn(payload.message, contextForServerLog, effectiveUserId);
-        break;
-      case 'error':
-        // Pass the pre-formatted message string directly.
-        // Winston's format.errors({ stack: true }) will handle stack if present in the string.
-        // We pass 'undefined' for the error object parameter as the client already formatted it.
-        logError(payload.message, undefined, contextForServerLog, effectiveUserId);
-        break;
-      case 'debug':
-        logDebug(payload.message, contextForServerLog, effectiveUserId);
-        break;
-      case 'verbose': // Add verbose if you plan to use it from client
-        logDebug(payload.message, contextForServerLog, effectiveUserId); // Defaulting client verbose to server debug for now
-        break;
-      default:
-        // Fallback for unexpected levels, log as info
-        logInfo(`[Client ${payload.level.toUpperCase()}] ${payload.message}`, contextForServerLog, effectiveUserId);
-    }
+    // switch (serverLevel) { // Logger removed
+    //   case 'info':
+    //     logInfo(payload.message, contextForServerLog, effectiveUserId);
+    //     break;
+    //   case 'warn':
+    //     logWarn(payload.message, contextForServerLog, effectiveUserId);
+    //     break;
+    //   case 'error':
+    //     logError(payload.message, undefined, contextForServerLog, effectiveUserId);
+    //     break;
+    //   case 'debug':
+    //     logDebug(payload.message, contextForServerLog, effectiveUserId);
+    //     break;
+    //   case 'verbose':
+    //     logDebug(payload.message, contextForServerLog, effectiveUserId);
+    //     break;
+    //   default:
+    //     logInfo(`[Client ${payload.level.toUpperCase()}] ${payload.message}`, contextForServerLog, effectiveUserId);
+    // }
 
     return NextResponse.json({ success: true, message: 'Log received by server' }, { status: 200 });
 
   } catch (error) {
     // Use console.error for critical errors within the API route itself
-    console.error('CRITICAL: Error processing client log in /api/client-log:', error);
+    // console.error('CRITICAL: Error processing client log in /api/client-log:', error);
 
     // Attempt to log the error using the server logger *if* it's likely available
     // Avoid if the logger itself might be the cause of the error.
-    try {
-        logError('Failed to process client log via API', error, { endpoint: '/api/client-log' });
-    } catch (loggingError) {
-        console.error("CRITICAL: Failed to log error using Winston as well:", loggingError);
-    }
+    // try { // Logger removed
+    //     logError('Failed to process client log via API', error, { endpoint: '/api/client-log' });
+    // } catch (loggingError) {
+    //     console.error("CRITICAL: Failed to log error using logger as well:", loggingError);
+    // }
 
     return NextResponse.json({ success: false, error: 'Failed to process client log on server' }, { status: 500 });
   }

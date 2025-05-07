@@ -1,6 +1,6 @@
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server'; // Re-enabled Clerk
+// import { auth } from '@clerk/nextjs/server'; // Clerk disabled
 import connectToDatabase from '@/lib/mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
@@ -9,16 +9,19 @@ import stringify from 'fast-json-stable-stringify'; // Import stable stringify
 // import { logInfo, logWarn, logError } from '@/lib/logger'; // Logger removed
 import { addCorsHeaders } from '@/lib/utils'; // Import CORS helper
 
+// Consistent placeholder ID
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+
 // Helper to safely get collection data for a specific user
 async function getCollectionData<T>(db: any, collectionName: string, userId: string): Promise<T[]> {
   const logContext = { userId, collectionName, operation: 'getCollectionData' };
-  console.log(`Sync API: Fetching ${collectionName} for user ${userId}`, logContext); // Replaced logInfo
+  // console.log(`Sync API: Fetching ${collectionName} for user ${userId}`, logContext); // Replaced logInfo with console.log
   try {
     const collection = db.collection(collectionName);
     // Ensure userId field exists for querying
     await collection.createIndex({ userId: 1 }); // Create index if it doesn't exist
     const data = await collection.find({ userId }, { projection: { _id: 0, userId: 0 } }).toArray();
-     console.log(`Sync API: Fetched ${data.length} items from ${collectionName}`, logContext); // Replaced logInfo
+     // console.log(`Sync API: Fetched ${data.length} items from ${collectionName}`, logContext); // Replaced logInfo with console.log
 
     // Ensure dates are valid Date objects after fetching
     return (data || []).map((item: any) => {
@@ -28,7 +31,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
                  if (isNaN(parsedDate.getTime())) throw new Error("Invalid date string from DB");
                  item.date = parsedDate;
             } catch (e) {
-                 console.warn(`Sync API: Invalid date format encountered in DB for ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting date.`, { ...logContext, itemDateValue: item.date }); // Replaced logWarn
+                 // console.warn(`Sync API: Invalid date format encountered in DB for ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting date.`, { ...logContext, itemDateValue: item.date }); // Replaced logWarn with console.warn
                  // Handle appropriately - maybe skip item or use default? Using current date for now.
                  item.date = new Date(); // Default to current date if invalid
             }
@@ -39,14 +42,14 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
                   if (isNaN(parsedTimestamp.getTime())) throw new Error("Invalid timestamp string from DB");
                   item.timestamp = parsedTimestamp;
              } catch (e) {
-                 console.warn(`Sync API: Invalid timestamp format encountered in DB for ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting timestamp.`, { ...logContext, itemTimestampValue: item.timestamp }); // Replaced logWarn
+                 // console.warn(`Sync API: Invalid timestamp format encountered in DB for ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting timestamp.`, { ...logContext, itemTimestampValue: item.timestamp }); // Replaced logWarn with console.warn
                  item.timestamp = new Date();
              }
         }
         return item as T;
     });
   } catch (error) {
-     console.error(`Sync API: Error fetching ${collectionName} for user ${userId}:`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError
+     // console.error(`Sync API: Error fetching ${collectionName} for user ${userId}:`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError with console.error
     throw new Error(`Failed to fetch ${collectionName}`); // Re-throw to handle in main function
   }
 }
@@ -55,7 +58,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
 // Helper to get weekly reviews owned by the specific user
 async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<string, WeeklyReviewData>> {
     const logContext = { userId, operation: 'getOwnedWeeklyReviews' };
-    console.log(`Sync API: Fetching owned weekly reviews for user ${userId}`, logContext); // Replaced logInfo
+    // console.log(`Sync API: Fetching owned weekly reviews for user ${userId}`, logContext); // Replaced logInfo with console.log
     try {
       const collection = db.collection('weeklyReviews');
       await collection.createIndex({ userId: 1, weekKey: 1 }); // Index for querying
@@ -68,10 +71,10 @@ async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<st
              reviewsMap[doc.weekKey] = doc as WeeklyReviewData;
           }
       }
-       console.log(`Sync API: Fetched ${Object.keys(reviewsMap).length} owned weekly reviews`, logContext); // Replaced logInfo
+       // console.log(`Sync API: Fetched ${Object.keys(reviewsMap).length} owned weekly reviews`, logContext); // Replaced logInfo with console.log
        return reviewsMap;
     } catch (error) {
-       console.error(`Sync API: Error fetching owned weeklyReviews for user ${userId}:`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError
+       // console.error(`Sync API: Error fetching owned weeklyReviews for user ${userId}:`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError with console.error
       throw new Error('Failed to fetch owned weekly reviews');
     }
 }
@@ -79,7 +82,7 @@ async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<st
 // Helper to get weekly reviews shared with the specific user
 async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<string, WeeklyReviewData>> {
     const logContext = { userId, operation: 'getSharedWeeklyReviews' };
-    console.log(`Sync API: Fetching shared weekly reviews for user ${userId}`, logContext); // Replaced logInfo
+    // console.log(`Sync API: Fetching shared weekly reviews for user ${userId}`, logContext); // Replaced logInfo with console.log
     try {
       const collection = db.collection('weeklyReviews');
        await collection.createIndex({ sharedWith: 1 }); // Index for querying shared reviews
@@ -95,10 +98,10 @@ async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<s
                reviewsMap[doc.weekKey] = doc as WeeklyReviewData;
            }
        }
-        console.log(`Sync API: Fetched ${Object.keys(reviewsMap).length} shared weekly reviews`, logContext); // Replaced logInfo
+        // console.log(`Sync API: Fetched ${Object.keys(reviewsMap).length} shared weekly reviews`, logContext); // Replaced logInfo with console.log
        return reviewsMap;
     } catch (error) {
-       console.error(`Sync API: Error fetching shared weeklyReviews for user ${userId}:`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError
+       // console.error(`Sync API: Error fetching shared weeklyReviews for user ${userId}:`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError with console.error
       throw new Error('Failed to fetch shared weekly reviews');
     }
 }
@@ -108,7 +111,7 @@ async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<s
 async function getUserProfileData(db: any, userId: string): Promise<{ startDate?: string, endDate?: string, gettingStartedDismissed?: boolean }> {
     const collectionName = 'userProfiles'; // Define collection name for clarity
     const logContext = { userId, collectionName, operation: 'getUserProfileData' };
-    console.log(`Sync API: Fetching user profile data for user ${userId} from collection '${collectionName}'`, logContext); // Replaced logInfo
+    // console.log(`Sync API: Fetching user profile data for user ${userId} from collection '${collectionName}'`, logContext); // Replaced logInfo with console.log
     try {
         const collection = db.collection(collectionName);
         await collection.createIndex({ userId: 1 }); // Ensure index exists
@@ -119,7 +122,7 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
             { projection: { _id: 0, statementStartDate: 1, statementEndDate: 1, gettingStartedDismissed: 1 } } // Exclude _id
         );
 
-        console.log(`Sync API: Found user profile for user ${userId}:`, userProfile ? 'Yes' : 'No', userProfile ? undefined : { note: 'Profile not found in DB.' }); // Replaced logInfo
+        // console.log(`Sync API: Found user profile for user ${userId}:`, userProfile ? 'Yes' : 'No', userProfile ? undefined : { note: 'Profile not found in DB.' }); // Replaced logInfo with console.log
 
         if (!userProfile) {
             return { gettingStartedDismissed: false }; // Return default if no profile found
@@ -132,7 +135,7 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
 
         return { startDate, endDate, gettingStartedDismissed };
     } catch (error) {
-        console.error(`Sync API: Error fetching user profile data for user ${userId} from collection '${collectionName}':`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError
+        // console.error(`Sync API: Error fetching user profile data for user ${userId} from collection '${collectionName}':`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError with console.error
         // Throw a more specific error to help diagnose
         throw new Error(`Failed to fetch user profile data. DB Error: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -146,24 +149,25 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const { userId } = auth();
+  // const { userId } = auth(); // Clerk disabled
+  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
 
   if (!userId) {
-    console.warn("Sync API: Unauthorized access attempt."); // Replaced logWarn
+    // console.warn("Sync API: Unauthorized access attempt."); // Replaced logWarn with console.warn
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response); // Add CORS headers to error response
   }
 
-  console.log(`Sync API: Initiating sync for user ${userId}`, { userId }); // Replaced logInfo
+  // console.log(`Sync API: Initiating sync for user ${userId}`, { userId }); // Replaced logInfo with console.log
 
   try {
-    console.log("Sync API: Connecting to database...", { userId }); // Replaced logInfo
+    // console.log("Sync API: Connecting to database...", { userId }); // Replaced logInfo with console.log
     const client = await connectToDatabase();
     const db = client.db();
-    console.log("Sync API: Database connection successful.", { userId }); // Replaced logInfo
+    // console.log("Sync API: Database connection successful.", { userId }); // Replaced logInfo with console.log
 
     // Fetch all data types concurrently
-    console.log("Sync API: Fetching all data collections concurrently...", { userId }); // Replaced logInfo
+    // console.log("Sync API: Fetching all data collections concurrently...", { userId }); // Replaced logInfo with console.log
     const [
         transactions,
         debts,
@@ -184,7 +188,7 @@ export async function GET() {
         getUserProfileData(db, userId) // Fetch profile data including gettingStartedDismissed
     ]);
 
-    console.log(`Sync API: Fetched data for user ${userId}. Transactions: ${transactions.length}, Debts: ${debts.length}, Assets: ${assetItems.length}, Owned Reviews: ${Object.keys(ownedReviews).length}, Shared Reviews: ${Object.keys(sharedReviews).length}, Profile:`, { ...profileData, userId }); // Replaced logInfo
+    // console.log(`Sync API: Fetched data for user ${userId}. Transactions: ${transactions.length}, Debts: ${debts.length}, Assets: ${assetItems.length}, Owned Reviews: ${Object.keys(ownedReviews).length}, Shared Reviews: ${Object.keys(sharedReviews).length}, Profile:`, { ...profileData, userId }); // Replaced logInfo with console.log
 
      // Combine all fetched data
      const fetchedData = {
@@ -201,13 +205,13 @@ export async function GET() {
      };
 
       // Prepare data structure for hashing (consistent sorting, date formats)
-      console.log("Sync API: Preparing fetched data for hashing...", { userId }); // Replaced logInfo
+      // console.log("Sync API: Preparing fetched data for hashing...", { userId }); // Replaced logInfo with console.log
       const preparedData = prepareDataForHashing(fetchedData as any); // Use 'as any' cautiously or create a proper type
       const dataString = stringify(preparedData); // Use stable stringify for hashing
-      console.log("Sync API: Generating hash for prepared data...", { userId }); // Replaced logInfo
+      // console.log("Sync API: Generating hash for prepared data...", { userId }); // Replaced logInfo with console.log
       const dataHash = await hashData(dataString);
 
-      console.log(`Sync API: Generated server hash for user ${userId}: ${dataHash}`, { userId }); // Replaced logInfo
+      // console.log(`Sync API: Generated server hash for user ${userId}: ${dataHash}`, { userId }); // Replaced logInfo with console.log
 
     // Return all fetched data (in prepared format) associated with the user, including hash
     const response = NextResponse.json({
@@ -216,7 +220,7 @@ export async function GET() {
     });
      return addCorsHeaders(response);
   } catch (error: any) {
-    console.error(`Sync API: Failed to fetch data for user ${userId}:`, { error, stack: error.stack, userId }); // Replaced logError
+    // console.error(`Sync API: Failed to fetch data for user ${userId}:`, { error, stack: error.stack, userId }); // Replaced logError with console.error
     // Return a more specific error message if possible
     const errorMessage = error.message || 'Failed to fetch data from database';
      const response = NextResponse.json({ error: errorMessage }, { status: 500 });
