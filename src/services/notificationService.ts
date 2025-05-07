@@ -1,4 +1,3 @@
-
 // src/services/notificationService.ts
 'use client';
 
@@ -12,7 +11,7 @@ import type { TransactionWithId, BudgetItem, BudgetItemCategory } from "@/lib/ty
 import { logInfo, logWarn, logError } from '@/lib/logger';
 // import { useAuth } from "@clerk/nextjs/client"; // Clerk disabled
 
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'local-user-wo-clerk';
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
 const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
 const OVERBUDGET_THRESHOLD_PERCENT = 1.0;
@@ -126,7 +125,7 @@ export function useBudgetNotifications() {
     return null; // This hook doesn't render anything
 }
 
-// Function to trigger collaboration notifications (remains mostly the same)
+// Function to trigger collaboration notifications
 export function triggerCollaborationNotification(sharerName: string, weekKey: string, recipientUserId: string) {
     const addNotification = useNotificationStore.getState().addNotification;
     addNotification({
@@ -135,7 +134,7 @@ export function triggerCollaborationNotification(sharerName: string, weekKey: st
         message: `${sharerName || 'A user'} shared their weekly review (${weekKey}) with you.`,
         link: '/weekly-review?tab=shared', // Link to the shared tab
     });
-    // Log this event to Logtail
+    // Log this event using the general logger
     logInfo(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, {
         sharerName,
         weekKey,
@@ -144,7 +143,7 @@ export function triggerCollaborationNotification(sharerName: string, weekKey: st
     });
 }
 
-// Function to trigger app update notifications (remains the same)
+// Function to trigger app update notifications
 export function triggerAppUpdateNotification(title: string, message: string, link?: string) {
     const addNotification = useNotificationStore.getState().addNotification;
     const newNotif = addNotification({

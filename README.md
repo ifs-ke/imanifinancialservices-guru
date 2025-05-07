@@ -6,11 +6,11 @@ This is a Next.js personal finance management application built in Firebase Stud
 
 1.  **Install Dependencies:**
     ```bash
-    npm install
-    # or
-    yarn install
-    # or
     pnpm install
+    # or
+    # npm install
+    # or
+    # yarn install
     ```
 
 2.  **Set Up Environment Variables:**
@@ -34,19 +34,18 @@ This is a Next.js personal finance management application built in Firebase Stud
     # Get this from Google AI Studio: https://aistudio.google.com/app/apikey
     GOOGLE_GENAI_API_KEY=
 
-    # Logtail Source Token (Optional - For client-side and notification logging)
-    # Get this from your Logtail source settings: https://betterstack.com/logtail (or app.logtail.com)
-    NEXT_PUBLIC_LOGTAIL_SOURCE_TOKEN=
+    # Optional: Winston Logging Level (defaults to 'debug')
+    # LOG_LEVEL=info # Example: Set to 'info' for production
     ```
     **Important:** Ensure your `.env` file is added to your `.gitignore` file to prevent accidental exposure of secrets. If deploying to Vercel, set these variables in your Vercel project settings.
 
 3.  **Run the Development Server:**
     ```bash
-    npm run dev
-    # or
-    yarn dev
-    # or
     pnpm dev
+    # or
+    # npm run dev
+    # or
+    # yarn dev
     ```
 
     The application will be available at [http://localhost:9002](http://localhost:9002) (or the specified port).
@@ -71,8 +70,8 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Data Persistence & Sync:** Data is cached locally in Session Storage using Zustand persist middleware and synced securely to MongoDB for authenticated users. Includes data integrity checks with SHA-256 hashing.
 - **Dark/Light Mode:** Theme toggle for user preference.
 - **Responsive Design:** Adapts to different screen sizes.
-- **Notifications:** In-app notifications for budget alerts, collaboration updates, and application info. Logged to Logtail (if configured).
-- **Admin Logger:** (Admin Role Only - currently displays client-side console logs for any user) Basic page structure for viewing application logs. Client-side logs are also sent to Logtail (if configured).
+- **Notifications:** In-app notifications for budget alerts, collaboration updates, and application info.
+- **Admin Logger:** (Admin Role Only - currently displays client-side console logs for any user) Basic page structure for viewing application logs. Client-side logs are also sent to the backend logger.
 
 ## Tech Stack
 
@@ -82,7 +81,7 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Authentication:** Clerk
 - **Database:** MongoDB (via official Node.js driver)
 - **AI (Optional):** Genkit (for Debt Analysis)
-- **Logging (Optional):** Logtail (via @logtail/browser for client-side and notification logging)
+- **Logging:** Winston (for server-side and client-side via API)
 - **Data Handling:** `fast-json-stable-stringify` (for hashing), Node.js `crypto` (for hashing)
 - **Linting/Formatting:** ESLint, Prettier (implicitly via Next.js defaults)
 - **Deployment:** Vercel (configured via `vercel.json`)
@@ -96,8 +95,8 @@ This application handles sensitive personal financial data. The following measur
 *   Financial data: Transactions, Debts, Assets, Liabilities, Budgets, Goals.
 *   Weekly review data: Journal entries, transaction comments, list of users a review is shared with.
 *   Application state: Statement date ranges, getting started guide dismissal status.
-*   Notifications (stored locally and potentially logged to Logtail).
-*   Client-side console logs (viewable on Logger page and potentially logged to Logtail).
+*   Notifications (stored locally).
+*   Client-side console logs (viewable on Logger page and potentially sent to backend Winston logger).
 
 **Data Storage & Security:**
 *   **Authentication:** Handled securely by Clerk, following industry best practices.
@@ -121,7 +120,7 @@ This application handles sensitive personal financial data. The following measur
 *   **Transport Security:** HTTPS is assumed (typically handled by Vercel deployment).
 *   **Logging:**
     *   Client-side console logs can be captured and viewed on the Logger page.
-    *   Application notifications and client-side console logs can be sent to Logtail if `NEXT_PUBLIC_LOGTAIL_SOURCE_TOKEN` is configured. Logtail data handling is subject to BetterStack's policies.
+    *   Application notifications and client-side console logs can be sent to the backend Winston logger. Logged data includes user context where available. Logs are typically viewed via the Vercel dashboard or server console.
 
 **GDPR/DPA Compliance Considerations:**
 *   **Lawfulness, Fairness, Transparency:** Requires a clear Privacy Policy explaining data collection, storage, processing, and user rights. Consent should be obtained appropriately (Clerk handles auth consent, app-specific processing might need more).
@@ -145,9 +144,8 @@ This application handles sensitive personal financial data. The following measur
 2.  **Implement User Data Deletion:** Create a mechanism for users to request deletion of their account and associated data from MongoDB.
 3.  **Formal Documentation:** Create and link a comprehensive Privacy Policy and Terms of Service.
 4.  **Data Retention Policy:** Define and implement how long inactive user data is kept.
-5.  **Review Third-Party Services:** Ensure Clerk, MongoDB Atlas, Logtail, and Vercel configurations align with GDPR/DPA requirements.
-6.  **Server-Side Audit Logs (Advanced):** For enhanced security, implement server-side audit logging for sensitive actions (data modifications, sharing, admin actions if any). This is separate from application/debug logging.
-7.  **Logger Page Access Control:** If the Logger page is intended only for admins, re-implement role checks for accessing it. Currently, it displays client-side logs for any authenticated user.
+5.  **Review Third-Party Services:** Ensure Clerk, MongoDB Atlas, and Vercel configurations align with GDPR/DPA requirements.
+6.  **Server-Side Audit Logs (Advanced):** For enhanced security, implement server-side audit logging for sensitive actions (data modifications, sharing, admin actions if any). Winston can be configured for this, potentially logging to a separate, secure destination.
+7.  **Logger Page Access Control:** If the Logger page is intended only for admins, re-implement role checks (using Clerk roles if enabled, or a custom system) for accessing it. Currently, it displays client-side logs for any authenticated user.
 
-**Conclusion:** The application has implemented several key security measures, including user-scoped data access, integrity checks via hashing, MongoDB transactions, and session clearing on logout. The main compliance gap regarding sensitive data handling is the lack of **encryption** for client-side caching in Session Storage. Address this and add formal documentation/policies to significantly improve compliance posture. The addition of Logtail for logging should be accompanied by a review of Logtail's own data handling and privacy policies.
-
+**Conclusion:** The application has implemented several key security measures, including user-scoped data access, integrity checks via hashing, MongoDB transactions, and session clearing on logout. The main compliance gap regarding sensitive data handling is the lack of **encryption** for client-side caching in Session Storage. Address this and add formal documentation/policies to significantly improve compliance posture. The backend logging uses Winston and outputs to console/Vercel logs by default.

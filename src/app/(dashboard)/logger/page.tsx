@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/logger/page.tsx
 'use client';
 
@@ -26,9 +25,13 @@ const getLogLevelColor = (level: CapturedLog['level']): string => {
   }
 };
 
+// Keep track of seen objects during stringification for a single message
+const seen = new Set();
+
 const formatLogMessage = (messages: any[]): string => {
   return messages
     .map(msg => {
+       seen.clear(); // Clear seen set for each top-level message argument
       if (typeof msg === 'string') return msg;
       if (msg instanceof Error) return `${msg.name}: ${msg.message}${msg.stack ? `\nStack: ${msg.stack.split('\n').slice(1).join('\n')}` : ''}`; // Basic stack formatting
       try {
@@ -49,20 +52,16 @@ const formatLogMessage = (messages: any[]): string => {
         } catch {
             return '[Unstringifiable Object]';
         }
-      } finally {
-          seen.clear(); // Clear seen set for the next message
       }
     })
     .join(' ');
 };
 
-// Keep track of seen objects during stringification for a single message
-const seen = new Set();
 
 export default function LoggerPage() {
   // const { isLoaded, userId } = useAuth(); // Clerk disabled
   const isLoaded = true; // Assume loaded when Clerk disabled
-  const userId = 'local-user-wo-clerk'; // Placeholder
+  const userId = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y'; // Placeholder
 
   const { logs: clientLogs, clearLogs: clearClientLogs } = useClientLogStore();
 
@@ -95,7 +94,7 @@ export default function LoggerPage() {
           <ListTree className="h-6 w-6 text-primary" /> Application Logger
         </h1>
         <p className="text-muted-foreground text-sm">
-          View client-side console activity and instructions for server-side log integration.
+          View client-side console activity and instructions for server-side log access.
         </p>
       </header>
 
@@ -104,7 +103,7 @@ export default function LoggerPage() {
           <CardHeader className="flex flex-row justify-between items-center">
             <div>
               <CardTitle className="flex items-center gap-2"><Terminal className="h-5 w-5"/>Client-Side Logs</CardTitle>
-              <CardDescription>Logs captured from your browser's console. These are also sent to Logtail if configured.</CardDescription>
+              <CardDescription>Logs captured from your browser's console. These are sent to the backend logger.</CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={clearClientLogs} disabled={clientLogs.length === 0}>
               <Trash2 className="mr-1 h-4 w-4" /> Clear Client Logs
@@ -145,22 +144,19 @@ export default function LoggerPage() {
               <Info className="h-4 w-4" />
               <AlertTitle>Accessing Server Logs</AlertTitle>
               <AlertDescription>
-                Server-side logs (from API routes, server actions) are typically managed by your hosting provider or a dedicated logging service.
+                Server-side logs (from API routes, server actions) are typically managed by your hosting provider or viewed directly in the server console/logs.
                 <ul className="list-disc pl-5 mt-2 space-y-1 text-xs">
                   <li>
-                    <strong>Vercel:</strong> Access logs via the Vercel Dashboard under your project's "Logs" tab. You can set up Log Drains to forward these to services like Logtail.
+                    <strong>Vercel:</strong> Access logs via the Vercel Dashboard under your project's "Logs" tab. These logs originate from the `console.log`, `console.warn`, etc., calls made in your server-side code (API routes, Server Actions).
                     <Button variant="link" size="sm" asChild className="p-0 h-auto ml-1 text-xs">
-                        <a href="https://vercel.com/docs/observability/log-drains" target="_blank" rel="noopener noreferrer">Vercel Log Drains <ExternalLink size={12} className="inline ml-0.5"/></a>
+                        <a href="https://vercel.com/docs/observability/logs" target="_blank" rel="noopener noreferrer">Vercel Logs Docs <ExternalLink size={12} className="inline ml-0.5"/></a>
                     </Button>
                   </li>
                   <li>
-                    <strong>Logtail (BetterStack):</strong> If you've configured Vercel Log Drains to Logtail (or use Logtail directly in server-side code), view aggregated logs in your Logtail dashboard.
-                    <Button variant="link" size="sm" asChild className="p-0 h-auto ml-1 text-xs">
-                        <a href="https://betterstack.com/logtail" target="_blank" rel="noopener noreferrer">Logtail Docs <ExternalLink size={12} className="inline ml-0.5"/></a>
-                    </Button>
+                    <strong>Local Development:</strong> Server logs will appear in the terminal where you run `pnpm dev`.
                   </li>
                   <li>
-                    <strong>Other Providers:</strong> Consult your hosting/logging provider's documentation for instructions on accessing and managing server logs.
+                    <strong>Other Providers:</strong> Consult your hosting provider's documentation for instructions on accessing server logs.
                   </li>
                 </ul>
                  <p className="mt-2 text-xs">Displaying live server logs directly here would require building a custom API endpoint to securely fetch and stream them, which is beyond the current scope.</p>

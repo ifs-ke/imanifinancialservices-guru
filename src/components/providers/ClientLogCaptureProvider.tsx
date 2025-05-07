@@ -3,7 +3,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useClientLogStore } from '@/store/clientLogStore';
-import { captureLog as sendToLogtail } from '@/lib/logger'; // Use the generic captureLog
+import { logInfo, logWarn, logError, logDebug } from '@/lib/logger'; // Use the existing logger methods which now use Winston
+import type { LogLevel, CapturedLog } from '@/store/clientLogStore'; // Import LogLevel type
 
 interface ClientLogCaptureProviderProps {
   children: React.ReactNode;
@@ -23,47 +24,50 @@ const ClientLogCaptureProvider: React.FC<ClientLogCaptureProviderProps> = ({ chi
         debug: console.debug,
       };
 
-      console.log = (...args: any[]) => {
-        originalConsoleMethodsRef.current?.log(...args);
-        addLogToStore('log', args);
-        sendToLogtail('log', args);
-      };
-      console.info = (...args: any[]) => {
-        originalConsoleMethodsRef.current?.info(...args);
-        addLogToStore('info', args);
-        sendToLogtail('info', args);
-      };
-      console.warn = (...args: any[]) => {
-        originalConsoleMethodsRef.current?.warn(...args);
-        addLogToStore('warn', args);
-        sendToLogtail('warn', args);
-      };
-      console.error = (...args: any[]) => {
-        originalConsoleMethodsRef.current?.error(...args);
-        addLogToStore('error', args);
-        sendToLogtail('error', args);
-      };
-      console.debug = (...args: any[]) => {
-        originalConsoleMethodsRef.current?.debug(...args);
-        addLogToStore('debug', args);
-        sendToLogtail('debug', args);
+      const createLogHandler = (level: LogLevel, originalMethod: (...args: any[]) => void) => {
+        return (...args: any[]) => {
+          // 1. Call the original console method
+          originalMethod(...args);
+
+          // 2. Add the log to the Zustand store for the UI Logger page
+          addLogToStore(level, args);
+
+          // 3. Format and send the log to the Winston backend via logger functions
+          const message = args.map(arg => {
+            if (arg instanceof Error) return `${arg.name}: ${arg.message}${arg.stack ? `\nStack: ${arg.stack}` : ''}`;
+            if (typeof arg === 'object') {
+              try { return JSON.stringify(arg); } catch { return '[Unserializable Object]'; }
+            }
+            return String(arg);
+          }).join(' ');
+
+          const context = { source: 'client-console' }; // Add context
+
+          // Use the appropriate Winston-backed logger function
+          switch (level) {
+              case 'log': logInfo(`Client Console Log: ${message}`, context); break;
+              case 'info': logInfo(`Client Console Info: ${message}`, context); break;
+              case 'warn': logWarn(`Client Console Warn: ${message}`, context); break;
+              case 'error':
+                  const errorArg = args.find(arg => arg instanceof Error);
+                  logError(`Client Console Error: ${message}`, errorArg, context);
+                  break;
+              case 'debug': logDebug(`Client Console Debug: ${message}`, context); break;
+          }
+        };
       };
 
-      console.info('ClientLogCaptureProvider: Console methods overridden.');
+      console.log = createLogHandler('log', originalConsoleMethodsRef.current.log);
+      console.info = createLogHandler('info', originalConsoleMethodsRef.current.info);
+      console.warn = createLogHandler('warn', originalConsoleMethodsRef.current.warn);
+      console.error = createLogHandler('error', originalConsoleMethodsRef.current.error);
+      console.debug = createLogHandler('debug', originalConsoleMethodsRef.current.debug);
+
+
+      logInfo('ClientLogCaptureProvider: Console methods overridden and connected to Winston logger.');
     }
 
-    // Cleanup function (optional, as this provider is likely top-level)
-    // return () => {
-    //   if (originalConsoleMethodsRef.current) {
-    //     console.log = originalConsoleMethodsRef.current.log;
-    //     console.info = originalConsoleMethodsRef.current.info;
-    //     console.warn = originalConsoleMethodsRef.current.warn;
-    //     console.error = originalConsoleMethodsRef.current.error;
-    //     console.debug = originalConsoleMethodsRef.current.debug;
-    //     console.info('ClientLogCaptureProvider: Console methods restored.');
-    //     originalConsoleMethodsRef.current = null;
-    //   }
-    // };
+    // Cleanup function is generally not needed here.
   }, [addLogToStore]);
 
   return <>{children}</>;
