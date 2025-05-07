@@ -1,5 +1,5 @@
 // src/app/(dashboard)/layout.tsx
-'use client'; // Make layout client-side to use hooks
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -8,13 +8,14 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { useAuth } from '@clerk/nextjs'; // Import useAuth hook for client-side check
+import { useAuth } from '@clerk/nextjs/client'; // Use client-side auth
 import { redirect } from 'next/navigation';
-import { useSyncManager } from '@/hooks/useSyncManager'; // Import the refactored sync manager hook
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
-import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Import the new component
-import { useBudgetNotifications } from '@/services/notificationService'; // Import the budget notification hook
-import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Ensure dialog is imported
+import { useSyncManager } from '@/hooks/useSyncManager';
+import { Skeleton } from '@/components/ui/skeleton';
+import FloatingChatButton from '@/components/layout/FloatingChatButton';
+import { useBudgetNotifications } from '@/services/notificationService';
+import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
+import { logInfo, logError } from '@/lib/logger'; // Import logger
 
 export default function DashboardLayout({
   children,
@@ -22,81 +23,69 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [isClient, setIsClient] = useState(false);
-  const [isMismatchDialogOpen, setIsMismatchDialogOpen] = useState(false); // Manage dialog state here
+  const [isMismatchDialogOpen, setIsMismatchDialogOpen] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
+    logInfo('DashboardLayout mounted', { component: 'DashboardLayout' });
   }, []);
 
-  // Client-side auth check
-  const { userId, isLoaded } = useAuth();
-  // Initialize sync manager - This hook now manages its own state and effects
-  const syncManager = useSyncManager(); // Get the whole syncManager object
+  const { userId, isLoaded: isClerkLoaded } = useAuth();
+  const syncManager = useSyncManager();
 
-  // Initialize budget notifications (this hook runs the checks)
   useBudgetNotifications();
 
-   // Effect to control dialog visibility based on hashMismatch from the hook
-   useEffect(() => {
-       if (syncManager.hashMismatch) { // Access hashMismatch from syncManager object
-           setIsMismatchDialogOpen(true);
-       } else {
-           setIsMismatchDialogOpen(false); // Close if mismatch resolves
-       }
-   }, [syncManager.hashMismatch]); // Depend on the object property
+  useEffect(() => {
+    if (syncManager.hashMismatch) {
+      setIsMismatchDialogOpen(true);
+      logWarn('Hash mismatch detected, opening dialog.', { component: 'DashboardLayout', userId });
+    } else {
+      setIsMismatchDialogOpen(false);
+    }
+  }, [syncManager.hashMismatch, userId]); // Added userId to context if needed
 
-
-  // Handle loading state from Clerk
-  if (!isLoaded) {
-    // More robust loading state using Skeleton components
+  if (!isClerkLoaded) {
     return (
-        <div className="flex min-h-screen">
-            {/* Skeleton Sidebar */}
-             <div className="hidden md:flex flex-col w-16 border-r border-border p-2 space-y-4">
-                <Skeleton className="h-8 w-8 rounded-full" />
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-                 <Skeleton className="h-6 w-full" />
-                 <Skeleton className="h-6 w-full mt-auto" />
-                 <Skeleton className="h-6 w-full" />
-                 <Skeleton className="h-6 w-full" />
-            </div>
-             {/* Skeleton Main Content Area */}
-             <div className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
-                 <Skeleton className="h-8 w-1/3" />
-                 <Skeleton className="h-4 w-2/3" />
-                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                     <Skeleton className="h-24" />
-                     <Skeleton className="h-24" />
-                     <Skeleton className="h-24" />
-                 </div>
-                 <Skeleton className="h-64" />
-             </div>
+      <div className="flex min-h-screen">
+        <div className="hidden md:flex flex-col w-16 border-r border-border p-2 space-y-4">
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-full mt-auto" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-full" />
         </div>
-     );
+        <div className="flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+          <Skeleton className="h-8 w-1/3" />
+          <Skeleton className="h-4 w-2/3" />
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="h-64" />
+        </div>
+      </div>
+    );
   }
 
-  // Redirect if not logged in after Clerk is loaded
-  if (isClient && !userId) { // Ensure isClient check to prevent server-side redirect during hydration
+  if (isClient && !userId) {
+    logInfo('User not signed in, redirecting to /sign-in', { component: 'DashboardLayout' });
     redirect('/sign-in');
   }
 
-  // Render layout only if user is logged in or Clerk is still loading (handled above)
   if (!userId) {
-     // This case should ideally not be reached due to the redirect above,
-     // but serves as a fallback during initial render phases.
-     return null; // Or a minimal loading state if preferred
+    return null;
   }
-
 
   return (
     <>
       <Sidebar side="left" variant="sidebar" collapsible="icon">
-        {/* Pass the entire syncManager object */}
         <AppSidebar
-            syncManager={syncManager}
-            openMismatchDialog={() => setIsMismatchDialogOpen(true)} // Pass function to open dialog
+          syncManager={syncManager}
+          openMismatchDialog={() => setIsMismatchDialogOpen(true)}
         />
         <SidebarRail />
       </Sidebar>
@@ -104,14 +93,25 @@ export default function DashboardLayout({
         {children}
         <FloatingChatButton />
       </SidebarInset>
-
-       {/* Data Sync Mismatch Dialog - Rendered here, controlled by local state */}
-       <DataSyncMismatchDialog
-           isOpen={isMismatchDialogOpen}
-           onClose={() => setIsMismatchDialogOpen(false)} // Allow closing
-           onForceSave={syncManager.forceSaveLocal} // Pass the function from hook
-           onForceFetch={syncManager.forceFetchServer} // Pass the function from hook
-       />
+      <DataSyncMismatchDialog
+        isOpen={isMismatchDialogOpen}
+        onClose={() => {
+          setIsMismatchDialogOpen(false);
+          logInfo('Mismatch dialog closed by user.', { component: 'DashboardLayout', userId });
+        }}
+        onForceSave={async () => {
+          logWarn('User initiated Force Save from mismatch dialog.', { component: 'DashboardLayout', userId });
+          const success = await syncManager.forceSaveLocal();
+          if (success) setIsMismatchDialogOpen(false); // Close on success
+          return success;
+        }}
+        onForceFetch={async () => {
+          logWarn('User initiated Force Fetch from mismatch dialog.', { component: 'DashboardLayout', userId });
+          const success = await syncManager.forceFetchServer();
+          if (success) setIsMismatchDialogOpen(false); // Close on success
+          return success;
+        }}
+      />
     </>
   );
 }
