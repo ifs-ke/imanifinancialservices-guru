@@ -13,11 +13,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils" // Import cn utility
-import { useSidebar } from "./sidebar" // Import useSidebar hook
+import type { SidebarState } from "./sidebar"; // Import SidebarState type
 
-export function ThemeToggle() {
+interface ThemeToggleProps {
+    sidebarState: SidebarState; // Accept sidebar state as a prop
+}
+
+export function ThemeToggle({ sidebarState }: ThemeToggleProps) {
   const { setTheme } = useTheme()
-  const { state } = useSidebar(); // Get sidebar state
+  // No need for useSidebar here, state is passed as prop
 
   return (
     <DropdownMenu>
@@ -27,15 +31,15 @@ export function ThemeToggle() {
           size="icon"
           className={cn(
               "w-full justify-start px-2",
-              state === 'collapsed' && 'justify-center' // Center icon when collapsed
+              sidebarState === 'collapsed' && 'justify-center' // Center icon when collapsed
           )}
          >
           <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-           {/* Use group-data state to conditionally hide text */}
+           {/* Use the sidebarState prop to conditionally hide text */}
            <span className={cn(
                "ml-2",
-               "group-data-[state=collapsed]/sidebar-wrapper:hidden" // Use group-data for hiding
+               sidebarState === 'collapsed' && "hidden" // Hide text if collapsed
             )}>
                Toggle theme
            </span>

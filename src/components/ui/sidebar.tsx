@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
-import { ThemeToggle } from "./ThemeToggle";
+import { ThemeToggle } from "./ThemeToggle"; // Import ThemeToggle
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
 // import { UserButton, useUser } from "@clerk/nextjs"; // Clerk disabled
@@ -65,7 +65,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Added logger link back with correct icon
 ];
 
-type SidebarState = "collapsed" | "expanded";
+export type SidebarState = "collapsed" | "expanded";
 
 interface SidebarContextProps {
   isMobile: boolean | undefined; // Allow undefined initially
@@ -239,7 +239,8 @@ const SidebarBase = React.forwardRef<
       </ScrollArea>
 
       <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
-        <ThemeToggle />
+        {/* Pass sidebar state to ThemeToggle */}
+        <ThemeToggle sidebarState={state} />
 
         <TooltipProvider delayDuration={100}>
           <Tooltip>
