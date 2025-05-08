@@ -29,7 +29,8 @@ import {
   ClipboardList, // Changed from Logger to ClipboardList
   RefreshCw,
   Menu,
-  UserCircle // Placeholder for UserButton
+  UserCircle, // Placeholder for UserButton
+  PieChart // Import PieChart icon
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -59,7 +60,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
   { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
   { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
-  { href: "/budget", label: "Budget", icon: <TrendingUp size={18} /> },
+  { href: "/budget", label: "Budget", icon: <PieChart size={18} /> }, // Changed icon here
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
   { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Added logger link back with correct icon
@@ -282,17 +283,6 @@ const SidebarBase = React.forwardRef<
               </span>
            )}
         </div>
-        {/* <div className={cn(
-             "flex items-center",
-             state === 'collapsed' ? "justify-center py-1" : "p-1"
-         )}>
-           <UserButton afterSignOutUrl="/sign-in"/>
-           {state === 'expanded' && (
-              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user?.fullName ?? user?.primaryEmailAddress?.emailAddress}>
-                   {user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? 'User'}
-              </span>
-           )}
-        </div> */}
       </div>
     </div>
   );
