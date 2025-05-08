@@ -138,7 +138,7 @@ export function useSyncManager() {
              // If parsing fails, the response body might not be JSON or might be empty
              // console.warn("Fetch Error: Failed to parse error response body as JSON. Response might be empty.", { status: response.status, statusText: response.statusText, parseError, ...logContext() }); // Console log commented out
              // Use the status text as the error in this case
-             errorData.error = `Fetch failed: ${response.statusText} (Status: ${response.status})`;
+             errorData.error = `Fetch failed: ${response.statusText} (Status: ${response.status}, failed to parse error response)`; // Added detail
         }
         // console.error(`Fetch API Error ${response.status}: ${errorData.error}`, { ...logContext() }); // Console log commented out
         throw new Error(errorData.error); // Throw with the best available error message
@@ -196,7 +196,9 @@ export function useSyncManager() {
        // console.error('Fetch Error:', { error, message: error.message, ...logContext() }); // Console log commented out
       setSyncStatus('error');
        // Modify the error message to be more user-friendly
-       const friendlyErrorMessage = error.message?.includes('Failed to fetch')
+       const friendlyErrorMessage = error.message?.includes('Fetch failed:') // Look for the specific prefix
+         ? error.message // Keep the detailed error message if it came from our fetch handling
+         : error.message?.includes('Failed to fetch') // Generic network error
          ? 'Network error. Please check your connection.'
          : error.message || 'An unknown error occurred.';
       toast({ title: 'Sync Load Failed', description: `Could not load data: ${friendlyErrorMessage}. Using local data if available. Click cloud icon to retry.`, variant: 'destructive' });
@@ -280,7 +282,7 @@ export function useSyncManager() {
               }
           } catch (parseError) {
               // console.warn("Save Error: Failed to parse error response body as JSON.", { status: response.status, statusText: response.statusText, parseError, ...logContext() }); // Console log commented out
-              errorData.error = `Save failed: ${response.statusText} (Status: ${response.status})`;
+              errorData.error = `Save failed: ${response.statusText} (Status: ${response.status}, failed to parse error response)`; // Added detail
           }
 
         if (response.status === 400 && errorData.error?.includes('integrity check failed')) {
@@ -313,10 +315,12 @@ export function useSyncManager() {
     } catch (error: any) {
        // console.error('Save Error:', { error, message: error.message, ...logContext() }); // Console log commented out
       setSyncStatus('error'); // Set status to error, but don't set hashMismatch here
-      const friendlyErrorMessage = error.message?.includes('Failed to fetch')
+      const friendlyErrorMessage = error.message?.includes('Save failed:') // Look for the specific prefix
+         ? error.message
+         : error.message?.includes('Failed to fetch')
          ? 'Network error. Please check your connection.'
          : error.message || 'An unknown error occurred.';
-      toast({ title: 'Sync Save Failed', description: `Could not save: ${friendlyErrorMessage}. Changes remain locally. Click cloud icon to retry.`, variant: 'destructive' });
+      toast({ title: 'Sync Save Failed', description: `Could not save data: ${friendlyErrorMessage}. Changes remain locally. Click cloud icon to retry.`, variant: 'destructive' });
       return false;
     } finally {
       isSavingRef.current = false;
