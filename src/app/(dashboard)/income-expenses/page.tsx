@@ -108,7 +108,7 @@ export default function IncomeExpensesPage() {
     </TableRow>
   );
 
-  // Render function for category sections
+  // Render function for category sections - REFACTORED
   const renderCategorySection = (
     title: string,
     description: string,
@@ -117,19 +117,20 @@ export default function IncomeExpensesPage() {
     isExpense = false
   ) => (
     <Card className="flex flex-col shadow-sm h-full"> {/* Ensure cards take full height */}
-      <CardHeader className="p-4"> {/* Adjusted padding */}
-        <CardTitle className="flex items-center gap-2 text-base"><Tag className="h-4 w-4"/>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+      <CardHeader className="p-4 border-b flex flex-row items-center justify-between space-y-0"> {/* Use flex row for title and total */}
+        <div>
+            <CardTitle className="flex items-center gap-2 text-base"><Tag className="h-4 w-4"/>{title}</CardTitle>
+            <CardDescription className="text-xs">{description}</CardDescription>
+        </div>
+         {/* Display total at the top */}
+         {transactions.length > 0 && (
+             <div className="text-right">
+                 <p className="text-xs text-muted-foreground">Total {title}</p>
+                 <p className="font-bold font-mono text-sm">{formatCurrency(total)}</p>
+             </div>
+         )}
       </CardHeader>
       <CardContent className="flex-grow p-0">
-        {transactions.length > 0 && (
-            <div className="px-4 pb-3 text-sm border-b"> {/* Adjusted padding */}
-                <div className="flex justify-between w-full">
-                <span className="font-semibold">Total {title}</span>
-                <span className="font-bold font-mono">{formatCurrency(total)}</span>
-                </div>
-            </div>
-        )}
         <ScrollArea className="h-[350px] w-full"> {/* Slightly increased height */}
           <Table>
             <TableHeader>
@@ -150,6 +151,7 @@ export default function IncomeExpensesPage() {
           </Table>
         </ScrollArea>
       </CardContent>
+       {/* Footer removed as total is now in header */}
     </Card>
   );
 
@@ -162,7 +164,7 @@ export default function IncomeExpensesPage() {
         <p className="text-muted-foreground">Breakdown based on recurrence and variability.</p>
       </header>
 
-      {/* Summary Section */}
+      {/* Summary Section - Kept as is */}
        <section className="mb-8 grid gap-4 md:grid-cols-3">
            <Card className="shadow-md">
                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
@@ -201,7 +203,8 @@ export default function IncomeExpensesPage() {
       <main className="flex-1 grid gap-8 lg:grid-cols-2">
         {/* Income Details Section */}
         <section className="space-y-6">
-            <h2 className="text-xl font-semibold flex items-center gap-2"><TrendingUp className="text-accent"/> Income Details</h2>
+            <h2 className="text-xl font-semibold flex items-center gap-2 mb-4"><TrendingUp className="text-accent"/> Income Details</h2>
+            {/* Render each income category using the updated component */}
             {renderCategorySection("Recurring - Fixed", "Regular income, same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
             {renderCategorySection("Recurring - Variable", "Regular income, amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
             {renderCategorySection("One-Time - Fixed", "Non-recurring income, fixed amount (e.g., Bonus).", categorizedIncome.oneTimeFixed, incomeTotals.oneTimeFixed)}
@@ -211,7 +214,8 @@ export default function IncomeExpensesPage() {
 
         {/* Expense Details Section */}
          <section className="space-y-6">
-             <h2 className="text-xl font-semibold flex items-center gap-2"><TrendingDown className="text-destructive"/> Expense Details</h2>
+             <h2 className="text-xl font-semibold flex items-center gap-2 mb-4"><TrendingDown className="text-destructive"/> Expense Details</h2>
+             {/* Render each expense category using the updated component */}
              {renderCategorySection("Recurring - Fixed", "Regular expenses, same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
              {renderCategorySection("Recurring - Variable", "Regular expenses, amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
              {renderCategorySection("One-Time - Fixed", "Non-recurring expenses, fixed amount.", categorizedExpenses.oneTimeFixed, expenseTotals.oneTimeFixed, true)}
@@ -222,5 +226,3 @@ export default function IncomeExpensesPage() {
     </div>
   );
 }
-
-    
