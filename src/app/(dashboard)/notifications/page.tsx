@@ -9,6 +9,7 @@ import { useNotificationStore } from '@/store/notificationStore'; // Import the 
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link'; // Import Link for navigation
+import type { NotificationType } from '@/lib/types'; // Import NotificationType
 
 export default function NotificationsPage() {
   const { notifications, markAsRead, markAllAsRead, deleteNotification, clearAllNotifications } = useNotificationStore();
@@ -80,7 +81,9 @@ export default function NotificationsPage() {
                       <div className="flex justify-between items-center">
                          <p className={cn("font-medium text-sm", !notification.read && "text-primary")}>{notification.title}</p>
                          <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                            {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
+                            {notification.timestamp instanceof Date && !isNaN(notification.timestamp.getTime())
+                                ? formatDistanceToNow(notification.timestamp, { addSuffix: true })
+                                : 'Invalid Date'}
                          </p>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{notification.message}</p>

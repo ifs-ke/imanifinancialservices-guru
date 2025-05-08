@@ -10,7 +10,7 @@ interface SyncData {
   budgetItems: BudgetItem[];
   ownedReviews: Record<string, WeeklyReviewData>;
   sharedReviews?: Record<string, WeeklyReviewData>; // Make sharedReviews optional
-  notifications: NotificationItem[];
+  notifications: NotificationItem[]; // Keep notifications in the type for fetching, but exclude from hashing
   startDate?: Date; // Use Date objects internally before converting
   endDate?: Date;
   gettingStartedDismissed?: boolean;
@@ -22,6 +22,7 @@ interface SyncData {
  * - Converting Dates to ISO strings.
  * - Ensuring consistent order of keys (handled by stringify).
  * - Handling potential null/undefined arrays/objects defensively.
+ * - EXCLUDING notifications and sharedReviews from the final hashed object.
  */
 export function prepareDataForHashing(data: SyncData): any {
 
@@ -31,9 +32,9 @@ export function prepareDataForHashing(data: SyncData): any {
     const assetItems = Array.isArray(data.assetItems) ? data.assetItems : [];
     const otherLiabilityItems = Array.isArray(data.otherLiabilityItems) ? data.otherLiabilityItems : [];
     const budgetItems = Array.isArray(data.budgetItems) ? data.budgetItems : [];
-    const notifications = Array.isArray(data.notifications) ? data.notifications : [];
+    // const notifications = Array.isArray(data.notifications) ? data.notifications : []; // Excluded from hashing
     const ownedReviews = typeof data.ownedReviews === 'object' && data.ownedReviews !== null ? data.ownedReviews : {};
-    const sharedReviews = typeof data.sharedReviews === 'object' && data.sharedReviews !== null ? data.sharedReviews : {}; // Handle optional sharedReviews
+    // const sharedReviews = typeof data.sharedReviews === 'object' && data.sharedReviews !== null ? data.sharedReviews : {}; // Excluded from hashing
 
     const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
         if (!Array.isArray(txs)) return [];
@@ -65,16 +66,17 @@ export function prepareDataForHashing(data: SyncData): any {
         return [...items].sort((a, b) => (a.description || '').localeCompare(b.description || ''));
     };
 
-    const sortNotifications = (items: NotificationItem[]): NotificationItem[] => {
-         if (!Array.isArray(items)) return [];
-        return [...items].sort((a, b) => {
-             const timeA = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp || 0);
-             const timeB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp || 0);
-             const tsA = !isNaN(timeA.getTime()) ? timeA.getTime() : 0;
-             const tsB = !isNaN(timeB.getTime()) ? timeB.getTime() : 0;
-             return tsA - tsB; // Sort by timestamp ascending
-         });
-     };
+    // sortNotifications is kept if needed for display, but result is not included in the hashed object
+    // const sortNotifications = (items: NotificationItem[]): NotificationItem[] => {
+    //      if (!Array.isArray(items)) return [];
+    //     return [...items].sort((a, b) => {
+    //          const timeA = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp || 0);
+    //          const timeB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp || 0);
+    //          const tsA = !isNaN(timeA.getTime()) ? timeA.getTime() : 0;
+    //          const tsB = !isNaN(timeB.getTime()) ? timeB.getTime() : 0;
+    //          return tsA - tsB; // Sort by timestamp ascending
+    //      });
+    //  };
 
 
     const formatReviewData = (reviews: Record<string, WeeklyReviewData>): Record<string, WeeklyReviewData> => {
@@ -108,6 +110,7 @@ export function prepareDataForHashing(data: SyncData): any {
     };
 
 
+    // Return only the data relevant for hashing/saving
     return {
         transactions: sortTransactions(transactions).map(tx => ({
             ...tx,
@@ -119,14 +122,9 @@ export function prepareDataForHashing(data: SyncData): any {
         otherLiabilityItems: sortStatementItems(otherLiabilityItems),
         budgetItems: sortBudgetItems(budgetItems),
         ownedReviews: formatReviewData(ownedReviews),
-        // Sort and format notifications
-        notifications: sortNotifications(notifications).map(n => ({
-             ...n,
-             // Ensure timestamp is valid before calling toISOString
-             timestamp: (n.timestamp instanceof Date && !isNaN(n.timestamp.getTime()) ? n.timestamp : new Date(0)).toISOString(),
-         })),
-        // Conditionally include sharedReviews only if it exists and has entries
-        ...(Object.keys(sharedReviews).length > 0 && { sharedReviews: formatReviewData(sharedReviews) }),
+        // EXCLUDE notifications and sharedReviews from the object returned for hashing/saving
+        // notifications: sortNotifications(notifications).map(n => ({ ... })),
+        // ...(Object.keys(sharedReviews).length > 0 && { sharedReviews: formatReviewData(sharedReviews) }),
         // Convert dates to ISO strings only if they are valid Date objects
         startDate: data.startDate instanceof Date && !isNaN(data.startDate.getTime()) ? data.startDate.toISOString() : undefined,
         endDate: data.endDate instanceof Date && !isNaN(data.endDate.getTime()) ? data.endDate.toISOString() : undefined,
