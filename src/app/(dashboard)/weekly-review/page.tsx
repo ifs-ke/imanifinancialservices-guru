@@ -22,7 +22,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ShareReviewDialog from './ShareReviewDialog';
+import ShareReviewDialog from './ShareReviewDialog'; // Corrected import (should already be correct as default)
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
@@ -104,7 +104,7 @@ export default function WeeklyReviewPage() {
          const dateB = b.date instanceof Date ? b.date : new Date(b.date);
          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
          return dateB.getTime() - dateA.getTime();
-    });
+     });
   }, [allTransactions, currentWeekStart]);
 
   // Filter transactions based on search term
@@ -128,7 +128,7 @@ export default function WeeklyReviewPage() {
        if (currentReviewOwnerId) { // Check if ownerId is available
            setJournalEntry(currentWeekKey, event.target.value, currentReviewOwnerId);
        } else {
-           console.error("Cannot save journal: Owner ID is missing."); // Console log commented out
+           // console.error("Cannot save journal: Owner ID is missing."); // Console log commented out
            toast({ title: "Error", description: "Could not save journal entry. Owner information missing.", variant: "destructive" });
        }
    };
