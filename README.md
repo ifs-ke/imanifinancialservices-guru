@@ -28,6 +28,11 @@ This is a Next.js personal finance management application built in Firebase Stud
     # Example: MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database-name>?retryWrites=true&w=majority
     # Ensure this URI is correct and accessible from your development machine and deployment environment (e.g., Vercel).
     # Common errors like "Failed to connect to MongoDB" often stem from an incorrect or missing URI here.
+    # Authentication Errors: If you see "bad auth : authentication failed", double-check:
+    #   - Username and Password: Ensure they are EXACTLY correct for the database user.
+    #   - Special Characters: If your password contains special characters (e.g., @, :, /), they might need to be URL-encoded (e.g., @ becomes %40).
+    #   - Database Name & Cluster URL: Verify the `<cluster-url>` and `<database-name>` parts are correct.
+    #   - IP Access List: Ensure your current IP address (for local dev) or Vercel's IPs are allowed in MongoDB Atlas Network Access settings.
     # Check firewall settings if connecting from local dev to a cloud DB.
     MONGODB_URI=
 
