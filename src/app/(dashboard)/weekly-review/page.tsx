@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/weekly-review/page.tsx
 'use client';
 
@@ -22,7 +21,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ShareReviewDialog from './ShareReviewDialog'; // Corrected import (should already be correct as default)
+import ShareReviewDialog from './ShareReviewDialog';
 import {
   Dialog,
   DialogContent,
@@ -77,7 +76,8 @@ export default function WeeklyReviewPage() {
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
   const [commentingTransaction, setCommentingTransaction] = useState<TransactionWithId | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleteCommentDialogOpen, setIsDeleteCommentDialogOpen] = useState(false); // Renamed state variable
+  const [isDeleteJournalDialogOpen, setIsDeleteJournalDialogOpen] = useState(false); // State for journal delete confirmation
   const [commentToDelete, setCommentToDelete] = useState<{ transactionId: string; comment: string } | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("owned"); // 'owned' or 'shared'
@@ -135,13 +135,30 @@ export default function WeeklyReviewPage() {
 
    const handleJournalChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
        // Update the store directly - ensure ownerId is passed correctly
-       if (currentReviewOwnerId) { // Check if ownerId is available
-           setJournalEntry(currentWeekKey, event.target.value, currentReviewOwnerId);
+       if (activeTab === 'owned' && userId) { // Only allow editing for owned reviews by the logged-in user
+           setJournalEntry(currentWeekKey, event.target.value, userId);
        } else {
-           // console.error("Cannot save journal: Owner ID is missing."); // Console log commented out
-           toast({ title: "Error", description: "Could not save journal entry. Owner information missing.", variant: "destructive" });
+           toast({ title: "Read Only", description: "You can only edit journals for your own reviews.", variant: "default" });
        }
    };
+
+    // Function to handle journal deletion
+    const handleDeleteJournal = () => {
+        if (activeTab === 'owned' && userId) {
+            setIsDeleteJournalDialogOpen(true); // Open confirmation dialog
+        } else {
+            toast({ title: "Action Denied", description: "You can only delete journals from your own reviews.", variant: "destructive" });
+        }
+    };
+
+    // Function to confirm journal deletion
+    const confirmDeleteJournal = () => {
+        if (activeTab === 'owned' && userId) {
+            setJournalEntry(currentWeekKey, '', userId); // Set journal to empty string
+            toast({ title: "Journal Cleared", description: `Journal entry for week ${currentWeekKey} has been cleared.` });
+        }
+        setIsDeleteJournalDialogOpen(false); // Close dialog
+    };
 
   // --- Comment Handling ---
   const handleAddCommentClick = (tx: TransactionWithId) => {
@@ -152,26 +169,42 @@ export default function WeeklyReviewPage() {
 
   const handleSaveComment = () => {
     if (!commentingTransaction || !currentReviewOwnerId) return;
-    setTransactionComment(currentWeekKey, commentingTransaction.id, commentText, currentReviewOwnerId);
-    toast({ title: "Comment Saved", description: `Comment for "${commentingTransaction.description}" saved.` });
-    setIsCommentDialogOpen(false);
-    setCommentingTransaction(null);
-    setCommentText('');
+     // Permission check: Allow if current user is the owner OR if it's a shared review they have access to
+     if (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) {
+         setTransactionComment(currentWeekKey, commentingTransaction.id, commentText, currentReviewOwnerId);
+         toast({ title: "Comment Saved", description: `Comment for "${commentingTransaction.description}" saved.` });
+         setIsCommentDialogOpen(false);
+         setCommentingTransaction(null);
+         setCommentText('');
+     } else {
+         toast({ title: "Permission Denied", description: "You cannot comment on this review.", variant: "destructive" });
+         setIsCommentDialogOpen(false); // Close dialog even on failure
+     }
   };
 
   const handleDeleteCommentClick = (transactionId: string) => {
      const comment = currentReview?.transactionComments?.[transactionId];
      if (comment && currentReviewOwnerId) {
-        setCommentToDelete({ transactionId, comment });
-        setIsDeleteDialogOpen(true);
+         // Permission check: Allow if current user is the owner OR if it's a shared review they have access to
+        if (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) {
+             setCommentToDelete({ transactionId, comment });
+             setIsDeleteCommentDialogOpen(true);
+         } else {
+            toast({ title: "Permission Denied", description: "You cannot delete comments on this review.", variant: "destructive" });
+        }
     }
   };
 
   const confirmDeleteComment = () => {
     if (!commentToDelete || !currentReviewOwnerId) return;
-    deleteTransactionComment(currentWeekKey, commentToDelete.transactionId, currentReviewOwnerId);
-    toast({ title: "Comment Deleted" });
-    setIsDeleteDialogOpen(false);
+    // Double check permission before deleting
+    if (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) {
+        deleteTransactionComment(currentWeekKey, commentToDelete.transactionId, currentReviewOwnerId);
+        toast({ title: "Comment Deleted" });
+    } else {
+         toast({ title: "Permission Denied", description: "Could not delete comment.", variant: "destructive" });
+    }
+    setIsDeleteCommentDialogOpen(false);
     setCommentToDelete(null);
   };
 
@@ -291,8 +324,9 @@ export default function WeeklyReviewPage() {
                  <TabsTrigger value="shared">Shared With Me</TabsTrigger>
             </TabsList>
 
-             {/* Owned Reviews Tab */}
-             <TabsContent value="owned">
+             {/* Owned Reviews Tab / Shared Review Display */}
+             {/* Combine content display logic based on activeTab */}
+             <TabsContent value={activeTab}> {/* Display based on activeTab */}
                 <div className="grid gap-6 lg:grid-cols-3">
                     {/* Transaction List & Comments (Left/Main Panel) */}
                     <div className="lg:col-span-2 space-y-4">
@@ -308,8 +342,12 @@ export default function WeeklyReviewPage() {
                          </div>
                         <Card className="shadow-sm">
                             <CardHeader className="p-4 border-b">
-                                <CardTitle className="text-base">Transactions for the Week</CardTitle>
-                                <CardDescription>Click a transaction to add/edit comments.</CardDescription>
+                                <CardTitle className="text-base">
+                                     {activeTab === 'shared' ? `Shared Review Transactions (Week ${currentWeekKey})` : 'Transactions for the Week'}
+                                </CardTitle>
+                                 <CardDescription>
+                                     {activeTab === 'shared' ? `Viewing review from owner ID: ${currentReviewOwnerId}. Click to view/add comments.` : 'Click a transaction to add/edit comments.'}
+                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="p-0">
                                 <ScrollArea className="h-[400px] w-full">
@@ -413,64 +451,57 @@ export default function WeeklyReviewPage() {
                              </CardContent>
                          </Card>
 
-                         {/* Journal Card */}
-                         <Card className="shadow-sm">
-                             <CardHeader className="p-4 pb-2">
-                                <CardTitle className="text-base flex items-center gap-1"><BookOpen size={16}/> Weekly Journal</CardTitle>
-                                <CardDescription className="text-xs">Reflect on your financial progress, challenges, and goals for this week.</CardDescription>
-                             </CardHeader>
-                             <CardContent className="p-4 pt-0">
+                         {/* Journal Card with Delete Button */}
+                        <Card className="shadow-sm">
+                            <CardHeader className="p-4 pb-2 flex flex-row justify-between items-center">
+                                <div>
+                                    <CardTitle className="text-base flex items-center gap-1"><BookOpen size={16}/> Weekly Journal</CardTitle>
+                                    <CardDescription className="text-xs">Reflect on financial progress, challenges, and goals.</CardDescription>
+                                </div>
+                                {/* Delete Journal Button - Visible only on owned tab and if journal has content */}
+                                {activeTab === 'owned' && journalEntry && (
+                                    <AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0" onClick={handleDeleteJournal}>
+                                                <Trash2 size={16} />
+                                                <span className="sr-only">Delete Journal Entry</span>
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                )}
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0">
                                 <Textarea
-                                    placeholder="Write your journal entry here..."
+                                    placeholder={activeTab === 'owned' ? "Write your journal entry here..." : "Journal entry (read-only)..."}
                                     value={journalEntry}
                                     onChange={handleJournalChange}
                                     rows={8}
                                     className="w-full text-sm"
-                                    // Disabled if not viewing an owned review - handled by logic checking currentReviewOwnerId vs userId
-                                    disabled={activeTab === 'shared'} // Simple disable for shared tab
+                                    // Disable editing if viewing a shared review
+                                    disabled={activeTab === 'shared'}
                                 />
-                                {activeTab === 'shared' && <p className='text-xs italic text-muted-foreground mt-2'>You can only view journals for shared reviews.</p>}
+                                {activeTab === 'shared' && !journalEntry && (
+                                    <p className='text-xs italic text-muted-foreground mt-2 text-center py-4'>No journal entry shared for this week.</p>
+                                )}
+                                {activeTab === 'shared' && journalEntry && (
+                                     <p className='text-xs italic text-muted-foreground mt-2'>You are viewing a shared journal entry.</p>
+                                )}
                             </CardContent>
                         </Card>
                     </div>
                 </div>
-             </TabsContent>
-
-            {/* Shared Reviews Tab */}
-            <TabsContent value="shared">
-                 <Card>
-                     <CardHeader>
-                         <CardTitle>Reviews Shared With You</CardTitle>
-                         <CardDescription>Select a review to view its details.</CardDescription>
-                     </CardHeader>
-                     <CardContent>
-                         {Object.keys(sharedReviews).length > 0 ? (
-                             <ScrollArea className="h-[60vh]">
-                                 <ul className="space-y-2">
-                                     {Object.entries(sharedReviews).map(([key, review]) => (
-                                         <li key={key} className="border p-3 rounded-md hover:bg-muted/50">
-                                             <p className="font-semibold">Week: {key}</p>
-                                             <p className="text-xs text-muted-foreground">Owner ID: {review.ownerId}</p>
-                                             <Button size="sm" variant="link" className="p-0 h-auto mt-1" onClick={() => {
-                                                 // Logic to load and display the selected shared review's data
-                                                  const selectedWeekDate = parseISO(key.split('-')[0] + '-W' + key.split('-')[1] + '-1'); // Attempt to parse week key back to a date
-                                                  if (!isNaN(selectedWeekDate.getTime())) {
-                                                    setCurrentWeekStart(startOfWeek(selectedWeekDate, { weekStartsOn: 1 }));
-                                                    // setActiveTab('shared'); // Stay on shared tab
-                                                     toast({title: `Viewing Shared Review ${key}`});
-                                                 } else {
-                                                     toast({title: "Error", description: "Could not parse week key.", variant: "destructive"});
-                                                  }
-                                              }}>View Details</Button>
-                                         </li>
-                                     ))}
-                                 </ul>
-                             </ScrollArea>
-                         ) : (
-                             <p className="text-center text-muted-foreground py-6">No reviews have been shared with you yet.</p>
-                         )}
-                     </CardContent>
-                 </Card>
              </TabsContent>
         </Tabs>
 
@@ -490,21 +521,27 @@ export default function WeeklyReviewPage() {
             onChange={(e) => setCommentText(e.target.value)}
             rows={4}
             className="w-full"
+            // Disable if viewing a shared review and not the owner
+            disabled={activeTab === 'shared' && currentReviewOwnerId !== userId}
           />
           <DialogFooter>
-              {currentReview?.transactionComments?.[commentingTransaction?.id || ''] && (
-                  <Button variant="destructive" onClick={() => handleDeleteCommentClick(commentingTransaction!.id)} className="mr-auto">
-                       <Trash2 className="mr-1 h-4 w-4"/> Delete Comment
-                   </Button>
+              {/* Delete Comment Button - Conditionally Rendered */}
+              {commentingTransaction && currentReview?.transactionComments?.[commentingTransaction.id] && (
+                   // Allow deletion if owner or if collaborator on shared review
+                   (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) && (
+                      <Button variant="destructive" onClick={() => handleDeleteCommentClick(commentingTransaction!.id)} className="mr-auto">
+                           <Trash2 className="mr-1 h-4 w-4"/> Delete Comment
+                       </Button>
+                   )
                )}
             <Button type="button" variant="outline" onClick={() => setIsCommentDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveComment}>Save Comment</Button>
+            <Button onClick={handleSaveComment} disabled={activeTab === 'shared' && currentReviewOwnerId !== userId}>Save Comment</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Comment Confirmation */}
-       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+       <AlertDialog open={isDeleteCommentDialogOpen} onOpenChange={setIsDeleteCommentDialogOpen}>
          <AlertDialogContent>
            <AlertDialogHeader>
              <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
@@ -529,6 +566,3 @@ export default function WeeklyReviewPage() {
     </div>
   );
 }
-
-
-    
