@@ -11,6 +11,7 @@
  import { Badge } from '@/components/ui/badge';
  import { ClipboardList, Filter, RotateCw, XCircle, AlertTriangle, Info, CheckCircle } from 'lucide-react';
  import { format } from 'date-fns';
+ import { cn } from '@/lib/utils'; // Import cn utility
  // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
  // Logger removed
 
