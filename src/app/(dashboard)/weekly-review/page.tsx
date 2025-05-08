@@ -8,14 +8,14 @@ import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
 // Import budget store and selectors/actions
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore'; // Import missing selectTotalGoals
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore';
 // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns'; // Removed differenceInDays as it's not used directly here
 import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import type { TransactionWithId, WeeklyReviewData, UserShareInfo } from '@/lib/types'; // Removed BudgetItemCategory, BudgetItem
+import type { TransactionWithId, WeeklyReviewData, UserShareInfo } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter, // Import DialogFooter
   DialogClose
 } from "@/components/ui/dialog"; // Import Dialog components
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert components
@@ -176,6 +177,8 @@ export default function WeeklyReviewPage() {
     };
 
   // --- Comment Handling ---
+  const isReadOnly = activeTab === 'shared'; // Determine if the current view is read-only
+
   const handleAddCommentClick = (tx: TransactionWithId) => {
     if (isReadOnly) {
       toast({ title: "Read Only", description: "Cannot add comments to a shared review.", variant: "default" });
@@ -284,7 +287,7 @@ export default function WeeklyReviewPage() {
   };
 
   // --- UI ---
-  const isReadOnly = activeTab === 'shared';
+
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
