@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/income-expenses/page.tsx
 'use client';
 
@@ -11,17 +10,10 @@ import type { TransactionWithId } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Coins, TrendingDown, TrendingUp, Tag, Scale } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils'; // Updated import
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion components
 
-// Formatting Function
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
+// Formatting Function (formatCurrency moved to utils)
 
 const formatDate = (date: Date | string) => {
      const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -37,8 +29,35 @@ const formatCategoryBadge = (value: string | undefined) => {
     return <Badge variant={variant} className="text-xs font-normal">{text}</Badge>;
 }
 
+// Accordion Trigger Component with Sum - adapted for this page
+const AccordionTriggerWithSum = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; description?: string; count: number }
+>(({ label, sum, description, count, children, ...props }, ref) => {
+  return (
+      <AccordionTrigger ref={ref} {...props} className='hover:no-underline py-3 px-4 data-[state=open]:border-b'>
+        <div className="flex justify-between items-center w-full">
+            <div className='flex flex-col items-start text-left'>
+                 <span className="flex items-center gap-2 text-base font-semibold">
+                    {label}
+                 </span>
+                 {description && <p className='text-xs text-muted-foreground font-normal mt-0.5'>{description}</p>}
+            </div>
+            {count > 0 && (
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">({count} items)</span>
+                    <span className="font-semibold font-mono text-base">{formatCurrency(sum)}</span>
+                </div>
+            )}
+        </div>
+      </AccordionTrigger>
+  );
+});
+AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
+
+
 export default function IncomeExpensesPage() {
-  const { transactions } = useTransactionsStore();
+  const { transactions } => useTransactionsStore();
 
   // Filter transactions
   const incomeTransactions = useMemo(() => transactions.filter(tx => tx.amount > 0), [transactions]);
@@ -108,51 +127,39 @@ export default function IncomeExpensesPage() {
     </TableRow>
   );
 
-  // Render function for category sections - REFACTORED
+  // Render function for category sections using Accordion
   const renderCategorySection = (
+    value: string, // Unique value for AccordionItem
     title: string,
     description: string,
     transactions: TransactionWithId[],
     total: number,
     isExpense = false
   ) => (
-    <Card className="flex flex-col shadow-sm h-full"> {/* Ensure cards take full height */}
-      <CardHeader className="p-4 border-b flex flex-row items-center justify-between space-y-0"> {/* Use flex row for title and total */}
-        <div>
-            <CardTitle className="flex items-center gap-2 text-base"><Tag className="h-4 w-4"/>{title}</CardTitle>
-            <CardDescription className="text-xs">{description}</CardDescription>
-        </div>
-         {/* Display total at the top */}
-         {transactions.length > 0 && (
-             <div className="text-right">
-                 <p className="text-xs text-muted-foreground">Total {title}</p>
-                 <p className="font-bold font-mono text-sm">{formatCurrency(total)}</p>
-             </div>
-         )}
-      </CardHeader>
-      <CardContent className="flex-grow p-0">
-        <ScrollArea className="h-[350px] w-full"> {/* Slightly increased height */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[100px] pl-4 pr-2">Date</TableHead> {/* Added padding */}
-                <TableHead className="px-2">Description</TableHead> {/* Added padding */}
-                <TableHead className="w-[90px] px-2">Mode</TableHead> {/* Added padding */}
-                <TableHead className="text-right w-[140px] pr-4 pl-2">Amount (KES)</TableHead> {/* Added padding */}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.length > 0 ? (
-                transactions.map(tx => renderTransactionRow(tx, isExpense))
-              ) : (
-                <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No transactions in this category.</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </ScrollArea>
-      </CardContent>
-       {/* Footer removed as total is now in header */}
-    </Card>
+    <AccordionItem value={value} className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
+        <AccordionTriggerWithSum label={title} sum={total} description={description} count={transactions.length} />
+        <AccordionContent className="p-0">
+            {transactions.length > 0 ? (
+                 <ScrollArea className={cn("w-full", transactions.length > 8 ? "h-[350px]" : "h-auto")}>
+                    <Table>
+                        <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[100px] pl-4 pr-2">Date</TableHead> {/* Added padding */}
+                            <TableHead className="px-2">Description</TableHead> {/* Added padding */}
+                            <TableHead className="w-[90px] px-2">Mode</TableHead> {/* Added padding */}
+                            <TableHead className="text-right w-[140px] pr-4 pl-2">Amount (KES)</TableHead> {/* Added padding */}
+                        </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {transactions.map(tx => renderTransactionRow(tx, isExpense))}
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
+            ) : (
+                 <p className="text-center text-muted-foreground py-4 text-sm px-4">No transactions in this category.</p>
+            )}
+        </AccordionContent>
+    </AccordionItem>
   );
 
   return (
@@ -164,7 +171,7 @@ export default function IncomeExpensesPage() {
         <p className="text-muted-foreground">Breakdown based on recurrence and variability.</p>
       </header>
 
-      {/* Summary Section - Kept as is */}
+      {/* Summary Section */}
        <section className="mb-8 grid gap-4 md:grid-cols-3">
            <Card className="shadow-md">
                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
@@ -202,25 +209,29 @@ export default function IncomeExpensesPage() {
 
       <main className="flex-1 grid gap-8 lg:grid-cols-2">
         {/* Income Details Section */}
-        <section className="space-y-6">
-            <h2 className="text-xl font-semibold flex items-center gap-2 mb-4"><TrendingUp className="text-accent"/> Income Details</h2>
-            {/* Render each income category using the updated component */}
-            {renderCategorySection("Recurring - Fixed", "Regular income, same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
-            {renderCategorySection("Recurring - Variable", "Regular income, amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
-            {renderCategorySection("One-Time - Fixed", "Non-recurring income, fixed amount (e.g., Bonus).", categorizedIncome.oneTimeFixed, incomeTotals.oneTimeFixed)}
-            {renderCategorySection("One-Time - Variable", "Non-recurring income, varying amount (e.g., Freelance).", categorizedIncome.oneTimeVariable, incomeTotals.oneTimeVariable)}
-            {categorizedIncome.uncategorized.length > 0 && renderCategorySection("Uncategorized Income", "Missing frequency/variability info.", categorizedIncome.uncategorized, incomeTotals.uncategorized)}
+        <section className="space-y-2">
+            <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingUp className="text-accent"/> Income Details</h2>
+            <Accordion type="multiple" className="w-full space-y-2">
+                 {/* Render each income category using the updated component */}
+                 {renderCategorySection("income-rf", "Recurring - Fixed", "Regular income, same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
+                 {renderCategorySection("income-rv", "Recurring - Variable", "Regular income, amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
+                 {renderCategorySection("income-otf", "One-Time - Fixed", "Non-recurring income, fixed amount (e.g., Bonus).", categorizedIncome.oneTimeFixed, incomeTotals.oneTimeFixed)}
+                 {renderCategorySection("income-otv", "One-Time - Variable", "Non-recurring income, varying amount (e.g., Freelance).", categorizedIncome.oneTimeVariable, incomeTotals.oneTimeVariable)}
+                 {categorizedIncome.uncategorized.length > 0 && renderCategorySection("income-uncat", "Uncategorized Income", "Missing frequency/variability info.", categorizedIncome.uncategorized, incomeTotals.uncategorized)}
+            </Accordion>
         </section>
 
         {/* Expense Details Section */}
-         <section className="space-y-6">
-             <h2 className="text-xl font-semibold flex items-center gap-2 mb-4"><TrendingDown className="text-destructive"/> Expense Details</h2>
-             {/* Render each expense category using the updated component */}
-             {renderCategorySection("Recurring - Fixed", "Regular expenses, same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
-             {renderCategorySection("Recurring - Variable", "Regular expenses, amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
-             {renderCategorySection("One-Time - Fixed", "Non-recurring expenses, fixed amount.", categorizedExpenses.oneTimeFixed, expenseTotals.oneTimeFixed, true)}
-             {renderCategorySection("One-Time - Variable", "Non-recurring expenses, varying amount (e.g., Dining out).", categorizedExpenses.oneTimeVariable, expenseTotals.oneTimeVariable, true)}
-              {categorizedExpenses.uncategorized.length > 0 && renderCategorySection("Uncategorized Expenses", "Missing frequency/variability info.", categorizedExpenses.uncategorized, expenseTotals.uncategorized, true)}
+         <section className="space-y-2">
+             <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingDown className="text-destructive"/> Expense Details</h2>
+             <Accordion type="multiple" className="w-full space-y-2">
+                  {/* Render each expense category using the updated component */}
+                  {renderCategorySection("expense-rf", "Recurring - Fixed", "Regular expenses, same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
+                  {renderCategorySection("expense-rv", "Recurring - Variable", "Regular expenses, amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
+                  {renderCategorySection("expense-otf", "One-Time - Fixed", "Non-recurring expenses, fixed amount.", categorizedExpenses.oneTimeFixed, expenseTotals.oneTimeFixed, true)}
+                  {renderCategorySection("expense-otv", "One-Time - Variable", "Non-recurring expenses, varying amount (e.g., Dining out).", categorizedExpenses.oneTimeVariable, expenseTotals.oneTimeVariable, true)}
+                  {categorizedExpenses.uncategorized.length > 0 && renderCategorySection("expense-uncat", "Uncategorized Expenses", "Missing frequency/variability info.", categorizedExpenses.uncategorized, expenseTotals.uncategorized, true)}
+             </Accordion>
         </section>
       </main>
     </div>
