@@ -19,9 +19,9 @@ import {
 import { X, UserPlus, Trash2, Loader2, Search, CheckCircle, AlertTriangle } from 'lucide-react';
 import type { UserShareInfo } from '@/lib/types';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import store hooks
-import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
+// import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
 import { triggerCollaborationNotification } from '@/services/notificationService'; // Import notification trigger
-// import { useAuth } from '@clerk/nextjs/client'; // Re-enable Clerk useAuth hook // Clerk disabled
+// import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk useAuth hook // Clerk disabled
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
@@ -55,17 +55,17 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
 
   // Fetch the list of users already shared with when the dialog opens
   const fetchSharedList = useCallback(async () => {
-    if (!isOpen || !weekKey) return;
-    setIsLoadingList(true);
-    try {
-      const users = await getSharedWithUsersApi(weekKey);
-      setSharedWithList(users);
-    } catch (error: any) {
-      console.error("Failed to fetch shared list:", error);
-      toast({ title: 'Error', description: `Could not load shared users: ${error.message}`, variant: 'destructive' });
-    } finally {
-      setIsLoadingList(false);
-    }
+    // if (!isOpen || !weekKey) return;
+    // setIsLoadingList(true);
+    // try {
+    //   const users = await getSharedWithUsersApi(weekKey);
+    //   setSharedWithList(users);
+    // } catch (error: any) {
+    //   console.error("Failed to fetch shared list:", error);
+    //   toast({ title: 'Error', description: `Could not load shared users: ${error.message}`, variant: 'destructive' });
+    // } finally {
+    //   setIsLoadingList(false);
+    // }
   }, [isOpen, weekKey, toast]);
 
   useEffect(() => {
@@ -123,7 +123,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
       // if they happen to be online when this action runs. A robust system would
       // store notifications server-side. For now, we trigger it for the sharer as a confirmation.
        // TODO: Implement server-side notification trigger for reliability
-       // triggerCollaborationNotification(sharerName, weekKey, searchResult.userId); // Pass recipient ID
+       triggerCollaborationNotification(sharerName, weekKey, searchResult.userId); // Pass recipient ID
        console.info(`Client-side notification trigger placeholder for sharing review ${weekKey} by ${sharerName} with ${searchResult.userId}`);
 
       // Add to local list optimistically or refetch

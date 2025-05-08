@@ -1,4 +1,3 @@
-// src/app/(dashboard)/weekly-review/page.tsx
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -9,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
 // Import budget store and selectors/actions
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore';
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore'; // Import missing selectTotalGoals
 // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns'; // Removed differenceInDays as it's not used directly here
 import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
@@ -26,12 +25,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
   DialogClose
 } from "@/components/ui/dialog"; // Import Dialog components
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert components
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
@@ -51,7 +50,7 @@ const formatToPeriodKey = (date: Date): string => {
 
 // Helper to format category badges
 const formatCategoryBadge = (value: string | undefined) => {
-    if (!value) return null; // Don't render anything if no value
+    if (!value) return null;
     const variant: "secondary" | "outline" = value === 'recurring' || value === 'fixed' ? 'secondary' : 'outline';
     const text = value.charAt(0).toUpperCase() + value.slice(1);
     return <Badge variant={variant} className="ml-2 text-xs font-normal">{text}</Badge>;
@@ -66,7 +65,7 @@ export default function WeeklyReviewPage() {
   const setBudgetPeriod = useBudgetStore(state => state.setBudgetPeriod);
   // Use selectors directly (they depend on the current budgetPeriod in the store)
   const monthlyBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
-  const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
+  const monthlyBudgetedExpenses = useBudgetStore(selectTotalRecurringExpenses);
   const monthlyBudgetedGoals = useBudgetStore(selectTotalGoals);
   const monthlyBudgetedDebt = useBudgetStore(selectTotalBudgetedDebt);
   const monthlyNetBudgeted = useBudgetStore(selectNetBudgeted);
@@ -102,7 +101,7 @@ export default function WeeklyReviewPage() {
   useEffect(() => {
       const correspondingMonthPeriod = formatToPeriodKey(currentWeekStart);
       setBudgetPeriod(correspondingMonthPeriod);
-      // console.log(`Weekly Review: Set budget period to ${correspondingMonthPeriod} for week starting ${formatDate(currentWeekStart)}`); // Console log commented out
+      // // console.log(`Weekly Review: Set budget period to ${correspondingMonthPeriod} for week starting ${formatDate(currentWeekStart)}`); // Console log commented out
   }, [currentWeekStart, setBudgetPeriod]);
 
 
@@ -239,10 +238,10 @@ export default function WeeklyReviewPage() {
 
       // Prorate the *monthly* budget figures for the *current* period to a weekly estimate
       const daysInWeek = 7;
-      const daysInAvgMonth = 30.44;
-      const budgetMultiplier = daysInWeek / daysInAvgMonth;
+      // const daysInAvgMonth = 30.44;
+      // const budgetMultiplier = daysInWeek / daysInAvgMonth;
 
-      const netBudgetedWeekly = monthlyNetBudgeted * budgetMultiplier; // Use selector result
+      const netBudgetedWeekly = monthlyNetBudgeted; // Use selector result
       const variance = netFlow - netBudgetedWeekly;
 
       let varianceStatus: 'favorable' | 'unfavorable' | 'on-track' | 'no-budget' = 'no-budget';
@@ -279,7 +278,7 @@ export default function WeeklyReviewPage() {
       }
        if (!ownedReviews[currentWeekKey] && userId) {
            setJournalEntry(currentWeekKey, '', userId);
-           // console.log(`Created shell for week ${currentWeekKey} before sharing.`); // Console log commented out
+           // // console.log(`Created shell for week ${currentWeekKey} before sharing.`); // Console log commented out
        }
       setIsShareDialogOpen(true);
   };
@@ -363,6 +362,8 @@ export default function WeeklyReviewPage() {
                                           </TableBody>
                                       </Table>
                                   </ScrollArea>
+                                   {/* Add/Edit Sheet */}
+                                  {/*<AddCommentSheet isOpen={isCommentDialogOpen} onClose={handleFormSheetClose} item={editingItem} initialCategory={categoryForNewItem} />*/}
                               </CardContent>
                           </Card>
                       </div>
@@ -378,15 +379,15 @@ export default function WeeklyReviewPage() {
                                    <div className="flex justify-between items-center text-xs pt-1"><span className="text-muted-foreground">Budget Variance (vs. {format(currentWeekStart, 'MMM yyyy')} budget):</span><span className={cn("font-mono font-semibold", weeklyMetrics.budgetVarianceStatus === 'favorable' && 'text-accent', weeklyMetrics.budgetVarianceStatus === 'unfavorable' && 'text-destructive', weeklyMetrics.budgetVarianceStatus === 'on-track' && 'text-primary', weeklyMetrics.budgetVarianceStatus === 'no-budget' && 'text-muted-foreground italic')}>{weeklyMetrics.budgetVarianceStatus === 'no-budget' ? 'No Budget Data' : `${weeklyMetrics.budgetVariance >= 0 ? '+' : ''}${formatCurrency(weeklyMetrics.budgetVariance)} (${weeklyMetrics.budgetVarianceStatus.replace('-', ' ')})`}</span></div>
                                </CardContent>
                            </Card>
-                          <Card className="shadow-sm">
-                              <CardHeader className="p-4 pb-2 flex flex-row justify-between items-center">
-                                  <div><CardTitle className="text-base flex items-center gap-1"><BookOpen size={16}/> Weekly Journal</CardTitle><CardDescription className="text-xs">Reflect on your financial progress.</CardDescription></div>
-                                  {journalEntry && (<AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0" onClick={handleDeleteJournal}><Trash2 size={16} /><span className="sr-only">Delete Journal Entry</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}
-                              </CardHeader>
-                              <CardContent className="p-4 pt-0">
-                                  <Textarea placeholder="Write your journal entry here..." value={journalEntry} onChange={handleJournalChange} rows={8} className="w-full text-sm" disabled={!userId}/>
-                              </CardContent>
-                          </Card>
+                           <Card className="shadow-sm">
+                               <CardHeader className="p-4 pb-2 flex flex-row justify-between items-center">
+                                   <div><CardTitle className="text-base flex items-center gap-1"><BookOpen size={16}/> Weekly Journal</CardTitle><CardDescription className="text-xs">Reflect on your financial progress.</CardDescription></div>
+                                   {journalEntry && (<AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0" onClick={handleDeleteJournal}><Trash2 size={16} /><span className="sr-only">Delete Journal Entry</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}
+                               </CardHeader>
+                               <CardContent className="p-4 pt-0">
+                                   <Textarea placeholder="Write your journal entry here..." value={journalEntry} onChange={handleJournalChange} rows={8} className="w-full text-sm" disabled={isReadOnly}/>
+                               </CardContent>
+                           </Card>
                       </div>
                  </div>
              </TabsContent>
@@ -430,22 +431,20 @@ export default function WeeklyReviewPage() {
                                                            <TableRow><TableHead className="w-[100px] pl-4">Date</TableHead><TableHead>Description</TableHead><TableHead>Category</TableHead><TableHead className="text-right">Amount (KES)</TableHead><TableHead className="w-[150px] text-center pr-4">Comment</TableHead></TableRow>
                                                        </TableHeader>
                                                       <TableBody>
-                                                          {transactionsForWeek.length > 0 ? ( // Show owner's transactions
-                                                              transactionsForWeek.map((tx) => {
-                                                                  const comment = currentReview?.transactionComments?.[tx.id];
-                                                                  return (
-                                                                      <TableRow key={tx.id} title={comment ? `Comment: ${comment}` : 'No Comment (Read-only)'}>
-                                                                          <TableCell className="font-medium pl-4">{formatDate(tx.date)}</TableCell>
-                                                                          <TableCell className="max-w-[200px] truncate">{tx.description}</TableCell>
-                                                                          <TableCell className="text-xs">{formatCategoryBadge(tx.frequency)}{formatCategoryBadge(tx.variability)}</TableCell>
-                                                                          <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(tx.amount)}</TableCell>
-                                                                          <TableCell className="text-center pr-4 text-xs">
-                                                                               {comment ? (<div className="flex items-center justify-center gap-1"><MessageSquareText size={14} className="text-blue-500" /><span className='italic truncate max-w-[80px]'>"{comment}"</span></div>) : (<span className="text-muted-foreground italic">No comment</span>)}
-                                                                          </TableCell>
-                                                                      </TableRow>
-                                                                  );
-                                                              })
-                                                          ) : ( <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No transactions found for the owner this week.</TableCell></TableRow> )}
+                                                          {transactionsForWeek.map((tx) => {
+                                                              const comment = currentReview?.transactionComments?.[tx.id];
+                                                              return (
+                                                                  <TableRow key={tx.id} title={comment ? `Comment: ${comment}` : 'No Comment (Read-only)'}>
+                                                                      <TableCell className="font-medium pl-4">{formatDate(tx.date)}</TableCell>
+                                                                      <TableCell className="max-w-[200px] truncate">{tx.description}</TableCell>
+                                                                      <TableCell className="text-xs">{formatCategoryBadge(tx.frequency)}{formatCategoryBadge(tx.variability)}</TableCell>
+                                                                      <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(tx.amount)}</TableCell>
+                                                                      <TableCell className="text-center pr-4 text-xs">
+                                                                           {comment ? (<div className="flex items-center justify-center gap-1"><MessageSquareText size={14} className="text-blue-500" /><span className='italic truncate max-w-[80px]'>"{comment}"</span></div>) : (<span className="text-muted-foreground italic">No comment</span>)}
+                                                                      </TableCell>
+                                                                  </TableRow>
+                                                              );
+                                                          })}
                                                       </TableBody>
                                                   </Table>
                                               </ScrollArea>
@@ -475,7 +474,6 @@ export default function WeeklyReviewPage() {
                  )}
              </TabsContent>
         </Tabs>
-
 
       {/* Add/Edit Comment Dialog */}
       <Dialog open={isCommentDialogOpen} onOpenChange={setIsCommentDialogOpen}>
@@ -524,23 +522,6 @@ export default function WeeklyReviewPage() {
            </AlertDialogFooter>
          </AlertDialogContent>
        </AlertDialog>
-
-       {/* Delete Journal Confirmation Dialog */}
-       <AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}>
-           <AlertDialogContent>
-               <AlertDialogHeader>
-                   <AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle>
-                   <AlertDialogDescription>
-                       Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.
-                   </AlertDialogDescription>
-               </AlertDialogHeader>
-               <AlertDialogFooter>
-                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                   <AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction>
-               </AlertDialogFooter>
-           </AlertDialogContent>
-       </AlertDialog>
-
 
         {/* Share Review Dialog */}
         <ShareReviewDialog

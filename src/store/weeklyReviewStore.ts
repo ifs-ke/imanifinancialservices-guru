@@ -3,7 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { encode, decode } from '@/lib/storage-utils';
 import type { WeeklyReviewData, UserShareInfo } from '@/lib/types';
 import { getISOWeek, getYear } from 'date-fns';
-import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
+// import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
 // import { auth } from '@clerk/nextjs'; // Re-enabled Clerk client auth - REMOVE - not meant for client side
 
 const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
@@ -217,11 +217,12 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
     {
       name: 'ifcGuru_weeklyReviews', // Persistence key
       storage: createJSONStorage(() => createSessionStorageWithEncoding()), // Use session storage with encoding
-       deserialize: (str) => {
-         const state = JSON.parse(str);
-         return { ...state, state: state.state, isHydrated: true };
+       onRehydrateStorage: () => (state) => {
+         if (state) {
+           state.isHydrated = true;
+            console.log("Weekly review store rehydrated."); // Replaced logInfo
+         }
        },
     }
   )
 );
-// ===== Selectors =====
