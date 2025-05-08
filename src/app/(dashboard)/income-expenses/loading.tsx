@@ -1,0 +1,10 @@
+// src/app/(dashboard)/income-expenses/loading.tsx
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+
+export default function Loading() {
+  return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+        <LoadingSpinner size={48} text="Loading Analysis..." />
+      </div>
+    );
+}
