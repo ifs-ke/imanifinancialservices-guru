@@ -1,12 +1,24 @@
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+// import { auth } from '@clerk/nextjs/server'; // Clerk disabled
 import connectToDatabase from '@/lib/mongodb';
-import { Collection } from 'mongodb';
+import { Collection, ClientSession } from 'mongodb'; // Import ClientSession
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
 import { hashData, verifyHash } from '@/lib/storage-utils'; // Use updated hash utils
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; // Import preparation helper
 import stringify from 'fast-json-stable-stringify'; // Import stable stringify
+import { Ratelimit } from '@upstash/ratelimit';
+import { kv } from '@vercel/kv';
+// import { logInfo, logWarn, logError } from '@/lib/logger'; // Logger removed
+import { addCorsHeaders } from '@/lib/utils'; // Import CORS helper
+
+// Consistent placeholder ID
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+
+const ratelimit = new Ratelimit({
+  redis: kv,
+  limiter: Ratelimit.slidingWindow(10, '10 s'), // Allow 10 requests per 10 seconds per user
+});
 
 // Define the structure of the incoming request body (should match client's prepared data + hash)
 interface SaveDataPayload {
@@ -14,7 +26,7 @@ interface SaveDataPayload {
   debts: DebtItem[];
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
-  budgetItems: BudgetItem[];
+  budgetItems: BudgetItem[]; // Includes period field now
   ownedReviews: Record<string, WeeklyReviewData>;
   startDate?: string; // Date as ISO string
   endDate?: string;   // Date as ISO string
@@ -22,62 +34,83 @@ interface SaveDataPayload {
   dataHash: string; // Hash of the prepared data being saved
 }
 
-// Helper function to safely replace data in a collection for a specific user
-async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[]) {
-  try {
-    const collection: Collection = db.collection(collectionName);
-    // Data received should already have Dates converted to ISO strings by prepareDataForHashing on client
-    // Convert back to Date objects before saving to MongoDB where applicable
-    const dataWithUserIdAndDates = data.map(item => ({
-        ...item,
-        userId,
-        ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}), // Convert 'date' string back to Date
-        // Note: We DO NOT convert startDate/endDate here as they belong in userProfiles
-    }));
-
-    const session = db.client.startSession();
+// Helper function to safely replace data in a collection for a specific user using a transaction session
+async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[], session: ClientSession) { // Accept session
+    const logContext = { userId, collectionName, operation: 'replaceCollectionData' };
+    // console.log(`Save API: Starting replace for ${collectionName}`, logContext); // Console log commented out
     try {
-      await session.withTransaction(async () => {
-        // Delete existing data scoped to the user within the transaction
-        await collection.deleteMany({ userId }, { session });
-        // Insert new data if any exists
-        if (dataWithUserIdAndDates.length > 0) {
-          await collection.insertMany(dataWithUserIdAndDates, { session });
+        const collection: Collection = db.collection(collectionName);
+        // Data received should already have Dates/Periods converted to strings by prepareDataForHashing on client
+        // Convert Dates back to Date objects before saving to MongoDB where applicable
+        const dataWithUserIdAndProcessed = (data || []).map(item => ({
+            ...item,
+            userId,
+             // Only convert 'date' if it exists and is a string (relevant for transactions)
+            ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}),
+             // Ensure 'period' exists for budget items (already string from prepareDataForHashing)
+            ...(collectionName === 'budgetItems' && !item.period ? { period: 'unknown-period' } : {}), // Handle missing period defensively
+             // Ensure _id is handled correctly
+            _id: item._id || undefined // Let Mongo generate _id if not present
+        }));
+
+        // Use 'id' (application-generated ID) for matching which items to keep
+        const itemIdsToKeep = new Set(dataWithUserIdAndProcessed.map(d => d.id));
+
+        // Delete documents for the user that are *not* in the incoming data list
+        const deleteFilter = { userId, id: { $nin: Array.from(itemIdsToKeep) } };
+        // console.log(`Save API: Performing deleteMany for ${collectionName} with filter: ${JSON.stringify(deleteFilter)}`, logContext); // Console log commented out
+        await collection.deleteMany(deleteFilter, { session });
+
+        // Upsert documents from the incoming list
+        if (dataWithUserIdAndProcessed.length > 0) {
+            const bulkOps = dataWithUserIdAndProcessed.map(doc => ({
+                 updateOne: {
+                     // Use 'id' (application-generated) for matching during upsert
+                     filter: { userId: userId, id: doc.id },
+                     update: { $set: { ...doc, userId: userId } }, // Ensure userId is set correctly
+                     upsert: true // Create if doesn't exist based on filter (id and userId)
+                 }
+             }));
+             // console.log(`Save API: Performing bulkWrite for ${collectionName} with ${bulkOps.length} operations`, logContext); // Console log commented out
+            await collection.bulkWrite(bulkOps, { session });
+        } else {
+             // console.log(`Save API: No data provided for ${collectionName}, deleted existing data.`, logContext); // Console log commented out
         }
-      });
-       console.log(`Save API: Successfully replaced ${collectionName} for user ${userId}`);
-    } finally {
-        await session.endSession();
+
+        // console.log(`Save API: Successfully processed ${collectionName}`, logContext); // Console log commented out
+
+    } catch (error) {
+        // console.error(`Save API: Error replacing ${collectionName}`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Console log commented out
+        throw new Error(`Failed to save ${collectionName}`);
     }
-  } catch (error) {
-    console.error(`Save API: Error replacing ${collectionName} for user ${userId}:`, error);
-    throw new Error(`Failed to save ${collectionName}`);
-  }
 }
 
-// Helper function to save/update owned weekly reviews for a specific user
-async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Record<string, WeeklyReviewData>) {
+
+// Helper function to save/update owned weekly reviews for a specific user using a transaction session
+async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Record<string, WeeklyReviewData>, session: ClientSession) { // Accept session
+    const logContext = { userId, operation: 'saveOwnedWeeklyReviews' };
+    // console.log(`Save API: Starting save for owned weekly reviews`, logContext); // Console log commented out
     try {
         const collection: Collection = db.collection('weeklyReviews');
-        const reviewKeys = Object.keys(ownedReviews);
+        const reviewKeys = Object.keys(ownedReviews || {});
 
         if (reviewKeys.length === 0) {
-             console.log(`Save API: No owned reviews provided to save for user ${userId}.`);
+             // console.log(`Save API: No owned reviews provided to save.`, logContext); // Console log commented out
              return;
         }
 
         const bulkOps = reviewKeys.map(weekKey => {
             const reviewData = ownedReviews[weekKey];
-             if (reviewData.ownerId !== userId) {
-                 console.warn(`Save API SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData.ownerId}). Skipping.`);
+             if (!reviewData || reviewData.ownerId !== userId) {
+                 // console.warn(`Save API: SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData?.ownerId}). Skipping.`, logContext); // Console log commented out
                  return null;
              }
             const cleanSharedWith = Array.isArray(reviewData.sharedWith) ? reviewData.sharedWith : undefined;
 
             return {
                  updateOne: {
-                     filter: { userId: userId, weekKey: weekKey },
-                     update: { $set: { ...reviewData, userId: userId, weekKey: weekKey, sharedWith: cleanSharedWith } },
+                     filter: { userId: userId, weekKey: weekKey }, // Use userId (ownerId) and weekKey
+                     update: { $set: { ...reviewData, userId: userId, weekKey: weekKey, sharedWith: cleanSharedWith } }, // Ensure userId and weekKey are set
                      upsert: true
                  }
              };
@@ -85,39 +118,45 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
 
 
         if (bulkOps.length > 0) {
-             await collection.bulkWrite(bulkOps as any);
-             console.log(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews for user ${userId}`);
+             // console.log(`Save API: Performing bulkWrite for owned weeklyReviews with ${bulkOps.length} operations`, logContext); // Console log commented out
+             await collection.bulkWrite(bulkOps as any, { session }); // Pass session
+             // console.log(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews`, logContext); // Console log commented out
          } else {
-             console.log(`Save API: No valid owned reviews to save for user ${userId}.`);
+             // console.log(`Save API: No valid owned reviews to save.`, logContext); // Console log commented out
          }
 
     } catch (error) {
-        console.error(`Save API: Error saving owned weeklyReviews for user ${userId}:`, error);
+        // console.error(`Save API: Error saving owned weeklyReviews`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Console log commented out
         throw new Error('Failed to save owned weekly reviews');
     }
 }
 
+// Helper function to save user profile data using a transaction session
+async function saveUserProfileData(db: any, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean, session?: ClientSession) { // Accept optional session
+    const logContext = { userId, operation: 'saveUserProfileData' };
+    // console.log(`Save API: Starting save for user profile data`, logContext); // Console log commented out
 
-// Helper function to save statement dates and getting started state for a specific user
-async function saveUserProfileData(db: any, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean) {
-     // Only proceed if at least one field is provided
+    // Only proceed if at least one field is provided and defined
     if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) {
-        console.log(`Save API: No user profile data fields provided for user ${userId}. Skipping profile update.`);
+        // console.log(`Save API: No user profile data fields provided. Skipping profile update.`, logContext); // Console log commented out
         return;
     }
 
     try {
         const collection: Collection = db.collection('userProfiles');
-        const updateDoc: { [key: string]: any } = {}; // Use a more specific type if possible
+        const updateDoc: { [key: string]: any } = {};
 
-        // Conditionally add fields to the update document only if they are defined
         if (startDate !== undefined) {
-            // Store as Date object if valid ISO string, otherwise null
-            updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
+            try {
+                 // Convert valid ISO string back to Date for storage
+                updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
+            } catch { updateDoc.statementStartDate = null; /* console.warn(`Save API: Invalid start date format received: ${startDate}`, logContext); */ } // Console log commented out
         }
         if (endDate !== undefined) {
-             // Store as Date object if valid ISO string, otherwise null
-            updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
+            try {
+                 // Convert valid ISO string back to Date for storage
+                updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
+            } catch { updateDoc.statementEndDate = null; /* console.warn(`Save API: Invalid end date format received: ${endDate}`, logContext); */ } // Console log commented out
         }
         if (gettingStartedDismissed !== undefined) {
             updateDoc.gettingStartedDismissed = gettingStartedDismissed;
@@ -125,95 +164,131 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
 
 
         if (Object.keys(updateDoc).length > 0) {
+             // console.log(`Save API: Updating user profile with data: ${JSON.stringify(updateDoc)}`, logContext); // Console log commented out
              await collection.updateOne(
-                 { userId }, // Filter by userId
-                 { $set: updateDoc }, // Set only the provided fields
-                 { upsert: true } // Create profile if it doesn't exist
+                 { userId },
+                 { $set: updateDoc },
+                 // Use upsert true. Pass session if provided (critical for transaction)
+                 session ? { upsert: true, session } : { upsert: true }
              );
-             console.log(`Save API: Successfully saved user profile data for user ${userId}:`, updateDoc);
+             // console.log(`Save API: Successfully saved user profile data`, logContext); // Console log commented out
          } else {
-              console.log(`Save API: No valid user profile fields to update for user ${userId}.`);
+              // console.log(`Save API: No valid user profile fields to update.`, logContext); // Console log commented out
          }
 
     } catch (error) {
-        console.error(`Save API: Error saving user profile data for user ${userId}:`, error);
+        // console.error(`Save API: Error saving user profile data`, { ...logContext, error, stack: error instanceof Error ? error.stack : undefined }); // Console log commented out
         throw new Error('Failed to save user profile data');
     }
 }
 
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS() {
+  const response = new NextResponse(null, { status: 200 });
+  addCorsHeaders(response);
+  return response;
+}
 
 export async function POST(request: Request) {
-  const { userId } = auth();
+  // const { userId } = auth(); // Clerk disabled
+  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+  const logContextBase = { userId: userId || 'unknown', operation: 'POST /api/save' };
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
+    // console.warn('Save API: Unauthorized save attempt: User not logged in.', logContextBase); // Console log commented out
+    const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
+    return addCorsHeaders(response); // Add CORS headers to error response
   }
+
+  // Apply Rate Limiting
+  const { success, limit, remaining, reset } = await ratelimit.limit(userId);
+  const logContextWithRateLimit = { ...logContextBase, rateLimit: { limit, remaining, reset } };
+
+  if (!success) {
+      // console.warn('Save API: Rate limit exceeded.', logContextWithRateLimit); // Console log commented out
+       const response = NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+       return addCorsHeaders(response); // Ensure CORS headers on rate limit response
+  }
+  // console.log('Save API: Rate limit check passed.', logContextWithRateLimit); // Console log commented out
+
 
   let payload: SaveDataPayload;
   try {
     payload = await request.json();
   } catch (error) {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    // console.error('Save API: Invalid request body.', { ...logContextWithRateLimit, error, stack: error instanceof Error ? error.stack : undefined }); // Console log commented out
+    const response = NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    return addCorsHeaders(response); // Ensure CORS headers on bad request response
   }
 
   if (!payload || typeof payload !== 'object' || !payload.dataHash) {
-      return NextResponse.json({ error: 'Invalid payload or missing dataHash' }, { status: 400 });
+      // console.warn('Save API: Invalid payload structure or missing dataHash.', logContextWithRateLimit); // Console log commented out
+       const response = NextResponse.json({ error: 'Invalid payload or missing dataHash' }, { status: 400 });
+       return addCorsHeaders(response); // Ensure CORS headers on bad request response
   }
 
   const { dataHash, ...receivedData } = payload;
 
    // Re-prepare the *received* data for hashing on the server-side
-   const preparedDataForVerification = prepareDataForHashing(receivedData as any); // Cast as any for flexibility if needed
+   const preparedDataForVerification = prepareDataForHashing(receivedData as any);
    const dataString = stringify(preparedDataForVerification);
    const calculatedServerHash = await hashData(dataString);
 
-    console.log(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`);
+    // console.log(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`, logContextWithRateLimit); // Console log commented out
 
     const isValid = await verifyHash(dataString, dataHash);
 
     if (!isValid) {
-       console.error(`Save API: Data integrity check failed for user ${userId}. Client hash: ${dataHash}, Server hash: ${calculatedServerHash}`);
-       // Optionally log more details about the data being compared (careful with sensitive info)
-       // console.log("Save API: Received Prepared Data:", JSON.stringify(preparedDataForVerification).substring(0, 500));
-       return NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
+       // console.error('Save API: Data integrity check failed!', { ...logContextWithRateLimit, clientHash: dataHash, serverHash: calculatedServerHash }); // Console log commented out
+       // console.log("Data that resulted in hash mismatch (truncated):", { dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : "") }, logContextWithRateLimit); // Console log commented out
+       const response = NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
+       return addCorsHeaders(response); // Ensure CORS headers on integrity check failure
     }
-    console.log(`Save API: Data integrity check passed for user ${userId}. Proceeding with save.`);
+    // console.log('Save API: Data integrity check passed. Proceeding with save.', logContextWithRateLimit); // Console log commented out
 
+  const client = await connectToDatabase();
+  const db = client.db();
+  const session = client.startSession(); // Start MongoDB session
 
   try {
-    const client = await connectToDatabase();
-    const db = client.db();
+    // console.log('Save API: Starting MongoDB transaction.', logContextWithRateLimit); // Console log commented out
+    await session.withTransaction(async () => {
+        // Use the verified prepared data for saving
+        const {
+          transactions = [],
+          debts = [],
+          assetItems = [],
+          otherLiabilityItems = [],
+          budgetItems = [], // Includes period field
+          ownedReviews = {},
+          startDate,
+          endDate,
+          gettingStartedDismissed
+        } = preparedDataForVerification;
 
-    // Use the verified prepared data for saving
-    const {
-      transactions = [],
-      debts = [],
-      assetItems = [],
-      otherLiabilityItems = [],
-      budgetItems = [],
-      ownedReviews = {},
-      startDate,
-      endDate,
-      gettingStartedDismissed // Get the state from the verified data
-    } = preparedDataForVerification;
 
-
-    // Perform all database operations
-    await Promise.all([
-      replaceCollectionData(db, 'transactions', userId, transactions),
-      replaceCollectionData(db, 'debts', userId, debts),
-      replaceCollectionData(db, 'assetItems', userId, assetItems),
-      replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems),
-      replaceCollectionData(db, 'budgetItems', userId, budgetItems),
-      saveOwnedWeeklyReviews(db, userId, ownedReviews),
-      // Pass the gettingStartedDismissed value to the profile update function
-      saveUserProfileData(db, userId, startDate, endDate, gettingStartedDismissed)
-    ]);
-
-     return NextResponse.json({ message: `Data saved successfully for user ${userId}` });
+        // Perform all database operations within the transaction
+        await Promise.all([
+            replaceCollectionData(db, 'transactions', userId, transactions, session),
+            replaceCollectionData(db, 'debts', userId, debts, session),
+            replaceCollectionData(db, 'assetItems', userId, assetItems, session),
+            replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems, session),
+            replaceCollectionData(db, 'budgetItems', userId, budgetItems, session), // Updated call
+            saveOwnedWeeklyReviews(db, userId, ownedReviews, session),
+            saveUserProfileData(db, userId, startDate, endDate, gettingStartedDismissed, session)
+        ]);
+    });
+    // console.log('Save API: MongoDB transaction committed successfully.', logContextWithRateLimit); // Console log commented out
+     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
+     return addCorsHeaders(response); // Add CORS headers to success response
   } catch (error: any) {
-    console.error(`Save API: Failed to save data for user ${userId}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to save data to database';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    // Transaction automatically aborted on error by withTransaction
+    // console.error('Save API: MongoDB transaction failed or aborted.', { ...logContextWithRateLimit, error, stack: error.stack }); // Console log commented out
+    const errorMessage = error instanceof Error ? `Failed to save data: ${error.message}` : 'An unknown error occurred during save.';
+     const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+     return addCorsHeaders(response); // Ensure CORS headers on internal server error
+  } finally {
+     await session.endSession(); // Ensure session is always closed
+     // console.log('Save API: MongoDB session ended.', logContextWithRateLimit); // Console log commented out
   }
 }

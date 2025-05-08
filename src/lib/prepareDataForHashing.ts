@@ -7,11 +7,11 @@ interface SyncData {
   debts: DebtItem[];
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
-  budgetItems: BudgetItem[];
+  budgetItems: BudgetItem[]; // Includes period field now
   ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews?: Record<string, WeeklyReviewData>; // Make sharedReviews optional
-  notifications: NotificationItem[]; // Keep notifications in the type for fetching, but exclude from hashing
-  startDate?: Date; // Use Date objects internally before converting
+  sharedReviews?: Record<string, WeeklyReviewData>;
+  notifications: NotificationItem[];
+  startDate?: Date;
   endDate?: Date;
   gettingStartedDismissed?: boolean;
 }
@@ -23,18 +23,16 @@ interface SyncData {
  * - Ensuring consistent order of keys (handled by stringify).
  * - Handling potential null/undefined arrays/objects defensively.
  * - EXCLUDING notifications and sharedReviews from the final hashed object.
+ * - Including the 'period' field for budget items.
  */
 export function prepareDataForHashing(data: SyncData): any {
 
-    // Ensure arrays/objects exist or default to empty structures
     const transactions = Array.isArray(data.transactions) ? data.transactions : [];
     const debts = Array.isArray(data.debts) ? data.debts : [];
     const assetItems = Array.isArray(data.assetItems) ? data.assetItems : [];
     const otherLiabilityItems = Array.isArray(data.otherLiabilityItems) ? data.otherLiabilityItems : [];
     const budgetItems = Array.isArray(data.budgetItems) ? data.budgetItems : [];
-    // const notifications = Array.isArray(data.notifications) ? data.notifications : []; // Excluded from hashing
     const ownedReviews = typeof data.ownedReviews === 'object' && data.ownedReviews !== null ? data.ownedReviews : {};
-    // const sharedReviews = typeof data.sharedReviews === 'object' && data.sharedReviews !== null ? data.sharedReviews : {}; // Excluded from hashing
 
     const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
         if (!Array.isArray(txs)) return [];
@@ -63,21 +61,13 @@ export function prepareDataForHashing(data: SyncData): any {
 
     const sortBudgetItems = (items: BudgetItem[]): BudgetItem[] => {
         if (!Array.isArray(items)) return [];
-        return [...items].sort((a, b) => (a.description || '').localeCompare(b.description || ''));
+        // Sort by period first (descending), then description
+        return [...items].sort((a, b) => {
+            const periodDiff = (b.period || '').localeCompare(a.period || '');
+            if (periodDiff !== 0) return periodDiff;
+            return (a.description || '').localeCompare(b.description || '');
+        });
     };
-
-    // sortNotifications is kept if needed for display, but result is not included in the hashed object
-    // const sortNotifications = (items: NotificationItem[]): NotificationItem[] => {
-    //      if (!Array.isArray(items)) return [];
-    //     return [...items].sort((a, b) => {
-    //          const timeA = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp || 0);
-    //          const timeB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp || 0);
-    //          const tsA = !isNaN(timeA.getTime()) ? timeA.getTime() : 0;
-    //          const tsB = !isNaN(timeB.getTime()) ? timeB.getTime() : 0;
-    //          return tsA - tsB; // Sort by timestamp ascending
-    //      });
-    //  };
-
 
     const formatReviewData = (reviews: Record<string, WeeklyReviewData>): Record<string, WeeklyReviewData> => {
         if (typeof reviews !== 'object' || reviews === null) return {};
@@ -85,7 +75,7 @@ export function prepareDataForHashing(data: SyncData): any {
         const sortedReviews: Record<string, WeeklyReviewData> = {};
         for (const key of sortedKeys) {
             const review = reviews[key];
-             if (typeof review !== 'object' || review === null) continue; // Skip malformed reviews
+             if (typeof review !== 'object' || review === null) continue;
 
             const sortedComments = review.transactionComments && typeof review.transactionComments === 'object'
                 ? Object.keys(review.transactionComments)
@@ -114,20 +104,15 @@ export function prepareDataForHashing(data: SyncData): any {
     return {
         transactions: sortTransactions(transactions).map(tx => ({
             ...tx,
-            // Ensure date is valid before calling toISOString
             date: (tx.date instanceof Date && !isNaN(tx.date.getTime()) ? tx.date : new Date(0)).toISOString(),
         })),
         debts: sortDebts(debts),
         assetItems: sortStatementItems(assetItems),
         otherLiabilityItems: sortStatementItems(otherLiabilityItems),
-        budgetItems: sortBudgetItems(budgetItems),
+        budgetItems: sortBudgetItems(budgetItems), // Includes period field
         ownedReviews: formatReviewData(ownedReviews),
-        // EXCLUDE notifications and sharedReviews from the object returned for hashing/saving
-        // notifications: sortNotifications(notifications).map(n => ({ ... })),
-        // ...(Object.keys(sharedReviews).length > 0 && { sharedReviews: formatReviewData(sharedReviews) }),
-        // Convert dates to ISO strings only if they are valid Date objects
         startDate: data.startDate instanceof Date && !isNaN(data.startDate.getTime()) ? data.startDate.toISOString() : undefined,
         endDate: data.endDate instanceof Date && !isNaN(data.endDate.getTime()) ? data.endDate.toISOString() : undefined,
-        gettingStartedDismissed: data.gettingStartedDismissed ?? false, // Default to false if undefined
+        gettingStartedDismissed: data.gettingStartedDismissed ?? false,
     };
 }

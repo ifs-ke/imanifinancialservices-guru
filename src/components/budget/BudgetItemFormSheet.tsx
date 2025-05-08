@@ -18,8 +18,8 @@ interface BudgetItemFormSheetProps {
   initialCategory?: BudgetItemCategory; // Optional initial category for Add
 }
 
-// Initial form data structure
-const initialFormData: Omit<BudgetItem, 'id'> = {
+// Initial form data structure (without period, as it's added by the store)
+const initialFormData: Omit<BudgetItem, 'id' | 'period'> = {
     description: '',
     amount: 0,
     category: 'recurring-expense' // Default category
@@ -34,11 +34,11 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
   // Use Zustand store hook for budget state management
   const { addBudgetItem, updateBudgetItem } = useBudgetStore();
   const { toast } = useToast();
-  const [formData, setFormData] = useState<Omit<BudgetItem, 'id'>>(initialFormData);
+  const [formData, setFormData] = useState<Omit<BudgetItem, 'id' | 'period'>>(initialFormData);
 
   // Effect to populate form when editing or setting initial category for adding
   useEffect(() => {
-    if (isOpen) { // Only run when the sheet is open
+    if (isOpen) {
         if (item) { // Editing existing item
             setFormData({
                 description: item.description,
@@ -74,13 +74,13 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
 
     try {
         if (item) {
-            // Update existing item using Zustand action
+            // Update existing item (ensure period from original item is preserved)
             updateBudgetItem({ ...item, ...formData });
             toast({ title: 'Budget Item Updated', description: 'Successfully updated.' });
         } else {
-            // Add new item using Zustand action
+            // Add new item (store will automatically add the current period)
             addBudgetItem(formData);
-            toast({ title: 'Budget Item Added', description: 'Successfully added.' });
+            toast({ title: 'Budget Item Added', description: 'Successfully added to current period.' });
         }
         onClose(); // Close the sheet on success
     } catch (error) {
@@ -95,7 +95,7 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
         <SheetHeader>
           <SheetTitle>{item ? 'Edit Budget Item' : 'Add New Budget Item'}</SheetTitle>
           <SheetDescription>
-            {item ? 'Update the details for this budget item.' : 'Enter the details for the new budget item.'}
+            {item ? 'Update the details for this budget item.' : 'Enter the details for the new budget item for the selected period.'}
           </SheetDescription>
         </SheetHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-4">
@@ -110,7 +110,7 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
                         <SelectItem value="recurring-expense">Recurring Expense</SelectItem>
                         <SelectItem value="one-time-expense">One-Time Expense</SelectItem>
                         <SelectItem value="goal">Goal</SelectItem>
-                        <SelectItem value="debt">Debt Allocation</SelectItem> {/* Added Debt Allocation */}
+                        <SelectItem value="debt">Debt Allocation</SelectItem>
                     </SelectContent>
                 </Select>
             </div>

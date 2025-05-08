@@ -71,13 +71,14 @@ export type BudgetItemCategory = 'income' | 'recurring-expense' | 'one-time-expe
 
 
 /**
- * Represents a single, itemized budget entry.
+ * Represents a single, itemized budget entry, associated with a specific period.
  */
 export interface BudgetItem {
     id: string;
     description: string;
     amount: number;
     category: BudgetItemCategory;
+    period: string; // Added: Period identifier (e.g., "YYYY-MM")
 }
 
 /**
