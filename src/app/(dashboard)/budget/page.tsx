@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown } from 'lucide-react'; // Added FileUp and FileDown
+import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown, History } from 'lucide-react'; // Added History icon
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore'; // Added selectTotalBudgetedDebt
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import BudgetItemFormSheet from '@/components/budget/BudgetItemFormSheet';
 import * as Papa from 'papaparse';
 import { Input } from '@/components/ui/input'; // Import Input
+import { Separator } from '@/components/ui/separator'; // Import Separator
 
 // Category configuration - Added Debt
 const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.ElementType }[] = [
@@ -107,7 +108,7 @@ export default function BudgetPage() {
       skipEmptyLines: true, // Skip empty lines
       complete: (results) => {
         if (results.errors.length > 0) {
-           // console.error("CSV Parsing Errors:", results.errors);
+           // console.error("CSV Parsing Errors:", results.errors); // Console log commented out
            toast({
              title: 'CSV Parsing Error',
              description: results.errors.map(error => `Row ${error.row}: ${error.message}`).join('\n'),
@@ -142,11 +143,11 @@ export default function BudgetPage() {
                importedCount++;
              } catch (error) {
                  errorCount++;
-                 // console.error(`Error adding budget item from row ${index + 2}:`, error); // +2 for header and 0-index
+                 // console.error(`Error adding budget item from row ${index + 2}:`, error); // +2 for header and 0-index // Console log commented out
              }
            } else {
              errorCount++;
-             // console.warn(`Skipping invalid data in CSV row ${index + 2}:`, item);
+             // console.warn(`Skipping invalid data in CSV row ${index + 2}:`, item); // Console log commented out
              toast({
                title: 'Data Error',
                description: `Invalid data in CSV row ${index + 2}: Category='${item.category}', Desc='${item.description}', Amount='${item.amount}'. Skipping row.`,
@@ -163,7 +164,7 @@ export default function BudgetPage() {
         e.target.value = '';
       },
        error: (error) => {
-         // console.error("CSV Parsing Failed:", error);
+         // console.error("CSV Parsing Failed:", error); // Console log commented out
          toast({
            title: 'CSV Parsing Failed',
            description: `Could not parse the file: ${error.message}`,
@@ -358,6 +359,28 @@ export default function BudgetPage() {
              </Card>
          ))}
       </main>
+
+        {/* Budget History Section Placeholder */}
+        <Separator className="my-8" />
+        <Card className="shadow-sm">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5 text-primary" /> Budget History
+                </CardTitle>
+                <CardDescription>
+                    View snapshots of your saved budgets from previous months. (Feature coming soon)
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                 {/* Placeholder content for budget history */}
+                 <div className="text-center text-muted-foreground py-10">
+                    <p>Budget history snapshots will be listed here once saved.</p>
+                    {/* You could add a (currently disabled) button here in the future */}
+                    {/* <Button disabled className="mt-4">Save Current Budget for [Month, Year]</Button> */}
+                 </div>
+            </CardContent>
+        </Card>
+
 
         {/* Add/Edit Sheet */}
         <BudgetItemFormSheet
