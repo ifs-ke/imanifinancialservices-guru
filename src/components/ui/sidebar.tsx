@@ -26,7 +26,7 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ListTree, // Keeping ListTree as it was recently added, but logger link removed below
+  ClipboardList, // Changed from Logger to ClipboardList
   RefreshCw,
   Menu,
   UserCircle // Placeholder for UserButton
@@ -36,10 +36,15 @@ import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser } from "@clerk/nextjs"; // Re-enabled Clerk
+// import { UserButton, useUser } from "@clerk/nextjs"; // Clerk disabled
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area"; // Import ScrollArea
 
+
+// Placeholder user data when Clerk is disabled
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
+const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
 
 interface SidebarMenuItem {
   href: string;
@@ -57,7 +62,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/budget", label: "Budget", icon: <TrendingUp size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  // { href: '/logger', label: 'Logger', icon: <ListTree size={18} /> }, // Removed logger link
+  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Added logger link back with correct icon
 ];
 
 type SidebarState = "collapsed" | "expanded";
@@ -126,7 +131,13 @@ const SidebarBase = React.forwardRef<
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const unreadCount = useNotificationStore(state => state.unreadCount());
-  const { user } = useUser(); // Using actual Clerk hook
+  // const { user } = useUser(); // Clerk disabled
+  // Mock user when Clerk is disabled
+  const user = {
+      id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
+      fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
+      primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL },
+  };
   const syncManager = useSyncManager();
   const { syncStatus, retrySync, hashMismatch } = syncManager;
 
@@ -258,8 +269,19 @@ const SidebarBase = React.forwardRef<
           </Tooltip>
         </TooltipProvider>
 
-         {/* Use actual Clerk UserButton */}
+         {/* Placeholder for UserButton when Clerk is disabled */}
          <div className={cn(
+             "flex items-center",
+             state === 'collapsed' ? "justify-center py-1" : "p-1"
+         )}>
+            <UserCircle size={24} className="text-sidebar-muted-foreground" />
+           {state === 'expanded' && (
+              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user?.primaryEmailAddress?.emailAddress}>
+                   {user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? 'User'}
+              </span>
+           )}
+        </div>
+        {/* <div className={cn(
              "flex items-center",
              state === 'collapsed' ? "justify-center py-1" : "p-1"
          )}>
@@ -269,7 +291,7 @@ const SidebarBase = React.forwardRef<
                    {user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? 'User'}
               </span>
            )}
-        </div>
+        </div> */}
       </div>
     </div>
   );
