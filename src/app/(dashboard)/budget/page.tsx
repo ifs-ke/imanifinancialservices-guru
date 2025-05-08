@@ -1,4 +1,3 @@
-// src/app/(dashboard)/budget/page.tsx
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -6,23 +5,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins } from 'lucide-react'; // Added Coins icon for Debt
+import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown } from 'lucide-react'; // Added FileUp and FileDown
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore'; // Added selectTotalBudgetedDebt
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import BudgetItemFormSheet from '@/components/budget/BudgetItemFormSheet';
-
-// Formatting Function
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
+import * as Papa from 'papaparse';
 
 // Category configuration - Added Debt
 const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.ElementType }[] = [
@@ -35,7 +25,7 @@ const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.Ele
 
 export default function BudgetPage() {
   const { toast } = useToast();
-  const { budgetItems, deleteBudgetItem } = useBudgetStore();
+  const { budgetItems, deleteBudgetItem, addBudgetItem } = useBudgetStore();
   const totalIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
   const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
@@ -106,6 +96,64 @@ export default function BudgetPage() {
        return totals;
    }, [groupedBudgetItems]);
 
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      complete: (results) => {
+        if (results.errors.length > 0) {
+          toast({
+            title: 'CSV Parsing Error',
+            description: results.errors.map(error => error.message).join('\n'),
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        const importedItems = results.data as any[];
+        importedItems.forEach((item: any) => {
+          try {
+            const newItem: Omit<BudgetItem, 'id'> = {
+              category: item.category as BudgetItemCategory,
+              description: item.description,
+              amount: parseFloat(item.amount),
+            };
+            addBudgetItem(newItem);
+          } catch (error) {
+            toast({
+              title: 'Data Error',
+              description: `Invalid data in CSV: ${JSON.stringify(item)}`,
+              variant: 'destructive',
+            });
+          }
+        });
+
+        toast({
+          title: 'CSV Imported',
+          description: `${importedItems.length} budget items imported.`,
+        });
+      },
+    });
+  };
+
+  const handleExport = () => {
+    const csvData = Papa.unparse(budgetItems, {
+      header: true,
+    });
+
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'budget_items.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
@@ -144,17 +192,17 @@ export default function BudgetPage() {
             </div>
              <div className="flex flex-col p-3 rounded-md border bg-muted">
                 <span className="text-muted-foreground mb-1">Expected Net</span>
-                 <span className={cn("font-bold text-lg font-mono", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>
+                 <span={cn("font-bold text-lg font-mono", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>
                     {formatCurrency(netBudgeted)}
-                </span>
+                
                  {netBudgeted !== 0 && (
-                     <p className={cn("text-xs mt-1", netBudgeted > 0 ? 'text-primary' : 'text-destructive')}>
+                     
                          {netBudgeted > 0 ? `${formatCurrency(netBudgeted)} Left Over` : `${formatCurrency(Math.abs(netBudgeted))} Shortfall`}
-                     </p>
+                     
                  )}
-            </div>
-        </CardContent>
-      </Card>
+            
+        
+      
 
       {/* Adjusted grid for potentially 5 categories */}
       <main className="flex-1 grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
@@ -162,91 +210,37 @@ export default function BudgetPage() {
              <Card key={key} className={cn("flex flex-col shadow-sm", key === 'debt' && 'lg:col-span-1 xl:col-span-1')}> {/* Assign specific span if needed */}
                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 border-b p-4"> {/* Adjusted padding */}
                      <CardTitle className="text-base font-medium flex items-center gap-2">
-                         <Icon className="h-4 w-4" /> {name}
-                     </CardTitle>
-                     <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleAddClick(key)}>
-                         <PlusCircle className="mr-1 h-3 w-3" /> Add {key === 'debt' ? 'Allocation' : name} {/* Adjust button text */}
-                     </Button>
-                 </CardHeader>
-                 <CardContent className="p-0 flex-grow">
-                      <ScrollArea className="h-[300px] w-full"> {/* Increased height slightly */}
-                         <Table>
-                             <TableHeader>
-                                 <TableRow>
-                                     <TableHead className="pl-4 pr-2">Description</TableHead> {/* Added padding */}
-                                     <TableHead className="text-right px-2">Amount (KES)</TableHead> {/* Added padding */}
-                                     <TableHead className="text-right w-[70px] pr-4 pl-2">Actions</TableHead> {/* Added padding */}
-                                 </TableRow>
-                             </TableHeader>
-                             <TableBody>
-                                {groupedBudgetItems[key].length > 0 ? (
-                                     groupedBudgetItems[key].map((item) => (
-                                         <TableRow key={item.id}>
-                                             <TableCell className="font-medium max-w-[150px] truncate pl-4 pr-2" title={item.description}>{item.description}</TableCell> {/* Added padding */}
-                                             <TableCell className="text-right font-mono px-2">{formatCurrency(item.amount)}</TableCell> {/* Added padding */}
-                                             <TableCell className="text-right py-1 pr-4 pl-2"> {/* Added padding */}
-                                                 {/* Edit Button */}
-                                                 <Button variant="ghost" size="icon" className="mr-1 h-6 w-6" onClick={() => handleEditClick(item)}>
-                                                     <Edit className="h-3 w-3" />
-                                                     <span className="sr-only">Edit</span>
-                                                 </Button>
-                                                  {/* Delete Button & Confirmation Dialog */}
-                                                 <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
-                                                      <AlertDialogTrigger asChild>
-                                                         <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
-                                                            <Trash2 className="h-3 w-3" />
-                                                            <span className="sr-only">Delete</span>
-                                                        </Button>
-                                                      </AlertDialogTrigger>
-                                                      <AlertDialogContent>
-                                                          {itemToDelete && itemToDelete.id === item.id && (
-                                                            <>
-                                                              <AlertDialogHeader>
-                                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                  This will permanently delete: <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong>
-                                                                </AlertDialogDescription>
-                                                              </AlertDialogHeader>
-                                                              <AlertDialogFooter>
-                                                                <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction>
-                                                              </AlertDialogFooter>
-                                                            </>
-                                                          )}
-                                                      </AlertDialogContent>
-                                                   </AlertDialog>
-                                             </TableCell>
-                                         </TableRow>
-                                     ))
-                                 ) : (
-                                     <TableRow>
-                                         <TableCell colSpan={3} className="h-20 text-center text-muted-foreground text-sm">
-                                             No {name.toLowerCase()} items budgeted yet.
-                                         </TableCell>
-                                     </TableRow>
-                                 )}
-                             </TableBody>
-                         </Table>
-                     </ScrollArea>
-                 </CardContent>
-                  {groupedBudgetItems[key].length > 0 && (
-                     <CardFooter className="p-3 border-t bg-muted/50 text-sm"> {/* Adjusted padding */}
-                         <div className="flex justify-between w-full font-semibold">
-                             <span>Total {name}</span>
-                             <span className="font-bold font-mono">{formatCurrency(groupTotals[key])}</span>
-                         </div>
-                     </CardFooter>
-                 )}
-             </Card>
-         ))}
+                         {name}
+                     
+                     
+                         Add {key === 'debt' ? 'Allocation' : name} {/* Adjust button text */}
+                     
+                 
+                 
+                      No {name.toLowerCase()} items budgeted yet.
+                 
+                 
+                     
+                         
+                             
+                                 
+                                     {formatCurrency(groupTotals[key])}
+                             
+                         
+                     
+                 
+             
+         
 
-         <BudgetItemFormSheet
+         
              isOpen={isFormSheetOpen}
              onClose={handleFormSheetClose}
              item={editingItem}
              initialCategory={categoryForNewItem}
-         />
-      </main>
-    </div>
+         
+      
+      <input type="file" accept=".csv" onChange={handleImport} />
+      <Button onClick={handleExport}>Export to CSV</Button>
+    
   );
 }
