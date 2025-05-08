@@ -8,14 +8,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
-import { useBudgetStore } from '@/store/budgetStore';
+// Import budget store and selectors/actions
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore';
 // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
-import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek, differenceInDays } from 'date-fns';
+import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns'; // Removed differenceInDays as it's not used directly here
 import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import type { TransactionWithId, BudgetItemCategory, BudgetItem, WeeklyReviewData, UserShareInfo } from '@/lib/types';
+import type { TransactionWithId, WeeklyReviewData, UserShareInfo } from '@/lib/types'; // Removed BudgetItemCategory, BudgetItem
 import { cn, formatCurrency } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +43,12 @@ const formatDate = (date: Date | string) => {
     return format(dateObj, 'PP');
 };
 
+// Helper function to format Date object to "YYYY-MM" period string
+const formatToPeriodKey = (date: Date): string => {
+    return format(date, 'yyyy-MM');
+}
+
+
 // Helper to format category badges
 const formatCategoryBadge = (value: string | undefined) => {
     if (!value) return null; // Don't render anything if no value
@@ -55,7 +62,16 @@ export default function WeeklyReviewPage() {
   const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
 
   const { transactions: allTransactions } = useTransactionsStore();
-  const budgetItems = useBudgetStore(state => state.budgetItems);
+  // Get budget state and actions
+  const setBudgetPeriod = useBudgetStore(state => state.setBudgetPeriod);
+  // Use selectors directly (they depend on the current budgetPeriod in the store)
+  const monthlyBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
+  const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
+  const monthlyBudgetedGoals = useBudgetStore(selectTotalGoals);
+  const monthlyBudgetedDebt = useBudgetStore(selectTotalBudgetedDebt);
+  const monthlyNetBudgeted = useBudgetStore(selectNetBudgeted);
+
+
   const {
     ownedReviews,
     sharedReviews,
@@ -63,14 +79,13 @@ export default function WeeklyReviewPage() {
     setTransactionComment,
     deleteTransactionComment,
     getReviewForWeek,
-    // getTransactionComment, // Removed as comment is accessed directly from review object
   } = useWeeklyReviewStore();
 
   const { toast } = useToast();
 
   // State for the selected week
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 })); // Monday as start
-  const [isSaving, setIsSaving] = useState(false); // This state might be less relevant with Zustand auto-persistence
+  const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
   const [commentingTransaction, setCommentingTransaction] = useState<TransactionWithId | null>(null);
@@ -83,14 +98,20 @@ export default function WeeklyReviewPage() {
 
   const currentWeekKey = useMemo(() => getWeekKey(currentWeekStart), [currentWeekStart]);
 
+  // Effect to sync the budget period with the selected week
+  useEffect(() => {
+      const correspondingMonthPeriod = formatToPeriodKey(currentWeekStart);
+      setBudgetPeriod(correspondingMonthPeriod);
+      // console.log(`Weekly Review: Set budget period to ${correspondingMonthPeriod} for week starting ${formatDate(currentWeekStart)}`); // Console log commented out
+  }, [currentWeekStart, setBudgetPeriod]);
+
+
    // Determine the review data based on the active tab and week key
    const currentReview = useMemo(() => {
         if (activeTab === 'owned') {
             return ownedReviews[currentWeekKey];
         } else {
-             // For shared, we need to find the *first* review shared for that week
-             // A better approach might involve selecting a specific shared review if multiple people share the same week with you
-             return sharedReviews[currentWeekKey]; // Simplification: assumes only one shared review per week key shown
+             return sharedReviews[currentWeekKey];
         }
     }, [activeTab, currentWeekKey, ownedReviews, sharedReviews]);
 
@@ -110,7 +131,7 @@ export default function WeeklyReviewPage() {
         const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
          if (isNaN(txDate.getTime())) return false;
         return txDate >= currentWeekStart && txDate <= weekEnd;
-    }).sort((a, b) => { // Sort transactions within the week, e.g., by date descending
+    }).sort((a, b) => {
          const dateA = a.date instanceof Date ? a.date : new Date(a.date);
          const dateB = b.date instanceof Date ? b.date : new Date(b.date);
          if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
@@ -126,7 +147,7 @@ export default function WeeklyReviewPage() {
       tx.description.toLowerCase().includes(lowerSearchTerm) ||
       tx.amount.toString().includes(lowerSearchTerm) ||
        tx.modeOfPayment.toLowerCase().includes(lowerSearchTerm) ||
-       (currentReview?.transactionComments?.[tx.id] || '').toLowerCase().includes(lowerSearchTerm) // Search comments too
+       (currentReview?.transactionComments?.[tx.id] || '').toLowerCase().includes(lowerSearchTerm)
     );
   }, [transactionsForWeek, searchTerm, currentReview]);
 
@@ -157,14 +178,16 @@ export default function WeeklyReviewPage() {
 
   // --- Comment Handling ---
   const handleAddCommentClick = (tx: TransactionWithId) => {
+    if (isReadOnly) {
+      toast({ title: "Read Only", description: "Cannot add comments to a shared review.", variant: "default" });
+      return;
+    }
     setCommentingTransaction(tx);
-    // Fetch comment based on currentReview (which could be owned or shared)
     setCommentText(currentReview?.transactionComments?.[tx.id] || '');
     setIsCommentDialogOpen(true);
   };
 
   const handleSaveComment = () => {
-     // Allow commenting only if viewing OWNED review
      if (activeTab === 'owned' && commentingTransaction && userId) {
          setTransactionComment(currentWeekKey, commentingTransaction.id, commentText, userId);
          toast({ title: "Comment Saved", description: `Comment for "${commentingTransaction.description}" saved.` });
@@ -173,13 +196,12 @@ export default function WeeklyReviewPage() {
          setCommentText('');
      } else {
          toast({ title: "Read Only", description: "You can only comment on your own weekly reviews.", variant: "default" });
-         setIsCommentDialogOpen(false); // Close dialog even if read-only
+         setIsCommentDialogOpen(false);
      }
   };
 
   const handleDeleteCommentClick = (transactionId: string) => {
      const comment = currentReview?.transactionComments?.[transactionId];
-      // Allow deleting only if viewing OWNED review
       if (activeTab === 'owned' && comment && userId) {
          setCommentToDelete({ transactionId, comment });
          setIsDeleteCommentDialogOpen(true);
@@ -189,7 +211,6 @@ export default function WeeklyReviewPage() {
   };
 
   const confirmDeleteComment = () => {
-     // Allow deletion only if viewing OWNED review
      if (activeTab === 'owned' && commentToDelete && userId) {
         deleteTransactionComment(currentWeekKey, commentToDelete.transactionId, userId);
         toast({ title: "Comment Deleted" });
@@ -204,9 +225,8 @@ export default function WeeklyReviewPage() {
   const goToNextWeek = () => setCurrentWeekStart(addWeeks(currentWeekStart, 1));
 
 
-  // --- Weekly Metrics Calculation ---
+  // --- Weekly Metrics Calculation (Now uses Budget Store Selectors) ---
   const weeklyMetrics = useMemo(() => {
-      // Only calculate metrics based on the user's OWN transactions
       const income = transactionsForWeek
           .filter(tx => tx.amount > 0)
           .reduce((sum, tx) => sum + tx.amount, 0);
@@ -217,36 +237,22 @@ export default function WeeklyReviewPage() {
 
       const netFlow = income - expenses;
 
-      // Budget Variance Calculation (simplified for the week)
-      const start = currentWeekStart;
-      const end = endOfWeek(currentWeekStart, { weekStartsOn: 1 });
+      // Prorate the *monthly* budget figures for the *current* period to a weekly estimate
       const daysInWeek = 7;
       const daysInAvgMonth = 30.44;
-      const budgetMultiplier = daysInWeek / daysInAvgMonth; // Prorate monthly budget to weekly
+      const budgetMultiplier = daysInWeek / daysInAvgMonth;
 
-       const proratedBudgetedIncome = budgetItems
-           .filter(item => item.category === 'income')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedExpenses = budgetItems
-           .filter(item => item.category === 'recurring-expense' || item.category === 'one-time-expense')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedGoals = budgetItems
-           .filter(item => item.category === 'goal')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedDebt = budgetItems
-           .filter(item => item.category === 'debt')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-
-       const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals - proratedBudgetedDebt;
-       const variance = netFlow - netBudgetedProrated;
+      const netBudgetedWeekly = monthlyNetBudgeted * budgetMultiplier; // Use selector result
+      const variance = netFlow - netBudgetedWeekly;
 
       let varianceStatus: 'favorable' | 'unfavorable' | 'on-track' | 'no-budget' = 'no-budget';
-      if (proratedBudgetedIncome > 0 || proratedBudgetedExpenses > 0 || proratedBudgetedGoals > 0 || proratedBudgetedDebt > 0) {
-          const threshold = Math.max(Math.abs(netBudgetedProrated * 0.05), 50);
-          if (Math.abs(variance) <= threshold) varianceStatus = 'on-track';
-          else if (variance > 0) varianceStatus = 'favorable';
-          else varianceStatus = 'unfavorable';
-      }
+       // Check if there's *any* budget data for the month
+       if (monthlyBudgetedIncome > 0 || monthlyBudgetedExpenses > 0 || monthlyBudgetedGoals > 0 || monthlyBudgetedDebt > 0) {
+           const threshold = Math.max(Math.abs(netBudgetedWeekly * 0.05), 50); // 5% or 50 KES threshold for the week
+           if (Math.abs(variance) <= threshold) varianceStatus = 'on-track';
+           else if (variance > 0) varianceStatus = 'favorable'; // More net income than budgeted net for the week
+           else varianceStatus = 'unfavorable'; // Less net income than budgeted net for the week
+       }
 
       return {
           totalIncome: income,
@@ -256,7 +262,14 @@ export default function WeeklyReviewPage() {
           budgetVarianceStatus: varianceStatus,
           transactionCount: transactionsForWeek.length,
       };
-  }, [transactionsForWeek, budgetItems, currentWeekStart]);
+  }, [
+      transactionsForWeek,
+      monthlyBudgetedIncome, // Depend on the selected values from the store
+      monthlyBudgetedExpenses,
+      monthlyBudgetedGoals,
+      monthlyBudgetedDebt,
+      monthlyNetBudgeted
+  ]);
 
   // --- Sharing ---
   const handleOpenShareDialog = () => {
@@ -264,21 +277,15 @@ export default function WeeklyReviewPage() {
           toast({ title: "Action Denied", description: "You can only share reviews you own.", variant: "destructive" });
           return;
       }
-       // Ensure there's an owned review (even if empty) before allowing sharing
        if (!ownedReviews[currentWeekKey] && userId) {
-            // Create a shell if it doesn't exist - this might happen if the user hasn't interacted with the week yet
            setJournalEntry(currentWeekKey, '', userId);
-           // Optionally wait a tick or show a loading state before opening,
-           // but opening immediately should be fine as the store updates sync.
-           console.log(`Created shell for week ${currentWeekKey} before sharing.`);
+           // console.log(`Created shell for week ${currentWeekKey} before sharing.`); // Console log commented out
        }
       setIsShareDialogOpen(true);
   };
 
   // --- UI ---
-  // Read-only state determination
-  const isReadOnly = activeTab === 'shared'; // Simplified read-only logic for shared tab
-
+  const isReadOnly = activeTab === 'shared';
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
@@ -368,7 +375,7 @@ export default function WeeklyReviewPage() {
                                    <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><TrendingUp size={14}/> Income:</span><span className="font-mono font-semibold text-accent">{formatCurrency(weeklyMetrics.totalIncome)}</span></div>
                                    <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><TrendingDown size={14}/> Expenses:</span><span className="font-mono font-semibold text-destructive">{formatCurrency(weeklyMetrics.totalExpenses)}</span></div>
                                    <div className="flex justify-between items-center border-t pt-2 mt-2"><span className="text-muted-foreground flex items-center gap-1"><Scale size={14}/> Net Flow:</span><span className={cn("font-mono font-bold", weeklyMetrics.netCashFlow >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(weeklyMetrics.netCashFlow)}</span></div>
-                                   <div className="flex justify-between items-center text-xs pt-1"><span className="text-muted-foreground">Budget Variance:</span><span className={cn("font-mono font-semibold", weeklyMetrics.budgetVarianceStatus === 'favorable' && 'text-accent', weeklyMetrics.budgetVarianceStatus === 'unfavorable' && 'text-destructive', weeklyMetrics.budgetVarianceStatus === 'on-track' && 'text-primary', weeklyMetrics.budgetVarianceStatus === 'no-budget' && 'text-muted-foreground italic')}>{weeklyMetrics.budgetVarianceStatus === 'no-budget' ? 'No Budget Data' : `${weeklyMetrics.budgetVariance >= 0 ? '+' : ''}${formatCurrency(weeklyMetrics.budgetVariance)} (${weeklyMetrics.budgetVarianceStatus.replace('-', ' ')})`}</span></div>
+                                   <div className="flex justify-between items-center text-xs pt-1"><span className="text-muted-foreground">Budget Variance (vs. {format(currentWeekStart, 'MMM yyyy')} budget):</span><span className={cn("font-mono font-semibold", weeklyMetrics.budgetVarianceStatus === 'favorable' && 'text-accent', weeklyMetrics.budgetVarianceStatus === 'unfavorable' && 'text-destructive', weeklyMetrics.budgetVarianceStatus === 'on-track' && 'text-primary', weeklyMetrics.budgetVarianceStatus === 'no-budget' && 'text-muted-foreground italic')}>{weeklyMetrics.budgetVarianceStatus === 'no-budget' ? 'No Budget Data' : `${weeklyMetrics.budgetVariance >= 0 ? '+' : ''}${formatCurrency(weeklyMetrics.budgetVariance)} (${weeklyMetrics.budgetVarianceStatus.replace('-', ' ')})`}</span></div>
                                </CardContent>
                            </Card>
                           <Card className="shadow-sm">
@@ -545,5 +552,3 @@ export default function WeeklyReviewPage() {
     </div>
   );
 }
-
-    
