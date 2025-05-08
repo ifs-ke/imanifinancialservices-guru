@@ -9,8 +9,6 @@ This is a Next.js personal finance management application built in Firebase Stud
     npm install
     # or
     # yarn install
-    # or
-    # pnpm install
     ```
 
 2.  **Set Up Environment Variables:**
@@ -30,14 +28,16 @@ This is a Next.js personal finance management application built in Firebase Stud
     # Example: MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database-name>?retryWrites=true&w=majority
     # Ensure this URI is correct and accessible from your development machine and deployment environment (e.g., Vercel).
     # Common errors like "Failed to connect to MongoDB" often stem from an incorrect or missing URI here.
+    # Check firewall settings if connecting from local dev to a cloud DB.
     MONGODB_URI=
 
     # Google Generative AI API Key (Optional - For AI features like Debt Analysis)
     # Get this from Google AI Studio: https://aistudio.google.com/app/apikey
     GOOGLE_GENAI_API_KEY=
 
-    # Optional: Winston Logging Level (defaults to 'debug')
-    # LOG_LEVEL=info # Example: Set to 'info' for production
+    # Optional: Logtail Source Token (For enhanced logging)
+    # Get this from Logtail: https://logtail.com/
+    # NEXT_PUBLIC_LOGTAIL_SOURCE_TOKEN=
     ```
     **Important:** Ensure your `.env` file is added to your `.gitignore` file to prevent accidental exposure of secrets. If deploying to Vercel, set these variables in your Vercel project settings.
 
@@ -46,8 +46,6 @@ This is a Next.js personal finance management application built in Firebase Stud
     npm run dev
     # or
     # yarn dev
-    # or
-    # pnpm dev
     ```
 
     The application will be available at [http://localhost:9002](http://localhost:9002) (or the specified port).
@@ -73,7 +71,7 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Dark/Light Mode:** Theme toggle for user preference.
 - **Responsive Design:** Adapts to different screen sizes.
 - **Notifications:** In-app notifications for budget alerts, collaboration updates, and application info.
-- **Logger:** View client-side console logs (currently available to all users, intended for debugging). Client-side logs are also sent to the backend.
+- **Logger:** View client-side logs (currently available to all users, intended for debugging). Client-side logs are also sent to the backend logger.
 
 ## Tech Stack
 
@@ -83,7 +81,7 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Authentication:** Clerk
 - **Database:** MongoDB (via official Node.js driver)
 - **AI (Optional):** Genkit (for Debt Analysis)
-- **Logging:** Console (Browser & Server), potentially Logtail (via API)
+- **Logging:** Console (Browser & Server), Logtail (optional, via Winston/browser integration)
 - **Data Handling:** `fast-json-stable-stringify` (for hashing), Node.js `crypto` (for hashing)
 - **Linting/Formatting:** ESLint, Prettier (implicitly via Next.js defaults)
 - **Deployment:** Vercel (configured via `vercel.json`)
@@ -104,7 +102,7 @@ This application handles sensitive personal financial data. The following measur
 *   **Authentication:** Handled securely by Clerk, following industry best practices.
 *   **Server-Side Storage (MongoDB):**
     *   Accessed via secure API routes (`/api/save`, `/api/sync`) and server actions (`/actions/shareActions`).
-    *   Connection uses `MONGODB_URI` stored securely as an environment variable. **Ensure this URI is correct and allows connections from your Vercel deployment's IP range.**
+    *   Connection uses `MONGODB_URI` stored securely as an environment variable. **Ensure this URI is correct and allows connections from your Vercel deployment's IP range.** Check Vercel deployment logs if connection issues occur.
     *   Data access is strictly scoped to the authenticated user (`userId`) in API routes and server actions.
     *   MongoDB Atlas typically provides encryption at rest and in transit (verify your Atlas configuration).
     *   Transactions are used for save operations to ensure atomicity across multiple collections.
@@ -122,7 +120,7 @@ This application handles sensitive personal financial data. The following measur
 *   **Transport Security:** HTTPS is assumed (typically handled by Vercel deployment).
 *   **Logging:**
     *   Client-side console logs can be captured and viewed on the Logger page.
-    *   Application notifications and client-side console logs can be sent to the backend console logger. Logged data includes user context where available. Logs are typically viewed via the Vercel dashboard or server console.
+    *   Application notifications and client-side console logs can be sent to the backend console logger (or Logtail if configured). Logged data includes user context where available. Logs are typically viewed via the Vercel dashboard, Logtail, or server console.
 
 **GDPR/DPA Compliance Considerations:**
 *   **Lawfulness, Fairness, Transparency:** Requires a clear Privacy Policy explaining data collection, storage, processing, and user rights. Consent should be obtained appropriately (Clerk handles auth consent, app-specific processing might need more).
@@ -146,8 +144,8 @@ This application handles sensitive personal financial data. The following measur
 2.  **Implement User Data Deletion:** Create a mechanism for users to request deletion of their account and associated data from MongoDB.
 3.  **Formal Documentation:** Create and link a comprehensive Privacy Policy and Terms of Service.
 4.  **Data Retention Policy:** Define and implement how long inactive user data is kept.
-5.  **Review Third-Party Services:** Ensure Clerk, MongoDB Atlas, and Vercel configurations align with GDPR/DPA requirements.
-6.  **Server-Side Audit Logs (Advanced):** For enhanced security, implement server-side audit logging for sensitive actions (data modifications, sharing, admin actions if any). Winston can be configured for this, potentially logging to a separate, secure destination.
+5.  **Review Third-Party Services:** Ensure Clerk, MongoDB Atlas, Vercel, and Logtail configurations align with GDPR/DPA requirements.
+6.  **Server-Side Audit Logs:** For enhanced security, implement more structured server-side audit logging for sensitive actions (data modifications, sharing, admin actions if any).
 7.  **Logger Page Access Control:** If the Logger page is intended only for admins, re-implement role checks (using Clerk roles if enabled, or a custom system) for accessing it. Currently, it displays client-side logs for any authenticated user.
 
-**Conclusion:** The application has implemented several key security measures, including user-scoped data access, integrity checks via hashing, MongoDB transactions, and session clearing on logout. The main compliance gap regarding sensitive data handling is the lack of **encryption** for client-side caching in Session Storage. Address this and add formal documentation/policies to significantly improve compliance posture. The backend logging uses the standard console and outputs to Vercel logs by default.
+**Conclusion:** The application has implemented several key security measures, including user-scoped data access, integrity checks via hashing, MongoDB transactions, and session clearing on logout. The main compliance gap regarding sensitive data handling is the lack of **encryption** for client-side caching in Session Storage. Address this and add formal documentation/policies to significantly improve compliance posture. The backend logging uses the standard console and can be augmented with Logtail for centralized viewing.

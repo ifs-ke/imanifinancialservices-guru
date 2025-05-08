@@ -9,7 +9,7 @@ const uri = process.env.MONGODB_URI;
 if (!uri) {
   // Throw error during build or server start if URI is missing
   // Avoid doing this at runtime in API routes if possible, handle connection errors there
-  if (process.env.NODE_ENV !== 'production' || process.env.BUILD_TIME) {
+  if (process.env.NODE_ENV !== 'production' || typeof process.env.BUILD_TIME !== 'undefined') { // Check BUILD_TIME flag if set during build
       console.warn('MONGODB_URI environment variable is not defined. Database connectivity will fail.');
       // In a build step, you might want to throw an error:
       // throw new Error('Please define the MONGODB_URI environment variable inside .env');
@@ -50,8 +50,11 @@ let clientPromise: Promise<MongoClient> | null = null;
 const connectToDatabase = async (): Promise<MongoClient> => {
    if (!uri) {
        // Throwing here ensures the application fails fast if the URI is missing at runtime.
+       console.error("MongoDB: Connection attempt failed - MONGODB_URI is not configured."); // Log before throwing
        throw new Error('MongoDB URI is not configured. Please set the MONGODB_URI environment variable.');
    }
+
+   // // console.log(`MongoDB: Attempting connection using URI (first 15 chars): ${uri.substring(0, 15)}...`); // Console log commented out
 
   if (process.env.NODE_ENV === 'development') {
     // In development mode, use a global variable so that the value
@@ -61,25 +64,29 @@ const connectToDatabase = async (): Promise<MongoClient> => {
     };
 
     if (!globalWithMongo._mongoClientPromise) {
+       // // console.log("MongoDB: Creating new client instance (development)."); // Console log commented out
       try {
         client = new MongoClient(uri, options);
         globalWithMongo._mongoClientPromise = client.connect();
-        console.log("MongoDB: Establishing new connection (development)...");
+        // // console.log("MongoDB: Establishing new connection (development)..."); // Console log commented out
       } catch (error) {
         console.error("MongoDB: Failed to create client (development):", error);
         // Clear the promise to allow retrying on next call
         globalWithMongo._mongoClientPromise = null;
         throw new Error("Failed to initialize MongoDB client."); // Re-throw for callers
       }
+    } else {
+        // // console.log("MongoDB: Reusing existing connection promise (development)."); // Console log commented out
     }
     clientPromise = globalWithMongo._mongoClientPromise;
   } else {
     // In production mode, it's best to not use a global variable.
     if (!clientPromise) {
+       // // console.log("MongoDB: Creating new client instance (production)."); // Console log commented out
        try {
            client = new MongoClient(uri, options);
            clientPromise = client.connect();
-           console.log("MongoDB: Establishing new connection (production)...");
+           // // console.log("MongoDB: Establishing new connection (production)..."); // Console log commented out
 
            // Optimization Opportunity: Apply schema validation on connect (or separately)
            // clientPromise.then(async (connectedClient) => {
@@ -106,24 +113,29 @@ const connectToDatabase = async (): Promise<MongoClient> => {
            clientPromise = null; // Clear the promise
            throw new Error("Failed to initialize MongoDB client."); // Re-throw
        }
+    } else {
+        // // console.log("MongoDB: Reusing existing connection promise (production)."); // Console log commented out
     }
   }
 
   try {
     // Wait for the connection promise to resolve
     const connectedClient = await clientPromise;
-    // Optional: Ping check can be removed if causing latency issues.
-    // await connectedClient.db("admin").command({ ping: 1 });
-    // console.log("MongoDB: Connection successful.");
+    // Ping the database to confirm connection before returning
+    // This adds a small overhead but guarantees the connection is active
+    await connectedClient.db("admin").command({ ping: 1 });
+    // // console.log("MongoDB: Connection successful and ping verified."); // Console log commented out
     return connectedClient;
   } catch (error) {
-    console.error("MongoDB: Connection failed:", error);
+    console.error("MongoDB: Connection or ping verification failed:", error); // Log the specific connection error
     // Reset the promise so the next call attempts to reconnect.
     clientPromise = null;
     if (process.env.NODE_ENV === 'development') {
         (global as any)._mongoClientPromise = null;
     }
-    throw new Error("Failed to connect to MongoDB."); // Re-throw the error
+    // Throw a more specific error based on the caught error if possible
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to connect to MongoDB. ${errorMessage}`); // Re-throw the error
   }
 };
 
