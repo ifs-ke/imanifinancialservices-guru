@@ -9,10 +9,10 @@
  import { startOfMonth, endOfMonth } from 'date-fns';
  import type { NotificationType } from "@/lib/types"; // Import NotificationType
  // Logger removed
- // import { useAuth } from "@clerk/nextjs"; // Clerk disabled
+ import { useAuth } from "@clerk/nextjs"; // Re-enable Clerk client-side hook
 
- // Consistent placeholder ID
- const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+ // No longer need placeholder
+ // const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
  const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
  const OVERBUDGET_THRESHOLD_PERCENT = 1.0;
@@ -22,8 +22,8 @@
      const budgetItems = useBudgetStore(state => state.budgetItems);
      const allTransactions = useTransactionsStore(state => state.transactions);
      const existingNotifications = useNotificationStore(state => state.notifications); // Get current notifications for duplicate check
-     // const { userId } = useAuth(); // Clerk disabled
-     const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+     const { userId } = useAuth(); // Use Clerk hook
+     // const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
 
      const monthlyAnalysis = useMemo(() => {
          const now = new Date();
@@ -68,6 +68,8 @@
      }, [allTransactions, budgetItems]);
 
      useEffect(() => {
+         if (!userId) return; // Don't run if user is not loaded/signed in
+
          const { actualSpendingByCategory, budgetByCategory } = monthlyAnalysis;
          const generatedNotificationKeys = new Set<string>(); // Track keys for which notifications were generated in this run
 
@@ -80,16 +82,15 @@
              if (budgetedAmount <= 0) continue; // Skip checks for zero or negative budgets
 
              const spendingRatio = actualAmount / budgetedAmount;
-             const logContext = { userId, budgetCategory: description, budgetedAmount, actualAmount, spendingRatio };
+             // const logContext = { userId, budgetCategory: description, budgetedAmount, actualAmount, spendingRatio };
 
              // Over Budget Check
              if (spendingRatio >= OVERBUDGET_THRESHOLD_PERCENT) {
                  const notifKey = `overbudget-${budgetKey}`;
                  const notifTitle = 'Over Budget Alert';
-                  // Check if a similar *unread* notification already exists
                   const existingUnread = existingNotifications.find(n =>
                        n.message.includes(`"${description}"`) &&
-                       n.title === notifTitle && // Match title
+                       n.title === notifTitle &&
                        n.type === 'budget' &&
                        !n.read
                   );
@@ -101,49 +102,48 @@
                          message: `You've spent ${formatCurrency(actualAmount)} out of ${formatCurrency(budgetedAmount)} budgeted for "${description}".`,
                          link: '/budget', // Link to budget page
                      });
-                      // console.error(`Over budget for "${description}"`, logContext); // Console log commented out
+                      // // console.error(`Over budget for "${description}"`, logContext); // Console log commented out
                       generatedNotificationKeys.add(notifKey);
                  }
              }
-             // Budget Warning Check (only if not already over budget in *this* check cycle)
+             // Budget Warning Check
              else if (spendingRatio >= BUDGET_WARNING_THRESHOLD_PERCENT) {
                  const notifKey = `warning-${budgetKey}`;
                  const notifTitle = 'Budget Warning';
-                 // Check if a similar *unread* notification already exists
                  const existingUnread = existingNotifications.find(n =>
                      n.message.includes(`"${description}"`) &&
-                     n.title === notifTitle && // Match title
+                     n.title === notifTitle &&
                      n.type === 'warning' &&
                      !n.read
                  );
 
                  if (!existingUnread && !generatedNotificationKeys.has(notifKey)) {
                      addNotification({
-                         type: 'warning', // Use 'warning' type
+                         type: 'warning',
                          title: notifTitle,
                          message: `Approaching budget limit for "${description}". Spent ${formatCurrency(actualAmount)} of ${formatCurrency(budgetedAmount)}.`,
-                         link: '/budget', // Link to budget page
+                         link: '/budget',
                      });
-                      // console.warn(`Budget warning for "${description}"`, logContext); // Console log commented out
+                      // // console.warn(`Budget warning for "${description}"`, logContext); // Console log commented out
                       generatedNotificationKeys.add(notifKey);
                  }
              }
          }
-     }, [monthlyAnalysis, addNotification, userId, existingNotifications]); // Add existingNotifications as dependency
+     }, [monthlyAnalysis, addNotification, userId, existingNotifications]);
 
-     return null; // This hook doesn't render anything
+     return null;
  }
 
- // Function to trigger collaboration notifications (called from server action ideally, or client action)
+ // Function to trigger collaboration notifications
  export function triggerCollaborationNotification(sharerName: string, weekKey: string, recipientUserId: string) {
      const addNotification = useNotificationStore.getState().addNotification;
      addNotification({
          type: 'collaboration',
          title: 'Review Shared With You',
          message: `${sharerName || 'A user'} shared their weekly review (${weekKey}) with you.`,
-         link: '/weekly-review?tab=shared', // Link to the shared tab
+         link: '/weekly-review?tab=shared',
      });
-      // console.log(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, { // Console log commented out
+      // // console.log(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, { // Console log commented out
       //     sharerName,
       //     weekKey,
       //     recipientUserId,
@@ -151,7 +151,7 @@
       // });
  }
 
- // Function to trigger app update notifications (can be called from a central place, e.g., layout)
+ // Function to trigger app update notifications
  export function triggerAppUpdateNotification(title: string, message: string, link?: string) {
      const addNotification = useNotificationStore.getState().addNotification;
      const newNotif = addNotification({
@@ -160,5 +160,5 @@
          message: message,
          link: link,
      });
-      // console.log(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }); // Console log commented out
+      // // console.log(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }); // Console log commented out
  }

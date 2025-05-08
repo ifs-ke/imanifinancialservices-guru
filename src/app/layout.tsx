@@ -5,7 +5,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
-// import { ClerkProvider } from '@clerk/nextjs'; // Clerk disabled
+import { ClerkProvider } from '@clerk/nextjs'; // Re-enable Clerk
 
  // Initialize Inter font for sans-serif
  const inter = Inter({
@@ -36,29 +36,29 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}> // Clerk disabled
-    <html lang="en" suppressHydrationWarning={true}>
-      <body
-          className={cn(
-            'min-h-screen bg-background font-sans antialiased',
-            inter.variable,
-            roboto_mono.variable // Add Roboto Mono variable
-          )}
-        >
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-                {/* Removed Context Providers as state is handled by Zustand */}
-                 <SidebarProvider> {/* Sidebar context needed for layout */}
-                    {children}
-                    <Toaster />
-                 </SidebarProvider>
-            </ThemeProvider>
-        </body>
-      </html>
-    // </ClerkProvider> // Clerk disabled
+    // Re-enable ClerkProvider
+    <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+      <html lang="en" suppressHydrationWarning={true}>
+        <body
+            className={cn(
+              'min-h-screen bg-background font-sans antialiased',
+              inter.variable,
+              roboto_mono.variable // Add Roboto Mono variable
+            )}
+          >
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                   <SidebarProvider> {/* Sidebar context needed for layout */}
+                      {children}
+                      <Toaster />
+                   </SidebarProvider>
+              </ThemeProvider>
+          </body>
+        </html>
+     </ClerkProvider>
   );
 }

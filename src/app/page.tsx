@@ -1,17 +1,15 @@
-// import { auth } from '@clerk/nextjs/server'; // Clerk disabled
+ import { auth } from '@clerk/nextjs/server'; // Use Clerk's server-side auth
  import { redirect } from 'next/navigation';
 
  export default function Home() {
-   // const { userId } = auth(); // Clerk disabled
+   const { userId } = auth(); // Get userId from Clerk
 
-   // When Clerk is disabled, always redirect to the dashboard
-   redirect('/dashboard');
-
-   // if (userId) { // Clerk disabled
-   //   // User is logged in, redirect to dashboard
-   //   redirect('/dashboard');
-   // } else {
-   //   // User is not logged in, redirect to sign-in
-   //   redirect('/sign-in');
-   // }
+   // Redirect logic based on actual Clerk auth state
+   if (userId) {
+     // User is logged in, redirect to dashboard
+     redirect('/dashboard');
+   } else {
+     // User is not logged in, redirect to sign-in
+     redirect('/sign-in');
+   }
  }

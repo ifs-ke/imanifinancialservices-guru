@@ -1,16 +1,14 @@
 // src/app/(auth)/sign-up/[[...sign-up]]/page.tsx
 
- // import { SignUp } from '@clerk/nextjs'; // Clerk disabled
- import { redirect } from 'next/navigation';
+ import { SignUp } from '@clerk/nextjs'; // Re-enable Clerk
+ // import { redirect } from 'next/navigation'; // No longer needed
 
 
  export default function SignUpPage() {
-   // When Clerk is disabled, redirect to dashboard or a landing page
-     redirect('/dashboard');
-
-   // return ( // Clerk disabled
-   //   <div className="flex items-center justify-center min-h-screen">
-   //     <SignUp />
-   //   </div>
-   // );
+    // Render the Clerk Sign Up component
+   return (
+     <div className="flex items-center justify-center min-h-screen">
+       <SignUp />
+     </div>
+   );
  }

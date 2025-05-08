@@ -3,10 +3,11 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { encode, decode } from '@/lib/storage-utils';
 import type { WeeklyReviewData, UserShareInfo } from '@/lib/types';
 import { getISOWeek, getYear } from 'date-fns';
-// import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
-// import { auth } from '@clerk/nextjs'; // Re-enabled Clerk client auth - REMOVE - not meant for client side
+// import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions'; // Actions moved to server
+// import { auth } from '@clerk/nextjs/client'; // Removed client-side Clerk hook
 
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// Placeholder used only if NEEDED (e.g., during initial state before auth loads), but prefer real ID
+// const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
 const createSessionStorageWithEncoding = (): StateStorage => {
   const storage = sessionStorage;
@@ -40,15 +41,15 @@ interface WeeklyReviewState {
   isHydrated: boolean;
   setOwnedReviews: (reviews: Record<string, WeeklyReviewData>) => void;
   setSharedReviews: (reviews: Record<string, WeeklyReviewData>) => void;
+  // Updated signatures to only require data, ownerId check should happen where action is called
   setJournalEntry: (weekKey: string, journal: string, ownerId: string) => void;
   setTransactionComment: (weekKey: string, transactionId: string, comment: string, ownerId: string) => void;
   deleteTransactionComment: (weekKey: string, transactionId: string, ownerId: string) => void;
-  getReviewForWeek: (weekKey: string, ownerId: string) => WeeklyReviewData | undefined;
-  getTransactionComment: (weekKey: string, transactionId: string, ownerId: string) => string | undefined;
+  // getReviewForWeek needs the *current* user's ID to check permissions
+  getReviewForWeek: (weekKey: string, ownerId: string, currentUserId: string | null) => WeeklyReviewData | undefined;
+  // getTransactionComment also needs the *current* user's ID
+  getTransactionComment: (weekKey: string, transactionId: string, ownerId: string, currentUserId: string | null) => string | undefined;
   clearReviews: () => void;
-  // shareWeekReview: (weekKey: string, targetUserId: string) => Promise<void>;  // Removed from client
-  // revokeWeekShare: (weekKey: string, targetUserId: string) => Promise<void>; // Removed from client
-  // searchUserToShareWith: (email: string) => Promise<UserShareInfo | null>;  // Removed from client
 }
 
 const initialState = {
@@ -65,15 +66,11 @@ export const getWeekKey = (date: Date): string => {
       }
       return `${year}-${weekNumber.toString().padStart(2, '0')}`;
   } catch (error) {
-       console.error("Error generating week key:", error); // Replaced logError
+       // console.error("Error generating week key:", error); // Console log commented out
        return "invalid-week-key";
   }
 };
-// Helper to get current user ID using client-side auth hook
-// const getCurrentUserId = (): string | null => { // REMOVE - use on server action now
-//     const { userId } = auth(); // Use actual Clerk auth hook
-//     return userId;
-// };
+
 export const useWeeklyReviewStore = create<WeeklyReviewState>()(
   persist(
     (set, get) => ({
@@ -86,133 +83,90 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
            const validatedReviews = (typeof reviews === 'object' && reviews !== null) ? reviews : {};
           set({ sharedReviews: validatedReviews, isHydrated: true });
       },
+      // Assume ownerId check happened before calling this
       setJournalEntry: (weekKey, journal, ownerId) => {
-         // const currentUserId = getCurrentUserId();  // REMOVE - this component cannot do that
-         // if (ownerId !== currentUserId) { // REMOVE - this component cannot do that
-         //     console.warn(`Security Warning: Attempted client-side journal update for non-owned review.`, { weekKey, ownerId, currentUserId }); // Replaced logWarn
-         //     return;
-         // }
-         // if (!currentUserId) {  // REMOVE - this component cannot do that
-         //     console.warn("Cannot set journal entry: User not available."); // Replaced logWarn
-         //     return;
-         // }
         set((state) => {
+             // Only update ownedReviews as shared reviews are read-only client-side
              const currentReview = state.ownedReviews[weekKey] || { ownerId: ownerId, journal: '', transactionComments: {}, sharedWith: [] };
-             if (currentReview.ownerId !== ownerId) return state;
+             // Double check ownership before modifying owned reviews
+             if (currentReview.ownerId !== ownerId) {
+                 // console.warn(`Attempted to set journal for review not owned by ${ownerId}.`); // Console log commented out
+                 return state;
+             }
              return {
                  ownedReviews: { ...state.ownedReviews, [weekKey]: { ...currentReview, journal: journal } },
              };
          });
       },
+      // Assume ownerId check happened before calling this
       setTransactionComment: (weekKey, transactionId, comment, ownerId) => {
-         // const currentUserId = getCurrentUserId();  // REMOVE - this component cannot do that
-         // if (!currentUserId) { // REMOVE - this component cannot do that
-         //     console.warn("Cannot set transaction comment: User not available."); // Replaced logWarn
-         //     return;
-         // }
         set((state) => {
-             let reviewToUpdate: WeeklyReviewData | undefined;
-             let reviewsMapKey: 'ownedReviews' | 'sharedReviews' | null = null;
-             if (state.ownedReviews[weekKey]?.ownerId === ownerId) {
-                 reviewToUpdate = state.ownedReviews[weekKey];
-                 reviewsMapKey = 'ownedReviews';
-             } else if (state.sharedReviews[weekKey]?.ownerId === ownerId) {
-                 reviewToUpdate = state.sharedReviews[weekKey];
-                 reviewsMapKey = 'sharedReviews';
-                  // Check if current user is allowed to comment (either owner or in sharedWith)
-                  // if (ownerId !== currentUserId && !(reviewToUpdate?.sharedWith?.includes(currentUserId))) { // REMOVE - this component cannot do that
-                  //    console.warn(`Permission Denied: User cannot comment on review.`, { currentUserId, weekKey, ownerId }); // Replaced logWarn
-                  //    return state;
-                  // }
+             // Only update ownedReviews
+             const reviewToUpdate = state.ownedReviews[weekKey];
+             if (!reviewToUpdate || reviewToUpdate.ownerId !== ownerId) {
+                  // console.warn(`Attempted to set comment for review not found or not owned by ${ownerId}.`); // Console log commented out
+                  // Optionally create a shell if it doesn't exist for the owner
+                  if (!reviewToUpdate && Object.keys(state.ownedReviews).length === 0 ) { // Create only if NO owned reviews exist for this user yet? Or always?
+                      const newReviewShell = { ownerId, journal: '', transactionComments: { [transactionId]: comment }, sharedWith: [] };
+                      return { ownedReviews: { ...state.ownedReviews, [weekKey]: newReviewShell } };
+                  } else if (!reviewToUpdate) {
+                      return state; // Don't create if other reviews exist? Needs defined behavior.
+                  }
+                  return state; // Not owned
              }
-             // If no existing review found, and the owner is the current user, create a new owned review shell
-             // if (!reviewToUpdate && ownerId === currentUserId) { // REMOVE - this component cannot do that
-             if (!reviewToUpdate && ownerId === 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y') {
-                  reviewToUpdate = { ownerId, journal: '', transactionComments: {}, sharedWith: [] };
-                  reviewsMapKey = 'ownedReviews';
-             } else if (!reviewToUpdate) {
-                  // If no review found and owner isn't current user, cannot proceed
-                  console.error(`Cannot set comment: Review not found or permission denied.`, { weekKey, ownerId }); // Replaced logError
-                  return state;
-             }
+
              const newComments = { ...(reviewToUpdate.transactionComments || {}), [transactionId]: comment };
-             if (comment.trim() === '') delete newComments[transactionId]; // Remove comment if empty
+             if (comment.trim() === '') delete newComments[transactionId];
              const updatedReview = { ...reviewToUpdate, transactionComments: Object.keys(newComments).length > 0 ? newComments : undefined };
-             if (reviewsMapKey === 'ownedReviews') return { ownedReviews: { ...state.ownedReviews, [weekKey]: updatedReview } };
-             if (reviewsMapKey === 'sharedReviews') return { sharedReviews: { ...state.sharedReviews, [weekKey]: updatedReview } };
-             return state;
+             return { ownedReviews: { ...state.ownedReviews, [weekKey]: updatedReview } };
          });
       },
+       // Assume ownerId check happened before calling this
       deleteTransactionComment: (weekKey, transactionId, ownerId) => {
-          // const currentUserId = getCurrentUserId(); // REMOVE - this component cannot do that
-          // if (!currentUserId) { // REMOVE - this component cannot do that
-          //     console.warn("Cannot delete transaction comment: User not available."); // Replaced logWarn
-          //     return;
-          // }
          set((state) => {
-             let reviewsMapKey: 'ownedReviews' | 'sharedReviews' | null = null;
-             let reviewToUpdate: WeeklyReviewData | undefined;
-             if (state.ownedReviews[weekKey]?.ownerId === ownerId) {
-                 reviewToUpdate = state.ownedReviews[weekKey];
-                 reviewsMapKey = 'ownedReviews';
-             } else if (state.sharedReviews[weekKey]?.ownerId === ownerId) {
-                 reviewToUpdate = state.sharedReviews[weekKey];
-                 reviewsMapKey = 'sharedReviews';
-                  // Check if current user is allowed to delete comment (either owner or in sharedWith)
-                  // if (ownerId !== currentUserId && !(reviewToUpdate?.sharedWith?.includes(currentUserId))) { // REMOVE - this component cannot do that
-                  //    console.warn(`Permission Denied: User cannot delete comments.`, { currentUserId, weekKey, ownerId }); // Replaced logWarn
-                  //    return state;
-                  // }
-             } else {
-                 console.error(`Cannot delete comment: Review not found or permission denied.`, { weekKey, ownerId }); // Replaced logError
-                 return state;
+             // Only delete from ownedReviews
+             const reviewToUpdate = state.ownedReviews[weekKey];
+             if (!reviewToUpdate || reviewToUpdate.ownerId !== ownerId || !reviewToUpdate.transactionComments) {
+                 // console.warn(`Attempted to delete comment for review not found, not owned, or without comments.`); // Console log commented out
+                 return state; // Not found, not owned, or no comments exist
              }
-             if (!reviewToUpdate || !reviewToUpdate.transactionComments) return state; // No comments to delete from
+
              const newComments = { ...reviewToUpdate.transactionComments };
              delete newComments[transactionId];
              const updatedReview = { ...reviewToUpdate, transactionComments: Object.keys(newComments).length > 0 ? newComments : undefined };
-             if (reviewsMapKey === 'ownedReviews') return { ownedReviews: { ...state.ownedReviews, [weekKey]: updatedReview } };
-             if (reviewsMapKey === 'sharedReviews') return { sharedReviews: { ...state.sharedReviews, [weekKey]: updatedReview } };
-             return state;
+             return { ownedReviews: { ...state.ownedReviews, [weekKey]: updatedReview } };
          });
       },
-      getReviewForWeek: (weekKey, ownerId) => {
-          // const currentUserId = getCurrentUserId(); // REMOVE - this component cannot do that
-          // if (!currentUserId) return undefined;  // REMOVE - this component cannot do that
+      // getReviewForWeek needs the *current* user's ID passed in
+      getReviewForWeek: (weekKey, ownerId, currentUserId) => {
+           if (!currentUserId) return undefined; // Cannot determine permissions without current user
+
            // Check owned reviews first
-           // if (ownerId === currentUserId && get().ownedReviews[weekKey]) {  // REMOVE - this component cannot do that
-           if (ownerId === 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y' && get().ownedReviews[weekKey]) {
+           if (ownerId === currentUserId && get().ownedReviews[weekKey]) {
                return get().ownedReviews[weekKey];
            }
            // Then check shared reviews
            const sharedReview = get().sharedReviews[weekKey];
            // Ensure the requested owner matches and the current user has permission
            if (sharedReview && sharedReview.ownerId === ownerId) {
-                // if (sharedReview.sharedWith?.includes(currentUserId)) { // REMOVE - this component cannot do that
-                if (sharedReview.sharedWith?.includes('user_2wXc4D8KBDKGhxagoRStZOXnP2Y')) {
+                if (sharedReview.sharedWith?.includes(currentUserId)) {
                     return sharedReview;
                 } else {
-                    console.warn(`Access Denied: Attempt to access shared review without permission.`, { weekKey, ownerId }); // Replaced logWarn
+                    // console.warn(`Access Denied: Attempt to access shared review without permission.`, { weekKey, ownerId }); // Console log commented out
                     return undefined;
                 }
            }
            return undefined; // Not found or no permission
       },
-      getTransactionComment: (weekKey, transactionId, ownerId) => {
-          const review = get().getReviewForWeek(weekKey, ownerId);
+       // getTransactionComment also needs the *current* user's ID passed in
+      getTransactionComment: (weekKey, transactionId, ownerId, currentUserId) => {
+          const review = get().getReviewForWeek(weekKey, ownerId, currentUserId); // Use the permission-checked getter
           return review?.transactionComments?.[transactionId];
       },
       clearReviews: () => {
-          console.log("Clearing weekly review store state."); // Replaced logInfo
+          // console.log("Clearing weekly review store state."); // Console log commented out
           set({ ...initialState, isHydrated: true });
       },
-       // These are not longer in the client
-      // shareWeekReview: async (weekKey, targetUserId) => {
-      // },
-      // revokeWeekShare: async (weekKey, targetUserId) => {
-      // },
-      // searchUserToShareWith: async (email: string): Promise<UserShareInfo | null> => {
-      // },
     }),
     {
       name: 'ifcGuru_weeklyReviews', // Persistence key
@@ -220,7 +174,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
        onRehydrateStorage: () => (state) => {
          if (state) {
            state.isHydrated = true;
-            console.log("Weekly review store rehydrated."); // Replaced logInfo
+            // console.log("Weekly review store rehydrated."); // Console log commented out
          }
        },
     }

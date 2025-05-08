@@ -29,23 +29,23 @@ import {
   ClipboardList, // Changed from Logger to ClipboardList
   RefreshCw,
   Menu,
-  UserCircle, // Placeholder for UserButton
-  PieChart // Import PieChart icon
+  // UserCircle // No longer needed, use Clerk's UserButton
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle"; // Import ThemeToggle
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-// import { UserButton, useUser } from "@clerk/nextjs"; // Clerk disabled
+import { UserButton, useUser } from "@clerk/nextjs"; // Re-enabled Clerk
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area"; // Import ScrollArea
+import { PieChart } from "lucide-react";
 
 
-// Placeholder user data when Clerk is disabled
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
-const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
-const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
+// No longer need placeholders
+// const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
+// const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
 
 interface SidebarMenuItem {
   href: string;
@@ -132,13 +132,13 @@ const SidebarBase = React.forwardRef<
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const unreadCount = useNotificationStore(state => state.unreadCount());
-  // const { user } = useUser(); // Clerk disabled
-  // Mock user when Clerk is disabled
-  const user = {
-      id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
-      fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
-      primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL },
-  };
+  const { user } = useUser(); // Using actual Clerk hook
+  // Removed mock user
+  // const user = {
+  //     id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
+  //     fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
+  //     primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL },
+  // };
   const syncManager = useSyncManager();
   const { syncStatus, retrySync, hashMismatch } = syncManager;
 
@@ -271,15 +271,20 @@ const SidebarBase = React.forwardRef<
           </Tooltip>
         </TooltipProvider>
 
-         {/* Placeholder for UserButton when Clerk is disabled */}
+         {/* Use Clerk's UserButton */}
          <div className={cn(
-             "flex items-center",
+             "flex items-center w-full",
              state === 'collapsed' ? "justify-center py-1" : "p-1"
          )}>
-            <UserCircle size={24} className="text-sidebar-muted-foreground" />
-           {state === 'expanded' && (
-              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user?.primaryEmailAddress?.emailAddress}>
-                   {user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? 'User'}
+            <UserButton afterSignOutUrl="/sign-in" appearance={{
+                 elements: {
+                     userButtonAvatarBox: state === 'collapsed' ? "w-7 h-7" : "w-8 h-8", // Adjust avatar size
+                     userButtonPopoverCard: "bg-popover border-border", // Style popover
+                 }
+             }}/>
+           {state === 'expanded' && user && (
+              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
+                   {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
               </span>
            )}
         </div>
@@ -300,7 +305,6 @@ export const Sidebar = React.forwardRef<
   if (isMobile) {
     return (
       <Sheet>
-        {/* Position trigger fixed */}
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="fixed top-3 left-3 z-50 md:hidden bg-background/80 backdrop-blur-sm h-10 w-10">
             <Menu size={24} />
@@ -308,7 +312,6 @@ export const Sidebar = React.forwardRef<
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0 border-r-sidebar-border">
-          {/* Pass state prop to SidebarBase inside Sheet */}
           <SidebarBase {...props} />
         </SheetContent>
       </Sheet>
