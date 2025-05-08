@@ -84,7 +84,7 @@ export function useSyncManager() {
       // Explicitly remove items from session storage
       const storeKeys = ['ifcGuru_transactions', 'ifcGuru_debts', 'ifcGuru_statementItems', 'ifcGuru_budgetItems', 'ifcGuru_weeklyReviews', 'ifcGuru_notifications'];
       storeKeys.forEach(key => {
-          try { sessionStorage.removeItem(key); } catch (e) { console.warn(`Failed to remove ${key} from sessionStorage`, { ...logContext(), error: e }); } // Replaced logWarn with console.warn
+          try { sessionStorage.removeItem(key); } catch (e) { /* console.warn(`Failed to remove ${key} from sessionStorage`, { ...logContext(), error: e }); */ } // Replaced logWarn with console.warn
       });
 
       // console.log('SyncManager: Local state cleared.', logContext()); // Replaced logInfo with console.log
@@ -121,16 +121,27 @@ export function useSyncManager() {
     // console.log(`Fetch Triggered${isRetry ? ' (Retry)' : ''}${skipHashCheck ? ' (Skip Hash Check)' : ''}...`, logContext()); // Replaced logInfo with console.log
     isFetchingRef.current = true;
     setSyncStatus('syncing');
-    setHashMismatch(false);
+    setHashMismatch(false); // Reset mismatch flag at the start of fetch
 
     try {
       const response = await fetch('/api/sync');
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
-        const serverErrorMessage = errorData.error || `Fetch failed: ${response.statusText}`;
-        // console.error(`Fetch API Error ${response.status}: ${response.statusText}`, { errorData, ...logContext() }); // Replaced logError with console.error
-        throw new Error(serverErrorMessage);
+        let errorData = { error: `Fetch failed: ${response.statusText} (Status: ${response.status})` }; // Default error
+        try {
+            // Try to parse the error response as JSON
+            const parsedError = await response.json();
+            if (parsedError && typeof parsedError.error === 'string') {
+                errorData.error = parsedError.error; // Use the error message from the server if available
+            }
+        } catch (parseError) {
+            // If parsing fails, the response body might not be JSON
+            // console.warn("Fetch Error: Failed to parse error response body as JSON.", { status: response.status, statusText: response.statusText, parseError, ...logContext() });
+        }
+        // console.error(`Fetch API Error ${response.status}: ${errorData.error}`, { ...logContext() });
+        throw new Error(errorData.error); // Throw with the best available error message
       }
+
 
       const data: SyncedData & { dataHash?: string } = await response.json();
       // console.log('Fetch: Received data from server.', logContext()); // Replaced logInfo with console.log
@@ -146,7 +157,7 @@ export function useSyncManager() {
              const isValid = await verifyHash(dataString, dataHash);
 
              if (!isValid) {
-               // console.error('Fetch Error: Data integrity check failed!', { serverHash: dataHash, clientHashCalculationInput: dataString.substring(0, 200), ...logContext() }); // Replaced logError with console.error
+                // console.error('Fetch Error: Data integrity check failed!', { serverHash: dataHash, clientHashCalculationInputTruncated: dataString.substring(0, 200), ...logContext() }); // Replaced logError with console.error
                setHashMismatch(true);
                setSyncStatus('error');
                setIsMismatchDialogOpen(true); // Open dialog on hash mismatch
@@ -176,13 +187,13 @@ export function useSyncManager() {
       setSyncStatus('synced');
       hasLocalChangesRef.current = false;
       // console.log('Fetch: Successfully synced with DB.', logContext()); // Replaced logInfo with console.log
-      if(isRetry || skipHashCheck) toast({ title: 'Sync Successful', description: 'Data successfully synced with the cloud.' });
+      if(isRetry || skipHashCheck) toast({ title: 'Sync Successful', description: 'Data successfully loaded from the cloud.' });
       return true;
 
     } catch (error: any) {
       // console.error('Fetch Error', { error, ...logContext() }); // Replaced logError with console.error
       setSyncStatus('error');
-      toast({ title: 'Sync Load Failed', description: `Could not load data: ${error.message}. Using local data. Click cloud icon to retry.`, variant: 'destructive' });
+      toast({ title: 'Sync Load Failed', description: `Could not load data: ${error.message}. Using local data if available. Click cloud icon to retry.`, variant: 'destructive' });
       return false;
     } finally {
       isFetchingRef.current = false;
@@ -214,18 +225,18 @@ export function useSyncManager() {
 
     if (!isForceSave) {
         // console.log('Save: Fetching latest data before saving to check for conflicts...', logContext()); // Replaced logInfo with console.log
-        const fetchSuccess = await fetchData(false, false);
+        const fetchSuccess = await fetchData(false, false); // Perform fetch WITH hash check
         if (!fetchSuccess) {
-            // fetchData sets status/mismatch flags and opens dialog if needed
+            // If fetchData failed (could be hash mismatch or other error), abort save.
+            // fetchData already sets status, opens dialog if needed, and shows toast.
             // console.error('Save Aborted: Pre-save fetch failed. Data might be out of sync or hash mismatch occurred.', logContext()); // Replaced logError with console.error
             isSavingRef.current = false;
-            // Don't show another toast here, fetchData handles it
             return false;
         }
-        // console.log('Save: Pre-save fetch successful, proceeding with save.', logContext()); // Replaced logInfo with console.log
+         // console.log('Save: Pre-save fetch successful, proceeding with save.', logContext()); // Replaced logInfo with console.log
     } else {
         setHashMismatch(false); // Clear mismatch flag when forcing save
-        // console.log('Save: Force save initiated, skipping pre-fetch check.', logContext()); // Replaced logInfo with console.log
+         // console.log('Save: Force save initiated, skipping pre-fetch check.', logContext()); // Replaced logInfo with console.log
     }
 
     try {
@@ -254,7 +265,16 @@ export function useSyncManager() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+         let errorData = { error: `Save failed: ${response.statusText} (Status: ${response.status})` }; // Default error
+          try {
+              const parsedError = await response.json();
+              if (parsedError && typeof parsedError.error === 'string') {
+                  errorData.error = parsedError.error; // Use server error if available
+              }
+          } catch (parseError) {
+              // console.warn("Save Error: Failed to parse error response body as JSON.", { status: response.status, statusText: response.statusText, parseError, ...logContext() });
+          }
+
         if (response.status === 400 && errorData.error?.includes('integrity check failed')) {
             // console.error('Save API Error 400: Data integrity check failed on server.', { errorData, ...logContext() }); // Replaced logError with console.error
             setHashMismatch(true);
@@ -262,9 +282,8 @@ export function useSyncManager() {
             setIsMismatchDialogOpen(true); // Open dialog on hash mismatch from server
             toast({ title: 'Save Failed: Data Out of Sync', description: "Data conflicts with server. Resolve using the cloud icon.", variant: 'destructive' });
         } else {
-            const serverErrorMessage = `Save failed: ${response.statusText} (${errorData.error || 'No server details'})`;
-            // console.error(`Save API Error ${response.status}: ${response.statusText}`, { errorData, ...logContext() }); // Replaced logError with console.error
-            throw new Error(serverErrorMessage);
+            // console.error(`Save API Error ${response.status}: ${errorData.error}`, { ...logContext() });
+            throw new Error(errorData.error); // Throw with best available message
         }
         isSavingRef.current = false;
         return false;
@@ -281,7 +300,7 @@ export function useSyncManager() {
     } catch (error: any) {
       // console.error('Save Error', { error, ...logContext() }); // Replaced logError with console.error
       setSyncStatus('error'); // Set status to error, but don't set hashMismatch here
-      toast({ title: 'Sync Save Failed', description: `Could not save: ${error.message}. Changes remain locally. Click cloud icon.`, variant: 'destructive' });
+      toast({ title: 'Sync Save Failed', description: `Could not save: ${error.message}. Changes remain locally. Click cloud icon to retry.`, variant: 'destructive' });
       return false;
     } finally {
       isSavingRef.current = false;

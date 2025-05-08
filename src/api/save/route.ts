@@ -147,12 +147,12 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
         if (startDate !== undefined) {
             try {
                 updateDoc.statementStartDate = startDate ? new Date(startDate) : null;
-            } catch { updateDoc.statementStartDate = null; // console.warn(`Save API: Invalid start date format received: ${startDate}`, logContext); } // Replaced logWarn with console.warn
+            } catch { updateDoc.statementStartDate = null; /* console.warn(`Save API: Invalid start date format received: ${startDate}`, logContext); */ } // Replaced logWarn with console.warn
         }
         if (endDate !== undefined) {
             try {
                 updateDoc.statementEndDate = endDate ? new Date(endDate) : null;
-            } catch { updateDoc.statementEndDate = null; // console.warn(`Save API: Invalid end date format received: ${endDate}`, logContext); } // Replaced logWarn with console.warn
+            } catch { updateDoc.statementEndDate = null; /* console.warn(`Save API: Invalid end date format received: ${endDate}`, logContext); */ } // Replaced logWarn with console.warn
         }
         if (gettingStartedDismissed !== undefined) {
             updateDoc.gettingStartedDismissed = gettingStartedDismissed;
@@ -203,7 +203,7 @@ export async function POST(request: Request) {
   if (!success) {
       // console.warn('Save API: Rate limit exceeded.', logContextWithRateLimit); // Replaced logWarn with console.warn
        const response = NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
-       return addCorsHeaders(response);
+       return addCorsHeaders(response); // Ensure CORS headers on rate limit response
   }
   // console.log('Save API: Rate limit check passed.', logContextWithRateLimit); // Replaced logInfo with console.log
 
@@ -214,13 +214,13 @@ export async function POST(request: Request) {
   } catch (error) {
     // console.error('Save API: Invalid request body.', { ...logContextWithRateLimit, error, stack: error instanceof Error ? error.stack : undefined }); // Replaced logError with console.error
     const response = NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
-    return addCorsHeaders(response);
+    return addCorsHeaders(response); // Ensure CORS headers on bad request response
   }
 
   if (!payload || typeof payload !== 'object' || !payload.dataHash) {
       // console.warn('Save API: Invalid payload structure or missing dataHash.', logContextWithRateLimit); // Replaced logWarn with console.warn
        const response = NextResponse.json({ error: 'Invalid payload or missing dataHash' }, { status: 400 });
-       return addCorsHeaders(response);
+       return addCorsHeaders(response); // Ensure CORS headers on bad request response
   }
 
   const { dataHash, ...receivedData } = payload;
@@ -238,7 +238,7 @@ export async function POST(request: Request) {
        // console.error('Save API: Data integrity check failed!', { ...logContextWithRateLimit, clientHash: dataHash, serverHash: calculatedServerHash }); // Replaced logError with console.error
        // console.log("Data that resulted in hash mismatch (truncated):", { dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : "") }, logContextWithRateLimit);
        const response = NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
-       return addCorsHeaders(response);
+       return addCorsHeaders(response); // Ensure CORS headers on integrity check failure
     }
     // console.log('Save API: Data integrity check passed. Proceeding with save.', logContextWithRateLimit); // Replaced logInfo with console.log
 
@@ -277,13 +277,14 @@ export async function POST(request: Request) {
     });
     // console.log('Save API: MongoDB transaction committed successfully.', logContextWithRateLimit); // Replaced logInfo with console.log
      const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
-     return addCorsHeaders(response);
+     return addCorsHeaders(response); // Add CORS headers to success response
   } catch (error: any) {
     // Transaction automatically aborted on error by withTransaction
     // console.error('Save API: MongoDB transaction failed or aborted.', { ...logContextWithRateLimit, error, stack: error.stack }); // Replaced logError with console.error
-    const errorMessage = error instanceof Error ? error.message : 'Failed to save data to database';
+    // Ensure consistent JSON error response format
+    const errorMessage = error instanceof Error ? `Failed to save data: ${error.message}` : 'An unknown error occurred during save.';
      const response = NextResponse.json({ error: errorMessage }, { status: 500 });
-     return addCorsHeaders(response);
+     return addCorsHeaders(response); // Ensure CORS headers on internal server error
   } finally {
      await session.endSession(); // Ensure session is always closed
      // console.log('Save API: MongoDB session ended.', logContextWithRateLimit); // Replaced logInfo with console.log

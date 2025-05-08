@@ -218,12 +218,12 @@ export async function GET() {
       ...preparedData, // Send the prepared data (dates as strings, sorted arrays)
       dataHash,
     });
-     return addCorsHeaders(response);
+     return addCorsHeaders(response); // Add CORS headers to success response
   } catch (error: any) {
     // console.error(`Sync API: Failed to fetch data for user ${userId}:`, { error, stack: error.stack, userId }); // Replaced logError with console.error
-    // Return a more specific error message if possible
+    // Ensure consistent JSON error response format
     const errorMessage = error.message || 'Failed to fetch data from database';
      const response = NextResponse.json({ error: errorMessage }, { status: 500 });
-     return addCorsHeaders(response);
+     return addCorsHeaders(response); // Ensure CORS headers on internal server error
   }
 }
