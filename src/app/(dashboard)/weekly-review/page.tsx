@@ -8,9 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
-import { useBudgetStore, selectNetBudgeted } from '@/store/budgetStore'; // Import selectNetBudgeted for variance calculation
+import { useBudgetStore } from '@/store/budgetStore';
 // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
-import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, parseISO, startOfISOWeek, endOfISOWeek, getYear, getISOWeek, differenceInDays } from 'date-fns';
+import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek, differenceInDays } from 'date-fns';
 import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,7 +18,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId, BudgetItemCategory, BudgetItem, WeeklyReviewData, UserShareInfo } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ShareReviewDialog from './ShareReviewDialog';
@@ -64,45 +63,47 @@ export default function WeeklyReviewPage() {
     setTransactionComment,
     deleteTransactionComment,
     getReviewForWeek,
-    getTransactionComment,
+    // getTransactionComment, // Removed as comment is accessed directly from review object
   } = useWeeklyReviewStore();
 
   const { toast } = useToast();
 
   // State for the selected week
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 })); // Monday as start
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // This state might be less relevant with Zustand auto-persistence
   const [searchTerm, setSearchTerm] = useState('');
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
   const [commentingTransaction, setCommentingTransaction] = useState<TransactionWithId | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [isDeleteCommentDialogOpen, setIsDeleteCommentDialogOpen] = useState(false); // Renamed state variable
-  const [isDeleteJournalDialogOpen, setIsDeleteJournalDialogOpen] = useState(false); // State for journal delete confirmation
+  const [isDeleteCommentDialogOpen, setIsDeleteCommentDialogOpen] = useState(false);
+  const [isDeleteJournalDialogOpen, setIsDeleteJournalDialogOpen] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<{ transactionId: string; comment: string } | null>(null);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("owned"); // 'owned' or 'shared'
+  const [activeTab, setActiveTab] = useState<"owned" | "shared">("owned");
 
   const currentWeekKey = useMemo(() => getWeekKey(currentWeekStart), [currentWeekStart]);
-  const currentReviewOwnerId = useMemo(() => {
-      // Logic to determine the owner ID based on the active tab and potentially the selected shared review
-       if (activeTab === 'owned' || !userId) {
-           return userId || CLERK_DISABLED_PLACEHOLDER_USER_ID; // Default to current user for owned tab
-       } else {
-           // For shared tab, you'd need a way to select a specific shared review to determine owner
-           // Placeholder: Return the first shared review's owner ID if any, otherwise current user
-           const firstSharedReviewKey = Object.keys(sharedReviews)[0];
-            return sharedReviews[firstSharedReviewKey]?.ownerId || (userId || CLERK_DISABLED_PLACEHOLDER_USER_ID);
-        }
-   }, [activeTab, userId, sharedReviews]);
 
-
+   // Determine the review data based on the active tab and week key
    const currentReview = useMemo(() => {
-        // Fetch the review based on the calculated owner and week key
-        return getReviewForWeek(currentWeekKey, currentReviewOwnerId);
-   }, [currentWeekKey, currentReviewOwnerId, getReviewForWeek]);
+        if (activeTab === 'owned') {
+            return ownedReviews[currentWeekKey];
+        } else {
+             // For shared, we need to find the *first* review shared for that week
+             // A better approach might involve selecting a specific shared review if multiple people share the same week with you
+             return sharedReviews[currentWeekKey]; // Simplification: assumes only one shared review per week key shown
+        }
+    }, [activeTab, currentWeekKey, ownedReviews, sharedReviews]);
+
+    // Determine the owner ID of the currently viewed review
+    const currentReviewOwnerId = useMemo(() => {
+        return currentReview?.ownerId || (activeTab === 'owned' ? userId : null);
+    }, [currentReview, activeTab, userId]);
+
+     // Get journal entry safely from the potentially undefined review
+     const journalEntry = currentReview?.journal || '';
 
 
-  // Filter transactions for the selected week
+  // Filter transactions for the selected week (owned transactions)
   const transactionsForWeek = useMemo(() => {
     const weekEnd = endOfWeek(currentWeekStart, { weekStartsOn: 1 });
     return allTransactions.filter(tx => {
@@ -130,79 +131,68 @@ export default function WeeklyReviewPage() {
   }, [transactionsForWeek, searchTerm, currentReview]);
 
   // --- Journal Handling ---
-   // Get journal entry safely from the potentially undefined review
-   const journalEntry = currentReview?.journal || '';
-
    const handleJournalChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-       // Update the store directly - ensure ownerId is passed correctly
-       if (activeTab === 'owned' && userId) { // Only allow editing for owned reviews by the logged-in user
+       if (activeTab === 'owned' && userId) {
            setJournalEntry(currentWeekKey, event.target.value, userId);
        } else {
            toast({ title: "Read Only", description: "You can only edit journals for your own reviews.", variant: "default" });
        }
    };
 
-    // Function to handle journal deletion
     const handleDeleteJournal = () => {
         if (activeTab === 'owned' && userId) {
-            setIsDeleteJournalDialogOpen(true); // Open confirmation dialog
+            setIsDeleteJournalDialogOpen(true);
         } else {
             toast({ title: "Action Denied", description: "You can only delete journals from your own reviews.", variant: "destructive" });
         }
     };
 
-    // Function to confirm journal deletion
     const confirmDeleteJournal = () => {
         if (activeTab === 'owned' && userId) {
-            setJournalEntry(currentWeekKey, '', userId); // Set journal to empty string
+            setJournalEntry(currentWeekKey, '', userId);
             toast({ title: "Journal Cleared", description: `Journal entry for week ${currentWeekKey} has been cleared.` });
         }
-        setIsDeleteJournalDialogOpen(false); // Close dialog
+        setIsDeleteJournalDialogOpen(false);
     };
 
   // --- Comment Handling ---
   const handleAddCommentClick = (tx: TransactionWithId) => {
     setCommentingTransaction(tx);
-    setCommentText(currentReview?.transactionComments?.[tx.id] || ''); // Pre-fill if comment exists
+    // Fetch comment based on currentReview (which could be owned or shared)
+    setCommentText(currentReview?.transactionComments?.[tx.id] || '');
     setIsCommentDialogOpen(true);
   };
 
   const handleSaveComment = () => {
-    if (!commentingTransaction || !currentReviewOwnerId) return;
-     // Permission check: Allow if current user is the owner OR if it's a shared review they have access to
-     if (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) {
-         setTransactionComment(currentWeekKey, commentingTransaction.id, commentText, currentReviewOwnerId);
+     // Allow commenting only if viewing OWNED review
+     if (activeTab === 'owned' && commentingTransaction && userId) {
+         setTransactionComment(currentWeekKey, commentingTransaction.id, commentText, userId);
          toast({ title: "Comment Saved", description: `Comment for "${commentingTransaction.description}" saved.` });
          setIsCommentDialogOpen(false);
          setCommentingTransaction(null);
          setCommentText('');
      } else {
-         toast({ title: "Permission Denied", description: "You cannot comment on this review.", variant: "destructive" });
-         setIsCommentDialogOpen(false); // Close dialog even on failure
+         toast({ title: "Read Only", description: "You can only comment on your own weekly reviews.", variant: "default" });
+         setIsCommentDialogOpen(false); // Close dialog even if read-only
      }
   };
 
   const handleDeleteCommentClick = (transactionId: string) => {
      const comment = currentReview?.transactionComments?.[transactionId];
-     if (comment && currentReviewOwnerId) {
-         // Permission check: Allow if current user is the owner OR if it's a shared review they have access to
-        if (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) {
-             setCommentToDelete({ transactionId, comment });
-             setIsDeleteCommentDialogOpen(true);
-         } else {
-            toast({ title: "Permission Denied", description: "You cannot delete comments on this review.", variant: "destructive" });
-        }
-    }
+      // Allow deleting only if viewing OWNED review
+      if (activeTab === 'owned' && comment && userId) {
+         setCommentToDelete({ transactionId, comment });
+         setIsDeleteCommentDialogOpen(true);
+     } else {
+        toast({ title: "Read Only", description: "You can only delete comments from your own weekly reviews.", variant: "default" });
+     }
   };
 
   const confirmDeleteComment = () => {
-    if (!commentToDelete || !currentReviewOwnerId) return;
-    // Double check permission before deleting
-    if (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) {
-        deleteTransactionComment(currentWeekKey, commentToDelete.transactionId, currentReviewOwnerId);
+     // Allow deletion only if viewing OWNED review
+     if (activeTab === 'owned' && commentToDelete && userId) {
+        deleteTransactionComment(currentWeekKey, commentToDelete.transactionId, userId);
         toast({ title: "Comment Deleted" });
-    } else {
-         toast({ title: "Permission Denied", description: "Could not delete comment.", variant: "destructive" });
     }
     setIsDeleteCommentDialogOpen(false);
     setCommentToDelete(null);
@@ -216,6 +206,7 @@ export default function WeeklyReviewPage() {
 
   // --- Weekly Metrics Calculation ---
   const weeklyMetrics = useMemo(() => {
+      // Only calculate metrics based on the user's OWN transactions
       const income = transactionsForWeek
           .filter(tx => tx.amount > 0)
           .reduce((sum, tx) => sum + tx.amount, 0);
@@ -233,7 +224,6 @@ export default function WeeklyReviewPage() {
       const daysInAvgMonth = 30.44;
       const budgetMultiplier = daysInWeek / daysInAvgMonth; // Prorate monthly budget to weekly
 
-       // Calculate prorated budget based on selected period
        const proratedBudgetedIncome = budgetItems
            .filter(item => item.category === 'income')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
@@ -243,24 +233,20 @@ export default function WeeklyReviewPage() {
        const proratedBudgetedGoals = budgetItems
            .filter(item => item.category === 'goal')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-        // Calculate prorated debt payments
        const proratedBudgetedDebt = budgetItems
            .filter(item => item.category === 'debt')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
 
-
-       // Compare prorated budget with actuals for the week
        const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals - proratedBudgetedDebt;
        const variance = netFlow - netBudgetedProrated;
 
       let varianceStatus: 'favorable' | 'unfavorable' | 'on-track' | 'no-budget' = 'no-budget';
       if (proratedBudgetedIncome > 0 || proratedBudgetedExpenses > 0 || proratedBudgetedGoals > 0 || proratedBudgetedDebt > 0) {
-          const threshold = Math.max(Math.abs(netBudgetedProrated * 0.05), 50); // 5% or KES 50 threshold for weekly
+          const threshold = Math.max(Math.abs(netBudgetedProrated * 0.05), 50);
           if (Math.abs(variance) <= threshold) varianceStatus = 'on-track';
           else if (variance > 0) varianceStatus = 'favorable';
           else varianceStatus = 'unfavorable';
       }
-
 
       return {
           totalIncome: income,
@@ -278,8 +264,20 @@ export default function WeeklyReviewPage() {
           toast({ title: "Action Denied", description: "You can only share reviews you own.", variant: "destructive" });
           return;
       }
+       // Ensure there's an owned review (even if empty) before allowing sharing
+       if (!ownedReviews[currentWeekKey] && userId) {
+            // Create a shell if it doesn't exist - this might happen if the user hasn't interacted with the week yet
+           setJournalEntry(currentWeekKey, '', userId);
+           // Optionally wait a tick or show a loading state before opening,
+           // but opening immediately should be fine as the store updates sync.
+           console.log(`Created shell for week ${currentWeekKey} before sharing.`);
+       }
       setIsShareDialogOpen(true);
   };
+
+  // --- UI ---
+  // Read-only state determination
+  const isReadOnly = activeTab === 'shared'; // Simplified read-only logic for shared tab
 
 
   return (
@@ -293,13 +291,11 @@ export default function WeeklyReviewPage() {
                  Review transactions, add comments, and journal your financial progress week by week.
              </p>
          </div>
-          {/* Share Button (only for owned reviews) */}
          <Button onClick={handleOpenShareDialog} variant="outline" disabled={activeTab !== 'owned'}>
              <Share2 className="mr-2 h-4 w-4" /> Share This Week
          </Button>
       </header>
 
-      {/* Week Navigation and Selection */}
        <Card className="shadow-sm">
            <CardContent className="p-4 flex items-center justify-between">
                <Button variant="outline" size="icon" onClick={goToPreviousWeek} aria-label="Previous week">
@@ -317,191 +313,159 @@ export default function WeeklyReviewPage() {
            </CardContent>
        </Card>
 
-        {/* Tabs for Owned and Shared Reviews */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 mb-4">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "owned" | "shared")}>
+             <TabsList className="grid w-full grid-cols-2 mb-4">
                  <TabsTrigger value="owned">My Reviews</TabsTrigger>
-                 <TabsTrigger value="shared">Shared With Me</TabsTrigger>
-            </TabsList>
+                 <TabsTrigger value="shared">Shared With Me ({Object.keys(sharedReviews).length})</TabsTrigger>
+             </TabsList>
 
-             {/* Owned Reviews Tab / Shared Review Display */}
-             {/* Combine content display logic based on activeTab */}
-             <TabsContent value={activeTab}> {/* Display based on activeTab */}
-                <div className="grid gap-6 lg:grid-cols-3">
-                    {/* Transaction List & Comments (Left/Main Panel) */}
-                    <div className="lg:col-span-2 space-y-4">
-                         {/* Search/Filter Input */}
-                         <div className="flex gap-2">
-                            <Input
-                                type="search"
-                                placeholder="Search transactions or comments..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="h-9"
-                             />
-                         </div>
-                        <Card className="shadow-sm">
-                            <CardHeader className="p-4 border-b">
-                                <CardTitle className="text-base">
-                                     {activeTab === 'shared' ? `Shared Review Transactions (Week ${currentWeekKey})` : 'Transactions for the Week'}
-                                </CardTitle>
-                                 <CardDescription>
-                                     {activeTab === 'shared' ? `Viewing review from owner ID: ${currentReviewOwnerId}. Click to view/add comments.` : 'Click a transaction to add/edit comments.'}
-                                 </CardDescription>
-                            </CardHeader>
-                            <CardContent className="p-0">
-                                <ScrollArea className="h-[400px] w-full">
-                                    <Table>
-                                        <TableHeader className="sticky top-0 bg-background z-10">
-                                             <TableRow>
-                                                 <TableHead className="w-[100px] pl-4">Date</TableHead>
-                                                 <TableHead>Description</TableHead>
-                                                 <TableHead>Category</TableHead>
-                                                 <TableHead className="text-right">Amount (KES)</TableHead>
-                                                 <TableHead className="w-[150px] text-center pr-4">Comment</TableHead>
-                                             </TableRow>
-                                         </TableHeader>
-                                        <TableBody>
-                                            {filteredTransactions.length > 0 ? (
-                                                filteredTransactions.map((tx) => {
-                                                    const comment = currentReview?.transactionComments?.[tx.id];
-                                                    return (
-                                                        <TableRow
-                                                            key={tx.id}
-                                                            className="cursor-pointer hover:bg-muted/50"
-                                                            onClick={() => handleAddCommentClick(tx)}
-                                                            title={comment ? `Comment: ${comment}` : 'Add Comment'}
-                                                        >
-                                                            <TableCell className="font-medium pl-4">{formatDate(tx.date)}</TableCell>
-                                                            <TableCell className="max-w-[200px] truncate">{tx.description}</TableCell>
-                                                            <TableCell className="text-xs">
-                                                                {formatCategoryBadge(tx.frequency)}
-                                                                {formatCategoryBadge(tx.variability)}
-                                                            </TableCell>
-                                                            <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
-                                                                {formatCurrency(tx.amount)}
-                                                            </TableCell>
-                                                            <TableCell className="text-center pr-4 text-xs">
-                                                                {comment ? (
-                                                                    <div className="flex items-center justify-center gap-1">
-                                                                        <MessageSquareText size={14} className="text-blue-500" />
-                                                                         <span className='italic truncate max-w-[80px]'>"{comment}"</span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-muted-foreground italic">No comment</span>
-                                                                )}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    );
-                                                })
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                                        {searchTerm ? 'No transactions match your search.' : 'No transactions found for this week.'}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </ScrollArea>
-                            </CardContent>
-                        </Card>
+             {/* Owned Reviews Tab Content */}
+             <TabsContent value="owned">
+                 {/* Layout for Owned Reviews */}
+                 <div className="grid gap-6 lg:grid-cols-3">
+                      {/* Transaction List & Comments (Left/Main Panel) */}
+                      <div className="lg:col-span-2 space-y-4">
+                           <div className="flex gap-2">
+                              <Input type="search" placeholder="Search your transactions or comments..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-9" />
+                           </div>
+                          <Card className="shadow-sm">
+                              <CardHeader className="p-4 border-b"><CardTitle className="text-base">Transactions & Comments</CardTitle><CardDescription>Click a transaction to add/edit comments.</CardDescription></CardHeader>
+                              <CardContent className="p-0">
+                                  <ScrollArea className="h-[400px] w-full">
+                                      <Table>
+                                          <TableHeader className="sticky top-0 bg-background z-10">
+                                               <TableRow><TableHead className="w-[100px] pl-4">Date</TableHead><TableHead>Description</TableHead><TableHead>Category</TableHead><TableHead className="text-right">Amount (KES)</TableHead><TableHead className="w-[150px] text-center pr-4">Comment</TableHead></TableRow>
+                                           </TableHeader>
+                                          <TableBody>
+                                              {filteredTransactions.length > 0 ? (
+                                                  filteredTransactions.map((tx) => {
+                                                      const comment = currentReview?.transactionComments?.[tx.id];
+                                                      return (
+                                                          <TableRow key={tx.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleAddCommentClick(tx)} title={comment ? `Comment: ${comment}` : 'Add Comment'}>
+                                                              <TableCell className="font-medium pl-4">{formatDate(tx.date)}</TableCell>
+                                                              <TableCell className="max-w-[200px] truncate">{tx.description}</TableCell>
+                                                              <TableCell className="text-xs">{formatCategoryBadge(tx.frequency)}{formatCategoryBadge(tx.variability)}</TableCell>
+                                                              <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(tx.amount)}</TableCell>
+                                                              <TableCell className="text-center pr-4 text-xs">
+                                                                  {comment ? (<div className="flex items-center justify-center gap-1"><MessageSquareText size={14} className="text-blue-500" /><span className='italic truncate max-w-[80px]'>"{comment}"</span></div>) : (<span className="text-muted-foreground italic">No comment</span>)}
+                                                              </TableCell>
+                                                          </TableRow>
+                                                      );
+                                                  })
+                                              ) : ( <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">{searchTerm ? 'No transactions match your search.' : 'No transactions found for this week.'}</TableCell></TableRow> )}
+                                          </TableBody>
+                                      </Table>
+                                  </ScrollArea>
+                              </CardContent>
+                          </Card>
+                      </div>
+                      {/* Weekly Summary & Journal (Right Panel) */}
+                      <div className="lg:col-span-1 space-y-4">
+                           <Card className="shadow-sm">
+                               <CardHeader className="p-4 pb-2"><CardTitle className="text-base">Week Summary</CardTitle></CardHeader>
+                               <CardContent className="p-4 text-sm space-y-2">
+                                   <div className="flex justify-between items-center"><span className="text-muted-foreground">Transactions:</span><span className="font-medium">{weeklyMetrics.transactionCount}</span></div>
+                                   <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><TrendingUp size={14}/> Income:</span><span className="font-mono font-semibold text-accent">{formatCurrency(weeklyMetrics.totalIncome)}</span></div>
+                                   <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><TrendingDown size={14}/> Expenses:</span><span className="font-mono font-semibold text-destructive">{formatCurrency(weeklyMetrics.totalExpenses)}</span></div>
+                                   <div className="flex justify-between items-center border-t pt-2 mt-2"><span className="text-muted-foreground flex items-center gap-1"><Scale size={14}/> Net Flow:</span><span className={cn("font-mono font-bold", weeklyMetrics.netCashFlow >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(weeklyMetrics.netCashFlow)}</span></div>
+                                   <div className="flex justify-between items-center text-xs pt-1"><span className="text-muted-foreground">Budget Variance:</span><span className={cn("font-mono font-semibold", weeklyMetrics.budgetVarianceStatus === 'favorable' && 'text-accent', weeklyMetrics.budgetVarianceStatus === 'unfavorable' && 'text-destructive', weeklyMetrics.budgetVarianceStatus === 'on-track' && 'text-primary', weeklyMetrics.budgetVarianceStatus === 'no-budget' && 'text-muted-foreground italic')}>{weeklyMetrics.budgetVarianceStatus === 'no-budget' ? 'No Budget Data' : `${weeklyMetrics.budgetVariance >= 0 ? '+' : ''}${formatCurrency(weeklyMetrics.budgetVariance)} (${weeklyMetrics.budgetVarianceStatus.replace('-', ' ')})`}</span></div>
+                               </CardContent>
+                           </Card>
+                          <Card className="shadow-sm">
+                              <CardHeader className="p-4 pb-2 flex flex-row justify-between items-center">
+                                  <div><CardTitle className="text-base flex items-center gap-1"><BookOpen size={16}/> Weekly Journal</CardTitle><CardDescription className="text-xs">Reflect on your financial progress.</CardDescription></div>
+                                  {journalEntry && (<AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0" onClick={handleDeleteJournal}><Trash2 size={16} /><span className="sr-only">Delete Journal Entry</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}
+                              </CardHeader>
+                              <CardContent className="p-4 pt-0">
+                                  <Textarea placeholder="Write your journal entry here..." value={journalEntry} onChange={handleJournalChange} rows={8} className="w-full text-sm" disabled={!userId}/>
+                              </CardContent>
+                          </Card>
+                      </div>
+                 </div>
+             </TabsContent>
+
+             {/* Shared Reviews Tab Content */}
+             <TabsContent value="shared">
+                {Object.keys(sharedReviews).length > 0 ? (
+                    <div className="space-y-4">
+                        {/* TODO: Add a way to select *which* shared review to view if multiple exist for the same week */}
+                        {/* For now, displaying the first one found for the currentWeekKey */}
+                        {currentReview && currentReviewOwnerId !== userId ? (
+                            <Alert>
+                                <Users className="h-4 w-4" />
+                                <AlertTitle>Viewing Shared Review</AlertTitle>
+                                <AlertDescription>
+                                    You are viewing the review for week {currentWeekKey} shared by user ID: {currentReviewOwnerId}. You cannot edit this review or its comments.
+                                </AlertDescription>
+                            </Alert>
+                        ) : (
+                             <Alert variant="destructive">
+                                 <AlertTriangleIcon className="h-4 w-4" />
+                                 <AlertTitle>No Shared Review Selected</AlertTitle>
+                                 <AlertDescription>No shared review found or selected for week {currentWeekKey}.</AlertDescription>
+                             </Alert>
+                        )}
+
+                         {/* Display shared review content (read-only) - Uses the same layout structure */}
+                        {currentReview && currentReviewOwnerId !== userId && (
+                             <div className="grid gap-6 lg:grid-cols-3">
+                                  {/* Transaction List (Read-Only) */}
+                                  <div className="lg:col-span-2 space-y-4">
+                                      <Card className="shadow-sm">
+                                          <CardHeader className="p-4 border-b"><CardTitle className="text-base">Shared Transactions</CardTitle><CardDescription>View transactions and comments for this shared week.</CardDescription></CardHeader>
+                                          <CardContent className="p-0">
+                                              <ScrollArea className="h-[400px] w-full">
+                                                  {/* Note: Shared reviews don't inherently contain transactions. We show the OWNER's transactions for that week. */}
+                                                  {/* This might need adjustment based on exact sharing requirements (e.g., share only comments/journal?) */}
+                                                  {/* Assuming for now, viewing shared review shows owner's transactions + their comments */}
+                                                  <Table>
+                                                       <TableHeader className="sticky top-0 bg-background z-10">
+                                                           <TableRow><TableHead className="w-[100px] pl-4">Date</TableHead><TableHead>Description</TableHead><TableHead>Category</TableHead><TableHead className="text-right">Amount (KES)</TableHead><TableHead className="w-[150px] text-center pr-4">Comment</TableHead></TableRow>
+                                                       </TableHeader>
+                                                      <TableBody>
+                                                          {transactionsForWeek.length > 0 ? ( // Show owner's transactions
+                                                              transactionsForWeek.map((tx) => {
+                                                                  const comment = currentReview?.transactionComments?.[tx.id];
+                                                                  return (
+                                                                      <TableRow key={tx.id} title={comment ? `Comment: ${comment}` : 'No Comment (Read-only)'}>
+                                                                          <TableCell className="font-medium pl-4">{formatDate(tx.date)}</TableCell>
+                                                                          <TableCell className="max-w-[200px] truncate">{tx.description}</TableCell>
+                                                                          <TableCell className="text-xs">{formatCategoryBadge(tx.frequency)}{formatCategoryBadge(tx.variability)}</TableCell>
+                                                                          <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(tx.amount)}</TableCell>
+                                                                          <TableCell className="text-center pr-4 text-xs">
+                                                                               {comment ? (<div className="flex items-center justify-center gap-1"><MessageSquareText size={14} className="text-blue-500" /><span className='italic truncate max-w-[80px]'>"{comment}"</span></div>) : (<span className="text-muted-foreground italic">No comment</span>)}
+                                                                          </TableCell>
+                                                                      </TableRow>
+                                                                  );
+                                                              })
+                                                          ) : ( <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">No transactions found for the owner this week.</TableCell></TableRow> )}
+                                                      </TableBody>
+                                                  </Table>
+                                              </ScrollArea>
+                                          </CardContent>
+                                      </Card>
+                                  </div>
+                                  {/* Journal (Read-Only) */}
+                                  <div className="lg:col-span-1 space-y-4">
+                                      <Card className="shadow-sm">
+                                          <CardHeader className="p-4 pb-2"><CardTitle className="text-base flex items-center gap-1"><BookOpen size={16}/> Shared Journal</CardTitle></CardHeader>
+                                          <CardContent className="p-4 pt-0">
+                                              <Textarea placeholder="Journal entry (read-only)..." value={journalEntry} rows={8} className="w-full text-sm bg-muted/50 cursor-not-allowed" disabled={true}/>
+                                              {!journalEntry && (<p className='text-xs italic text-muted-foreground mt-2 text-center py-4'>No journal entry shared for this week.</p>)}
+                                          </CardContent>
+                                      </Card>
+                                  </div>
+                             </div>
+                        )}
                     </div>
-
-                     {/* Weekly Summary & Journal (Right Panel) */}
-                     <div className="lg:col-span-1 space-y-4">
-                         {/* Weekly Metrics Card */}
-                         <Card className="shadow-sm">
-                             <CardHeader className="p-4 pb-2">
-                                <CardTitle className="text-base">Week Summary</CardTitle>
-                             </CardHeader>
-                             <CardContent className="p-4 text-sm space-y-2">
-                                 <div className="flex justify-between items-center">
-                                     <span className="text-muted-foreground">Transactions:</span>
-                                     <span className="font-medium">{weeklyMetrics.transactionCount}</span>
-                                 </div>
-                                 <div className="flex justify-between items-center">
-                                      <span className="text-muted-foreground flex items-center gap-1"><TrendingUp size={14}/> Income:</span>
-                                      <span className="font-mono font-semibold text-accent">{formatCurrency(weeklyMetrics.totalIncome)}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center">
-                                      <span className="text-muted-foreground flex items-center gap-1"><TrendingDown size={14}/> Expenses:</span>
-                                      <span className="font-mono font-semibold text-destructive">{formatCurrency(weeklyMetrics.totalExpenses)}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center border-t pt-2 mt-2">
-                                      <span className="text-muted-foreground flex items-center gap-1"><Scale size={14}/> Net Flow:</span>
-                                       <span className={cn("font-mono font-bold", weeklyMetrics.netCashFlow >= 0 ? 'text-accent' : 'text-destructive')}>
-                                           {formatCurrency(weeklyMetrics.netCashFlow)}
-                                       </span>
-                                   </div>
-                                  {/* Budget Variance Display */}
-                                  <div className="flex justify-between items-center text-xs pt-1">
-                                      <span className="text-muted-foreground">Budget Variance:</span>
-                                      <span className={cn("font-mono font-semibold",
-                                          weeklyMetrics.budgetVarianceStatus === 'favorable' && 'text-accent',
-                                          weeklyMetrics.budgetVarianceStatus === 'unfavorable' && 'text-destructive',
-                                          weeklyMetrics.budgetVarianceStatus === 'on-track' && 'text-primary', // Or accent?
-                                          weeklyMetrics.budgetVarianceStatus === 'no-budget' && 'text-muted-foreground italic'
-                                      )}>
-                                          {weeklyMetrics.budgetVarianceStatus === 'no-budget'
-                                              ? 'No Budget Data'
-                                              : `${weeklyMetrics.budgetVariance >= 0 ? '+' : ''}${formatCurrency(weeklyMetrics.budgetVariance)} (${weeklyMetrics.budgetVarianceStatus.replace('-', ' ')})`}
-                                      </span>
-                                  </div>
-                             </CardContent>
-                         </Card>
-
-                         {/* Journal Card with Delete Button */}
-                        <Card className="shadow-sm">
-                            <CardHeader className="p-4 pb-2 flex flex-row justify-between items-center">
-                                <div>
-                                    <CardTitle className="text-base flex items-center gap-1"><BookOpen size={16}/> Weekly Journal</CardTitle>
-                                    <CardDescription className="text-xs">Reflect on financial progress, challenges, and goals.</CardDescription>
-                                </div>
-                                {/* Delete Journal Button - Visible only on owned tab and if journal has content */}
-                                {activeTab === 'owned' && journalEntry && (
-                                    <AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0" onClick={handleDeleteJournal}>
-                                                <Trash2 size={16} />
-                                                <span className="sr-only">Delete Journal Entry</span>
-                                            </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent>
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.
-                                                </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                <AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                )}
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0">
-                                <Textarea
-                                    placeholder={activeTab === 'owned' ? "Write your journal entry here..." : "Journal entry (read-only)..."}
-                                    value={journalEntry}
-                                    onChange={handleJournalChange}
-                                    rows={8}
-                                    className="w-full text-sm"
-                                    // Disable editing if viewing a shared review
-                                    disabled={activeTab === 'shared'}
-                                />
-                                {activeTab === 'shared' && !journalEntry && (
-                                    <p className='text-xs italic text-muted-foreground mt-2 text-center py-4'>No journal entry shared for this week.</p>
-                                )}
-                                {activeTab === 'shared' && journalEntry && (
-                                     <p className='text-xs italic text-muted-foreground mt-2'>You are viewing a shared journal entry.</p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
+                ) : (
+                    <Card className="text-center py-10">
+                        <CardContent>
+                            <Users className="mx-auto h-12 w-12 text-muted-foreground/50 mb-2" />
+                            <p className="text-muted-foreground">No reviews have been shared with you yet.</p>
+                        </CardContent>
+                    </Card>
+                 )}
              </TabsContent>
         </Tabs>
 
@@ -516,26 +480,23 @@ export default function WeeklyReviewPage() {
             </DialogDescription>
           </DialogHeader>
           <Textarea
-            placeholder="Add your comment here..."
+            placeholder={activeTab === 'owned' ? "Add your comment here..." : "Comment (read-only)..."}
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             rows={4}
             className="w-full"
-            // Disable if viewing a shared review and not the owner
-            disabled={activeTab === 'shared' && currentReviewOwnerId !== userId}
+            disabled={isReadOnly} // Disable if viewing shared review
           />
           <DialogFooter>
-              {/* Delete Comment Button - Conditionally Rendered */}
-              {commentingTransaction && currentReview?.transactionComments?.[commentingTransaction.id] && (
-                   // Allow deletion if owner or if collaborator on shared review
-                   (currentReviewOwnerId === userId || (activeTab === 'shared' && sharedReviews[currentWeekKey]?.sharedWith?.includes(userId || ''))) && (
-                      <Button variant="destructive" onClick={() => handleDeleteCommentClick(commentingTransaction!.id)} className="mr-auto">
-                           <Trash2 className="mr-1 h-4 w-4"/> Delete Comment
-                       </Button>
-                   )
+              {/* Delete Comment Button - Show only if viewing owned review and comment exists */}
+              {activeTab === 'owned' && commentingTransaction && currentReview?.transactionComments?.[commentingTransaction.id] && (
+                   <Button variant="destructive" onClick={() => handleDeleteCommentClick(commentingTransaction!.id)} className="mr-auto">
+                        <Trash2 className="mr-1 h-4 w-4"/> Delete Comment
+                    </Button>
                )}
             <Button type="button" variant="outline" onClick={() => setIsCommentDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveComment} disabled={activeTab === 'shared' && currentReviewOwnerId !== userId}>Save Comment</Button>
+             {/* Disable save button if viewing shared review */}
+            <Button onClick={handleSaveComment} disabled={isReadOnly}>Save Comment</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -546,7 +507,8 @@ export default function WeeklyReviewPage() {
            <AlertDialogHeader>
              <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
              <AlertDialogDescription>
-               Are you sure you want to delete this comment? "{commentToDelete?.comment}"
+                {/* Ensure commentToDelete exists before accessing properties */}
+               Are you sure you want to delete this comment? "{commentToDelete?.comment || ''}"
              </AlertDialogDescription>
            </AlertDialogHeader>
            <AlertDialogFooter>
@@ -555,6 +517,23 @@ export default function WeeklyReviewPage() {
            </AlertDialogFooter>
          </AlertDialogContent>
        </AlertDialog>
+
+       {/* Delete Journal Confirmation Dialog */}
+       <AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}>
+           <AlertDialogContent>
+               <AlertDialogHeader>
+                   <AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle>
+                   <AlertDialogDescription>
+                       Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.
+                   </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                   <AlertDialogCancel>Cancel</AlertDialogCancel>
+                   <AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction>
+               </AlertDialogFooter>
+           </AlertDialogContent>
+       </AlertDialog>
+
 
         {/* Share Review Dialog */}
         <ShareReviewDialog
@@ -566,3 +545,5 @@ export default function WeeklyReviewPage() {
     </div>
   );
 }
+
+    
