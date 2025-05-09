@@ -35,7 +35,7 @@
  import { ThemeToggle } from "./ThemeToggle";
  import { useNotificationStore } from "@/store/notificationStore";
  import { Badge } from "@/components/ui/badge";
- import { UserButton, useUser } from "@clerk/nextjs"; // Clerk
+ import { UserButton, useUser } from "@clerk/nextjs";
  import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
  import { ScrollArea } from "./scroll-area";
  import { logInfo, logWarn, logDebug } from "@/lib/logger";
@@ -56,7 +56,6 @@
    { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
    { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
    { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-   // { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Logger page removed from menu
  ];
 
  export type SidebarState = "collapsed" | "expanded";
@@ -87,15 +86,14 @@
    children,
  }) => {
    const isMobile = useIsMobile();
-   const [state, setState] = React.useState<SidebarState>(isMobile ? "collapsed" : "expanded"); // Default to expanded on desktop
+   const [state, setState] = React.useState<SidebarState>(isMobile ? "collapsed" : "expanded");
 
    React.useEffect(() => {
      if (isMobile) {
        setState("collapsed");
      } else {
-       // Optionally, restore a persisted preference for desktop, or default to expanded/collapsed
-       // For now, let's default to 'expanded' on desktop if not mobile, or keep current if already set.
-       // The initial state above already handles desktop default to expanded.
+       // On desktop, maintain current state or default to expanded if transitioning from mobile
+       // setState("expanded"); // Or keep current if preferred
      }
    }, [isMobile]);
 
@@ -103,14 +101,7 @@
    const collapseSidebar = () => setState("collapsed");
    const expandSidebar = () => setState("expanded");
    const toggleSidebar = () => {
-     if (isMobile) { // On mobile, toggling always leads to expanded (sheet opens) or implies closed.
-       // The sheet itself handles its open/close state, so this toggle is more for desktop.
-       // However, if we want a unified 'state', this needs careful thought for mobile.
-       // For now, assume this toggle is primarily for desktop persistent state.
-       setState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
-     } else {
-       setState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
-     }
+     setState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
    };
 
 
@@ -134,15 +125,14 @@
    React.HTMLAttributes<HTMLDivElement>
  >(({ className, ...props }, ref) => {
    const { state, toggleSidebar } = useSidebar();
-   const serverPathname = usePathname(); // Get initial pathname (might be null on server)
+   const pathname = usePathname(); // Raw pathname, null on server
+
+   // Client-side state for pathname to avoid hydration mismatch
    const [clientPathname, setClientPathname] = React.useState<string | null>(null);
-
    React.useEffect(() => {
-     // This runs only on the client after hydration
-     setClientPathname(window.location.pathname);
-   }, []);
+     setClientPathname(pathname);
+   }, [pathname]);
 
-   const currentPathname = clientPathname ?? serverPathname; // Use client pathname once available
 
    const unreadCount = useNotificationStore(state => state.unreadCount());
    const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
@@ -232,11 +222,11 @@
                <Tooltip>
                  <TooltipTrigger asChild>
                    <Button
-                     variant={currentPathname === item.href ? "primary" : "ghost"}
+                     variant={clientPathname === item.href ? "primary" : "ghost"}
                      className={cn(
                        "w-full justify-start text-sm h-9",
                        state === "collapsed" && "justify-center px-0 w-9 h-9",
-                       currentPathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                       clientPathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                      )}
                      asChild
                    >
@@ -334,11 +324,11 @@
    HTMLDivElement,
    React.HTMLAttributes<HTMLDivElement> & {
      side?: "left" | "right";
-     variant?: "sidebar" | "navigation"; // Keep variant prop if used for styling
-     collapsible?: "icon" | "full"; // Keep collapsible prop if used
+     variant?: "sidebar" | "navigation";
+     collapsible?: "icon" | "full";
    }
  >(({ className, side = "left", variant = "sidebar", collapsible = "icon", ...props }, ref) => {
-   const { isMobile } = useSidebar(); // isMobile from context
+   const { isMobile } = useSidebar();
 
    if (isMobile) {
      return (
@@ -351,16 +341,14 @@
          </SheetTrigger>
          <SheetContent side={side} className={cn(
              "w-64 p-0 border-r-sidebar-border",
-             variant === "navigation" && "bg-card text-card-foreground" // Example conditional styling
+             variant === "navigation" && "bg-card text-card-foreground"
          )}>
-           {/* Pass all relevant props including data-attributes for consistency if SidebarBase uses them */}
            <SidebarBase
-             ref={ref} // Pass ref
+             ref={ref}
              className={cn(className, variant === "navigation" && "bg-card text-card-foreground")}
              data-side={side}
              data-variant={variant}
              data-collapsible={collapsible}
-             // data-state will be derived from context within SidebarBase
              {...props}
            />
          </SheetContent>
@@ -368,22 +356,18 @@
      );
    }
 
-   // Desktop view (Div)
    return (
      <div
-       ref={ref} // Pass ref
+       ref={ref}
        className={cn(
          "group/sidebar peer hidden md:block text-sidebar-foreground",
          className
        )}
-       // Data attributes are managed by SidebarBase via context or props
-       // data-state={state} // state is from useSidebar inside SidebarBase
        data-collapsible={collapsible}
        data-variant={variant}
        data-side={side}
-       {...props} // Pass remaining props
+       {...props}
      >
-       {/* SidebarBase will use its own state from useSidebar context */}
        <SidebarBase
          className={cn(variant === "navigation" && "bg-card text-card-foreground")}
        />
@@ -435,4 +419,5 @@
    );
  });
  SidebarInset.displayName = "SidebarInset";
- 
+
+    
