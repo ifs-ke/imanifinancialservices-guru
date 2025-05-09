@@ -25,31 +25,30 @@
    Cloud,
    CloudOff,
    AlertTriangle,
-   ClipboardList, // Changed from Logger to ClipboardList
+   ClipboardList,
    RefreshCw,
    Menu,
-   UserCircle // Placeholder for UserButton
+   // Removed UserCircle as UserButton will be used
  } from "lucide-react";
  import Link from "next/link";
  import { useSyncManager } from "@/hooks/useSyncManager";
- import { ThemeToggle } from "../ui/ThemeToggle"; // Ensure correct import path
+ import { ThemeToggle } from "../ui/ThemeToggle";
  import { useNotificationStore } from "@/store/notificationStore";
  import { Badge } from "@/components/ui/badge";
- // import { UserButton, useUser } from "@clerk/nextjs"; // Clerk disabled
+ import { UserButton, useUser } from "@clerk/nextjs";
  import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
- import { ScrollArea } from "../ui/scroll-area"; // Ensure correct import path
- import { useSidebar } from "../ui/sidebar"; // Ensure correct import path
+ import { ScrollArea } from "../ui/scroll-area";
+ import { useSidebar } from "../ui/sidebar";
+ import { PieChart } from "lucide-react";
+ import { logInfo, logWarn } from "@/lib/logger";
 
 
- // Placeholder user data when Clerk is disabled
- const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
- const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
- const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
+// Removed CLERK_DISABLED_PLACEHOLDER constants
 
  interface SidebarMenuItem {
    href: string;
    label: string;
-   icon: React.ReactNode; // Lucide icons are ReactNode
+   icon: React.ReactNode;
  }
 
  const menuItems: SidebarMenuItem[] = [
@@ -58,27 +57,20 @@
    { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
    { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
    { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
-   { href: "/budget", label: "Budget", icon: <TrendingUp size={18} /> },
+   { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
    { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
    { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-   { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Added logger link back with correct icon
+   { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
  ];
 
- // Component for the actual sidebar content (used in both desktop and mobile sheet)
  const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
    ({ className, ...props }, ref) => {
      const { state, toggleSidebar } = useSidebar();
      const pathname = usePathname();
      const unreadCount = useNotificationStore(state => state.unreadCount());
-     // const { user } = useUser(); // Clerk disabled
-     // Mock user when Clerk is disabled
-     const user = {
-         id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
-         fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
-         primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL },
-     };
+     const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser(); // Use Clerk's useUser hook
      const syncManager = useSyncManager();
-     const { syncStatus, retrySync, hashMismatch } = syncManager;
+     const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
 
      let PersistenceIcon: React.ElementType = CloudOff;
      let persistenceStatusText = 'Local';
@@ -86,21 +78,49 @@
      let iconColor = 'text-muted-foreground';
      let isClickable = true;
 
-     switch (syncStatus) {
-       case 'syncing': PersistenceIcon = RefreshCw; persistenceStatusText = 'Syncing...'; persistenceTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary animate-spin'; isClickable = false; break;
-       case 'synced': PersistenceIcon = Cloud; persistenceStatusText = 'Synced'; persistenceTooltipText = 'Data synced with cloud.'; iconColor = 'text-accent'; isClickable = false; break;
-       case 'error': PersistenceIcon = AlertTriangle; persistenceStatusText = hashMismatch ? 'Conflict' : 'Sync Error'; persistenceTooltipText = hashMismatch ? 'Data mismatch detected. Click to resolve.' : 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; isClickable = true; break;
-       case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local'; persistenceTooltipText = "Data saved locally. Click to sync."; iconColor = 'text-muted-foreground'; isClickable = true; break;
+     if (!isClerkLoaded) { // If Clerk is still loading, show an indeterminate state for sync
+        PersistenceIcon = RefreshCw;
+        persistenceStatusText = 'Auth Loading...';
+        persistenceTooltipText = 'Waiting for authentication status...';
+        iconColor = 'text-muted-foreground animate-spin';
+        isClickable = false;
+     } else if (!isSignedIn) { // If not signed in, sync is not possible
+        PersistenceIcon = CloudOff;
+        persistenceStatusText = 'Offline';
+        persistenceTooltipText = 'Sign in to enable cloud sync.';
+        iconColor = 'text-muted-foreground';
+        isClickable = false; // Cannot sync if not signed in
+     } else { // User is signed in and Clerk is loaded
+        switch (syncStatus) {
+          case 'syncing': PersistenceIcon = RefreshCw; persistenceStatusText = 'Syncing...'; persistenceTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary animate-spin'; isClickable = false; break;
+          case 'synced': PersistenceIcon = Cloud; persistenceStatusText = 'Synced'; persistenceTooltipText = 'Data synced with cloud.'; iconColor = 'text-accent'; isClickable = false; break;
+          case 'error':
+            PersistenceIcon = AlertTriangle;
+            persistenceStatusText = hashMismatch ? 'Conflict' : 'Sync Error';
+            persistenceTooltipText = hashMismatch ? 'Data mismatch detected. Click to resolve.' : 'Sync failed. Click to retry.';
+            iconColor = 'text-destructive';
+            isClickable = true;
+            break;
+          case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local'; persistenceTooltipText = "Data saved locally. Click to sync."; iconColor = 'text-muted-foreground'; isClickable = true; break;
+        }
      }
 
-     const handleSyncClick = () => { if (isClickable) retrySync(); };
+
+     const handleSyncClick = () => {
+       if (!isClerkLoaded || !isSignedIn) {
+         logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded });
+         // Optionally, trigger sign-in flow or show a message
+         return;
+       }
+       if (isClickable) retrySync();
+     };
 
      return (
        <div
          ref={ref}
          className={cn(
            "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear border-r border-sidebar-border",
-           state === "expanded" ? "w-64" : "w-14", // Use fixed widths for consistency
+           state === "expanded" ? "w-64" : "w-14",
            className
          )}
          {...props}
@@ -176,7 +196,7 @@
          </ScrollArea>
 
          <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
-           <ThemeToggle />
+           <ThemeToggle sidebarState={state} />
 
            <TooltipProvider delayDuration={100}>
              <Tooltip>
@@ -187,12 +207,14 @@
                    className={cn(
                      "w-full justify-start text-sm h-9",
                      state === "collapsed" && "justify-center px-0 w-9 h-9",
-                     "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                     "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                      // Add blinking/pulsing animation if there's a hash mismatch dialog open
+                     isMismatchDialogOpen && "animate-pulse border-destructive ring-2 ring-destructive"
                    )}
                    aria-label={persistenceTooltipText}
                    disabled={!isClickable}
                  >
-                   {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor) })}
+                   {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor, isMismatchDialogOpen && "text-destructive") })}
                    <span className={cn("ml-2 truncate text-xs", state === "collapsed" && "hidden")}>
                      {persistenceStatusText}
                    </span>
@@ -206,15 +228,25 @@
              </Tooltip>
            </TooltipProvider>
 
-           {/* Placeholder for UserButton when Clerk is disabled */}
            <div className={cn(
-               "flex items-center",
+               "flex items-center w-full",
                state === 'collapsed' ? "justify-center py-1" : "p-1"
            )}>
-              <UserCircle size={24} className="text-sidebar-muted-foreground" />
-             {state === 'expanded' && (
-                <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user?.primaryEmailAddress?.emailAddress}>
-                     {user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? 'User'}
+              {isLoaded && isSignedIn && user ? ( // Only show UserButton if loaded, signed in, and user object exists
+                <UserButton afterSignOutUrl="/" appearance={{
+                    elements: {
+                        userButtonAvatarBox: state === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
+                        userButtonPopoverCard: "bg-popover border-border",
+                    }
+                }}/>
+              ) : (
+                 <div className="h-8 w-8 flex items-center justify-center"> {/* Placeholder if not signed in or loading */}
+                    {/* Optionally show a different icon or nothing */}
+                 </div>
+              )}
+             {state === 'expanded' && isLoaded && isSignedIn && user && (
+                <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
+                     {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
                 </span>
              )}
            </div>
@@ -225,7 +257,6 @@
  );
  SidebarContent.displayName = "SidebarContent";
 
- // Main Sidebar component that decides whether to render Sheet or static Sidebar
  export const Sidebar = React.forwardRef<
    HTMLDivElement,
    React.HTMLAttributes<HTMLDivElement>
@@ -248,7 +279,6 @@
      );
    }
 
-   // Desktop view (Fixed Position Div)
    return (
      <div
        ref={ref}
@@ -259,3 +289,46 @@
    );
  });
  Sidebar.displayName = "Sidebar";
+
+ export const SidebarRail = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  const { state, isMobile } = useSidebar();
+
+  if (isMobile) return null;
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "hidden md:block flex-shrink-0 transition-[width] duration-200 ease-linear",
+        state === "expanded" ? "w-64" : "w-14",
+        className
+      )}
+      {...props}
+    />
+  );
+});
+SidebarRail.displayName = "SidebarRail";
+
+export const SidebarInset = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+   const { state, isMobile } = useSidebar();
+   const marginLeftClass = isMobile ? 'ml-0' : (state === 'expanded' ? 'md:ml-64' : 'md:ml-14');
+
+   return (
+     <div
+       ref={ref}
+       className={cn(
+         "flex-1 transition-[margin-left] duration-200 ease-linear",
+          marginLeftClass,
+         className
+       )}
+       {...props}
+     />
+   );
+});
+SidebarInset.displayName = "SidebarInset";

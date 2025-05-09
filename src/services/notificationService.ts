@@ -21,7 +21,7 @@
      const budgetItems = useBudgetStore(state => state.budgetItems);
      const allTransactions = useTransactionsStore(state => state.transactions);
      const existingNotifications = useNotificationStore(state => state.notifications);
-     const { userId, isSignedIn } = useAuth(); // Use actual userId from Clerk
+     const { userId, isSignedIn } = useAuth(); // Use actual userId and isSignedIn from Clerk
 
      const monthlyAnalysis = useMemo(() => {
          const now = new Date();
@@ -61,89 +61,97 @@
      }, [allTransactions, budgetItems]);
 
      useEffect(() => {
-         if (!isSignedIn || !userId) return; // Don't run if user is not signed in
+         if (!isSignedIn || !userId) return; // Don't run if user is not signed in or userId is not available
 
          const { actualSpendingByCategory, budgetByCategory } = monthlyAnalysis;
-         const generatedNotificationKeys = new Set<string>();
+         const generatedNotificationKeys = new Set<string>(); // To avoid duplicate notifications in one cycle
 
          for (const budgetKey in budgetByCategory) {
              const budgetedAmount = budgetByCategory[budgetKey];
              const actualAmount = actualSpendingByCategory[budgetKey] || 0;
               const description = budgetKey.substring(budgetKey.indexOf('-') + 1);
 
-             if (budgetedAmount <= 0) continue;
+             if (budgetedAmount <= 0) continue; // Skip if no budget allocated
 
              const spendingRatio = actualAmount / budgetedAmount;
              const logContext = { userId, budgetCategory: description, budgetedAmount, actualAmount, spendingRatio };
 
+             // Check for Over Budget
              if (spendingRatio >= OVERBUDGET_THRESHOLD_PERCENT) {
                  const notifKey = `overbudget-${budgetKey}`;
                  const notifTitle = 'Over Budget Alert';
+                  // Check if an unread "over budget" notification for this specific item already exists
                   const existingUnread = existingNotifications.find(n =>
-                       n.message.includes(`"${description}"`) &&
+                       n.message.includes(`"${description}"`) && // More specific message check
                        n.title === notifTitle &&
-                       n.type === 'budget' &&
+                       n.type === 'budget' && // Ensure it's a budget alert type
                        !n.read
                   );
 
                  if (!existingUnread && !generatedNotificationKeys.has(notifKey)) {
                      addNotification({
-                         type: 'budget',
+                         type: 'budget', // Specific type for over-budget
                          title: notifTitle,
                          message: `You've spent ${formatCurrency(actualAmount)} out of ${formatCurrency(budgetedAmount)} budgeted for "${description}".`,
-                         link: '/budget',
+                         link: '/budget', // Link to budget page
                      });
                       logError(`Over budget for "${description}"`, undefined, logContext);
                       generatedNotificationKeys.add(notifKey);
                  }
              }
+             // Check for Budget Warning (only if not already over budget)
              else if (spendingRatio >= BUDGET_WARNING_THRESHOLD_PERCENT) {
                  const notifKey = `warning-${budgetKey}`;
                  const notifTitle = 'Budget Warning';
+                 // Check if an unread "warning" notification for this specific item already exists
                  const existingUnread = existingNotifications.find(n =>
-                     n.message.includes(`"${description}"`) &&
+                     n.message.includes(`"${description}"`) && // More specific message check
                      n.title === notifTitle &&
-                     n.type === 'warning' &&
+                     n.type === 'warning' && // Ensure it's a warning type
                      !n.read
                  );
 
                  if (!existingUnread && !generatedNotificationKeys.has(notifKey)) {
                      addNotification({
-                         type: 'warning',
+                         type: 'warning', // Specific type for warning
                          title: notifTitle,
                          message: `Approaching budget limit for "${description}". Spent ${formatCurrency(actualAmount)} of ${formatCurrency(budgetedAmount)}.`,
-                         link: '/budget',
+                         link: '/budget', // Link to budget page
                      });
                       logWarn(`Budget warning for "${description}"`, logContext);
                       generatedNotificationKeys.add(notifKey);
                  }
              }
          }
-     }, [monthlyAnalysis, addNotification, userId, isSignedIn, existingNotifications]); // Added isSignedIn
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+     }, [monthlyAnalysis, addNotification, userId, isSignedIn, existingNotifications]); // Added isSignedIn and existingNotifications
 
-     return null;
+     return null; // This hook doesn't render anything
  }
 
+ // Function to trigger a collaboration notification
  export function triggerCollaborationNotification(sharerName: string, weekKey: string, recipientUserId: string) {
      const addNotification = useNotificationStore.getState().addNotification;
      addNotification({
          type: 'collaboration',
          title: 'Review Shared With You',
          message: `${sharerName || 'A user'} shared their weekly review (${weekKey}) with you.`,
-         link: '/weekly-review?tab=shared',
+         link: '/weekly-review?tab=shared', // Link to the shared tab of weekly review
      });
+      // Log this action, including the recipient
       logInfo(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, {
           sharerName,
           weekKey,
-          recipientUserId,
-          type: 'collaboration_received'
+          recipientUserId, // Important for tracking who received the notification
+          type: 'collaboration_received' // Differentiate from a general collaboration event if needed
       });
  }
 
+ // Function to trigger a general application update notification
  export function triggerAppUpdateNotification(title: string, message: string, link?: string) {
      const addNotification = useNotificationStore.getState().addNotification;
      const newNotif = addNotification({
-         type: 'update',
+         type: 'update', // 'update' type for app changes
          title: title,
          message: message,
          link: link,

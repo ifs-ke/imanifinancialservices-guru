@@ -25,9 +25,6 @@ import { ClerkProvider } from '@clerk/nextjs'; // Re-enable Clerk
 export const metadata: Metadata = {
   title: 'IFC - Guru',
   description: 'Take control of your finances and conquer your debt.',
-  // icons: { // Consider adding favicons here
-  //   icon: '/favicon.ico',
-  // },
 };
 
 export default function RootLayout({

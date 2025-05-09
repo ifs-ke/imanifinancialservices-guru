@@ -52,12 +52,12 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
       const users = await getSharedWithUsersApi(weekKey);
       setSharedWithList(users);
     } catch (error: any) {
-      logError("Failed to fetch shared list:", error, { weekKey });
+      logError("Failed to fetch shared list:", error, { weekKey, userId: user?.id });
       toast({ title: 'Error', description: `Could not load shared users: ${error.message}`, variant: 'destructive' });
     } finally {
       setIsLoadingList(false);
     }
-  }, [isOpen, weekKey, toast, isSignedIn]);
+  }, [isOpen, weekKey, toast, isSignedIn, user?.id]);
 
   useEffect(() => {
     if (isOpen && isSignedIn) { // Fetch only if dialog is open and user is signed in
@@ -102,7 +102,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
         setSearchError('User not found.');
       }
     } catch (error: any) {
-      logError("Search user failed", error, { emailToShare });
+      logError("Search user failed", error, { emailToShare, userId: user?.id });
       setSearchError(`Search failed: ${error.message}`);
     } finally {
       setIsSearching(false);
@@ -127,7 +127,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
       setSearchResult(null);
       setSearchError(null);
     } catch (error: any) {
-      logError("Share review failed", error, { weekKey, targetUserId: searchResult.userId });
+      logError("Share review failed", error, { weekKey, targetUserId: searchResult.userId, userId: user?.id });
       toast({ title: 'Error Sharing', description: error.message, variant: 'destructive' });
     } finally {
       setIsSharing(false);
@@ -135,7 +135,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   };
 
   const handleRevokeClick = async (targetUserId: string) => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !user) { // Check user and isSignedIn
         toast({ title: "Not Authenticated", description: "Please sign in to manage sharing.", variant: "destructive"});
         return;
     }
@@ -146,7 +146,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
       toast({ title: 'Access Revoked', description: `Sharing revoked from ${revokedUser?.name || revokedUser?.email || targetUserId}.` });
       setSharedWithList(prev => prev.filter(u => u.userId !== targetUserId));
     } catch (error: any) {
-      logError("Revoke share failed", error, { weekKey, targetUserId });
+      logError("Revoke share failed", error, { weekKey, targetUserId, userId: user?.id });
       toast({ title: 'Error Revoking', description: error.message, variant: 'destructive' });
     } finally {
       setIsRevoking(null);

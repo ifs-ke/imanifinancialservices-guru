@@ -1,6 +1,7 @@
 // src/lib/roles.ts
  import type { User } from '@clerk/nextjs/server'; // Ensure type is available
  import { auth, clerkClient } from '@clerk/nextjs/server'; // Re-enable Clerk server-side
+ import { logInfo, logWarn, logError } from '@/lib/logger'; // Import logger
 
  export type AppRole = 'admin' | 'user';
 
@@ -10,58 +11,64 @@
 
 
  export const hasRole = (role: AppRole): boolean => {
-   const { sessionClaims } = auth(); // Use actual Clerk auth
+   const { sessionClaims, userId } = auth(); // Use actual Clerk auth
    const userRole = sessionClaims?.publicMetadata?.role as AppRole | undefined; // Get role from Clerk metadata
-
-   // No longer mocking
-   // const userRole = CLERK_DISABLED_DEFAULT_ROLE;
-   // console.warn("Clerk is disabled: hasRole check returning mocked value:", userRole === role);
-
+   logInfo(`Role check for user ${userId || 'unauthenticated'}: requested role '${role}', actual role '${userRole || 'none'}'`, { userId, requestedRole: role, actualRole: userRole });
    return userRole === role;
  };
 
 
- export const setUserRole = async (userId: string, role: AppRole) => {
+ export const setUserRole = async (userIdToUpdate: string, role: AppRole) => {
      // Authorization check MUST be done by the caller context
-     // Example: Only allow admins to call this function
+     // Example: Only allow admins to call this function (e.g., check if auth().userId is an admin)
+     const { userId: currentAdminId } = auth();
+     const logContext = { currentAdminId, targetUserId: userIdToUpdate, newRole: role, operation: 'setUserRole' };
 
-     // Use Clerk client to update user metadata
+     if (!currentAdminId) {
+        logError("Unauthorized attempt to set user role: No admin session found.", undefined, logContext);
+        throw new Error("Unauthorized: Admin privileges required.");
+     }
+     // Add a check here if you want to ensure currentAdminId *is* an admin
+     // const isAdmin = (await getUserRole(currentAdminId)) === 'admin';
+     // if (!isAdmin) {
+     //    logError(`User ${currentAdminId} attempted to set role for ${userIdToUpdate} without admin privileges.`, undefined, logContext);
+     //    throw new Error("Forbidden: Admin privileges required.");
+     // }
+
+
      try {
-         await clerkClient.users.updateUserMetadata(userId, {
+         logInfo(`Admin ${currentAdminId} attempting to set role for user ${userIdToUpdate} to ${role}.`, logContext);
+         await clerkClient.users.updateUserMetadata(userIdToUpdate, {
              publicMetadata: { role: role }
          });
-         // console.log(`Successfully set role for user ${userId} to ${role}.`); // Console log commented out
+         logInfo(`Successfully set role for user ${userIdToUpdate} to ${role}.`, logContext);
          return Promise.resolve();
      } catch (error) {
-         // console.error(`Error setting user role for ${userId}:`, error); // Console log commented out
+         logError(`Error setting user role for ${userIdToUpdate}:`, error, logContext);
          throw new Error('Failed to set user role.');
      }
-
-     // Removed mock logic
-     // console.warn(`Clerk is disabled: Mocking setUserRole for user ${userId} to role ${role}. No actual change persisted.`);
-     // return Promise.resolve();
  };
 
 
- export const getUserRole = async (userId: string): Promise<AppRole | undefined> => {
-     // Authorization check MUST be done by the caller context if needed
+ export const getUserRole = async (userIdToQuery: string): Promise<AppRole | undefined> => {
+     const { userId: currentUserId } = auth(); // For logging context primarily
+     const logContext = { currentUserId: currentUserId || 'system_or_unauthenticated_query', targetUserId: userIdToQuery, operation: 'getUserRole' };
 
-     // Fetch user data from Clerk to get the role
+     // Authorization check by caller context if needed (e.g., only admins can query roles of others)
+     logInfo(`Fetching role for user ${userIdToQuery}.`, logContext);
      try {
-         const user = await clerkClient.users.getUser(userId);
+         const user = await clerkClient.users.getUser(userIdToQuery);
          const userRole = user?.publicMetadata?.role as AppRole | undefined;
-         // console.log(`Fetched role for user ${userId}: ${userRole}`); // Console log commented out
-         return userRole || 'user'; // Default to 'user' if no role found in metadata
-     } catch (error) {
-         // console.error(`Error getting user role for ${userId}:`, error); // Console log commented out
-         // Decide how to handle errors - return undefined or default 'user'?
-         return undefined; // Indicate role couldn't be fetched
+         logInfo(`Fetched role for user ${userIdToQuery}: ${userRole || 'none'}. Defaulting to 'user' if undefined.`, { ...logContext, fetchedRole: userRole });
+         return userRole || 'user'; // Default to 'user' if no role found in metadata or user not found (Clerk might throw before this for not found)
+     } catch (error: any) {
+         if (error.status === 404) { // Clerk API might return 404 if user doesn't exist
+            logWarn(`User ${userIdToQuery} not found when trying to get role. Defaulting to 'user'.`, { ...logContext, clerkErrorStatus: error.status });
+            return 'user'; // Default to 'user' if user doesn't exist
+         }
+         logError(`Error getting user role for ${userIdToQuery}:`, error, logContext);
+         // Decide how to handle other errors - return undefined or default 'user'?
+         // Returning 'user' might be safer for non-critical role checks.
+         return 'user';
      }
-
-     // Removed mock logic
-     // console.warn(`Clerk is disabled: Mocking getUserRole for user ${userId}. Returning default role.`);
-     // if (userId === CLERK_DISABLED_PLACEHOLDER_USER_ID) {
-     //    return CLERK_DISABLED_DEFAULT_ROLE;
-     // }
-     // return undefined;
  };

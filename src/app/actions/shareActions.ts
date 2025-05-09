@@ -11,7 +11,9 @@ import { logInfo, logWarn, logError } from '@/lib/logger';
 
 export async function searchUserByEmailApi(email: string): Promise<UserShareInfo | null> {
     const { userId: currentUserId } = auth();
-    const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', targetEmail: email, operation: 'searchUserByEmailApi' };
+     // Log context always includes operation for better traceability
+    const logContext = { currentUserId: currentUserId || 'unauthenticated_search_attempt', targetEmail: email, operation: 'searchUserByEmailApi' };
+
 
     if (!currentUserId) {
         logError('Unauthorized search: User not logged in.', undefined, logContext);
@@ -37,9 +39,7 @@ export async function searchUserByEmailApi(email: string): Promise<UserShareInfo
 
         if (targetUser.id === currentUserId) {
             logInfo("User tried to search for themselves.", logContext);
-            // It's generally not an error to search for oneself, but sharing with self is prevented later.
-            // Returning the user info might be fine, or null if self-sharing isn't desired at search stage.
-            // For now, let's return the info.
+            // Prevent sharing with self at the point of sharing, not search.
         }
 
         const primaryEmail = targetUser.emailAddresses.find(em => em.id === targetUser.primaryEmailAddressId)?.emailAddress;
@@ -58,17 +58,17 @@ export async function searchUserByEmailApi(email: string): Promise<UserShareInfo
 
     } catch (error) {
         logError(`Error searching for user by email:`, error, logContext);
-        return null;
+        return null; // Return null on error to indicate search failure.
     }
 }
 
 export async function shareReviewApi(weekKey: string, targetUserId: string): Promise<void> {
     const { userId: currentUserId } = auth();
-     const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', targetUserId, weekKey, operation: 'shareReviewApi' };
+    const logContext = { currentUserId, targetUserId, weekKey, operation: 'shareReviewApi' };
 
 
     if (!currentUserId) {
-        logError('Unauthorized: Cannot share review.', undefined, logContext);
+        logError('Unauthorized: Cannot share review. User not logged in.', undefined, logContext);
         throw new Error('Unauthorized: Cannot share review.');
     }
     if (currentUserId === targetUserId) {
@@ -83,40 +83,48 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
         const db = client.db();
         const reviewsCollection: Collection<WeeklyReviewData> = db.collection('weeklyReviews');
 
-        const review = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId });
+        // Ensure the review exists and is owned by the current user, or create it if it's the owner trying to share
+        let review = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId });
 
         if (!review) {
-            logWarn(`Share failed: Review ${weekKey} not found or not owned by user ${currentUserId}. Creating new review shell.`, logContext);
+            logInfo(`Review ${weekKey} not found for owner ${currentUserId}. Creating new review shell for sharing.`, logContext);
             const newReviewShell: WeeklyReviewData = {
-                 ownerId: currentUserId, // Ensure ownerId is set
-                 journal: '',
+                 ownerId: currentUserId,
+                 journal: '', // Default empty journal
+                 transactionComments: {}, // Default empty comments
                  sharedWith: [targetUserId].sort(), // Initialize sharedWith with target user
              };
-             await reviewsCollection.insertOne({
+             await reviewsCollection.insertOne({ // Use insertOne for a new document
                  weekKey,
                  ...newReviewShell,
              });
-             logInfo(`Created new review shell ${weekKey} for sharing.`, logContext);
-             return;
+             logInfo(`Created new review shell ${weekKey} and shared with ${targetUserId}.`, logContext);
+             return; // Successfully created and shared
         }
 
+        // If review exists, update its sharedWith list
         const currentSharedWith = review.sharedWith || [];
         if (!currentSharedWith.includes(targetUserId)) {
             const updatedSharedWith = [...currentSharedWith, targetUserId].sort();
 
             const updateResult = await reviewsCollection.updateOne(
-                { weekKey, ownerId: currentUserId },
+                { weekKey, ownerId: currentUserId }, // Filter by ownerId
                 { $set: { sharedWith: updatedSharedWith } }
             );
 
             if (updateResult.modifiedCount === 1) {
                  logInfo(`Successfully shared review ${weekKey} with user ${targetUserId}.`, logContext);
              } else {
-                 logWarn(`Share update did not modify document for review ${weekKey}.`, { ...logContext, updateResult });
-                 throw new Error('Failed to update sharing status.');
+                 logWarn(`Share update did not modify document for review ${weekKey}. This might happen if the review was already shared or if a concurrent update occurred.`, { ...logContext, updateResult });
+                 // Potentially re-fetch and check if already shared to avoid throwing an unnecessary error.
+                 const updatedReview = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId });
+                 if (!updatedReview?.sharedWith?.includes(targetUserId)) {
+                    throw new Error('Failed to update sharing status despite review existing.');
+                 }
+                 logInfo(`Review ${weekKey} was likely already shared with user ${targetUserId} (concurrent update or no change needed).`, logContext);
              }
         } else {
-            logInfo(`Review ${weekKey} already shared with user ${targetUserId}.`, logContext);
+            logInfo(`Review ${weekKey} already shared with user ${targetUserId}. No action taken.`, logContext);
         }
     } catch (error) {
         logError(`Error sharing review ${weekKey} with user ${targetUserId}:`, error, logContext);
@@ -127,10 +135,10 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
 
 export async function revokeShareApi(weekKey: string, targetUserId: string): Promise<void> {
     const { userId: currentUserId } = auth();
-    const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', targetUserId, weekKey, operation: 'revokeShareApi' };
+    const logContext = { currentUserId, targetUserId, weekKey, operation: 'revokeShareApi' };
 
     if (!currentUserId) {
-        logError('Unauthorized: Cannot revoke share.', undefined, logContext);
+        logError('Unauthorized: Cannot revoke share. User not logged in.', undefined, logContext);
         throw new Error('Unauthorized: Cannot revoke share.');
     }
 
@@ -141,6 +149,7 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
         const db = client.db();
         const reviewsCollection: Collection<WeeklyReviewData> = db.collection('weeklyReviews');
 
+        // Find the review owned by the current user
         const review = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId });
 
         if (!review) {
@@ -153,15 +162,22 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
             const updatedSharedWith = currentSharedWith.filter(id => id !== targetUserId);
 
             const updateResult = await reviewsCollection.updateOne(
-                { weekKey, ownerId: currentUserId },
-                { $set: { sharedWith: updatedSharedWith.length > 0 ? updatedSharedWith : undefined } } // Set to undefined if array becomes empty
+                { weekKey, ownerId: currentUserId }, // Filter by ownerId
+                // If updatedSharedWith is empty, MongoDB can remove the field if $unset is used, or set to empty array.
+                // Setting to an empty array is simpler and usually fine.
+                { $set: { sharedWith: updatedSharedWith } }
             );
 
             if (updateResult.modifiedCount === 1) {
                  logInfo(`Successfully revoked share for review ${weekKey} from user ${targetUserId}.`, logContext);
              } else {
-                 logWarn(`Revoke update did not modify document for review ${weekKey}.`, { ...logContext, updateResult });
-                 throw new Error('Failed to update sharing status.');
+                 logWarn(`Revoke update did not modify document for review ${weekKey}. This might happen if sharing was already revoked or due to a concurrent update.`, { ...logContext, updateResult });
+                 // Potentially re-fetch and check to confirm.
+                 const updatedReview = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId });
+                 if (updatedReview?.sharedWith?.includes(targetUserId)) {
+                    throw new Error('Failed to update sharing status despite review existing and user was in sharedWith.');
+                 }
+                 logInfo(`Review ${weekKey} share was likely already revoked for user ${targetUserId} (concurrent update or no change needed).`, logContext);
              }
         } else {
             logInfo(`Review ${weekKey} was not shared with user ${targetUserId}. No revoke needed.`, logContext);
@@ -174,11 +190,11 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
 
 export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareInfo[]> {
     const { userId: currentUserId } = auth();
-    const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', weekKey, operation: 'getSharedWithUsersApi' };
+    const logContext = { currentUserId, weekKey, operation: 'getSharedWithUsersApi' };
 
 
      if (!currentUserId) {
-        logError('Unauthorized: Cannot get shared list.', undefined, logContext);
+        logError('Unauthorized: Cannot get shared list. User not logged in.', undefined, logContext);
         throw new Error('Unauthorized: Cannot get shared list.');
     }
 
@@ -189,17 +205,20 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
          const db = client.db();
          const reviewsCollection: Collection<WeeklyReviewData> = db.collection('weeklyReviews');
 
-         // Find the review owned by the current user to get its sharedWith list
          const review = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId }, { projection: { sharedWith: 1 } });
 
          if (!review || !review.sharedWith || review.sharedWith.length === 0) {
-             logInfo(`Review ${weekKey} not found, not owned, or not shared with anyone.`, logContext);
+             logInfo(`Review ${weekKey} not found, not owned by ${currentUserId}, or not shared with anyone.`, logContext);
              return [];
          }
 
          const sharedUserIds = review.sharedWith;
 
-         // Fetch user details from Clerk for the shared IDs
+         if (sharedUserIds.length === 0) {
+             logInfo(`Review ${weekKey} has an empty sharedWith list.`, logContext);
+             return [];
+         }
+         
          const users = await clerkClient.users.getUserList({ userId: sharedUserIds });
 
           const userInfos = users.map(user => {
@@ -207,7 +226,7 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
              return {
                  userId: user.id,
                  email: primaryEmail || 'No Primary Email',
-                 name: user.fullName || primaryEmail || 'Unnamed User'
+                 name: user.fullName || primaryEmail || 'Unnamed User' // Use fullName if available
              };
          });
 

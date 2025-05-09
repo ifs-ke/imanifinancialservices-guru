@@ -146,13 +146,14 @@ export async function OPTIONS() {
 
 export async function GET() {
   const { userId } = auth();
-  const logContextBase = { userId: userId || 'unknown-unauthenticated', operation: 'GET /api/sync' };
 
   if (!userId) {
-    logWarn("Sync API: Unauthorized access attempt.", logContextBase);
+    logWarn("Sync API: Unauthorized access attempt. User not logged in.", { operation: 'GET /api/sync' });
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response);
   }
+  const logContextBase = { userId, operation: 'GET /api/sync' };
+
 
   logInfo(`Sync API: Initiating sync for user ${userId}`, logContextBase);
 

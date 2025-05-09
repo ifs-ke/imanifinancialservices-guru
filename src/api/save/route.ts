@@ -159,13 +159,14 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   const { userId } = auth();
-  const logContextBase = { userId: userId || 'unknown-unauthenticated', operation: 'POST /api/save' };
-
+  
   if (!userId) {
-    logWarn('Save API: Unauthorized save attempt: User not logged in.', logContextBase);
+    logWarn('Save API: Unauthorized save attempt: User not logged in.', { operation: 'POST /api/save' });
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response);
   }
+  const logContextBase = { userId, operation: 'POST /api/save' };
+
 
   const { success, limit, remaining, reset } = await ratelimit.limit(userId);
   const logContextWithRateLimit = { ...logContextBase, rateLimit: { limit, remaining, reset } };
