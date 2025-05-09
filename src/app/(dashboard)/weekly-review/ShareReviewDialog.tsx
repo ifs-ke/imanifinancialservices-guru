@@ -20,7 +20,7 @@ import { X, UserPlus, Trash2, Loader2, Search, CheckCircle, AlertTriangle } from
 import type { UserShareInfo } from '@/lib/types';
 import { getSharedWithUsersApi, shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
 import { triggerCollaborationNotification } from '@/services/notificationService';
-import { useAuth } from '@clerk/nextjs'; // Use Clerk hook
+import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk useAuth hook
 import { logError, logInfo, logWarn } from '@/lib/logger';
 
 
@@ -120,7 +120,9 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
       toast({ title: 'Success', description: `Review shared with ${searchResult.name || searchResult.email}.` });
 
       const sharerName = user?.fullName || user?.primaryEmailAddresses?.[0]?.emailAddress || 'Someone';
-      triggerCollaborationNotification(sharerName, weekKey, searchResult.userId);
+      // Pass current user's ID (sharerId) to the notification trigger
+      triggerCollaborationNotification(sharerName, weekKey, searchResult.userId, user.id);
+
 
       setSharedWithList(prev => [...prev, searchResult].filter((v,i,a)=>a.findIndex(t=>(t.userId === v.userId))===i));
       setEmailToShare('');

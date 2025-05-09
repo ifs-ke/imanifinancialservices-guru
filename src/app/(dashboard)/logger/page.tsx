@@ -11,9 +11,10 @@
  import { Badge } from '@/components/ui/badge';
  import { ClipboardList, Filter, RotateCw, XCircle, AlertTriangle, Info, CheckCircle } from 'lucide-react';
  import { format } from 'date-fns';
- import { cn } from '@/lib/utils'; // Import cn utility
- // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
- // Logger removed
+ import { cn } from '@/lib/utils';
+ // import { useAuth } from '@clerk/nextjs'; // Clerk auth hook
+ // import { hasRole } from '@/lib/roles'; // For role-based access control if needed
+
 
  // Mock log data structure
  interface LogEntry {
@@ -24,8 +25,8 @@
  }
 
  export default function LoggerPage() {
-   // const { has, userId } = useAuth(); // Clerk disabled
-   // const isAdmin = has && has({ role: 'admin' }); // Clerk disabled
+   // const { isSignedIn } = useAuth(); // Example: get auth state
+   // const isUserAdmin = isSignedIn && hasRole('admin'); // Example: check admin role
 
    const [logs, setLogs] = useState<LogEntry[]>([]);
    const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
@@ -40,10 +41,11 @@
      setError(null);
      // Simulate fetching logs
      await new Promise(resolve => setTimeout(resolve, 500));
+     // Example mock logs, potentially replace with fetching from /api/client-log if persisted
      const mockLogs: LogEntry[] = [
-         { timestamp: new Date(Date.now() - 10000).toISOString(), level: 'info', message: 'Sync successful', context: { userId: 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y' } },
-         { timestamp: new Date(Date.now() - 5000).toISOString(), level: 'warn', message: 'Budget approaching limit for Groceries', context: { userId: 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y', budget: 'Groceries' } },
-         { timestamp: new Date().toISOString(), level: 'error', message: 'Failed to save data', context: { userId: 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y', reason: 'Network timeout' } },
+         { timestamp: new Date(Date.now() - 10000).toISOString(), level: 'info', message: 'Sync successful', context: { userId: 'user_example_1' } },
+         { timestamp: new Date(Date.now() - 5000).toISOString(), level: 'warn', message: 'Budget approaching limit for Groceries', context: { userId: 'user_example_1', budget: 'Groceries' } },
+         { timestamp: new Date().toISOString(), level: 'error', message: 'Failed to save data', context: { userId: 'user_example_1', reason: 'Network timeout' } },
      ];
      setLogs(mockLogs);
      setIsLoading(false);
@@ -71,8 +73,8 @@
    const getBadgeVariant = (level: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
      switch (level.toLowerCase()) {
        case 'error': return 'destructive';
-       case 'warn': return 'secondary'; // Yellowish in dark mode? Let's use secondary
-       case 'info': return 'default'; // Blue/Primary
+       case 'warn': return 'secondary';
+       case 'info': return 'default';
        case 'debug': return 'outline';
        default: return 'outline';
      }
@@ -81,15 +83,15 @@
     const getIconForLevel = (level: string) => {
         switch (level.toLowerCase()) {
             case 'error': return <XCircle className="h-4 w-4 text-destructive" />;
-            case 'warn': return <AlertTriangle className="h-4 w-4 text-yellow-500" />; // Use a warning color
+            case 'warn': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
             case 'info': return <Info className="h-4 w-4 text-primary" />;
             case 'debug': return <ClipboardList className="h-4 w-4 text-muted-foreground" />;
             default: return <Info className="h-4 w-4 text-muted-foreground" />;
         }
     };
 
-   // Removed admin check as Clerk is disabled
-   // if (!isAdmin) {
+   // If this page were admin-only, you'd use something like:
+   // if (!isUserAdmin && isSignedIn) { // Check if signed in but not admin
    //   return (
    //     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-10rem)] p-4 text-center">
    //       <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
@@ -98,6 +100,7 @@
    //     </div>
    //   );
    // }
+   // If not signed in at all, Clerk middleware should handle redirection.
 
    return (
      <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
@@ -106,7 +109,7 @@
            <ClipboardList className="h-6 w-6 text-primary" /> Application Logger
          </h1>
          <p className="text-muted-foreground text-sm">
-           View client-side and server-side logs (Mock Data).
+           View client-side and server-side logs (Currently Mock Data).
          </p>
        </header>
 
@@ -150,7 +153,7 @@
                    <TableHead className="w-[180px]">Timestamp</TableHead>
                    <TableHead className="w-[100px]">Level</TableHead>
                    <TableHead>Message</TableHead>
-                   <TableHead className="w-[150px]">User ID</TableHead>
+                   <TableHead className="w-[200px]">User ID / Context</TableHead>
                  </TableRow>
                </TableHeader>
                <TableBody>
@@ -179,7 +182,10 @@
                          </Badge>
                        </TableCell>
                        <TableCell className="whitespace-pre-wrap break-words">{log.message}</TableCell>
-                       <TableCell className="font-mono text-muted-foreground">{log.context?.userId ?? 'N/A'}</TableCell>
+                       <TableCell className="font-mono text-muted-foreground truncate" title={JSON.stringify(log.context)}>
+                            {log.context?.userId ?? 'N/A'}
+                            {Object.keys(log.context || {}).filter(k => k !== 'userId').length > 0 ? ' (...)' : ''}
+                        </TableCell>
                      </TableRow>
                    ))
                  ) : (

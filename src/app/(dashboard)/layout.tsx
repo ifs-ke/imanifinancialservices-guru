@@ -24,12 +24,9 @@
    children: React.ReactNode;
  }) {
    const { userId } = useAuth(); // Use Clerk's useAuth hook
-   // No longer need placeholder
-   // const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID;
 
    const syncManager = useSyncManager();
    const { isMismatchDialogOpen, setIsMismatchDialogOpen, forceFetchServer, forceSaveLocal } = syncManager;
-
 
    useBudgetNotifications(); // Activate budget notification checks
 

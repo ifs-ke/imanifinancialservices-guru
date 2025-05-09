@@ -1,6 +1,6 @@
 // src/hooks/useSyncManager.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
-// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
+import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
@@ -14,8 +14,7 @@ import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
-// Placeholder ID used when Clerk is disabled
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -34,11 +33,7 @@ interface SyncedData {
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'local' | 'error';
 
 export function useSyncManager() {
-  // const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth(); // Clerk disabled
-  // Use placeholder when Clerk is disabled
-  const isSignedIn = true; // Assume user is signed in for placeholder logic
-  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID;
-  const isClerkLoaded = true; // Assume Clerk is loaded for placeholder logic
+  const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth(); // Use actual Clerk auth
 
   const { toast } = useToast();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -65,7 +60,7 @@ export function useSyncManager() {
     if (isClearingRef.current) return;
     isClearingRef.current = true;
     // Use the current userId from auth context if available, otherwise log as clearing for an unknown/logged-out user
-    const currentContextUserId = userId;
+    const currentContextUserId = userId; // userId from useAuth()
     logInfo('SyncManager: Clearing local state.', { userId: currentContextUserId });
     try {
       getTransactionsState().clearTransactions();
@@ -127,7 +122,7 @@ export function useSyncManager() {
 
 
     try {
-      const response = await fetch('/api/sync'); // API route will use server-side auth if Clerk enabled
+      const response = await fetch('/api/sync'); 
 
       if (!response.ok) {
         let errorMessage = `Fetch failed: ${response.statusText} (Status: ${response.status})`;
@@ -161,8 +156,8 @@ export function useSyncManager() {
             setHashMismatch(true);
             setSyncStatus('error');
             setIsMismatchDialogOpen(true); // Open dialog for user to resolve
-            toast({ title: 'Data Sync Mismatch', description: "Local and server data don't match. Please resolve the conflict.", variant: 'destructive', link: '#' }); // Provide a link or action
-            return false; // Indicate failure
+            toast({ title: 'Data Sync Mismatch', description: "Local and server data don't match. Please resolve the conflict.", variant: 'destructive', link: '#' }); 
+            return false; 
           }
           logDebug('Fetch: Data integrity check passed.', { userId });
         }
@@ -185,30 +180,30 @@ export function useSyncManager() {
 
       setLastSyncTime(new Date());
       setSyncStatus('synced');
-      hasLocalChangesRef.current = false; // Reset local changes flag after successful sync
+      hasLocalChangesRef.current = false; 
       logInfo('Fetch: Successfully synced with DB.', { userId });
       if (isRetry || skipHashCheck) toast({ title: 'Sync Successful', description: 'Data successfully loaded from the cloud.' });
-      return true; // Indicate success
+      return true; 
 
     } catch (error: any) {
       logError('Fetch Error:', error, { userId });
-      setSyncStatus('error'); // Set status to error
+      setSyncStatus('error'); 
       let friendlyErrorMessage = 'Could not load data.';
        if (error.message?.includes('Internal Server Error')) {
            friendlyErrorMessage += ` Server error encountered.`;
        } else if (error.message?.includes('Failed to parse') || error.message?.includes('JSON')) {
           friendlyErrorMessage = 'Could not load data: Failed to parse server response.';
-       } else if (error.message?.includes('Failed to fetch')) { // General network error
+       } else if (error.message?.includes('Failed to fetch')) { 
            friendlyErrorMessage += ' Network error. Please check connection.';
        } else {
            friendlyErrorMessage += ` An unknown error occurred (${error.message || String(error)}).`;
        }
       friendlyErrorMessage += ' Using local data if available. Click cloud icon to retry.';
       toast({ title: 'Sync Load Failed', description: friendlyErrorMessage, variant: 'destructive' });
-      return false; // Indicate failure
+      return false; 
     } finally {
       isFetchingRef.current = false;
-      initialFetchDoneRef.current = true; // Mark initial fetch attempt as done
+      initialFetchDoneRef.current = true; 
       logDebug('Fetch: Operation complete.', { userId });
     }
   }, [
@@ -224,7 +219,7 @@ export function useSyncManager() {
     }
     if (!isSignedIn || !userId) { // Strict check for isSignedIn and userId
       logWarn('Save Aborted: User not signed in or userId not available.', { currentUserId: userId, isSignedIn });
-      setSyncStatus('local'); // Data remains local if not signed in
+      setSyncStatus('local'); 
       return false;
     }
 
@@ -239,26 +234,24 @@ export function useSyncManager() {
 
     if (!isForceSave) {
         logInfo('Save: Fetching latest data before saving to check for conflicts...', { userId });
-        // Fetch data AND perform hash check. If mismatch, fetchData will return false and potentially open dialog.
-        const fetchSuccess = await fetchData(false, false); // Pass false for skipHashCheck
+        
+        const fetchSuccess = await fetchData(false, false); 
         if (!fetchSuccess) {
             logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', undefined, { userId });
-            // If fetch failed due to hashMismatch, the dialog is already open.
-            // If it failed for other reasons, status is 'error'.
+            
             isSavingRef.current = false;
-            // Do not proceed with save if pre-fetch failed (either error or mismatch)
-            // Toast is handled by fetchData
+            
             return false;
         }
         logInfo('Save: Pre-save fetch successful, proceeding with save.', { userId });
     } else {
-      setHashMismatch(false); // If forcing save, clear any existing hash mismatch flag
-      setIsMismatchDialogOpen(false); // Close dialog if it was open
+      setHashMismatch(false); 
+      setIsMismatchDialogOpen(false); 
       logInfo('Save: Force save initiated, skipping pre-fetch check, proceeding with save.', { userId });
     }
 
     try {
-      // Collect current state from all stores
+      
       const currentState = {
         transactions: getTransactionsState().transactions,
         debts: getDebtState().debts,
@@ -266,18 +259,18 @@ export function useSyncManager() {
         otherLiabilityItems: getStatementState().otherLiabilityItems,
         budgetItems: getBudgetState().budgetItems,
         ownedReviews: getWeeklyReviewState().ownedReviews,
-        // sharedReviews and notifications are not saved from client to server directly
-        startDate: getStatementState().startDate, // Send Date objects as is, prepareDataForHashing will convert
+        
+        startDate: getStatementState().startDate, 
         endDate: getStatementState().endDate,
-        gettingStartedDismissed: gettingStartedDismissed, // Use the local state from useSyncManager
+        gettingStartedDismissed: gettingStartedDismissed, 
       };
 
-      const preparedData = prepareDataForHashing(currentState as SyncedData); // Cast to SyncedData for prepare
+      const preparedData = prepareDataForHashing(currentState as SyncedData); 
       const dataString = stringify(preparedData);
       const dataHash = await hashData(dataString);
       logDebug(`Save Client: Calculated client hash: ${dataHash}`, { userId });
 
-      const response = await fetch('/api/save', { // API route will use server-side auth if Clerk enabled
+      const response = await fetch('/api/save', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...preparedData, dataHash }),
@@ -294,12 +287,12 @@ export function useSyncManager() {
           logWarn("Save Error: Failed to parse error response body as JSON.", { status: response.status, statusText: response.statusText, parseError, userId });
         }
 
-        // Specific handling for 400 Bad Request due to integrity check
+        
         if (response.status === 400 && errorData.error?.includes('integrity check failed')) {
           logError('Save API Error 400: Data integrity check failed on server.', errorData, { userId });
-          setHashMismatch(true); // Set mismatch state
+          setHashMismatch(true); 
           setSyncStatus('error');
-          setIsMismatchDialogOpen(true); // Open dialog for user to resolve
+          setIsMismatchDialogOpen(true); 
           toast({ title: 'Save Failed: Data Conflict', description: "Server data changed since last sync. Resolve using the cloud icon.", variant: 'destructive', link: '#' });
         } else if (response.status === 401) {
             logError('Save API Error 401: Unauthorized.', errorData, { userId });
@@ -312,28 +305,28 @@ export function useSyncManager() {
         }
         else {
           logError(`Save API Error ${response.status}: ${errorData.error}`, undefined, { userId });
-          throw new Error(errorData.error); // Throw for generic catch block
+          throw new Error(errorData.error); 
         }
         isSavingRef.current = false;
-        return false; // Indicate save failure
+        return false; 
       }
 
       const result = await response.json();
       setLastSyncTime(new Date());
       setSyncStatus('synced');
-      hasLocalChangesRef.current = false; // Reset local changes flag after successful save
+      hasLocalChangesRef.current = false; 
       logInfo(`Save Successful. Server: ${result.message}`, { userId });
       toast({ title: 'Data Saved', description: 'Changes saved to cloud.' });
-      return true; // Indicate success
+      return true; 
 
     } catch (error: any) {
       logError('Save Error:', error, { userId });
-      setSyncStatus('error'); // Set status to error
+      setSyncStatus('error'); 
       let friendlyErrorMessage = 'Could not save data.';
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) { // Network error during save
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) { 
         friendlyErrorMessage = 'Could not save data: Network error. Please check connection.';
       } else if (error.message?.includes('integrity check failed')) {
-        // This case should be caught by the specific 400 check above, but as a fallback:
+        
         friendlyErrorMessage = `Save failed: ${error.message}.`;
         setHashMismatch(true);
         setIsMismatchDialogOpen(true);
@@ -342,7 +335,7 @@ export function useSyncManager() {
       }
       friendlyErrorMessage += ' Changes remain locally. Click cloud icon to retry.';
       toast({ title: 'Sync Save Failed', description: friendlyErrorMessage, variant: 'destructive' });
-      return false; // Indicate save failure
+      return false; 
     } finally {
       isSavingRef.current = false;
       logDebug('Save: Operation complete.', { userId });
@@ -350,7 +343,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast, gettingStartedDismissed,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, fetchData, // Include fetchData as it's called within saveData
+    getWeeklyReviewState, fetchData, 
   ]);
 
 
@@ -367,24 +360,24 @@ export function useSyncManager() {
     if (currentAuthUserId && currentAuthUserId !== previousUserIdRef.current) {
       // User signed in or changed
       logInfo(`Auth Effect: User signed in or changed (from ${previousUserIdRef.current ?? 'none'} to ${currentAuthUserId}). Clearing local state and fetching data.`, { oldUserId: previousUserIdRef.current, newUserId: currentAuthUserId });
-      clearLocalState(); // Clear previous user's data
-      previousUserIdRef.current = currentAuthUserId; // Update ref
-      initialFetchDoneRef.current = false; // Reset for new user
+      clearLocalState(); 
+      previousUserIdRef.current = currentAuthUserId; 
+      initialFetchDoneRef.current = false; 
       logDebug('Auth Effect: Triggering initial fetch for new user...', { newUserId: currentAuthUserId });
-      fetchData(); // Fetch data for the new user
+      fetchData(); 
     } else if (!currentAuthUserId && previousUserIdRef.current) {
       // User signed out
       logInfo(`Auth Effect: User signed out (was ${previousUserIdRef.current}). Clearing local state.`, { oldUserId: previousUserIdRef.current });
       clearLocalState();
       previousUserIdRef.current = null;
       initialFetchDoneRef.current = false;
-      setSyncStatus('local'); // No user, so data is only 'local' (empty)
+      setSyncStatus('local'); 
     } else if (!currentAuthUserId && previousUserIdRef.current === undefined) {
       // Initial load, no active user session (and wasn't one before)
       logInfo('Auth Effect: Initial load, no active user session. Local state is active.');
       setSyncStatus('local');
-      previousUserIdRef.current = null; // Explicitly set to null
-      initialFetchDoneRef.current = true; // Consider initial state as "fetched" (i.e., nothing to fetch)
+      previousUserIdRef.current = null; 
+      initialFetchDoneRef.current = true; 
     } else if (currentAuthUserId && currentAuthUserId === previousUserIdRef.current && !initialFetchDoneRef.current) {
       // User session exists, but initial fetch hasn't completed (e.g., page refresh while logged in)
       logInfo('Auth Effect: User session exists, but initial fetch not done. Triggering fetch...', { currentAuthUserId });
@@ -397,7 +390,7 @@ export function useSyncManager() {
        }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, isSignedIn, isClerkLoaded]); // Dependencies
+  }, [userId, isSignedIn, isClerkLoaded]); 
 
 
   // Effect to monitor Zustand store changes for `syncStatus` update
@@ -408,9 +401,8 @@ export function useSyncManager() {
     }
     if (hashMismatch) {
       logWarn('Change Subscription: Blocked due to hash mismatch. Data is local but potentially conflicting.', { currentUserId: userId });
-      // If there's a hash mismatch, we should stay in 'error' or 'local' but indicate a problem.
-      // The 'local' status is technically correct if changes are made, but 'error' from mismatch takes precedence.
-      if (syncStatus !== 'error') setSyncStatus('local'); // If not already error, mark as local due to changes.
+      
+      if (syncStatus !== 'error') setSyncStatus('local'); 
       return;
     }
 
@@ -418,17 +410,17 @@ export function useSyncManager() {
     const storesToWatch = [
       useTransactionsStore, useDebtStore, useStatementStore,
       useBudgetStore, useWeeklyReviewStore,
-      // Not watching notification store for 'hasLocalChanges' as notifications are often transient/generated
+      
     ];
 
     const handleChange = () => {
-      // Only set hasLocalChangesRef if an operation isn't already in progress and no hash mismatch
+      
       if (initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && !isClearingRef.current && !hashMismatch) {
         if (!hasLocalChangesRef.current) {
           logInfo('Change Subscription: First local change detected since last sync.', { currentUserId: userId });
         }
         hasLocalChangesRef.current = true;
-        // If status was 'synced' or 'idle', and local changes occur, update to 'local'
+        
         if (syncStatus === 'synced' || syncStatus === 'idle') {
           setSyncStatus('local');
           logInfo('Change Subscription: Status changed to "local" due to store changes.', { currentUserId: userId });
@@ -445,7 +437,7 @@ export function useSyncManager() {
       unsubscribes.forEach(unsub => unsub());
     };
   }, [
-    isClerkLoaded, isSignedIn, userId, syncStatus, hashMismatch, // Rerun if these critical states change
+    isClerkLoaded, isSignedIn, userId, syncStatus, hashMismatch, 
   ]);
 
   // Effect to track changes to `gettingStartedDismissed`
@@ -454,12 +446,12 @@ export function useSyncManager() {
       logDebug('Getting Started Tracker: Conditions not met for tracking.', { isClerkLoaded, isSignedIn, currentUserId: userId, initialFetchDone: initialFetchDoneRef.current });
       return;
     }
-     if (hashMismatch) { // Don't mark as local change if there's a sync conflict
+     if (hashMismatch) { 
        logWarn('Getting Started Tracker: Change detected, but blocked by hash mismatch.', { gettingStartedDismissed, currentUserId: userId });
        return;
      }
 
-    // This effect runs AFTER the initial fetch, so changes to `gettingStartedDismissed` are local changes.
+    
     if (initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && !isClearingRef.current) {
       logDebug('Getting Started Tracker: Change detected.', { gettingStartedDismissed, currentUserId: userId });
       if (!hasLocalChangesRef.current) {
@@ -474,50 +466,50 @@ export function useSyncManager() {
       logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { initialFetchDone: initialFetchDoneRef.current, isFetching: isFetchingRef.current, isSaving: isSavingRef.current, isClearing: isClearingRef.current, hashMismatch, currentUserId: userId, currentStatus: syncStatus });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gettingStartedDismissed]); // Only track this specific state
+  }, [gettingStartedDismissed]); 
 
 
-  // Function for user to force save local data (overwrite server)
+  
   const forceSaveLocal = useCallback(async () => {
     if (!userId || !isSignedIn) {
         toast({ title: 'Error', description: 'Cannot force save without an authenticated user.', variant: 'destructive' });
         return false;
     }
     logWarn('SyncManager: User chose to force save local data, overwriting server.', { userId });
-    const success = await saveData(true); // Pass true to indicate force save
+    const success = await saveData(true); 
     if (success) {
-      setHashMismatch(false); // Conflict resolved
-      setIsMismatchDialogOpen(false); // Close dialog
+      setHashMismatch(false); 
+      setIsMismatchDialogOpen(false); 
       toast({ title: 'Conflict Resolved', description: 'Local data successfully saved to the cloud, overwriting server data.' });
       logInfo('Force Save Local: Successful.', { userId });
     } else {
       logError('Force Save Local: Failed.', undefined, { userId });
-      // Toast is handled by saveData on failure
+      
     }
     return success;
   }, [saveData, toast, userId, isSignedIn]);
 
-  // Function for user to force fetch server data (overwrite local)
+  
   const forceFetchServer = useCallback(async () => {
      if (!userId || !isSignedIn) {
         toast({ title: 'Error', description: 'Cannot force fetch without an authenticated user.', variant: 'destructive' });
         return false;
     }
     logWarn('SyncManager: User chose to force fetch server data, discarding local changes.', { userId });
-    const success = await fetchData(false, true); // Pass true to skip hash check on fetch
+    const success = await fetchData(false, true); 
     if (success) {
-      setHashMismatch(false); // Conflict resolved
-      setIsMismatchDialogOpen(false); // Close dialog
+      setHashMismatch(false); 
+      setIsMismatchDialogOpen(false); 
       toast({ title: 'Conflict Resolved', description: 'Server data loaded. Any unsaved local changes were discarded.' });
       logInfo('Force Fetch Server: Successful.', { userId });
     } else {
       logError('Force Fetch Server: Failed.', undefined, { userId });
-      // Toast is handled by fetchData on failure
+      
     }
     return success;
   }, [fetchData, toast, userId, isSignedIn]);
 
-  // Retry logic for the sync icon click
+  
   const retrySync = useCallback(() => {
     if (!isClerkLoaded) {
       toast({ title: 'Cannot Sync', description: 'Authentication status loading...', variant: 'default' });
@@ -532,23 +524,23 @@ export function useSyncManager() {
 
     if (syncStatus === 'error' && hashMismatch) {
       logWarn('Manual Retry: Hash mismatch detected. Opening resolution dialog.', { userId });
-      setIsMismatchDialogOpen(true); // Open dialog for user to resolve
+      setIsMismatchDialogOpen(true); 
       return;
     }
 
-    // If local changes exist, or error without mismatch, try saving.
+    
     if (hasLocalChangesRef.current || (syncStatus === 'error' && !hashMismatch)) {
       logInfo('Manual Sync: Local changes or non-mismatch error. Attempting save...', { userId });
-      saveData(); // Attempt to save local changes (which includes a pre-fetch)
+      saveData(); 
     } else if (syncStatus === 'synced') {
-      // If already synced, user might want to ensure they have the latest from server
+      
       toast({ title: 'Checking for Updates', description: 'Fetching latest data from cloud...' });
-      fetchData(true); // Fetch with isRetry=true (shows success toast)
+      fetchData(true); 
     } else if (syncStatus === 'syncing') {
       toast({ title: 'Sync Busy', description: 'Please wait for the current operation to complete.' });
-    } else { // Includes 'idle', or 'local' with no changes (though latter is less likely if icon is retryable)
+    } else { 
       logInfo('Manual Sync: Default case (e.g., idle or no local changes). Attempting fetch...', { userId });
-      fetchData(true); // Fetch with isRetry=true
+      fetchData(true); 
     }
   }, [syncStatus, hashMismatch, saveData, fetchData, toast, isSignedIn, userId, isClerkLoaded]);
 

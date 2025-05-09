@@ -1,6 +1,6 @@
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server'; // Re-enable Clerk
 import connectToDatabase from '@/lib/mongodb';
 import { Collection, ClientSession } from 'mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
@@ -158,7 +158,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  const { userId } = auth();
+  const { userId } = auth(); // Use Clerk's auth()
   
   if (!userId) {
     logWarn('Save API: Unauthorized save attempt: User not logged in.', { operation: 'POST /api/save' });

@@ -1,6 +1,6 @@
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server'; // Re-enable Clerk
 import connectToDatabase from '@/lib/mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
@@ -145,7 +145,7 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const { userId } = auth();
+  const { userId } = auth(); // Use Clerk's auth()
 
   if (!userId) {
     logWarn("Sync API: Unauthorized access attempt. User not logged in.", { operation: 'GET /api/sync' });

@@ -8,9 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedDebt, selectNetBudgeted, selectTotalGoals } from '@/store/budgetStore';
-import { useAuth } from '@clerk/nextjs';
-import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns';
+// Import budget store and selectors/actions
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore'; // Import missing selectTotalGoals
+import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk
+import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns'; // Removed differenceInDays as it's not used directly here
 import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -379,7 +380,7 @@ export default function WeeklyReviewPage() {
                   <Users className="h-4 w-4" />
                   <AlertTitle>Viewing Shared Review</AlertTitle>
                   <AlertDescription>
-                    You are viewing the review for week {currentWeekKey} shared by user ID: {currentReviewOwnerId || 'Unknown User'}. You cannot edit this review or its comments.
+                    You are viewing the review for week {currentWeekKey} shared by {currentReview.ownerUsername || `User ID: ${currentReviewOwnerId || 'Unknown User'}`}. You cannot edit this review or its comments.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -467,7 +468,7 @@ export default function WeeklyReviewPage() {
                 <Trash2 className="mr-1 h-4 w-4" /> Delete Comment
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={() => setIsCommentDialogOpen(false)}>Cancel</Button>
+            <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
             <Button onClick={handleSaveComment} disabled={isReadOnly}>Save Comment</Button>
           </DialogFooter>
         </DialogContent>

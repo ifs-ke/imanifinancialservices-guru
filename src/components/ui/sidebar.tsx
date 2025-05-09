@@ -1,8 +1,9 @@
+
 // src/components/ui/sidebar.tsx
 "use client";
 
 import * as React from "react";
-import { useState, useContext, createContext } from "react";
+import { useState, useContext, createContext, useEffect } from "react"; // Added useEffect
 import { usePathname } from "next/navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -26,50 +27,44 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ClipboardList, // Changed from Logger to ClipboardList
+  ClipboardList,
   RefreshCw,
   Menu,
-  // UserCircle // No longer needed, use Clerk's UserButton
+  PieChart,
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
-import { ThemeToggle } from "./ThemeToggle"; // Import ThemeToggle
+import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser } from "@clerk/nextjs"; // Re-enabled Clerk
+import { UserButton, useUser } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ScrollArea } from "./scroll-area"; // Import ScrollArea
-import { PieChart } from "lucide-react";
+import { ScrollArea } from "./scroll-area";
+import { logInfo, logWarn, logDebug } from "@/lib/logger";
 
-
-// No longer need placeholders
-// const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
-// const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
-// const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
 
 interface SidebarMenuItem {
   href: string;
   label: string;
-  icon: React.ReactNode; // Lucide icons are ReactNode
+  icon: React.ReactNode;
 }
 
-// Removed logger link
 const menuItems: SidebarMenuItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
   { href: "/transactions", label: "Transactions", icon: <ReceiptText size={18} /> },
   { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
   { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
   { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
-  { href: "/budget", label: "Budget", icon: <PieChart size={18} /> }, // Changed icon here
+  { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Added logger link back with correct icon
+  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
 ];
 
 export type SidebarState = "collapsed" | "expanded";
 
 interface SidebarContextProps {
-  isMobile: boolean | undefined; // Allow undefined initially
+  isMobile: boolean; // Will now be a boolean due to useIsMobile change
   state: SidebarState;
   collapseSidebar: () => void;
   expandSidebar: () => void;
@@ -77,8 +72,8 @@ interface SidebarContextProps {
 }
 
 const SidebarContext = createContext<SidebarContextProps>({
-  isMobile: undefined, // Start as undefined
-  state: "collapsed", // Default to collapsed
+  isMobile: false, // Default to false (desktop)
+  state: "collapsed",
   collapseSidebar: () => {},
   expandSidebar: () => {},
   toggleSidebar: () => {},
@@ -93,21 +88,21 @@ interface SidebarProviderProps {
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   children,
 }) => {
-  const isMobile = useIsMobile();
-  // Initialize state based on isMobile only when it's defined
-  const [state, setState] = useState<SidebarState>("collapsed"); // Start collapsed by default
+  const isMobile = useIsMobile(); // This now returns boolean (defaulting to false on server/initial mount)
+  const [state, setState] = useState<SidebarState>("collapsed");
+
+  useEffect(() => {
+    // Adjust sidebar state based on isMobile, ensuring it's collapsed on mobile.
+    if (isMobile) {
+      setState("collapsed");
+    }
+    // For desktop, the state can be 'expanded' or 'collapsed' based on user interaction
+    // or a default. Here, we ensure it starts collapsed unless explicitly changed.
+  }, [isMobile]);
 
   const collapseSidebar = () => setState("collapsed");
   const expandSidebar = () => setState("expanded");
   const toggleSidebar = () => setState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
-
-  // Update state when isMobile value becomes available or changes
-  React.useEffect(() => {
-    if (isMobile !== undefined) {
-      // Always start collapsed on mobile, stay collapsed on desktop initially
-      setState("collapsed");
-    }
-  }, [isMobile]);
 
   const value = {
     isMobile,
@@ -124,46 +119,64 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   );
 };
 
-// Base Sidebar component (used for both desktop and mobile sheet)
 const SidebarBase = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   const { state, toggleSidebar } = useSidebar();
-  const pathname = usePathname();
+  const pathname = usePathname(); // This should now be more stable
   const unreadCount = useNotificationStore(state => state.unreadCount());
-  const { user } = useUser(); // Using actual Clerk hook
-  // Removed mock user
-  // const user = {
-  //     id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
-  //     fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
-  //     primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL },
-  // };
+  const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
   const syncManager = useSyncManager();
-  const { syncStatus, retrySync, hashMismatch } = syncManager;
+  const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
 
   let PersistenceIcon: React.ElementType = CloudOff;
   let persistenceStatusText = 'Local';
-  let persistenceTooltipText = "Data local. Sync to cloud.";
-  let iconColor = 'text-muted-foreground'; // Default to muted
+  let persistenceTooltipText = "Data saved locally. Click to sync.";
+  let iconColor = 'text-muted-foreground';
   let isClickable = true;
 
-  switch (syncStatus) {
-    case 'syncing': PersistenceIcon = RefreshCw; persistenceStatusText = 'Syncing...'; persistenceTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary animate-spin'; isClickable = false; break;
-    case 'synced': PersistenceIcon = Cloud; persistenceStatusText = 'Synced'; persistenceTooltipText = 'Data synced with cloud.'; iconColor = 'text-accent'; isClickable = false; break; // Synced, no need to click
-    case 'error': PersistenceIcon = AlertTriangle; persistenceStatusText = hashMismatch ? 'Conflict' : 'Sync Error'; persistenceTooltipText = hashMismatch ? 'Data mismatch detected. Click to resolve.' : 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; isClickable = true; break;
-    case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local'; persistenceTooltipText = "Data saved locally. Click to sync."; iconColor = 'text-muted-foreground'; isClickable = true; break;
+  if (!isClerkLoaded) {
+     PersistenceIcon = RefreshCw;
+     persistenceStatusText = 'Auth Loading...';
+     persistenceTooltipText = 'Waiting for authentication status...';
+     iconColor = 'text-muted-foreground animate-spin';
+     isClickable = false;
+  } else if (!isSignedIn) {
+     PersistenceIcon = CloudOff;
+     persistenceStatusText = 'Offline';
+     persistenceTooltipText = 'Sign in to enable cloud sync.';
+     iconColor = 'text-muted-foreground';
+     isClickable = false;
+  } else {
+     switch (syncStatus) {
+       case 'syncing': PersistenceIcon = RefreshCw; persistenceStatusText = 'Syncing...'; persistenceTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary animate-spin'; isClickable = false; break;
+       case 'synced': PersistenceIcon = Cloud; persistenceStatusText = 'Synced'; persistenceTooltipText = 'Data synced with cloud.'; iconColor = 'text-accent'; isClickable = false; break;
+       case 'error':
+         PersistenceIcon = AlertTriangle;
+         persistenceStatusText = hashMismatch ? 'Conflict' : 'Sync Error';
+         persistenceTooltipText = hashMismatch ? 'Data mismatch detected. Click to resolve.' : 'Sync failed. Click to retry.';
+         iconColor = 'text-destructive';
+         isClickable = true;
+         break;
+       case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local'; persistenceTooltipText = "Data saved locally. Click to sync."; iconColor = 'text-muted-foreground'; isClickable = true; break;
+     }
   }
 
-  const handleSyncClick = () => { if (isClickable) retrySync(); };
+  const handleSyncClick = () => {
+    if (!isClerkLoaded || !isSignedIn) {
+      logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id });
+      return;
+    }
+    if (isClickable) retrySync();
+  };
 
   return (
     <div
       ref={ref}
-      data-state={state} // Add state attribute here for styling based on state
       className={cn(
-        "group/sidebar flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear border-r border-sidebar-border",
-        state === "expanded" ? "w-64" : "w-14", // Use fixed widths for consistency
+        "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear border-r border-sidebar-border",
+        state === "expanded" ? "w-64" : "w-14",
         className
       )}
       {...props}
@@ -173,20 +186,19 @@ const SidebarBase = React.forwardRef<
             "flex items-center gap-2 overflow-hidden w-full",
             state === 'collapsed' && "justify-center"
         )}>
-           <Button
+          <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0" // Ensure button doesn't shrink
+            className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0"
             onClick={toggleSidebar}
             aria-label={state === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-             {/* Dynamically render icon based on state */}
-             {state === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
+            {state === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
           </Button>
           <span
             className={cn(
               "whitespace-nowrap text-lg font-semibold transition-opacity duration-200",
-              state === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100" // Add delay for smoother transition
+              state === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
             )}
           >
             IFC - Guru
@@ -204,33 +216,33 @@ const SidebarBase = React.forwardRef<
                     variant={pathname === item.href ? "primary" : "ghost"}
                     className={cn(
                       "w-full justify-start text-sm h-9",
-                      state === "collapsed" && "justify-center px-0 w-9 h-9", // Adjust size for collapsed icon-only button
+                      state === "collapsed" && "justify-center px-0 w-9 h-9",
                       pathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
                     asChild
                   >
                     <Link href={item.href}>
                       {React.cloneElement(item.icon as React.ReactElement, { size: 18, className: "flex-shrink-0" })}
-                       <span className={cn(
-                           "ml-2 truncate", // Always have ml-2 for spacing when expanded
-                           state === "collapsed" && "hidden" // Hide text when collapsed
-                       )}>
-                         {item.label}
-                       </span>
-                       {item.href === "/notifications" && unreadCount > 0 && (
-                          <Badge variant="destructive" className={cn("ml-auto", state === 'collapsed' && 'absolute top-0 right-0 h-4 w-4 p-0 flex items-center justify-center text-[10px]')}>
-                                {state === 'expanded' ? unreadCount : ''} {/* Show count only when expanded */}
-                            </Badge>
-                       )}
+                      <span className={cn(
+                        "ml-2 truncate",
+                        state === "collapsed" && "hidden"
+                      )}>
+                        {item.label}
+                      </span>
+                      {item.href === "/notifications" && unreadCount > 0 && (
+                        <Badge variant="destructive" className={cn("ml-auto", state === 'collapsed' && 'absolute top-0 right-0 h-4 w-4 p-0 flex items-center justify-center text-[10px]')}>
+                          {state === 'expanded' ? unreadCount : ''}
+                        </Badge>
+                      )}
                     </Link>
                   </Button>
                 </TooltipTrigger>
                 {state === "collapsed" && (
                   <TooltipContent side="right" align="center">
                     {item.label}
-                     {item.href === "/notifications" && unreadCount > 0 && (
-                         <span className="ml-1.5 text-xs">({unreadCount})</span>
-                     )}
+                    {item.href === "/notifications" && unreadCount > 0 && (
+                      <span className="ml-1.5 text-xs">({unreadCount})</span>
+                    )}
                   </TooltipContent>
                 )}
               </Tooltip>
@@ -240,7 +252,6 @@ const SidebarBase = React.forwardRef<
       </ScrollArea>
 
       <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
-        {/* Pass sidebar state to ThemeToggle */}
         <ThemeToggle sidebarState={state} />
 
         <TooltipProvider delayDuration={100}>
@@ -251,16 +262,17 @@ const SidebarBase = React.forwardRef<
                 onClick={handleSyncClick}
                 className={cn(
                   "w-full justify-start text-sm h-9",
-                  state === "collapsed" && "justify-center px-0 w-9 h-9", // Adjust size
-                  "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  state === "collapsed" && "justify-center px-0 w-9 h-9",
+                  "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  isMismatchDialogOpen && "animate-pulse border-destructive ring-2 ring-destructive"
                 )}
                 aria-label={persistenceTooltipText}
-                 disabled={!isClickable} // Disable button if not clickable
+                disabled={!isClickable}
               >
-                 {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor) })}
-                 <span className={cn("ml-2 truncate text-xs", state === "collapsed" && "hidden")}>
-                      {persistenceStatusText}
-                  </span>
+                {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor, isMismatchDialogOpen && "text-destructive") })}
+                <span className={cn("ml-2 truncate text-xs", state === "collapsed" && "hidden")}>
+                  {persistenceStatusText}
+                </span>
               </Button>
             </TooltipTrigger>
             {state === "collapsed" && (
@@ -271,22 +283,26 @@ const SidebarBase = React.forwardRef<
           </Tooltip>
         </TooltipProvider>
 
-         {/* Use Clerk's UserButton */}
-         <div className={cn(
-             "flex items-center w-full",
-             state === 'collapsed' ? "justify-center py-1" : "p-1"
-         )}>
-            <UserButton afterSignOutUrl="/sign-in" appearance={{
+        <div className={cn(
+            "flex items-center w-full",
+            state === 'collapsed' ? "justify-center py-1" : "p-1"
+        )}>
+           {isLoaded && isSignedIn && user ? (
+             <UserButton afterSignOutUrl="/" appearance={{
                  elements: {
-                     userButtonAvatarBox: state === 'collapsed' ? "w-7 h-7" : "w-8 h-8", // Adjust avatar size
-                     userButtonPopoverCard: "bg-popover border-border", // Style popover
+                     userButtonAvatarBox: state === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
+                     userButtonPopoverCard: "bg-popover border-border",
                  }
              }}/>
-           {state === 'expanded' && user && (
-              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
-                   {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
-              </span>
+           ) : (
+              <div className="h-8 w-8 flex items-center justify-center">
+              </div>
            )}
+          {state === 'expanded' && isLoaded && isSignedIn && user && (
+             <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
+                  {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
+             </span>
+          )}
         </div>
       </div>
     </div>
@@ -294,8 +310,6 @@ const SidebarBase = React.forwardRef<
 });
 SidebarBase.displayName = "SidebarBase";
 
-
-// Main Sidebar component that decides whether to render Sheet or static Sidebar
 export const Sidebar = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -318,64 +332,56 @@ export const Sidebar = React.forwardRef<
     );
   }
 
-  // Desktop view (Fixed Position Div)
   return (
-      <div
-        ref={ref}
-        className={cn(
-           "fixed inset-y-0 left-0 z-40 hidden md:flex" // Use flex for internal layout
-        )}
-      >
-        <SidebarBase {...props} />
-      </div>
+    <div
+      ref={ref}
+      className={cn("fixed inset-y-0 left-0 z-40 hidden md:flex")}
+    >
+      <SidebarBase {...props} />
+    </div>
   );
 });
 Sidebar.displayName = "Sidebar";
 
-
 export const SidebarRail = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+ HTMLDivElement,
+ React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+ const { state, isMobile } = useSidebar();
+
+ if (isMobile) return null;
+
+ return (
+   <div
+     ref={ref}
+     className={cn(
+       "hidden md:block flex-shrink-0 transition-[width] duration-200 ease-linear",
+       state === "expanded" ? "w-64" : "w-14",
+       className
+     )}
+     {...props}
+   />
+ );
+});
+SidebarRail.displayName = "SidebarRail";
+
+export const SidebarInset = React.forwardRef<
+ HTMLDivElement,
+ React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   const { state, isMobile } = useSidebar();
-
-  if (isMobile) return null; // No rail needed on mobile
+  const marginLeftClass = isMobile ? 'ml-0' : (state === 'expanded' ? 'md:ml-64' : 'md:ml-14');
 
   return (
     <div
       ref={ref}
       className={cn(
-        "hidden md:block flex-shrink-0 transition-[width] duration-200 ease-linear",
-        state === "expanded" ? "w-64" : "w-14", // Match SidebarBase fixed widths
+        "flex-1 transition-[margin-left] duration-200 ease-linear",
+         marginLeftClass,
         className
       )}
       {...props}
     />
   );
-});
-SidebarRail.displayName = "SidebarRail";
-
-
-// SidebarInset manages main content margin based on sidebar state
-export const SidebarInset = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => {
-   const { state, isMobile } = useSidebar();
-
-   // Adjust margin based on sidebar state for desktop
-   const marginLeftClass = isMobile ? 'ml-0' : (state === 'expanded' ? 'md:ml-64' : 'md:ml-14');
-
-   return (
-     <div
-       ref={ref}
-       className={cn(
-         "flex-1 transition-[margin-left] duration-200 ease-linear",
-          marginLeftClass, // Apply dynamic margin
-         className
-       )}
-       {...props}
-     />
-   );
 });
 SidebarInset.displayName = "SidebarInset";

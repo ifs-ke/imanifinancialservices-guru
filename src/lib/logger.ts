@@ -4,7 +4,7 @@
 // Logtail and Winston have been removed. Logging will use console.
 // Client-side logs can be sent to a server endpoint if needed for centralized logging.
 
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
 const ANONYMOUS_USER_FOR_LOGGING = 'anonymous_or_unauthenticated_user';
 
 // Base context for all logs from this client instance
@@ -22,9 +22,9 @@ const clientLog = (
     message: string,
     context?: Record<string, any>,
     errorDetails?: any,
-    userIdForLog?: string // Allow explicit userId passing
+    userIdForLog?: string | null // Allow explicit userId passing (can be null)
 ) => {
-    const finalUserId = userIdForLog || CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder if no Clerk
+    const finalUserId = userIdForLog || ANONYMOUS_USER_FOR_LOGGING; // Use passed userId or anonymous
     const logContext = {
         ...getBaseClientContext(),
         userId: finalUserId,
@@ -73,19 +73,19 @@ const clientLog = (
     }
 };
 
-export const logInfo = (message: string, context?: Record<string, any>, userId?: string) => {
+export const logInfo = (message: string, context?: Record<string, any>, userId?: string | null) => {
     clientLog('info', message, context, undefined, userId);
 };
 
-export const logWarn = (message: string, context?: Record<string, any>, userId?: string) => {
+export const logWarn = (message: string, context?: Record<string, any>, userId?: string | null) => {
     clientLog('warn', message, context, undefined, userId);
 };
 
-export const logError = (message: string, error?: any, context?: Record<string, any>, userId?: string) => {
+export const logError = (message: string, error?: any, context?: Record<string, any>, userId?: string | null) => {
     clientLog('error', message, context, error, userId);
 };
 
-export const logDebug = (message: string, context?: Record<string, any>, userId?: string) => {
+export const logDebug = (message: string, context?: Record<string, any>, userId?: string | null) => {
     // Debug logs are often conditional on NODE_ENV for client-side
     if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS === 'true') {
         clientLog('debug', message, context, undefined, userId);
@@ -93,4 +93,4 @@ export const logDebug = (message: string, context?: Record<string, any>, userId?
 };
 
 // Note: Server-side logging (in API routes, server actions) should use console directly
-// or a dedicated server-side logging setup if needed (which is now just console.* via this setup).
+// or a dedicated server-side logging setup if needed.

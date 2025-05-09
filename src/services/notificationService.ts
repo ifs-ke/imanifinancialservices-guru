@@ -8,10 +8,10 @@
  import { formatCurrency } from "@/lib/utils";
  import { startOfMonth, endOfMonth } from 'date-fns';
  import type { NotificationType } from '@/lib/types';
- import { logInfo, logWarn, logError } from '@/lib/logger'; // Use console-based logger
- // import { useAuth } from "@clerk/nextjs"; // Clerk disabled
+ import { logInfo, logWarn, logError } from '@/lib/logger';
+ import { useAuth } from "@clerk/nextjs"; // Re-enable Clerk
 
- const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
 
 
  const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
@@ -22,9 +22,7 @@
      const budgetItems = useBudgetStore(state => state.budgetItems);
      const allTransactions = useTransactionsStore(state => state.transactions);
      const existingNotifications = useNotificationStore(state => state.notifications);
-     // const { userId, isSignedIn } = useAuth(); // Clerk disabled
-     const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
-     const isSignedIn = true; // Assume signed in when Clerk is disabled
+     const { userId, isSignedIn } = useAuth(); // Use actual Clerk auth state
 
 
      const monthlyAnalysis = useMemo(() => {
@@ -133,9 +131,9 @@
      return null; 
  }
 
- export function triggerCollaborationNotification(sharerName: string, weekKey: string, recipientUserId: string) {
+ export function triggerCollaborationNotification(sharerName: string, weekKey: string, recipientUserId: string, sharerId?: string | null) {
      const addNotification = useNotificationStore.getState().addNotification;
-     const currentUserId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Since useAuth can't be used here
+     const currentUserIdForLog = sharerId || 'system_or_unknown_sharer';
      addNotification({
          type: 'collaboration',
          title: 'Review Shared With You',
@@ -148,17 +146,17 @@
           weekKey,
           recipientUserId, 
           type: 'collaboration_received' 
-      }, currentUserId);
+      }, currentUserIdForLog);
  }
 
- export function triggerAppUpdateNotification(title: string, message: string, link?: string) {
+ export function triggerAppUpdateNotification(title: string, message: string, link?: string, triggeredByUserId?: string | null) {
      const addNotification = useNotificationStore.getState().addNotification;
-     const currentUserId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Since useAuth can't be used here
+     const currentUserIdForLog = triggeredByUserId || 'system';
      const newNotif = addNotification({
          type: 'update', 
          title: title,
          message: message,
          link: link,
      });
-      logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }, currentUserId);
+      logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }, currentUserIdForLog);
  }

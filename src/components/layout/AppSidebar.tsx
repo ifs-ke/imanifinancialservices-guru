@@ -35,7 +35,7 @@
  import { ThemeToggle } from "../ui/ThemeToggle";
  import { useNotificationStore } from "@/store/notificationStore";
  import { Badge } from "@/components/ui/badge";
- import { UserButton, useUser } from "@clerk/nextjs";
+ import { UserButton, useUser } from "@clerk/nextjs"; // Re-enabled Clerk
  import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
  import { ScrollArea } from "../ui/scroll-area";
  import { useSidebar } from "../ui/sidebar";
@@ -108,7 +108,7 @@
 
      const handleSyncClick = () => {
        if (!isClerkLoaded || !isSignedIn) {
-         logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded });
+         logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id });
          // Optionally, trigger sign-in flow or show a message
          return;
        }

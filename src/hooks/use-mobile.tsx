@@ -4,32 +4,27 @@ import * as React from "react"
 const MOBILE_BREAKPOINT = 768
 
 export function useIsMobile() {
-  // Initialize state based on whether window exists (safer for SSR)
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(
-      typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : undefined
-  );
+  // Default to false (desktop) for SSR and initial client render before hydration.
+  // This ensures the server-rendered output matches the initial client render.
+  const [isMobile, setIsMobile] = React.useState(false);
+  const [hasMounted, setHasMounted] = React.useState(false);
 
   React.useEffect(() => {
-    // Only run effect logic if window exists
-    if (typeof window === 'undefined') {
-        return;
-    }
+    setHasMounted(true); // Mark as mounted once on the client
 
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      // Check window.innerWidth directly inside the handler
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
+    const checkIsMobile = () => {
+      if (typeof window !== 'undefined') { // Ensure window is defined
+        setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+      }
+    };
 
-    // Initial check immediately after mount
-    onChange();
+    checkIsMobile(); // Perform initial check on client mount
+    window.addEventListener("resize", checkIsMobile); // Listen for resize events
 
-    mql.addEventListener("change", onChange)
-    // Cleanup listener on unmount
-    return () => mql.removeEventListener("change", onChange)
-  }, []) // Empty dependency array ensures this runs once on mount/client-side
+    return () => window.removeEventListener("resize", checkIsMobile); // Cleanup listener
+  }, []); // Empty dependency array ensures this effect runs only once on client mount
 
-  // Return the determined state, could still be undefined initially on the server
-  return isMobile;
+  // Return the client-determined value only after the component has mounted.
+  // Before mounting (SSR or initial client render), return the default (false).
+  return hasMounted ? isMobile : false;
 }
-

@@ -28,12 +28,12 @@
         logError("Unauthorized attempt to set user role: No admin session found.", undefined, logContext);
         throw new Error("Unauthorized: Admin privileges required.");
      }
-     // Add a check here if you want to ensure currentAdminId *is* an admin
-     // const isAdmin = (await getUserRole(currentAdminId)) === 'admin';
-     // if (!isAdmin) {
-     //    logError(`User ${currentAdminId} attempted to set role for ${userIdToUpdate} without admin privileges.`, undefined, logContext);
-     //    throw new Error("Forbidden: Admin privileges required.");
-     // }
+     
+     const isAdmin = (await getUserRole(currentAdminId)) === 'admin';
+     if (!isAdmin) {
+        logError(`User ${currentAdminId} attempted to set role for ${userIdToUpdate} without admin privileges.`, undefined, logContext);
+        throw new Error("Forbidden: Admin privileges required.");
+     }
 
 
      try {

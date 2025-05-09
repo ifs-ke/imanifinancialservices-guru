@@ -1,11 +1,10 @@
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
-// Clerk auth is disabled, so we'll use a placeholder or client-provided ID.
+import { auth } from '@clerk/nextjs/server'; // Re-enable Clerk
 
 // Consistent placeholder for when no user context can be determined server-side
-// or if Clerk is disabled and client doesn't send one.
-const ANONYMOUS_USER_ID = 'anonymous-client-user';
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+// or if client doesn't send one.
+const ANONYMOUS_API_USER = 'anonymous-api-user';
 
 
 interface ClientLogPayload {
@@ -19,9 +18,11 @@ export async function POST(request: Request) {
   let logContextBase: Record<string, any> = {};
 
   try {
-    // Since Clerk is disabled, we directly use the placeholder or context-provided ID.
+    // Try to get userId from Clerk session if available, fallback to payload or anonymous
+    const { userId: clerkUserId } = auth();
     const tempPayloadForUserIdCheck = await request.clone().json(); // Clone to read body once for userId
-    effectiveUserId = tempPayloadForUserIdCheck.context?.userId || CLERK_DISABLED_PLACEHOLDER_USER_ID; // Fallback to general placeholder
+    
+    effectiveUserId = clerkUserId || tempPayloadForUserIdCheck.context?.userId || ANONYMOUS_API_USER;
 
     logContextBase = { userId: effectiveUserId, source: 'client-log-api' };
 
