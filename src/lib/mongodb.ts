@@ -50,7 +50,7 @@ let clientPromise: Promise<MongoClient> | null = null;
 const connectToDatabase = async (): Promise<MongoClient> => {
    if (!uri) {
        // Throwing here ensures the application fails fast if the URI is missing at runtime.
-       // console.error("MongoDB: Connection attempt failed - MONGODB_URI is not configured."); // Console log commented out // Log before throwing
+       // console.error("MongoDB: Connection attempt failed - MONGODB_URI is not configured."); // Console log commented out
        throw new Error('MongoDB URI is not configured. Please set the MONGODB_URI environment variable.');
    }
 
@@ -127,7 +127,7 @@ const connectToDatabase = async (): Promise<MongoClient> => {
     // // console.log("MongoDB: Connection successful and ping verified."); // Console log commented out // Console log commented out
     return connectedClient;
   } catch (error) {
-    // console.error("MongoDB: Connection or ping verification failed:", error); // Console log commented out // Log the specific connection error
+    // console.error("MongoDB: Connection or ping verification failed:", error); // Console log commented out
     // Reset the promise so the next call attempts to reconnect.
     clientPromise = null;
     if (process.env.NODE_ENV === 'development') {
