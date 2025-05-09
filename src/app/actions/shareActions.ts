@@ -1,104 +1,102 @@
 // src/app/actions/shareActions.ts
 'use server';
 
-import { auth, clerkClient } from '@clerk/nextjs/server'; // Re-enabled Clerk server-side
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import type { UserShareInfo, WeeklyReviewData } from '@/lib/types';
 import { Collection } from 'mongodb';
-// import { logInfo, logWarn, logError } from '@/lib/logger'; // Logger removed
+import { logInfo, logWarn, logError } from '@/lib/logger';
 
-// No longer need placeholders
-// const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
-// const CLERK_DISABLED_PLACEHOLDER_CURRENT_USER_EMAIL = 'local-user@example.com';
-
+// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID and CLERK_DISABLED_PLACEHOLDER_CURRENT_USER_EMAIL
 
 export async function searchUserByEmailApi(email: string): Promise<UserShareInfo | null> {
-    const { userId: currentUserId } = auth(); // Get current user ID from Clerk
-    // const logContext = { currentUserId, targetEmail: email, operation: 'searchUserByEmailApi' };
+    const { userId: currentUserId } = auth();
+    const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', targetEmail: email, operation: 'searchUserByEmailApi' };
 
     if (!currentUserId) {
-        // console.error('Unauthorized search: User not logged in.'); // Console log commented out
+        logError('Unauthorized search: User not logged in.', undefined, logContext);
         throw new Error('Unauthorized: User not logged in.');
     }
 
     if (!email || typeof email !== 'string' || email.trim().length === 0) {
-        // console.warn('Invalid email input for search.'); // Console log commented out
+        logWarn('Invalid email input for search.', logContext);
         return null;
     }
 
-    // // console.log(`Searching for user by email.`); // Console log commented out
+    logInfo(`Searching for user by email.`, logContext);
 
     try {
-        // Use Clerk's client to search for users by email
         const users = await clerkClient.users.getUserList({ emailAddress: [email.trim()] });
 
         if (users.length === 0) {
-            // console.log("User not found."); // Console log commented out
-            return null; // User not found
+            logInfo("User not found.", logContext);
+            return null;
         }
 
         const targetUser = users[0];
 
-        // Prevent sharing with self
         if (targetUser.id === currentUserId) {
-            // console.log("User tried to search for themselves."); // Console log commented out
-            return null; // Return null to indicate self-search or handle differently if needed
+            logInfo("User tried to search for themselves.", logContext);
+            // It's generally not an error to search for oneself, but sharing with self is prevented later.
+            // Returning the user info might be fine, or null if self-sharing isn't desired at search stage.
+            // For now, let's return the info.
         }
 
         const primaryEmail = targetUser.emailAddresses.find(em => em.id === targetUser.primaryEmailAddressId)?.emailAddress;
 
         if (!primaryEmail) {
-            // console.warn("User found but has no primary email address.", { targetUserId: targetUser.id }); // Console log commented out
-            return null; // Cannot share if target has no primary email
+            logWarn("User found but has no primary email address.", { ...logContext, targetUserId: targetUser.id });
+            return null;
         }
 
-        // // console.log(`User found: ${targetUser.id}`); // Console log commented out
+        logInfo(`User found: ${targetUser.id}`, logContext);
         return {
             userId: targetUser.id,
             email: primaryEmail,
-            name: targetUser.fullName || primaryEmail, // Use full name if available, else email
+            name: targetUser.fullName || primaryEmail,
         };
 
     } catch (error) {
-        // console.error(`Error searching for user by email:`, { error }); // Console log commented out
-        // Handle specific Clerk errors if necessary, e.g., rate limits
-        return null; // Return null on error
+        logError(`Error searching for user by email:`, error, logContext);
+        return null;
     }
 }
 
 export async function shareReviewApi(weekKey: string, targetUserId: string): Promise<void> {
-    const { userId: currentUserId } = auth(); // Get current user ID from Clerk
+    const { userId: currentUserId } = auth();
+     const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', targetUserId, weekKey, operation: 'shareReviewApi' };
+
 
     if (!currentUserId) {
+        logError('Unauthorized: Cannot share review.', undefined, logContext);
         throw new Error('Unauthorized: Cannot share review.');
     }
     if (currentUserId === targetUserId) {
+        logWarn('Attempted to share review with self.', logContext);
         throw new Error('Cannot share review with yourself.');
     }
 
-    // const logContext = { currentUserId, targetUserId, weekKey, operation: 'shareReviewApi' };
-    // // console.log(`Attempting to share review ${weekKey} with ${targetUserId}.`); // Console log commented out
+    logInfo(`Attempting to share review ${weekKey} with ${targetUserId}.`, logContext);
 
     try {
         const client = await connectToDatabase();
         const db = client.db();
         const reviewsCollection: Collection<WeeklyReviewData> = db.collection('weeklyReviews');
 
-        // Find the review owned by the current user
         const review = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId });
 
         if (!review) {
-            // // console.warn(`Share failed: Review ${weekKey} not found or not owned by user ${currentUserId}. Creating new review shell.`); // Console log commented out
+            logWarn(`Share failed: Review ${weekKey} not found or not owned by user ${currentUserId}. Creating new review shell.`, logContext);
             const newReviewShell: WeeklyReviewData = {
-                 ownerId: currentUserId,
+                 ownerId: currentUserId, // Ensure ownerId is set
                  journal: '',
-                 sharedWith: [targetUserId].sort(),
+                 sharedWith: [targetUserId].sort(), // Initialize sharedWith with target user
              };
              await reviewsCollection.insertOne({
                  weekKey,
                  ...newReviewShell,
              });
-             // // console.log(`Created new review shell ${weekKey} for sharing.`); // Console log commented out
+             logInfo(`Created new review shell ${weekKey} for sharing.`, logContext);
              return;
         }
 
@@ -112,30 +110,31 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
             );
 
             if (updateResult.modifiedCount === 1) {
-                 // // console.log(`Successfully shared review ${weekKey} with user ${targetUserId}.`); // Console log commented out
+                 logInfo(`Successfully shared review ${weekKey} with user ${targetUserId}.`, logContext);
              } else {
-                 // // console.warn(`Share update did not modify document for review ${weekKey}.`, { updateResult }); // Console log commented out
+                 logWarn(`Share update did not modify document for review ${weekKey}.`, { ...logContext, updateResult });
                  throw new Error('Failed to update sharing status.');
              }
         } else {
-            // // console.log(`Review ${weekKey} already shared with user ${targetUserId}.`); // Console log commented out
+            logInfo(`Review ${weekKey} already shared with user ${targetUserId}.`, logContext);
         }
     } catch (error) {
-        // // console.error(`Error sharing review ${weekKey} with user ${targetUserId}:`, { error }); // Console log commented out
+        logError(`Error sharing review ${weekKey} with user ${targetUserId}:`, error, logContext);
         throw new Error(`Failed to share review: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
 
 export async function revokeShareApi(weekKey: string, targetUserId: string): Promise<void> {
-    const { userId: currentUserId } = auth(); // Get current user ID from Clerk
+    const { userId: currentUserId } = auth();
+    const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', targetUserId, weekKey, operation: 'revokeShareApi' };
 
     if (!currentUserId) {
+        logError('Unauthorized: Cannot revoke share.', undefined, logContext);
         throw new Error('Unauthorized: Cannot revoke share.');
     }
 
-    // const logContext = { currentUserId, targetUserId, weekKey, operation: 'revokeShareApi' };
-    // // console.log(`Attempting to revoke share for review ${weekKey} from ${targetUserId}.`); // Console log commented out
+    logInfo(`Attempting to revoke share for review ${weekKey} from ${targetUserId}.`, logContext);
 
     try {
         const client = await connectToDatabase();
@@ -145,7 +144,7 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
         const review = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId });
 
         if (!review) {
-            // // console.warn(`Revoke failed: Review ${weekKey} not found or not owned by user ${currentUserId}.`); // Console log commented out
+            logWarn(`Revoke failed: Review ${weekKey} not found or not owned by user ${currentUserId}.`, logContext);
             throw new Error(`Review ${weekKey} not found or not owned by you.`);
         }
 
@@ -155,43 +154,46 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
 
             const updateResult = await reviewsCollection.updateOne(
                 { weekKey, ownerId: currentUserId },
-                { $set: { sharedWith: updatedSharedWith.length > 0 ? updatedSharedWith : undefined } }
+                { $set: { sharedWith: updatedSharedWith.length > 0 ? updatedSharedWith : undefined } } // Set to undefined if array becomes empty
             );
 
             if (updateResult.modifiedCount === 1) {
-                 // // console.log(`Successfully revoked share for review ${weekKey} from user ${targetUserId}.`); // Console log commented out
+                 logInfo(`Successfully revoked share for review ${weekKey} from user ${targetUserId}.`, logContext);
              } else {
-                 // // console.warn(`Revoke update did not modify document for review ${weekKey}.`, { updateResult }); // Console log commented out
+                 logWarn(`Revoke update did not modify document for review ${weekKey}.`, { ...logContext, updateResult });
                  throw new Error('Failed to update sharing status.');
              }
         } else {
-            // // console.log(`Review ${weekKey} was not shared with user ${targetUserId}. No revoke needed.`); // Console log commented out
+            logInfo(`Review ${weekKey} was not shared with user ${targetUserId}. No revoke needed.`, logContext);
         }
     } catch (error) {
-        // // console.error(`Error revoking share for review ${weekKey} from user ${targetUserId}:`, { error }); // Console log commented out
+        logError(`Error revoking share for review ${weekKey} from user ${targetUserId}:`, error, logContext);
         throw new Error(`Failed to revoke share: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
 export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareInfo[]> {
-    const { userId: currentUserId } = auth(); // Get current user ID from Clerk
+    const { userId: currentUserId } = auth();
+    const logContext = { currentUserId: currentUserId || 'unknown-unauthenticated', weekKey, operation: 'getSharedWithUsersApi' };
+
 
      if (!currentUserId) {
+        logError('Unauthorized: Cannot get shared list.', undefined, logContext);
         throw new Error('Unauthorized: Cannot get shared list.');
     }
 
-     // const logContext = { currentUserId, weekKey, operation: 'getSharedWithUsersApi' };
-     // // console.log(`Fetching shared user list for review ${weekKey}.`); // Console log commented out
+     logInfo(`Fetching shared user list for review ${weekKey}.`, logContext);
 
      try {
          const client = await connectToDatabase();
          const db = client.db();
          const reviewsCollection: Collection<WeeklyReviewData> = db.collection('weeklyReviews');
 
+         // Find the review owned by the current user to get its sharedWith list
          const review = await reviewsCollection.findOne({ weekKey, ownerId: currentUserId }, { projection: { sharedWith: 1 } });
 
          if (!review || !review.sharedWith || review.sharedWith.length === 0) {
-             // // console.log(`Review ${weekKey} not found, not owned, or not shared with anyone.`); // Console log commented out
+             logInfo(`Review ${weekKey} not found, not owned, or not shared with anyone.`, logContext);
              return [];
          }
 
@@ -209,11 +211,11 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
              };
          });
 
-         // // console.log(`Fetched details for ${userInfos.length} shared users for review ${weekKey}.`); // Console log commented out
+         logInfo(`Fetched details for ${userInfos.length} shared users for review ${weekKey}.`, logContext);
          return userInfos;
 
      } catch (error) {
-         // // console.error(`Error fetching shared user list for review ${weekKey}:`, { error }); // Console log commented out
+         logError(`Error fetching shared user list for review ${weekKey}:`, error, logContext);
          throw new Error(`Failed to fetch shared users: ${error instanceof Error ? error.message : String(error)}`);
      }
 }
