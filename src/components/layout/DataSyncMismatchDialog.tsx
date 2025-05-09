@@ -4,13 +4,12 @@
 import React, { useState } from 'react';
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
+  AlertDialogContent, // Removed AlertDialogAction, AlertDialogCancel
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogCancel, // Keep Cancel for closing
 } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertTriangle, UploadCloud, DownloadCloud } from 'lucide-react';
@@ -61,21 +60,25 @@ const DataSyncMismatchDialog: React.FC<DataSyncMismatchDialogProps> = ({
         <div className="py-4 space-y-4">
           <p className="text-sm font-medium">Resolution Options:</p>
           <div className="flex flex-col sm:flex-row gap-4">
+              {/* Keep Local & Overwrite Cloud Button */}
               <Button onClick={handleForceSaveClick} disabled={isSaving || isFetching} className="flex-1">
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                   {isSaving ? 'Saving Local...' : 'Keep Local & Overwrite Cloud'}
               </Button>
-              <Button onClick={handleForceFetchClick} disabled={isSaving || isFetching} className="flex-1" variant="destructive">
+              {/* Discard Local & Load Cloud Button */}
+              <Button onClick={handleForceFetchClick} disabled={isSaving || isFetching} className="flex-1" variant="outline">
+                   {/* Changed variant to outline for better visual distinction */}
                   {isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
-                   {isFetching ? 'Loading Server...' : 'Discard Local & Load Cloud'}
+                   {isFetching ? 'Loading Cloud...' : 'Discard Local & Load Cloud'}
                </Button>
           </div>
           <p className="text-xs text-muted-foreground text-center mt-2">
-             Choosing 'Load Cloud' will discard any unsaved local changes made since the last successful sync.
+             Choosing 'Load Cloud' will discard any unsaved local changes made since the last successful sync. Choosing 'Keep Local' will overwrite the data currently in the cloud.
           </p>
         </div>
-        {/* No explicit Cancel/Action needed in footer, actions are buttons above */}
+        {/* Footer with only a "Decide Later" / Close button */}
         <AlertDialogFooter>
+            {/* Use AlertDialogCancel which already has appropriate styling and functionality */}
             <AlertDialogCancel onClick={onClose} disabled={isSaving || isFetching}>Decide Later</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -84,4 +87,3 @@ const DataSyncMismatchDialog: React.FC<DataSyncMismatchDialogProps> = ({
 };
 
 export default DataSyncMismatchDialog;
-
