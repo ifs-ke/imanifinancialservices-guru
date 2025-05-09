@@ -11,24 +11,14 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { kv } from '@vercel/kv';
 import { logInfo, logWarn, logError } from '@/lib/logger';
 import { addCorsHeaders } from '@/lib/utils';
+import { SaveDataPayloadSchema } from '@/lib/schemas'; // Import Zod schema
 
 const ratelimit = new Ratelimit({
   redis: kv,
   limiter: Ratelimit.slidingWindow(10, '10 s'),
 });
 
-interface SaveDataPayload {
-  transactions: TransactionWithId[];
-  debts: DebtItem[];
-  assetItems: StatementItem[];
-  otherLiabilityItems: OtherLiabilityItem[];
-  budgetItems: BudgetItem[];
-  ownedReviews: Record<string, WeeklyReviewData>;
-  startDate?: string;
-  endDate?: string;
-  gettingStartedDismissed?: boolean;
-  dataHash: string;
-}
+// Interface SaveDataPayload removed, will use Zod inferred type or schema directly
 
 async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[], session: ClientSession) {
   const logContext = { userId, collectionName, operation: 'replaceCollectionData' };
@@ -185,23 +175,27 @@ export async function POST(request: Request) {
   }
   logInfo('Save API: Rate limit check passed.', logContextWithRateLimit);
 
-  let payload: SaveDataPayload;
+  let rawPayload: any;
   try {
-    payload = await request.json();
+    rawPayload = await request.json();
   } catch (error) {
-    logError('Save API: Invalid request body.', error, logContextWithRateLimit);
+    logError('Save API: Invalid request body - JSON parsing failed.', error, logContextWithRateLimit);
     const response = NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     return addCorsHeaders(response);
   }
 
-  if (!payload || typeof payload !== 'object' || !payload.dataHash) {
-    logWarn('Save API: Invalid payload structure or missing dataHash.', logContextWithRateLimit);
-    const response = NextResponse.json({ error: 'Invalid payload or missing dataHash' }, { status: 400 });
+  // Validate payload with Zod
+  const validationResult = SaveDataPayloadSchema.safeParse(rawPayload);
+  if (!validationResult.success) {
+    logWarn('Save API: Invalid payload structure or data types.', { ...logContextWithRateLimit, errors: validationResult.error.flatten() });
+    const response = NextResponse.json({ error: 'Invalid payload structure or data types.', details: validationResult.error.flatten() }, { status: 400 });
     return addCorsHeaders(response);
   }
 
+  const payload = validationResult.data; // Use validated and potentially transformed data
+
   const { dataHash, ...receivedData } = payload;
-  const preparedDataForVerification = prepareDataForHashing(receivedData);
+  const preparedDataForVerification = prepareDataForHashing(receivedData as any); // `prepareDataForHashing` expects dates as Date objects internally
   const dataString = stringify(preparedDataForVerification);
   const calculatedServerHash = await hashData(dataString);
 
@@ -226,6 +220,7 @@ export async function POST(request: Request) {
   try {
     logInfo('Save API: Starting MongoDB transaction.', logContextWithRateLimit);
     await session.withTransaction(async () => {
+      // Use preparedDataForVerification which has dates as Date objects, ready for DB
       const {
         transactions = [],
         debts = [],
@@ -233,10 +228,10 @@ export async function POST(request: Request) {
         otherLiabilityItems = [],
         budgetItems = [],
         ownedReviews = {},
-        startDate,
-        endDate,
+        startDate, // This is now a string (ISO) from SaveDataPayloadSchema
+        endDate,   // This is now a string (ISO) from SaveDataPayloadSchema
         gettingStartedDismissed
-      } = preparedDataForVerification;
+      } = preparedDataForVerification; // Use the data that was hashed
 
       await Promise.all([
         replaceCollectionData(db, 'transactions', userId, transactions, session),
@@ -245,7 +240,8 @@ export async function POST(request: Request) {
         replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems, session),
         replaceCollectionData(db, 'budgetItems', userId, budgetItems, session),
         saveOwnedWeeklyReviews(db, userId, ownedReviews, session),
-        saveUserProfileData(db, userId, startDate, endDate, gettingStartedDismissed, session)
+        // Pass startDate and endDate (ISO strings) to saveUserProfileData
+        saveUserProfileData(db, userId, startDate?.toString(), endDate?.toString(), gettingStartedDismissed, session)
       ]);
     });
     logInfo('Save API: MongoDB transaction committed successfully.', logContextWithRateLimit);

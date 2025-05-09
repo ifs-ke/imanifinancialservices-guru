@@ -1,11 +1,8 @@
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server'; // Re-enable Clerk
-
-// Consistent placeholder for when no user context can be determined server-side
-// or if client doesn't send one.
-const ANONYMOUS_API_USER = 'anonymous-api-user';
-
+import { auth } from '@clerk/nextjs/server';
+import { ClientLogPayloadSchema } from '@/lib/schemas'; // Import Zod schema
+import { logInfo, logWarn, logError, logDebug } from '@/lib/logger'; // Import server-side logger
 
 interface ClientLogPayload {
   level: 'log' | 'info' | 'warn' | 'error' | 'debug';
@@ -18,58 +15,72 @@ export async function POST(request: Request) {
   let logContextBase: Record<string, any> = {};
 
   try {
-    // Try to get userId from Clerk session if available, fallback to payload or anonymous
     const { userId: clerkUserId } = auth();
-    const tempPayloadForUserIdCheck = await request.clone().json(); // Clone to read body once for userId
     
-    effectiveUserId = clerkUserId || tempPayloadForUserIdCheck.context?.userId || ANONYMOUS_API_USER;
+    let rawPayload;
+    try {
+        rawPayload = await request.clone().json(); // Clone to read body for userId and then full parse
+    } catch (jsonError) {
+        logError('CRITICAL: Failed to parse client log payload as JSON in /api/client-log', jsonError, { endpoint: '/api/client-log' });
+        return NextResponse.json({ success: false, error: 'Invalid JSON payload' }, { status: 400 });
+    }
 
+    // Validate payload with Zod
+    const validationResult = ClientLogPayloadSchema.safeParse(rawPayload);
+    if (!validationResult.success) {
+        logWarn('Invalid client log payload received in /api/client-log', { 
+            errors: validationResult.error.flatten(), 
+            receivedPayload: rawPayload, // Log the raw payload for debugging
+            endpoint: '/api/client-log' 
+        });
+        return NextResponse.json({ success: false, error: 'Invalid log payload structure or data types.', details: validationResult.error.flatten() }, { status: 400 });
+    }
+    
+    const payload = validationResult.data; // Use validated data
+
+    effectiveUserId = clerkUserId || payload.context?.userId || 'anonymous-api-user';
     logContextBase = { userId: effectiveUserId, source: 'client-log-api' };
-
-    const payload = await request.json() as ClientLogPayload;
 
     const contextForLog = {
       ...logContextBase,
       ...(payload.context || {}),
     };
 
-    const serverLevel: string = payload.level === 'log' ? 'info' : payload.level;
-    // Prefix to distinguish client logs in server console
+    const serverLevel = payload.level === 'log' ? 'info' : payload.level;
     const logMessage = `[Client ${payload.level.toUpperCase()}] ${payload.message}`;
 
-    // Log using console on the server
     switch (serverLevel) {
       case 'info':
-        console.info(logMessage, contextForLog);
+        logInfo(logMessage, contextForLog);
         break;
       case 'warn':
-        console.warn(logMessage, contextForLog);
+        logWarn(logMessage, contextForLog);
         break;
       case 'error':
         let clientErrorDetails = payload.context?.error || payload.context?.errorMessage || payload.context?.stack;
         if (typeof clientErrorDetails === 'object') clientErrorDetails = JSON.stringify(clientErrorDetails);
-        console.error(logMessage, clientErrorDetails || '', contextForLog);
+        logError(logMessage, clientErrorDetails || '', contextForLog);
         break;
       case 'debug':
-        // Server-side debug logs can be verbose, consider environment flag if needed
         if (process.env.NODE_ENV === 'development' || process.env.SERVER_DEBUG_LOGS === 'true') {
-            console.debug(logMessage, contextForLog);
+            logDebug(logMessage, contextForLog);
         }
         break;
       default:
-        console.log(logMessage, contextForLog); // Default to console.log for unknown 'log' level
+        logInfo(logMessage, contextForLog); // Default to info for unknown 'log' level
     }
 
     return NextResponse.json({ success: true, message: 'Log received by server' }, { status: 200 });
 
   } catch (error: any) {
+    // Use the base logger context if determination failed earlier, otherwise, this error is pre-payload processing
     const criticalErrorContext = {
-        ...logContextBase, // Use base context which might have a determined userId or anonymous
+        ...(Object.keys(logContextBase).length > 0 ? logContextBase : { userId: 'unknown', source: 'client-log-api-critical-error' }),
         endpoint: '/api/client-log',
         errorMessage: error.message,
         stack: error.stack,
     };
-    console.error('CRITICAL: Error processing client log in /api/client-log:', criticalErrorContext);
+    logError('CRITICAL: Error processing client log in /api/client-log', error, criticalErrorContext);
 
     return NextResponse.json({ success: false, error: 'Failed to process client log on server' }, { status: 500 });
   }

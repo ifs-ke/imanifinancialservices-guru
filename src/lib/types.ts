@@ -1,5 +1,9 @@
 // src/lib/types.ts
 
+// These types can now be inferred from Zod schemas if preferred,
+// or kept separate for clarity. For this example, they are kept separate
+// but should mirror the structure validated by Zod.
+
 /**
  * Represents the allowed modes of payment.
  */
@@ -21,20 +25,18 @@ export type TransactionVariability = 'fixed' | 'variable';
  * Includes optional categorization fields.
  */
 export interface TransactionWithId {
-  id: string; // Using string ID for flexibility
-  date: Date;
+  id: string;
+  date: Date; // Stored as Date object in Zustand
   description: string;
-  amount: number; // Positive for income, negative for expense
-  modeOfPayment: ModeOfPayment; // Make mandatory after import/creation
-  frequency?: TransactionFrequency; // Optional categorization
-  variability?: TransactionVariability; // Optional categorization
+  amount: number;
+  modeOfPayment: ModeOfPayment;
+  frequency?: TransactionFrequency;
+  variability?: TransactionVariability;
 }
 
 
 /**
  * Represents an item in the financial statements (Asset).
- * Note: Income/Expense items are derived from transactions on the Statements page.
- * Liabilities are split into DebtItems and OtherLiabilityItems.
  */
 export interface StatementItem {
   id: string;
@@ -45,13 +47,15 @@ export interface StatementItem {
 /**
  * Represents a single debt item, categorized by term.
  */
+export type DebtTerm = 'long' | 'short'; // Moved from schemas for direct type use
+
 export interface DebtItem {
     id: string;
-    description: string; // e.g., "Car Loan", "Student Loan - Gov", "Credit Card XYZ"
-    principal: number; // Current outstanding principal balance
-    interestRate: number; // Annual interest rate (e.g., 12.5 for 12.5%)
-    minPayment: number; // Minimum monthly payment
-    term: 'long' | 'short'; // Categorize debt term
+    description: string;
+    principal: number;
+    interestRate: number;
+    minPayment: number;
+    term: DebtTerm;
 }
 
 /**
@@ -65,7 +69,6 @@ export interface OtherLiabilityItem {
 
 /**
  * Represents the categories for individual budget items.
- * Added 'debt' category.
  */
 export type BudgetItemCategory = 'income' | 'recurring-expense' | 'one-time-expense' | 'goal' | 'debt';
 
@@ -78,19 +81,18 @@ export interface BudgetItem {
     description: string;
     amount: number;
     category: BudgetItemCategory;
-    period: string; // Added: Period identifier (e.g., "YYYY-MM")
+    period: string; // e.g., "YYYY-MM"
 }
 
 /**
  * Represents the data stored for a specific weekly review.
- * Includes journal entry and comments linked to transaction IDs.
- * Added ownerId and sharedWith for collaboration.
  */
 export interface WeeklyReviewData {
-  ownerId: string; // ID of the user who owns this review
+  ownerId: string;
+  ownerUsername?: string;
   journal: string;
-  transactionComments?: Record<string, string>; // transactionId -> comment string
-  sharedWith?: string[]; // Array of user IDs this review is shared with
+  transactionComments?: Record<string, string>;
+  sharedWith?: string[];
 }
 
 /**
@@ -98,8 +100,8 @@ export interface WeeklyReviewData {
  */
 export interface UserShareInfo {
     userId: string;
-    email: string; // Primary email for identification
-    name?: string; // Optional user's name
+    email: string;
+    name?: string;
 }
 
 /**
@@ -116,7 +118,28 @@ export interface NotificationItem {
     type: NotificationType;
     title: string;
     message: string;
-    timestamp: Date;
+    timestamp: Date; // Stored as Date object in Zustand
     read: boolean;
-    link?: string; // Optional link for navigation (e.g., to a specific review or budget page)
+    link?: string;
+}
+
+// Client Log Payload type (matches Zod schema)
+export interface ClientLogPayloadType {
+  level: 'log' | 'info' | 'warn' | 'error' | 'debug';
+  message: string;
+  context?: Record<string, any>;
+}
+
+// Save Data Payload type (matches Zod schema, dates are strings)
+export interface SaveDataPayloadType {
+  transactions: Array<Omit<TransactionWithId, 'date'> & { date: string }>;
+  debts: DebtItem[];
+  assetItems: StatementItem[];
+  otherLiabilityItems: OtherLiabilityItem[];
+  budgetItems: BudgetItem[];
+  ownedReviews: Record<string, WeeklyReviewData>;
+  startDate?: string;
+  endDate?: string;
+  gettingStartedDismissed?: boolean;
+  dataHash: string;
 }
