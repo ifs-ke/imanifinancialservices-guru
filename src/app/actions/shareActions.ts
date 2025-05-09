@@ -1,14 +1,11 @@
 // src/app/actions/shareActions.ts
 'use server';
 
-import { auth, clerkClient } from '@clerk/nextjs/server'; // Re-enabled Clerk
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import type { UserShareInfo, WeeklyReviewData } from '@/lib/types';
 import { Collection } from 'mongodb';
 import { logInfo, logWarn, logError } from '@/lib/logger';
-
-// Removed CLERK_DISABLED_PLACEHOLDER constants
-
 
 export async function searchUserByEmailApi(email: string): Promise<UserShareInfo | null> {
     const { userId: currentUserId } = auth();

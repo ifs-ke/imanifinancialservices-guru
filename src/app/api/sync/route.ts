@@ -1,6 +1,6 @@
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-// import { auth } from '@clerk/nextjs/server'; // Clerk disabled
+import { auth } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
@@ -8,9 +8,6 @@ import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; // Import p
 import stringify from 'fast-json-stable-stringify'; // Import stable stringify
 // import { logInfo, logWarn, logError } from '@/lib/logger'; // Logger removed
 import { addCorsHeaders } from '@/lib/utils'; // Import CORS helper
-
-// Consistent placeholder ID
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
 // Helper to safely get collection data for a specific user
 async function getCollectionData<T>(db: any, collectionName: string, userId: string): Promise<T[]> {
@@ -161,8 +158,7 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  // const { userId } = auth(); // Clerk disabled
-  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+  const { userId } = auth();
 
   if (!userId) {
     // console.warn("Sync API: Unauthorized access attempt."); // Console log commented out

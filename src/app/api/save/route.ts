@@ -1,6 +1,5 @@
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-// import { auth } from '@clerk/nextjs/server'; // Clerk disabled
 import connectToDatabase from '@/lib/mongodb';
 import { Collection, ClientSession } from 'mongodb'; // Import ClientSession
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
@@ -11,9 +10,7 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { kv } from '@vercel/kv';
 // import { logInfo, logWarn, logError } from '@/lib/logger'; // Logger removed
 import { addCorsHeaders } from '@/lib/utils'; // Import CORS helper
-
-// Consistent placeholder ID
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+import { auth } from '@clerk/nextjs/server';
 
 const ratelimit = new Ratelimit({
   redis: kv,
@@ -190,8 +187,8 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  // const { userId } = auth(); // Clerk disabled
-  const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+  const { userId } = auth();
+  
   const logContextBase = { userId: userId || 'unknown', operation: 'POST /api/save' };
 
   if (!userId) {

@@ -14,10 +14,6 @@
  import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Import floating chat button
  import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Import mismatch dialog
 
- // No longer need placeholder
- // const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
-
-
  export default function DashboardLayout({
    children,
  }: {

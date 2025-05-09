@@ -2,7 +2,7 @@
  "use client";
 
 import * as React from "react";
-import { usePathname } from "next/navigation"; // Correct import for App Router
+import { usePathname } from "next/navigation";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
@@ -29,7 +29,6 @@ import {
   RefreshCw,
   Menu,
   PieChart,
-  // UserCircle removed
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -39,7 +38,8 @@ import { Badge } from "@/components/ui/badge";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
-import { logInfo, logWarn, logDebug } from "@/lib/logger"; // Assuming logger is set up
+import { logDebug, logInfo, logWarn } from "@/lib/logger";
+
 
 interface SidebarMenuItem {
   href: string;
@@ -86,7 +86,9 @@ interface SidebarProviderProps {
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   children,
 }) => {
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(); // Returns false on SSR / pre-mount client
+  // Initial state: isMobile will be false on server, so state is 'expanded'.
+  // On client, isMobile is false initially (from useIsMobile), state is 'expanded'. Matches SSR.
   const [state, setState] = React.useState<SidebarState>(isMobile ? "collapsed" : "expanded");
   const [hasMounted, setHasMounted] = React.useState(false);
 
@@ -94,29 +96,37 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
     setHasMounted(true);
   }, []);
 
+  // This effect runs after mount, when isMobile reflects actual client width.
   React.useEffect(() => {
     if (hasMounted) {
       if (isMobile) {
         setState("collapsed");
       } else {
-        // setState("expanded"); // Keep previous logic or set to expanded
+        // Default to expanded on desktop unless user manually collapses.
+        // For "initial" behavior, let's keep it simple: expand on desktop.
+        setState("expanded");
       }
     }
   }, [isMobile, hasMounted]);
 
+
   const collapseSidebar = () => setState("collapsed");
   const expandSidebar = () => setState("expanded");
   const toggleSidebar = () => {
-    setState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
+    setState(prev => {
+      const newState = prev === "collapsed" ? "expanded" : "collapsed";
+      logDebug('Sidebar toggled', { newState: newState });
+      return newState;
+    });
   };
 
-  const value = {
+  const value = React.useMemo(() => ({
     isMobile,
     state,
     collapseSidebar,
     expandSidebar,
     toggleSidebar,
-  };
+  }), [isMobile, state]);
 
   return (
     <SidebarContext.Provider value={value}>
@@ -125,24 +135,24 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   );
 };
 
+
 const SidebarBase = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
-  const { state, toggleSidebar, isMobile } = useSidebar(); // Added isMobile
-  const rawPathname = usePathname(); // From next/navigation
-  const [clientPathname, setClientPathname] = React.useState<string>("/"); // Default to a valid path
+  const { state, toggleSidebar, isMobile } = useSidebar();
+  const pathname = usePathname();
+  const [clientPathname, setClientPathname] = React.useState<string>("/");
   const [isMounted, setIsMounted] = React.useState(false);
 
   React.useEffect(() => {
     setIsMounted(true);
-    if (typeof rawPathname === 'string') { // Ensure rawPathname is a string before setting
-      setClientPathname(rawPathname);
+    if (typeof pathname === 'string') {
+      setClientPathname(pathname);
     } else {
-      // Optional: handle null pathname, though default state already covers this
-      setClientPathname("/"); // Fallback to default if rawPathname is null
+      setClientPathname("/");
     }
-  }, [rawPathname]);
+  }, [pathname]);
 
   const unreadCount = useNotificationStore(state => state.unreadCount());
   const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
@@ -214,7 +224,7 @@ const SidebarBase = React.forwardRef<
           >
             {state === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
           </Button>
-          {isMounted && state === "expanded" && ( // Render only if expanded and mounted
+          {isMounted && state === "expanded" && (
             <span
               className={cn(
                 "whitespace-nowrap text-lg font-semibold transition-opacity duration-200",
@@ -229,7 +239,7 @@ const SidebarBase = React.forwardRef<
 
       <ScrollArea className="flex-grow">
         <nav className="space-y-1 p-2.5">
-          {isMounted && menuItems.map((item) => ( // Defer rendering until mounted
+          {isMounted && menuItems.map((item) => (
             <TooltipProvider key={item.href} delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -271,7 +281,7 @@ const SidebarBase = React.forwardRef<
         </nav>
       </ScrollArea>
 
-      {isMounted && ( // Defer rendering of bottom section until mounted
+      {isMounted && (
         <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
           <ThemeToggle sidebarState={state} />
 
@@ -335,14 +345,13 @@ const SidebarBase = React.forwardRef<
 });
 SidebarBase.displayName = "SidebarBase";
 
+
 export const Sidebar = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
-    side?: "left" | "right";
-    variant?: "sidebar" | "navigation";
-    collapsible?: "icon" | "full";
+    side?: "left" | "right"; // Ensure 'side' prop is available for SheetContent
   }
->(({ className, side = "left", variant = "sidebar", collapsible = "icon", ...props }, ref) => {
+>(({ className, side = "left", ...props }, ref) => {
   const { isMobile } = useSidebar();
 
   if (isMobile) {
@@ -354,37 +363,25 @@ export const Sidebar = React.forwardRef<
             <span className="sr-only">Open sidebar</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side={side} className={cn(
-            "w-64 p-0 border-r-sidebar-border",
-            variant === "navigation" && "bg-card text-card-foreground"
-        )}>
-          <SidebarBase
-            className={cn(className, variant === "navigation" && "bg-card text-card-foreground")}
-            {...props}
-          />
+        <SheetContent side={side} className="w-64 p-0 border-r-sidebar-border">
+          <SidebarBase className={className} {...props} />
         </SheetContent>
       </Sheet>
     );
   }
 
-  // Desktop view (Div)
   return (
     <div
       ref={ref}
-      className={cn(
-        "group/sidebar peer hidden md:block text-sidebar-foreground",
-        className
-      )}
-      data-collapsible={collapsible}
-      data-variant={variant}
-      data-side={side}
+      className={cn("fixed inset-y-0 left-0 z-40 hidden md:flex", className)} // Apply className here as well
       {...props}
     >
-      <SidebarBase className={cn(variant === "navigation" && "bg-card text-card-foreground")} />
+      <SidebarBase /> {/* Removed redundant props passing, className is on parent */}
     </div>
   );
 });
 Sidebar.displayName = "Sidebar";
+
 
 export const SidebarRail = React.forwardRef<
  HTMLDivElement,

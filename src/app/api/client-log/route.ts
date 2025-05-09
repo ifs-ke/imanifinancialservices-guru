@@ -3,10 +3,6 @@ import { NextResponse } from 'next/server';
 // Import the SERVER-SIDE logger functions from the refactored logger.ts
 // Logger removed
 // import { logInfo, logWarn, logError, logDebug, type LogLevel as ServerLogLevel } from '@/lib/logger'; // Correct path
-// Clerk is disabled, so we won't import auth
-
-// Consistent placeholder ID
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
 
 // Interface matching the payload sent from client-logger.ts
 interface ClientLogPayload {
@@ -18,8 +14,8 @@ interface ClientLogPayload {
 export async function POST(request: Request) {
   try {
     const payload = await request.json() as ClientLogPayload;
-    // Since Clerk is disabled, we primarily rely on the userId sent in the context
-    const effectiveUserId = payload.context?.userId || CLERK_DISABLED_PLACEHOLDER_USER_ID;
+
+    const effectiveUserId = payload.context?.userId;
 
     // Prepare context for the server-side Winston logger
     const contextForServerLog = {

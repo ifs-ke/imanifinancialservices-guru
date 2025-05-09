@@ -61,12 +61,12 @@ const DataSyncMismatchDialog: React.FC<DataSyncMismatchDialogProps> = ({
           <p className="text-sm font-medium">Resolution Options:</p>
           <div className="flex flex-col sm:flex-row gap-4">
               {/* Keep Local & Overwrite Cloud Button */}
-              <Button onClick={handleForceSaveClick} disabled={isSaving || isFetching} className="flex-1">
+              <Button size="sm" onClick={handleForceSaveClick} disabled={isSaving || isFetching} className="flex-1">
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                   {isSaving ? 'Saving Local...' : 'Keep Local & Overwrite Cloud'}
               </Button>
               {/* Discard Local & Load Cloud Button */}
-              <Button onClick={handleForceFetchClick} disabled={isSaving || isFetching} className="flex-1" variant="outline">
+              <Button size="sm" onClick={handleForceFetchClick} disabled={isSaving || isFetching} className="flex-1" variant="outline">
                    {/* Changed variant to outline for better visual distinction */}
                   {isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DownloadCloud className="mr-2 h-4 w-4" />}
                    {isFetching ? 'Loading Cloud...' : 'Discard Local & Load Cloud'}
