@@ -8,10 +8,11 @@
  import { formatCurrency } from "@/lib/utils";
  import { startOfMonth, endOfMonth } from 'date-fns';
  import type { NotificationType } from '@/lib/types';
- import { logInfo, logWarn, logError } from '@/lib/logger';
- import { useAuth } from "@clerk/nextjs";
+ import { logInfo, logWarn, logError } from '@/lib/logger'; // Use console-based logger
+ // import { useAuth } from "@clerk/nextjs"; // Clerk disabled
 
- // Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
+ const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
+
 
  const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
  const OVERBUDGET_THRESHOLD_PERCENT = 1.0;
@@ -21,7 +22,10 @@
      const budgetItems = useBudgetStore(state => state.budgetItems);
      const allTransactions = useTransactionsStore(state => state.transactions);
      const existingNotifications = useNotificationStore(state => state.notifications);
-     const { userId, isSignedIn } = useAuth(); // Use actual userId and isSignedIn from Clerk
+     // const { userId, isSignedIn } = useAuth(); // Clerk disabled
+     const userId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Use placeholder
+     const isSignedIn = true; // Assume signed in when Clerk is disabled
+
 
      const monthlyAnalysis = useMemo(() => {
          const now = new Date();
@@ -61,100 +65,100 @@
      }, [allTransactions, budgetItems]);
 
      useEffect(() => {
-         if (!isSignedIn || !userId) return; // Don't run if user is not signed in or userId is not available
+         if (!isSignedIn || !userId) return; 
 
          const { actualSpendingByCategory, budgetByCategory } = monthlyAnalysis;
-         const generatedNotificationKeys = new Set<string>(); // To avoid duplicate notifications in one cycle
+         const generatedNotificationKeys = new Set<string>(); 
 
          for (const budgetKey in budgetByCategory) {
              const budgetedAmount = budgetByCategory[budgetKey];
              const actualAmount = actualSpendingByCategory[budgetKey] || 0;
               const description = budgetKey.substring(budgetKey.indexOf('-') + 1);
 
-             if (budgetedAmount <= 0) continue; // Skip if no budget allocated
+             if (budgetedAmount <= 0) continue; 
 
              const spendingRatio = actualAmount / budgetedAmount;
              const logContext = { userId, budgetCategory: description, budgetedAmount, actualAmount, spendingRatio };
 
-             // Check for Over Budget
+             
              if (spendingRatio >= OVERBUDGET_THRESHOLD_PERCENT) {
                  const notifKey = `overbudget-${budgetKey}`;
                  const notifTitle = 'Over Budget Alert';
-                  // Check if an unread "over budget" notification for this specific item already exists
+                  
                   const existingUnread = existingNotifications.find(n =>
-                       n.message.includes(`"${description}"`) && // More specific message check
+                       n.message.includes(`"${description}"`) && 
                        n.title === notifTitle &&
-                       n.type === 'budget' && // Ensure it's a budget alert type
+                       n.type === 'budget' && 
                        !n.read
                   );
 
                  if (!existingUnread && !generatedNotificationKeys.has(notifKey)) {
                      addNotification({
-                         type: 'budget', // Specific type for over-budget
+                         type: 'budget', 
                          title: notifTitle,
                          message: `You've spent ${formatCurrency(actualAmount)} out of ${formatCurrency(budgetedAmount)} budgeted for "${description}".`,
-                         link: '/budget', // Link to budget page
+                         link: '/budget', 
                      });
-                      logError(`Over budget for "${description}"`, undefined, logContext);
+                      logError(`Over budget for "${description}"`, undefined, logContext, userId);
                       generatedNotificationKeys.add(notifKey);
                  }
              }
-             // Check for Budget Warning (only if not already over budget)
+             
              else if (spendingRatio >= BUDGET_WARNING_THRESHOLD_PERCENT) {
                  const notifKey = `warning-${budgetKey}`;
                  const notifTitle = 'Budget Warning';
-                 // Check if an unread "warning" notification for this specific item already exists
+                 
                  const existingUnread = existingNotifications.find(n =>
-                     n.message.includes(`"${description}"`) && // More specific message check
+                     n.message.includes(`"${description}"`) && 
                      n.title === notifTitle &&
-                     n.type === 'warning' && // Ensure it's a warning type
+                     n.type === 'warning' && 
                      !n.read
                  );
 
                  if (!existingUnread && !generatedNotificationKeys.has(notifKey)) {
                      addNotification({
-                         type: 'warning', // Specific type for warning
+                         type: 'warning', 
                          title: notifTitle,
                          message: `Approaching budget limit for "${description}". Spent ${formatCurrency(actualAmount)} of ${formatCurrency(budgetedAmount)}.`,
-                         link: '/budget', // Link to budget page
+                         link: '/budget', 
                      });
-                      logWarn(`Budget warning for "${description}"`, logContext);
+                      logWarn(`Budget warning for "${description}"`, logContext, userId);
                       generatedNotificationKeys.add(notifKey);
                  }
              }
          }
      // eslint-disable-next-line react-hooks/exhaustive-deps
-     }, [monthlyAnalysis, addNotification, userId, isSignedIn, existingNotifications]); // Added isSignedIn and existingNotifications
+     }, [monthlyAnalysis, addNotification, userId, isSignedIn, existingNotifications]); 
 
-     return null; // This hook doesn't render anything
+     return null; 
  }
 
- // Function to trigger a collaboration notification
  export function triggerCollaborationNotification(sharerName: string, weekKey: string, recipientUserId: string) {
      const addNotification = useNotificationStore.getState().addNotification;
+     const currentUserId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Since useAuth can't be used here
      addNotification({
          type: 'collaboration',
          title: 'Review Shared With You',
          message: `${sharerName || 'A user'} shared their weekly review (${weekKey}) with you.`,
-         link: '/weekly-review?tab=shared', // Link to the shared tab of weekly review
+         link: '/weekly-review?tab=shared', 
      });
-      // Log this action, including the recipient
+      
       logInfo(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, {
           sharerName,
           weekKey,
-          recipientUserId, // Important for tracking who received the notification
-          type: 'collaboration_received' // Differentiate from a general collaboration event if needed
-      });
+          recipientUserId, 
+          type: 'collaboration_received' 
+      }, currentUserId);
  }
 
- // Function to trigger a general application update notification
  export function triggerAppUpdateNotification(title: string, message: string, link?: string) {
      const addNotification = useNotificationStore.getState().addNotification;
+     const currentUserId = CLERK_DISABLED_PLACEHOLDER_USER_ID; // Since useAuth can't be used here
      const newNotif = addNotification({
-         type: 'update', // 'update' type for app changes
+         type: 'update', 
          title: title,
          message: message,
          link: link,
      });
-      logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link });
+      logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }, currentUserId);
  }
