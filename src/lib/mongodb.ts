@@ -72,7 +72,7 @@ const connectToDatabase = async (): Promise<MongoClient> => {
       } catch (error) {
         // console.error("MongoDB: Failed to create client (development):", error); // Console log commented out
         // Clear the promise to allow retrying on next call
-        globalWithMongo._mongoClientPromise = null;
+        globalWithMongo._mongoClientPromise = undefined;
         throw new Error("Failed to initialize MongoDB client."); // Re-throw for callers
       }
     } else {

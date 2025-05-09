@@ -1,6 +1,6 @@
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server'; // Re-enable Clerk
+import { auth } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import { Collection, ClientSession } from 'mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
@@ -11,8 +11,6 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { kv } from '@vercel/kv';
 import { logInfo, logWarn, logError } from '@/lib/logger';
 import { addCorsHeaders } from '@/lib/utils';
-
-// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
 
 const ratelimit = new Ratelimit({
   redis: kv,
@@ -53,8 +51,8 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
     if (dataWithUserIdAndProcessed.length > 0) {
       const bulkOps = dataWithUserIdAndProcessed.map(doc => ({
         updateOne: {
-          filter: { userId: userId, id: doc.id },
-          update: { $set: { ...doc, userId: userId } },
+          filter: { userId, id: doc.id },
+          update: { $set: { ...doc, userId } },
           upsert: true
         }
       }));
@@ -92,16 +90,16 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
 
       return {
         updateOne: {
-          filter: { userId: userId, weekKey: weekKey },
-          update: { $set: { ...reviewData, userId: userId, weekKey: weekKey, sharedWith: cleanSharedWith } },
+          filter: { userId, weekKey },
+          update: { $set: { ...reviewData, userId, weekKey, sharedWith: cleanSharedWith } },
           upsert: true
         }
       };
-    }).filter(op => op !== null);
+    }).filter(op => op !== null) as any[];
 
     if (bulkOps.length > 0) {
       logInfo(`Save API: Performing bulkWrite for owned weeklyReviews with ${bulkOps.length} operations`, logContext);
-      await collection.bulkWrite(bulkOps as any, { session });
+      await collection.bulkWrite(bulkOps, { session });
       logInfo(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews`, logContext);
     } else {
       logInfo(`Save API: No valid owned reviews to save.`, logContext);
@@ -125,10 +123,20 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
     const updateDoc: { [key: string]: any } = {};
 
     if (startDate !== undefined) {
-      try { updateDoc.statementStartDate = startDate ? new Date(startDate) : null; } catch { updateDoc.statementStartDate = null; logWarn(`Save API: Invalid start date format received: ${startDate}`, logContext); }
+      try { 
+        updateDoc.statementStartDate = startDate ? new Date(startDate) : null; 
+      } catch { 
+        updateDoc.statementStartDate = null; 
+        logWarn(`Save API: Invalid start date format received: ${startDate}`, logContext); 
+      }
     }
     if (endDate !== undefined) {
-      try { updateDoc.statementEndDate = endDate ? new Date(endDate) : null; } catch { updateDoc.statementEndDate = null; logWarn(`Save API: Invalid end date format received: ${endDate}`, logContext); }
+      try { 
+        updateDoc.statementEndDate = endDate ? new Date(endDate) : null; 
+      } catch { 
+        updateDoc.statementEndDate = null; 
+        logWarn(`Save API: Invalid end date format received: ${endDate}`, logContext); 
+      }
     }
     if (gettingStartedDismissed !== undefined) {
       updateDoc.gettingStartedDismissed = gettingStartedDismissed;
@@ -139,7 +147,7 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
       await collection.updateOne(
         { userId },
         { $set: updateDoc },
-        session ? { upsert: true, session } : { upsert: true }
+        { upsert: true, session }
       );
       logInfo(`Save API: Successfully saved user profile data`, logContext);
     } else {
@@ -158,16 +166,15 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  const { userId } = auth(); // Use Clerk's auth()
+  const { userId } = auth();
   
   if (!userId) {
     logWarn('Save API: Unauthorized save attempt: User not logged in.', { operation: 'POST /api/save' });
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response);
   }
+
   const logContextBase = { userId, operation: 'POST /api/save' };
-
-
   const { success, limit, remaining, reset } = await ratelimit.limit(userId);
   const logContextWithRateLimit = { ...logContextBase, rateLimit: { limit, remaining, reset } };
 
@@ -194,7 +201,7 @@ export async function POST(request: Request) {
   }
 
   const { dataHash, ...receivedData } = payload;
-  const preparedDataForVerification = prepareDataForHashing(receivedData as any);
+  const preparedDataForVerification = prepareDataForHashing(receivedData);
   const dataString = stringify(preparedDataForVerification);
   const calculatedServerHash = await hashData(dataString);
 
@@ -204,7 +211,9 @@ export async function POST(request: Request) {
 
   if (!isValid) {
     logError('Save API: Data integrity check failed!', { ...logContextWithRateLimit, clientHash: dataHash, serverHash: calculatedServerHash });
-    logWarn("Data that resulted in hash mismatch (truncated):", { dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : "") }, logContextWithRateLimit);
+    logWarn("Data that resulted in hash mismatch (truncated):", { 
+      dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : "") 
+    }, logContextWithRateLimit);
     const response = NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
     return addCorsHeaders(response);
   }

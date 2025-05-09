@@ -19,13 +19,11 @@ import {
 import { X, UserPlus, Trash2, Loader2, Search, CheckCircle, AlertTriangle } from 'lucide-react';
 import type { UserShareInfo } from '@/lib/types';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import store hooks
-// import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
+import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
 import { triggerCollaborationNotification } from '@/services/notificationService'; // Import notification trigger
-// import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk useAuth hook // Clerk disabled
+import { useAuth } from '@clerk/nextjs';
 
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
-const CLERK_DISABLED_PLACEHOLDER_USER_NAME = 'Local User';
-const CLERK_DISABLED_PLACEHOLDER_USER_EMAIL = 'local-user@example.com';
+
 
 interface ShareReviewDialogProps {
   isOpen: boolean;
@@ -36,13 +34,7 @@ interface ShareReviewDialogProps {
 const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, weekKey }) => {
   const { toast } = useToast();
   const { shareWeekReview, revokeWeekShare, searchUserToShareWith } = useWeeklyReviewStore(); // Get actions from store
-  // const { user } = useAuth(); // Clerk disabled
-  // Mock user object when Clerk is disabled
-  const user = {
-      id: CLERK_DISABLED_PLACEHOLDER_USER_ID,
-      fullName: CLERK_DISABLED_PLACEHOLDER_USER_NAME,
-      primaryEmailAddress: { emailAddress: CLERK_DISABLED_PLACEHOLDER_USER_EMAIL },
-  };
+  const { user } = useAuth(); 
 
   const [emailToShare, setEmailToShare] = useState('');
   const [searchResult, setSearchResult] = useState<UserShareInfo | null>(null);
@@ -55,17 +47,17 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
 
   // Fetch the list of users already shared with when the dialog opens
   const fetchSharedList = useCallback(async () => {
-    // if (!isOpen || !weekKey) return;
-    // setIsLoadingList(true);
-    // try {
-    //   const users = await getSharedWithUsersApi(weekKey);
-    //   setSharedWithList(users);
-    // } catch (error: any) {
-    //   console.error("Failed to fetch shared list:", error);
-    //   toast({ title: 'Error', description: `Could not load shared users: ${error.message}`, variant: 'destructive' });
-    // } finally {
-    //   setIsLoadingList(false);
-    // }
+    if (!isOpen || !weekKey) return;
+    setIsLoadingList(true);
+    try {
+      const users = await getSharedWithUsersApi(weekKey);
+      setSharedWithList(users);
+    } catch (error: any) {
+      console.error("Failed to fetch shared list:", error);
+      toast({ title: 'Error', description: `Could not load shared users: ${error.message}`, variant: 'destructive' });
+    } finally {
+      setIsLoadingList(false);
+    }
   }, [isOpen, weekKey, toast]);
 
   useEffect(() => {

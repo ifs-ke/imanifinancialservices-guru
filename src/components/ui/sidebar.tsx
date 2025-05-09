@@ -1,5 +1,5 @@
 // src/components/ui/sidebar.tsx
- "use client";
+"use client";
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
@@ -39,7 +39,6 @@ import { UserButton, useUser } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
 import { logDebug, logInfo, logWarn } from "@/lib/logger";
-
 
 interface SidebarMenuItem {
   href: string;
@@ -86,9 +85,7 @@ interface SidebarProviderProps {
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   children,
 }) => {
-  const isMobile = useIsMobile(); // Returns false on SSR / pre-mount client
-  // Initial state: isMobile will be false on server, so state is 'expanded'.
-  // On client, isMobile is false initially (from useIsMobile), state is 'expanded'. Matches SSR.
+  const isMobile = useIsMobile();
   const [state, setState] = React.useState<SidebarState>(isMobile ? "collapsed" : "expanded");
   const [hasMounted, setHasMounted] = React.useState(false);
 
@@ -96,19 +93,15 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
     setHasMounted(true);
   }, []);
 
-  // This effect runs after mount, when isMobile reflects actual client width.
   React.useEffect(() => {
     if (hasMounted) {
       if (isMobile) {
         setState("collapsed");
       } else {
-        // Default to expanded on desktop unless user manually collapses.
-        // For "initial" behavior, let's keep it simple: expand on desktop.
         setState("expanded");
       }
     }
   }, [isMobile, hasMounted]);
-
 
   const collapseSidebar = () => setState("collapsed");
   const expandSidebar = () => setState("expanded");
@@ -134,7 +127,6 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
     </SidebarContext.Provider>
   );
 };
-
 
 const SidebarBase = React.forwardRef<
   HTMLDivElement,
@@ -320,7 +312,7 @@ const SidebarBase = React.forwardRef<
               "flex items-center w-full",
               state === 'collapsed' ? "justify-center py-1" : "p-1"
           )}>
-            {isLoaded && isSignedIn && user ? (
+            {isClerkLoaded && isSignedIn && user ? (
               <UserButton afterSignOutUrl="/" appearance={{
                   elements: {
                       userButtonAvatarBox: state === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
@@ -332,7 +324,7 @@ const SidebarBase = React.forwardRef<
                 {/* Optional: Placeholder icon when not signed in or loading */}
               </div>
             )}
-            {state === 'expanded' && isLoaded && isSignedIn && user && (
+            {state === 'expanded' && isClerkLoaded && isSignedIn && user && (
               <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
                   {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
               </span>
@@ -345,11 +337,10 @@ const SidebarBase = React.forwardRef<
 });
 SidebarBase.displayName = "SidebarBase";
 
-
 export const Sidebar = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
-    side?: "left" | "right"; // Ensure 'side' prop is available for SheetContent
+    side?: "left" | "right";
   }
 >(({ className, side = "left", ...props }, ref) => {
   const { isMobile } = useSidebar();
@@ -373,15 +364,14 @@ export const Sidebar = React.forwardRef<
   return (
     <div
       ref={ref}
-      className={cn("fixed inset-y-0 left-0 z-40 hidden md:flex", className)} // Apply className here as well
+      className={cn("fixed inset-y-0 left-0 z-40 hidden md:flex", className)}
       {...props}
     >
-      <SidebarBase /> {/* Removed redundant props passing, className is on parent */}
+      <SidebarBase />
     </div>
   );
 });
 Sidebar.displayName = "Sidebar";
-
 
 export const SidebarRail = React.forwardRef<
  HTMLDivElement,

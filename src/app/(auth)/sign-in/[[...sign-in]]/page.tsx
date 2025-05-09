@@ -1,8 +1,6 @@
 // src/app/(auth)/sign-in/[[...sign-in]]/page.tsx
 
- import { SignIn } from '@clerk/nextjs'; // Re-enable Clerk
- // import { redirect } from 'next/navigation'; // No longer needed
-
+ import { SignIn } from '@clerk/nextjs';
 
  export default function SignInPage() {
    // Render the Clerk Sign In component
