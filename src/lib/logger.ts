@@ -1,10 +1,10 @@
 // src/lib/logger.ts
 'use client'; // This module can be used client-side for capturing logs.
 
-// Logtail and Winston have been removed. Logging will use console.
+// Console is used directly as Winston and Logtail were removed.
 // Client-side logs can be sent to a server endpoint if needed for centralized logging.
 
-// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
+const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y'; // Placeholder for when Clerk is disabled
 const ANONYMOUS_USER_FOR_LOGGING = 'anonymous_or_unauthenticated_user';
 
 // Base context for all logs from this client instance
@@ -24,20 +24,39 @@ const clientLog = (
     errorDetails?: any,
     userIdForLog?: string | null // Allow explicit userId passing (can be null)
 ) => {
-    const finalUserId = userIdForLog || ANONYMOUS_USER_FOR_LOGGING; // Use passed userId or anonymous
-    const logContext = {
+    // Determine effective user ID for the log entry
+    // When Clerk is disabled, this will use the placeholder or anonymous.
+    // When Clerk is enabled, useSyncManager should ideally pass the actual userId.
+    const effectiveUserId = userIdForLog || (typeof window !== 'undefined' ? CLERK_DISABLED_PLACEHOLDER_USER_ID : ANONYMOUS_USER_FOR_LOGGING);
+
+    const logContext: Record<string, any> = {
         ...getBaseClientContext(),
-        userId: finalUserId,
+        userId: effectiveUserId,
         ...(context || {}),
     };
 
     if (errorDetails) {
         if (errorDetails instanceof Error) {
             logContext.errorMessage = errorDetails.message;
-            logContext.stack = errorDetails.stack;
+            // Ensure stack is a string and truncate if too long to prevent issues
+            const stackString = typeof errorDetails.stack === 'string' ? errorDetails.stack : String(errorDetails.stack);
+            logContext.stack = stackString.substring(0, 2000); // Truncate stack to 2000 chars
         } else if (typeof errorDetails === 'object' && errorDetails !== null) {
+            // Iterate over errorDetails properties and add them to logContext
+            // Be cautious about deeply nested objects or very large properties
             Object.keys(errorDetails).forEach(key => {
-                logContext[`error_${key}`] = errorDetails[key];
+                const value = errorDetails[key];
+                if (typeof value !== 'function' && (typeof value !== 'object' || value === null || key === 'status' || key === 'statusText')) {
+                     // Include primitives, nulls, or specific object properties like status/statusText
+                    logContext[`error_${key}`] = value;
+                } else if (typeof value === 'object' && value !== null) {
+                    // For other objects, stringify them but truncate if too long
+                    try {
+                        logContext[`error_${key}`] = JSON.stringify(value).substring(0, 500);
+                    } catch {
+                        logContext[`error_${key}`] = '[Unserializable Object]';
+                    }
+                }
             });
         } else {
             logContext.errorDetails = String(errorDetails);
@@ -58,17 +77,22 @@ const clientLog = (
 
     // Send log to the server-side API endpoint for centralized logging
     // This allows server to persist or forward logs (e.g., to a file or another service)
-    if (typeof window !== 'undefined') { // Ensure this runs only in browser
+    if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_LOG_TO_SERVER === 'true') {
+        // Prepare a cleaner context for server-side logging if necessary
+        const serverLogContext = { ...logContext };
+        // Remove potentially problematic large fields like full stack if preferred for server logs
+        // For now, sending the truncated stack from logContext.stack
+
         fetch('/api/client-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                level: level === 'debug' && process.env.NODE_ENV !== 'development' ? 'info' : level, // Adjust level for server if needed
+                level: level,
                 message: message, // Send original message
-                context: logContext, // Send full context including userId
+                context: serverLogContext, // Send potentially modified/cleaned context
             }),
         }).catch(fetchError => {
-            console.warn('Failed to send client log to server:', fetchError);
+            console.warn('Failed to send client log to server:', fetchError, { originalMessage: message, originalContext: context });
         });
     }
 };
@@ -91,6 +115,3 @@ export const logDebug = (message: string, context?: Record<string, any>, userId?
         clientLog('debug', message, context, undefined, userId);
     }
 };
-
-// Note: Server-side logging (in API routes, server actions) should use console directly
-// or a dedicated server-side logging setup if needed.
