@@ -25,10 +25,11 @@
    Cloud,
    CloudOff,
    AlertTriangle,
-   ClipboardList,
+   ClipboardList, // Changed from Logger
    RefreshCw,
    Menu,
    PieChart,
+   // Removed UserCircle as UserButton will be used
  } from "lucide-react";
  import Link from "next/link";
  import { useSyncManager } from "@/hooks/useSyncManager";
@@ -56,6 +57,7 @@
    { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
    { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
    { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
+   { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
  ];
 
  export type SidebarState = "collapsed" | "expanded";
@@ -87,15 +89,24 @@
  }) => {
    const isMobile = useIsMobile();
    const [state, setState] = React.useState<SidebarState>(isMobile ? "collapsed" : "expanded");
+   const [hasMounted, setHasMounted] = React.useState(false);
 
    React.useEffect(() => {
-     if (isMobile) {
-       setState("collapsed");
-     } else {
-       // On desktop, maintain current state or default to expanded if transitioning from mobile
-       // setState("expanded"); // Or keep current if preferred
+     setHasMounted(true);
+   }, []);
+
+   React.useEffect(() => {
+     if (hasMounted) { // Only run this effect after initial mount
+       if (isMobile) {
+         setState("collapsed");
+       } else {
+         // On desktop, you might want to preserve the current state or default to expanded.
+         // Example: setState("expanded");
+         // Or, to preserve, only set if it was previously mobile:
+         // if (state === "collapsed") setState("expanded");
+       }
      }
-   }, [isMobile]);
+   }, [isMobile, hasMounted]);
 
 
    const collapseSidebar = () => setState("collapsed");
@@ -125,12 +136,14 @@
    React.HTMLAttributes<HTMLDivElement>
  >(({ className, ...props }, ref) => {
    const { state, toggleSidebar } = useSidebar();
-   const pathname = usePathname(); // Raw pathname, null on server
+   const pathname = usePathname();
 
-   // Client-side state for pathname to avoid hydration mismatch
    const [clientPathname, setClientPathname] = React.useState<string | null>(null);
+   const [isMounted, setIsMounted] = React.useState(false); // New state
+
    React.useEffect(() => {
-     setClientPathname(pathname);
+     setIsMounted(true); // Component has mounted
+     setClientPathname(pathname); // Set pathname from hook
    }, [pathname]);
 
 
@@ -217,7 +230,7 @@
 
        <ScrollArea className="flex-grow">
          <nav className="space-y-1 p-2.5">
-           {menuItems.map((item) => (
+           {isMounted && menuItems.map((item) => ( // Defer rendering until mounted
              <TooltipProvider key={item.href} delayDuration={100}>
                <Tooltip>
                  <TooltipTrigger asChild>
@@ -305,6 +318,7 @@
               }}/>
             ) : (
                <div className="h-8 w-8 flex items-center justify-center">
+                 {/* Optional: Placeholder icon when not signed in or loading */}
                </div>
             )}
            {state === 'expanded' && isLoaded && isSignedIn && user && (
@@ -340,7 +354,7 @@
            </Button>
          </SheetTrigger>
          <SheetContent side={side} className={cn(
-             "w-64 p-0 border-r-sidebar-border",
+             "w-64 p-0 border-r-sidebar-border", // Default width for mobile sheet
              variant === "navigation" && "bg-card text-card-foreground"
          )}>
            <SidebarBase
