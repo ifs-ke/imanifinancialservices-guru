@@ -2,47 +2,55 @@
  'use client'; // This layout needs to be a client component for hooks
 
  import React, { useEffect } from 'react';
- import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk hook
+ import { useAuth } from '@clerk/nextjs';
  import { useBudgetNotifications } from '@/services/notificationService';
  import {
-   SidebarProvider, // Import SidebarProvider
+   SidebarProvider,
    Sidebar,
    SidebarRail,
    SidebarInset,
- } from "@/components/ui/sidebar"; // Adjust path as needed
- import { useSyncManager } from '@/hooks/useSyncManager'; // Hook to manage sync
- import FloatingChatButton from '@/components/layout/FloatingChatButton'; // Import floating chat button
- import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Import mismatch dialog
+ } from "@/components/ui/sidebar";
+ import { useSyncManager } from '@/hooks/useSyncManager';
+ import FloatingChatButton from '@/components/layout/FloatingChatButton';
+ import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
+ import { Toaster } from '@/components/ui/toaster'; // Ensure Toaster is here for notifications from sync
+ import { logDebug } from '@/lib/logger';
+
 
  export default function DashboardLayout({
    children,
  }: {
    children: React.ReactNode;
  }) {
-   const { userId } = useAuth(); // Use Clerk's useAuth hook
+   const { userId, isSignedIn, isLoaded: isClerkLoaded } = useAuth(); // Get full auth state
 
+   // useSyncManager should be called unconditionally at the top level of the component.
    const syncManager = useSyncManager();
-   const { isMismatchDialogOpen, setIsMismatchDialogOpen, forceFetchServer, forceSaveLocal } = syncManager;
+   const { isMismatchDialogOpen, setIsMismatchDialogOpen, forceFetchServer, forceSaveLocal, syncStatus } = syncManager;
 
-   useBudgetNotifications(); // Activate budget notification checks
+   // Activate budget notification checks, only if user is signed in
+    useBudgetNotifications();
+
 
    // Open mismatch dialog when hashMismatch becomes true
    useEffect(() => {
        if (syncManager.hashMismatch) {
+           logDebug("DashboardLayout: Hash mismatch detected, opening dialog.", { userId });
            setIsMismatchDialogOpen(true);
        }
-   }, [syncManager.hashMismatch, setIsMismatchDialogOpen]);
+   }, [syncManager.hashMismatch, setIsMismatchDialogOpen, userId]);
+
 
    return (
      <div className="flex min-h-screen bg-background">
-       <Sidebar /> {/* Render Sidebar (handles mobile sheet / desktop fixed) */}
-       <SidebarRail /> {/* Spacer for desktop */}
-       <SidebarInset> {/* Main content area with dynamic margin */}
+       <Sidebar />
+       <SidebarRail />
+       <SidebarInset>
          {children}
        </SidebarInset>
-       <FloatingChatButton /> {/* Add floating chat button */}
+       <FloatingChatButton />
+       <Toaster /> {/* Ensure Toaster is rendered */}
 
-        {/* Data Sync Mismatch Resolution Dialog */}
         <DataSyncMismatchDialog
            isOpen={isMismatchDialogOpen}
            onClose={() => setIsMismatchDialogOpen(false)}
