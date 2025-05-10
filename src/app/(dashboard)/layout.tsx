@@ -24,17 +24,24 @@
    const { userId, isSignedIn, isLoaded: isClerkLoaded } = useAuth(); 
 
    const syncManager = useSyncManager();
-   const { isMismatchDialogOpen, setIsMismatchDialogOpen, forceFetchServer, forceSaveLocal } = syncManager;
+   const { 
+     isMismatchDialogOpen, 
+     setIsMismatchDialogOpen, 
+     forceFetchServer, 
+     forceSaveLocal,
+     hashMismatch // Make sure to get hashMismatch from the hook
+   } = syncManager;
  
    useBudgetNotifications();
 
 
    useEffect(() => {
-       if (syncManager.hashMismatch) {
+       // Use hashMismatch from syncManager directly
+       if (hashMismatch) {
            logDebug("DashboardLayout: Hash mismatch detected, opening dialog.", { userId });
            setIsMismatchDialogOpen(true);
        }
-   }, [syncManager.hashMismatch, setIsMismatchDialogOpen, userId]);
+   }, [hashMismatch, setIsMismatchDialogOpen, userId]); // Depend on hashMismatch from the hook
 
    // If Clerk is not loaded yet, show a loading state for the entire dashboard area
    if (!isClerkLoaded) {
@@ -50,7 +57,8 @@
        <Sidebar />
        {/* SidebarRail component removed */}
        <SidebarInset>
-         {isClerkLoaded ? children : null}
+         {/* Conditional rendering based on Clerk's loading state */}
+         {isClerkLoaded ? children : null} 
        </SidebarInset>
        <FloatingChatButton />
        <Toaster />
@@ -64,5 +72,3 @@
      </div>
    );
  }
-
-```
