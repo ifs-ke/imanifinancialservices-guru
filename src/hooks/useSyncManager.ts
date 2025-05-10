@@ -84,9 +84,12 @@ export function useSyncManager() {
   }, [userId]);
 
   const clearLocalState = useCallback(() => {
-    if (isClearingRef.current) return;
+    if (isClearingRef.current) {
+      logDebug("ClearLocalState: Already in progress, skipping.", { userId: internalPreviousUserId.current });
+      return;
+    }
     isClearingRef.current = true;
-    const contextUserId = internalPreviousUserId.current;
+    const contextUserId = internalPreviousUserId.current; 
     logInfo('SyncManager: Clearing local state.', { userId: contextUserId });
 
     try {
@@ -114,11 +117,11 @@ export function useSyncManager() {
         }
       });
 
-      logInfo('SyncManager: Local state cleared.', { userId: contextUserId });
+      logInfo('SyncManager: Local state cleared successfully.', { userId: contextUserId });
       updateSyncState({ 
         status: 'local',
         lastSyncTime: null,
-        gettingStartedDismissed: false, // Reset this as well, it's user-specific profile data
+        gettingStartedDismissed: false, 
         hashMismatch: false,
         isMismatchDialogOpen: false
       });
@@ -269,6 +272,7 @@ export function useSyncManager() {
         else if (syncState.hashMismatch) updateSyncState({status: 'error'}); 
         return false;
       }
+      // Check hashMismatch again after pre-save fetch, as fetchData might have updated it.
       if(syncState.hashMismatch) {
         logError('Save Aborted: Hash mismatch detected after pre-save fetch.', undefined, { currentUserId: userId });
         isSavingRef.current = false;
@@ -378,7 +382,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, fetchData, syncState.gettingStartedDismissed, syncState.status, syncState.hashMismatch, 
+    getWeeklyReviewState, fetchData, syncState.gettingStartedDismissed, syncState.hashMismatch, 
     updateSyncState, cleanupAsyncOperations
   ]);
 
@@ -405,15 +409,15 @@ export function useSyncManager() {
   }, [syncState.status, syncState.hashMismatch, triggerDebouncedSave, userId, updateSyncState]);
 
   useEffect(() => {
-    if (!isClerkLoaded) { 
-      logDebug('Auth Effect: Auth state not ready. Waiting for load.', { currentUserId: userId }); 
-      updateSyncState({ status: 'idle' }); 
-      return cleanupAsyncOperations; 
+    if (!isClerkLoaded) {
+      logDebug('Auth Effect: Auth state not ready. Waiting for load.', { currentUserId: userId });
+      updateSyncState({ status: 'idle' });
+      return cleanupAsyncOperations;
     }
     const currentAuthUserId = userId;
 
-    if (currentAuthUserId && internalPreviousUserId.current && currentAuthUserId !== internalPreviousUserId.current) {
-      logInfo(`Auth Effect: User CHANGED. New: ${currentAuthUserId}, Old: ${internalPreviousUserId.current}. Clearing local state.`, {
+    if (currentAuthUserId && currentAuthUserId !== internalPreviousUserId.current) {
+      logInfo(`Auth Effect: User signed IN or SWITCHED. New: ${currentAuthUserId}, Old: ${internalPreviousUserId.current ?? 'none'}. Clearing local state and fetching new data.`, {
         oldUserId: internalPreviousUserId.current,
         newUserId: currentAuthUserId
       }, currentAuthUserId);
@@ -421,17 +425,10 @@ export function useSyncManager() {
       clearLocalState(); 
       internalPreviousUserId.current = currentAuthUserId;
       initialFetchDoneRef.current = false; 
-      if (!isFetchingRef.current) {
-        fetchData();
-      }
-    } else if (currentAuthUserId && !internalPreviousUserId.current) {
-      logInfo(`Auth Effect: User DETECTED (or re-detected after clear). Current: ${currentAuthUserId}. Fetching data if not already.`, {
-        currentAuthUserId
-      }, currentAuthUserId);
-      internalPreviousUserId.current = currentAuthUserId; 
-      if (!initialFetchDoneRef.current && !isFetchingRef.current) {
-        fetchData();
-      }
+      updateSyncState({ status: 'syncing', hashMismatch: false, isMismatchDialogOpen: false, lastSyncTime: null });
+      fetchData().then(() => {
+        // fetchData will set appropriate status ('synced' or 'error'/'local')
+      });
     } else if (!currentAuthUserId && internalPreviousUserId.current) {
       logInfo(`Auth Effect: User signed OUT. Was: ${internalPreviousUserId.current}. Clearing local state.`, {
         oldUserId: internalPreviousUserId.current
@@ -440,25 +437,33 @@ export function useSyncManager() {
       clearLocalState(); 
       internalPreviousUserId.current = null;
       initialFetchDoneRef.current = false;
-      updateSyncState({ status: 'local' }); 
+      updateSyncState({ status: 'local', lastSyncTime: null, hashMismatch: false, isMismatchDialogOpen: false });
+    } else if (currentAuthUserId && currentAuthUserId === internalPreviousUserId.current && !initialFetchDoneRef.current && !isFetchingRef.current && syncState.status !== 'synced') {
+      logInfo('Auth Effect: Same user session, initial fetch not completed or sync not confirmed. Triggering fetch...', {
+        currentAuthUserId,
+        currentStatus: syncState.status
+      }, currentAuthUserId);
+      updateSyncState({ status: 'syncing', hashMismatch: false, isMismatchDialogOpen: false });
+      fetchData();
     } else if (!currentAuthUserId && !internalPreviousUserId.current && !initialFetchDoneRef.current) {
       logInfo('Auth Effect: Initial load, no active user session. Setting status to local.', { currentUserId: userId });
-      updateSyncState({ status: 'local' });
-      initialFetchDoneRef.current = true; 
+      updateSyncState({ status: 'local', lastSyncTime: null, hashMismatch: false, isMismatchDialogOpen: false });
+      initialFetchDoneRef.current = true;
     } else {
-      logDebug('Auth Effect: No primary auth-driven data clear/fetch action taken.', {
-        isClerkLoaded, 
-        currentAuthUserId, 
+      logDebug('Auth Effect: No primary auth-driven data clear/fetch action taken. Review conditions.', {
+        isClerkLoaded,
+        currentAuthUserId,
         previousUserId: internalPreviousUserId.current,
-        initialFetchDone: initialFetchDoneRef.current, 
+        initialFetchDone: initialFetchDoneRef.current,
         isFetching: isFetchingRef.current,
-        isSaving: isSavingRef.current, 
+        isSaving: isSavingRef.current,
         currentStatus: syncState.status,
         currentUserId: userId,
       });
     }
     return () => cleanupAsyncOperations('Auth effect cleanup');
-  }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState]);
+  }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState, syncState.status]);
+
 
   useEffect(() => {
     if (!isClerkLoaded || !isSignedIn || !userId || !initialFetchDoneRef.current) {
@@ -498,7 +503,15 @@ export function useSyncManager() {
       }
       triggerDebouncedSave();
     } else {
-      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { initialFetchDone: initialFetchDoneRef.current, isFetching: isFetchingRef.current, isSaving: isSavingRef.current, isClearing: isClearingRef.current, hashMismatch: syncState.hashMismatch, currentUserId: userId, currentStatus: syncState.status });
+      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { 
+        initialFetchDone: initialFetchDoneRef.current, 
+        isFetching: isFetchingRef.current, 
+        isSaving: isSavingRef.current, // Corrected from isSavingRef.current to isSaving
+        isClearing: isClearingRef.current, // Corrected from isClearingRef.current to isClearing
+        hashMismatch: syncState.hashMismatch, 
+        currentUserId: userId, 
+        currentStatus: syncState.status 
+      });
     }
   }, [syncState.gettingStartedDismissed, isClerkLoaded, isSignedIn, userId, syncState.hashMismatch, triggerDebouncedSave, syncState.status, updateSyncState]);
 
@@ -544,9 +557,14 @@ export function useSyncManager() {
     if (hasLocalChangesRef.current || (syncState.status === 'error' && !syncState.hashMismatch)) {
       logInfo('Manual Sync: Local changes or non-mismatch error. Attempting save...', { currentUserId: userId });
       saveData();
-    } else { 
+    } else if (syncState.status === 'synced' || syncState.status === 'idle' || syncState.status === 'local') { 
       toast({ title: 'Checking for Updates', description: 'Fetching latest data from cloud...' });
       fetchData(true); 
+    } else if (syncState.status === 'syncing') {
+      toast({ title: 'Sync Busy', description: 'Please wait for the current operation to complete.' });
+    } else {
+      logInfo('Manual Sync: Default case (unknown state). Attempting fetch...', { currentUserId: userId, currentStatus: syncState.status });
+      fetchData(true);
     }
   }, [syncState.status, syncState.hashMismatch, saveData, fetchData, toast, isSignedIn, userId, isClerkLoaded, updateSyncState]);
 
@@ -563,3 +581,4 @@ export function useSyncManager() {
     lastSyncTime: syncState.lastSyncTime,
   };
 }
+

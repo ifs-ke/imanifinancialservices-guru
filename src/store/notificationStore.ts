@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { NotificationItem, NotificationType } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils';
-import { logDebug } from '@/lib/logger';
+import { logDebug, logInfo } from '@/lib/logger'; // Import logger
 
 const MAX_NOTIFICATIONS = 50; 
 
@@ -58,7 +58,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
 
 export interface NotificationState {
   notifications: NotificationItem[];
-  selectedNotificationIds: string[]; // New state for selected notifications
+  selectedNotificationIds: string[]; 
   isHydrated: boolean; 
   addNotification: (notificationData: Omit<NotificationItem, 'id' | 'timestamp' | 'read'>) => NotificationItem;
   markAsRead: (id: string) => void;
@@ -67,11 +67,11 @@ export interface NotificationState {
   clearAllNotifications: () => void;
   setNotifications: (notifications: NotificationItem[]) => void; 
   unreadCount: () => number;
-  toggleSelectNotification: (id: string) => void; // New action
-  toggleSelectAllNotifications: () => void; // New action
-  markSelectedAsRead: () => void; // New action
-  deleteSelectedNotifications: () => void; // New action
-  clearSelection: () => void; // New action
+  toggleSelectNotification: (id: string) => void; 
+  toggleSelectAllNotifications: () => void; 
+  markSelectedAsRead: () => void; 
+  deleteSelectedNotifications: () => void; 
+  clearSelection: () => void; 
 }
 
 const initialState = {
@@ -123,18 +123,21 @@ export const useNotificationStore = create<NotificationState>()(
       markAllAsRead: () => {
         set((state) => ({
           notifications: state.notifications.map((n) => ({ ...n, read: true })),
-          selectedNotificationIds: [] // Clear selection after marking all as read
+          selectedNotificationIds: [] 
         }));
       },
 
       deleteNotification: (id) => {
         set((state) => ({
           notifications: state.notifications.filter((n) => n.id !== id),
-          selectedNotificationIds: state.selectedNotificationIds.filter(selectedId => selectedId !== id) // Remove from selection if deleted
+          selectedNotificationIds: state.selectedNotificationIds.filter(selectedId => selectedId !== id) 
         }));
       },
 
-      clearAllNotifications: () => set({ notifications: [], selectedNotificationIds: [], isHydrated: true }), 
+      clearAllNotifications: () => {
+        logInfo("NotificationStore: Clearing all notifications.");
+        set({ notifications: [], selectedNotificationIds: [], isHydrated: true });
+      }, 
 
       unreadCount: () => get().notifications.filter(n => !n.read).length,
 
@@ -152,10 +155,8 @@ export const useNotificationStore = create<NotificationState>()(
       toggleSelectAllNotifications: () => {
         set((state) => {
           if (state.selectedNotificationIds.length === state.notifications.length && state.notifications.length > 0) {
-            // All are selected, so deselect all
             return { selectedNotificationIds: [] };
           } else {
-            // Not all (or none) are selected, so select all
             return { selectedNotificationIds: state.notifications.map(n => n.id) };
           }
         });
@@ -166,14 +167,14 @@ export const useNotificationStore = create<NotificationState>()(
           notifications: state.notifications.map((n) =>
             state.selectedNotificationIds.includes(n.id) ? { ...n, read: true } : n
           ),
-          selectedNotificationIds: [] // Clear selection
+          selectedNotificationIds: [] 
         }));
       },
 
       deleteSelectedNotifications: () => {
         set((state) => ({
           notifications: state.notifications.filter((n) => !state.selectedNotificationIds.includes(n.id)),
-          selectedNotificationIds: [] // Clear selection
+          selectedNotificationIds: [] 
         }));
       },
       
@@ -187,10 +188,11 @@ export const useNotificationStore = create<NotificationState>()(
        onRehydrateStorage: () => (state) => {
          if (state) {
            state.isHydrated = true;
-           state.selectedNotificationIds = []; // Ensure selection is clear on rehydration
-           logDebug("Notification store rehydrated.");
+           state.selectedNotificationIds = []; 
+           logInfo("NotificationStore: Rehydrated successfully.");
          }
        },
     }
   )
 );
+```

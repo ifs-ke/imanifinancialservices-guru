@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { TransactionWithId } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils'; 
+import { logInfo } from '@/lib/logger'; // Import logger
 
 const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -39,7 +40,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
             return value;
         });
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); // Console log disabled
+        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); 
         return null;
       }
     },
@@ -56,7 +57,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); // Console log disabled
+        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); 
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -122,20 +123,19 @@ export const useTransactionsStore = create<TransactionsState>()(
                  return newTransactionsWithIds; 
             },
              clearTransactions: () => {
-                 // console.log("Clearing transactions store state."); // Console log disabled
+                 logInfo("TransactionsStore: Clearing transactions state.");
                  set({ ...initialState, isHydrated: true }); 
              },
         }),
         {
             name: 'ifcGuru_transactions', 
-            storage: createJSONStorage(createSessionStorageWithEncoding), // Use the new storage option
+            storage: createJSONStorage(createSessionStorageWithEncoding), 
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
-                   // console.log("Transaction store rehydrated."); // Console log disabled
+                   logInfo("TransactionsStore: Rehydrated successfully.");
                  }
              },
-             // partialize: (state) => ({ transactions: state.transactions }),
         }
     )
 );
@@ -149,3 +149,4 @@ export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+```

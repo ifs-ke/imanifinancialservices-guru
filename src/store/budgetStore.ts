@@ -4,6 +4,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils'; 
 import { format } from 'date-fns'; 
+import { logInfo } from '@/lib/logger'; // Import logger
 
 const generateId = (): string => `budget_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -45,9 +46,9 @@ const createSessionStorageWithEncoding = (): StateStorage => {
       if (!str) return null;
       try {
         const decodedStr = decode(str);
-        return JSON.parse(decodedStr); // Parse after decoding
+        return JSON.parse(decodedStr); 
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); // Console log disabled
+        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); 
         return null;
       }
     },
@@ -58,7 +59,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); // Console log disabled
+        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); 
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -110,7 +111,7 @@ export const useBudgetStore = create<BudgetState>()(
             },
             updateBudgetItem: (updatedItem) => {
                  if (!updatedItem.period) {
-                    // console.warn("Attempted to update budget item without a period. Update skipped.", updatedItem); // Console log disabled
+                    // console.warn("Attempted to update budget item without a period. Update skipped.", updatedItem); 
                     return; 
                  }
                 set((state) => ({
@@ -130,27 +131,25 @@ export const useBudgetStore = create<BudgetState>()(
                      period: currentPeriod, 
                  }));
                  set((state) => ({ budgetItems: sortBudgetItems([...state.budgetItems, ...newBudgetsWithIdsAndPeriod]) }));
-                 return newBudgetsWithIdsAndPeriod;
-             },
+                 return newBudgetsWithIdsAndPeriod; 
+            },
             clearBudgetItems: () => {
-                // console.log("Clearing budget store state."); // Console log disabled
+                logInfo("BudgetStore: Clearing budget items and period state.");
                 set({ ...initialState, budgetPeriod: getCurrentPeriodKey(), isHydrated: true }); 
             },
         }),
         {
             name: 'ifcGuru_budgetItems', 
-            storage: createJSONStorage(createSessionStorageWithEncoding), // Use the new storage option
+            storage: createJSONStorage(createSessionStorageWithEncoding), 
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
-                   if (!state.budgetPeriod || typeof state.budgetPeriod !== 'string' || !/^\d{4}-\d{02}$/.test(state.budgetPeriod)) {
+                   if (!state.budgetPeriod || typeof state.budgetPeriod !== 'string' || !/^\d{4}-\d{2}$/.test(state.budgetPeriod)) {
                        state.budgetPeriod = getCurrentPeriodKey(); 
                    }
-                   // console.log("Budget store rehydrated."); // Console log disabled
+                   logInfo("BudgetStore: Rehydrated successfully.");
                  }
              },
-             // partialize can be used if you don't want to persist everything
-             // partialize: (state) => ({ budgetItems: state.budgetItems, budgetPeriod: state.budgetPeriod }),
         }
     )
 );

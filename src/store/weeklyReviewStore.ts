@@ -2,11 +2,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { encode, decode } from '@/lib/storage-utils';
-import type { WeeklyReviewData } from '@/lib/types'; // Removed UserShareInfo as API calls are server-side
+import type { WeeklyReviewData } from '@/lib/types'; 
 import { getISOWeek, getYear } from 'date-fns';
-// Server actions are used directly in components now, not via store
-// import { shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions'; 
-// import { auth } from '@clerk/nextjs'; // No client-side auth needed here
+import { logInfo } from '@/lib/logger'; // Import logger
 
 
 const createSessionStorageWithEncoding = (): StateStorage => {
@@ -20,7 +18,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const decodedStr = decode(str);
         return JSON.parse(decodedStr);
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); // Console log disabled
+        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); 
         return null;
       }
     },
@@ -31,7 +29,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); // Console log disabled
+        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); 
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -63,12 +61,12 @@ export const getWeekKey = (date: Date): string => {
       const year = getYear(date);
       const weekNumber = getISOWeek(date);
       if (weekNumber < 1 || weekNumber > 53) {
-          // console.warn(`Invalid week number ${weekNumber} calculated for date ${date}. Defaulting to year-01.`); // Console log disabled
-          return `${year}-01`; // Fallback for safety, though date-fns should be reliable
+          // console.warn(`Invalid week number ${weekNumber} calculated for date ${date}. Defaulting to year-01.`); 
+          return `${year}-01`; 
       }
       return `${year}-${weekNumber.toString().padStart(2, '0')}`;
   } catch (error) {
-       // console.error("Error generating week key:", error); // Console log disabled
+       // console.error("Error generating week key:", error); 
        return "invalid-week-key";
   }
 };
@@ -89,7 +87,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
         set((state) => {
              const currentReview = state.ownedReviews[weekKey] || { ownerId: ownerId, journal: '', transactionComments: {}, sharedWith: [] };
              if (currentReview.ownerId !== ownerId) {
-                 // console.warn(`Attempted to set journal for review not owned by ${ownerId}.`); // Console log disabled
+                 // console.warn(`Attempted to set journal for review not owned by ${ownerId}.`); 
                  return state;
              }
              return {
@@ -101,18 +99,18 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
         set((state) => {
              const reviewToUpdate = state.ownedReviews[weekKey];
              
-             if (!reviewToUpdate) { // If review doesn't exist for the owner, create it
+             if (!reviewToUpdate) { 
                   const newReviewShell = { ownerId, journal: '', transactionComments: { [transactionId]: comment }, sharedWith: [] };
                   return { ownedReviews: { ...state.ownedReviews, [weekKey]: newReviewShell } };
              }
 
              if (reviewToUpdate.ownerId !== ownerId) {
-                 // console.warn(`Attempted to set comment for review not owned by ${ownerId}.`); // Console log disabled
+                 // console.warn(`Attempted to set comment for review not owned by ${ownerId}.`); 
                  return state; 
              }
 
              const newComments = { ...(reviewToUpdate.transactionComments || {}), [transactionId]: comment };
-             if (comment.trim() === '') delete newComments[transactionId]; // Remove comment if empty
+             if (comment.trim() === '') delete newComments[transactionId]; 
              const updatedReview = { ...reviewToUpdate, ownerId, transactionComments: Object.keys(newComments).length > 0 ? newComments : undefined };
              return { ownedReviews: { ...state.ownedReviews, [weekKey]: updatedReview } };
          });
@@ -121,7 +119,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
          set((state) => {
              const reviewToUpdate = state.ownedReviews[weekKey];
              if (!reviewToUpdate || reviewToUpdate.ownerId !== ownerId || !reviewToUpdate.transactionComments) {
-                 // console.warn(`Attempted to delete comment for review not found, not owned, or without comments.`); // Console log disabled
+                 // console.warn(`Attempted to delete comment for review not found, not owned, or without comments.`); 
                  return state; 
              }
              const newComments = { ...reviewToUpdate.transactionComments };
@@ -140,7 +138,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                 if (Array.isArray(sharedReview.sharedWith) && sharedReview.sharedWith.includes(currentUserId)) {
                     return sharedReview;
                 } else {
-                    // console.warn(`Access Denied: Attempt to access shared review without permission.`, { weekKey, ownerId, currentUserId }); // Console log disabled
+                    // console.warn(`Access Denied: Attempt to access shared review without permission.`, { weekKey, ownerId, currentUserId }); 
                     return undefined;
                 }
            }
@@ -151,20 +149,20 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
           return review?.transactionComments?.[transactionId];
       },
       clearReviews: () => {
-          // console.log("Clearing weekly review store state."); // Console log disabled
+          logInfo("WeeklyReviewStore: Clearing owned and shared reviews state.");
           set({ ...initialState, isHydrated: true });
       },
     }),
     {
       name: 'ifcGuru_weeklyReviews', 
-      storage: createJSONStorage(createSessionStorageWithEncoding), // Use the new storage option
+      storage: createJSONStorage(createSessionStorageWithEncoding), 
        onRehydrateStorage: () => (state) => {
          if (state) {
            state.isHydrated = true;
-            // console.log("Weekly review store rehydrated."); // Console log disabled
+           logInfo("WeeklyReviewStore: Rehydrated successfully.");
          }
        },
-       // partialize: (state) => ({ ownedReviews: state.ownedReviews, sharedReviews: state.sharedReviews }),
     }
   )
 );
+```

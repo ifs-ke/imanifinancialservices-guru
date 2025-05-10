@@ -4,6 +4,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import type { StatementItem, OtherLiabilityItem } from '@/lib/types';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import { encode, decode } from '@/lib/storage-utils'; 
+import { logInfo } from '@/lib/logger'; // Import logger
 
 const generateId = (prefix: 'asset' | 'lia'): string => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -33,7 +34,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
             return value;
         });
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); // Console log disabled
+        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); 
         return null;
       }
     },
@@ -50,7 +51,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); // Console log disabled
+        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); 
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -117,32 +118,25 @@ export const useStatementStore = create<StatementState>()(
                 set((state) => ({ otherLiabilityItems: sortItems(state.otherLiabilityItems.filter(item => item.id !== id)) }));
             },
             clearStatementItems: () => {
-                 // console.log("Clearing statement store state (items and dates)."); // Console log disabled
+                 logInfo("StatementStore: Clearing statement items and dates state.");
                  set({ ...initialState, isHydrated: true }); 
              },
         }),
         {
             name: 'ifcGuru_statementItems', 
-            storage: createJSONStorage(createSessionStorageWithEncoding), // Use the new storage option
+            storage: createJSONStorage(createSessionStorageWithEncoding), 
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
-                   // Ensure dates are valid on rehydration
                    if (!(state.startDate instanceof Date) || isNaN(state.startDate.getTime())) {
                        state.startDate = defaultStartDate;
                    }
                    if (!(state.endDate instanceof Date) || isNaN(state.endDate.getTime())) {
                        state.endDate = defaultEndDate;
                    }
-                   // console.log("Statement store rehydrated."); // Console log disabled
+                   logInfo("StatementStore: Rehydrated successfully.");
                  }
              },
-             // partialize: (state) => ({ 
-             //   assetItems: state.assetItems, 
-             //   otherLiabilityItems: state.otherLiabilityItems,
-             //   startDate: state.startDate,
-             //   endDate: state.endDate
-             // }),
         }
     )
 );
@@ -156,3 +150,4 @@ export const selectTotalOtherLiabilities = (state: StatementState): number =>
 export const selectStartDate = (state: StatementState): Date | undefined => state.startDate;
 
 export const selectEndDate = (state: StatementState): Date | undefined => state.endDate;
+```
