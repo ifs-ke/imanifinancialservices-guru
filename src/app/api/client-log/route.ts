@@ -1,83 +1,92 @@
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
-// Import the SERVER-SIDE logger functions from the refactored logger.ts
-// Logger removed
-// import { logInfo, logWarn, logError, logDebug, type LogLevel as ServerLogLevel } from '@/lib/logger'; // Correct path
+import { auth } from '@clerk/nextjs/server';
+import { ClientLogPayloadSchema } from '@/lib/schemas'; // Import Zod schema
 
-// Interface matching the payload sent from client-logger.ts
 interface ClientLogPayload {
-  level: 'log' | 'info' | 'warn' | 'error' | 'debug'; // Match ClientLogLevel from client-logger
-  message: string; // Formatted message string
-  context?: Record<string, any>; // Additional context from client
+  level: 'log' | 'info' | 'warn' | 'error' | 'debug';
+  message: string;
+  context?: Record<string, any>;
 }
 
 export async function POST(request: Request) {
+  let effectiveUserId: string;
+  let logContextBase: Record<string, any> = {};
+
   try {
-    const payload = await request.json() as ClientLogPayload;
+    const { userId: clerkUserId } = auth();
+    
+    let rawPayload;
+    try {
+        rawPayload = await request.clone().json(); // Clone to read body for userId and then full parse
+    } catch (jsonError: any) {
+        console.error('CRITICAL: Failed to parse client log payload as JSON in /api/client-log', { 
+            endpoint: '/api/client-log', 
+            errorMessage: jsonError.message,
+            stack: jsonError.stack
+        });
+        return NextResponse.json({ success: false, error: 'Invalid JSON payload' }, { status: 400 });
+    }
 
-    const effectiveUserId = payload.context?.userId;
+    // Validate payload with Zod
+    const validationResult = ClientLogPayloadSchema.safeParse(rawPayload);
+    if (!validationResult.success) {
+        console.warn('Invalid client log payload received in /api/client-log', { 
+            errors: validationResult.error.flatten(), 
+            receivedPayload: rawPayload, 
+            endpoint: '/api/client-log',
+            apiRoute: '/api/client-log'
+        });
+        return NextResponse.json({ success: false, error: 'Invalid log payload structure or data types.', details: validationResult.error.flatten() }, { status: 400 });
+    }
+    
+    const payload = validationResult.data; 
 
-    // Prepare context for the server-side Winston logger
-    const contextForServerLog = {
-        ...(payload.context || {}), // Include context sent from client
-        source: 'client-log-api', // Explicitly mark source as this API endpoint
+    effectiveUserId = clerkUserId || payload.context?.userId || 'anonymous-api-user';
+    logContextBase = { userId: effectiveUserId, source: 'client-log-api', apiRoute: '/api/client-log' };
+
+    const contextForLog = {
+      ...logContextBase,
+      ...(payload.context || {}),
     };
 
-    // Log using console since Winston is removed
-     const serverLevel: string = payload.level === 'log' ? 'info' : payload.level;
-     const logMessage = `[${serverLevel.toUpperCase()}] ${payload.message}`;
-     switch (serverLevel) {
-         case 'info':
-             // console.info(logMessage, contextForServerLog);
-             break;
-         case 'warn':
-             // console.warn(logMessage, contextForServerLog);
-             break;
-         case 'error':
-             // console.error(logMessage, contextForServerLog);
-             break;
-         case 'debug':
-             // console.debug(logMessage, contextForServerLog);
-             break;
-         default:
-             // console.log(`[Client ${payload.level.toUpperCase()}] ${payload.message}`, contextForServerLog);
-     }
+    // Use server-side console for logging.
+    // If a dedicated server-side logger (like Winston with Logtail transport) was configured,
+    // it would be used here instead. For now, direct console logging.
+    const serverLevel = payload.level === 'log' ? 'info' : payload.level;
+    const logMessage = `[Server API - Client ${payload.level.toUpperCase()}] ${payload.message}`;
 
-
-    // Use the appropriate server-side logger function based on the level
-    // switch (serverLevel) { // Logger removed
-    //   case 'info':
-    //     logInfo(payload.message, contextForServerLog, effectiveUserId);
-    //     break;
-    //   case 'warn':
-    //     logWarn(payload.message, contextForServerLog, effectiveUserId);
-    //     break;
-    //   case 'error':
-    //     logError(payload.message, undefined, contextForServerLog, effectiveUserId);
-    //     break;
-    //   case 'debug':
-    //     logDebug(payload.message, contextForServerLog, effectiveUserId);
-    //     break;
-    //   case 'verbose':
-    //     logDebug(payload.message, contextForServerLog, effectiveUserId);
-    //     break;
-    //   default:
-    //     logInfo(`[Client ${payload.level.toUpperCase()}] ${payload.message}`, contextForServerLog, effectiveUserId);
-    // }
+    switch (serverLevel) {
+      case 'info':
+        console.log(logMessage, contextForLog); 
+        break;
+      case 'warn':
+        console.warn(logMessage, contextForLog);
+        break;
+      case 'error':
+        let clientErrorDetails = payload.context?.error || payload.context?.errorMessage || payload.context?.stack;
+        if (typeof clientErrorDetails === 'object') clientErrorDetails = JSON.stringify(clientErrorDetails);
+        console.error(logMessage, { ...contextForLog, clientError: clientErrorDetails || 'No specific client error details provided.' });
+        break;
+      case 'debug':
+        if (process.env.NODE_ENV === 'development' || process.env.SERVER_DEBUG_LOGS === 'true') {
+            console.debug(logMessage, contextForLog);
+        }
+        break;
+      default:
+        console.log(logMessage, contextForLog); 
+    }
 
     return NextResponse.json({ success: true, message: 'Log received by server' }, { status: 200 });
 
-  } catch (error) {
-    // Use console.error for critical errors within the API route itself
-    // console.error('CRITICAL: Error processing client log in /api/client-log:', error);
-
-    // Attempt to log the error using the server logger *if* it's likely available
-    // Avoid if the logger itself might be the cause of the error.
-    // try { // Logger removed
-    //     logError('Failed to process client log via API', error, { endpoint: '/api/client-log' });
-    // } catch (loggingError) {
-    //     console.error("CRITICAL: Failed to log error using logger as well:", loggingError);
-    // }
+  } catch (error: any) {
+    const criticalErrorContext = {
+        ...(Object.keys(logContextBase).length > 0 ? logContextBase : { userId: 'unknown', source: 'client-log-api-critical-error', apiRoute: '/api/client-log' }),
+        endpoint: '/api/client-log',
+        errorMessage: error.message,
+        stack: error.stack,
+    };
+    console.error('CRITICAL: Error processing client log in /api/client-log', criticalErrorContext);
 
     return NextResponse.json({ success: false, error: 'Failed to process client log on server' }, { status: 500 });
   }

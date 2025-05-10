@@ -1,56 +1,66 @@
 // src/lib/logger.ts
-'use client'; // This module can be used client-side for capturing logs.
+'use client';
 
-// Console is used directly as Winston and Logtail were removed.
-// Client-side logs can be sent to a server endpoint if needed for centralized logging.
+// import { Logtail } from '@logtail/browser'; // Logtail browser client removed for now
+// import { auth } from '@clerk/nextjs'; // Clerk re-enabled
 
-const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y'; // Placeholder for when Clerk is disabled
-const ANONYMOUS_USER_FOR_LOGGING = 'anonymous_or_unauthenticated_user';
+// Placeholder for when Clerk is disabled or user not signed in, for client-side context.
+// The actual userId from Clerk will be used when available (passed into logging functions).
+const CLERK_ANONYMOUS_USER_ID = 'anonymous_client_user';
+const CLERK_SESSION_ID_PLACEHOLDER = 'no_session_id_client';
+const CLERK_ORG_ID_PLACEHOLDER = 'no_org_id_client';
 
-// Base context for all logs from this client instance
-const getBaseClientContext = () => {
+
+const getBaseClientContext = (userIdForLog?: string | null) => {
+  let effectiveUserId = CLERK_ANONYMOUS_USER_ID;
+  let effectiveSessionId = CLERK_SESSION_ID_PLACEHOLDER;
+  let effectiveOrgId = CLERK_ORG_ID_PLACEHOLDER;
+  
+  // if (typeof window !== 'undefined') { // Check if in browser
+  //   const { userId, sessionId, orgId } = auth(); // Clerk re-enabled
+  //   if (userId) effectiveUserId = userId;
+  //   if (sessionId) effectiveSessionId = sessionId;
+  //   if (orgId) effectiveOrgId = orgId;
+  // }
+  // If a specific userId is passed for the log (e.g. from useSyncManager), prioritize it.
+  if (userIdForLog) {
+    effectiveUserId = userIdForLog;
+  }
+
+
   return {
+    userId: effectiveUserId,
+    // sessionId: effectiveSessionId, // Temporarily removed as auth() is server-side here
+    // orgId: effectiveOrgId,         // Temporarily removed
     environment: process.env.NODE_ENV || 'unknown_env',
     clientTimestamp: new Date().toISOString(),
     source_client_component: typeof window !== 'undefined' ? window.location.pathname : 'unknown_path',
   };
 };
 
-// Generic log function (client-side)
 const clientLog = (
-    level: 'debug' | 'info' | 'warn' | 'error',
+    level: 'debug' | 'info' | 'warn' | 'error' | 'log',
     message: string,
     context?: Record<string, any>,
     errorDetails?: any,
-    userIdForLog?: string | null // Allow explicit userId passing (can be null)
+    userIdForLog?: string | null
 ) => {
-    // Determine effective user ID for the log entry
-    // When Clerk is disabled, this will use the placeholder or anonymous.
-    // When Clerk is enabled, useSyncManager should ideally pass the actual userId.
-    const effectiveUserId = userIdForLog || (typeof window !== 'undefined' ? CLERK_DISABLED_PLACEHOLDER_USER_ID : ANONYMOUS_USER_FOR_LOGGING);
-
     const logContext: Record<string, any> = {
-        ...getBaseClientContext(),
-        userId: effectiveUserId,
+        ...getBaseClientContext(userIdForLog), // Pass userIdForLog to getBaseClientContext
         ...(context || {}),
     };
 
     if (errorDetails) {
         if (errorDetails instanceof Error) {
             logContext.errorMessage = errorDetails.message;
-            // Ensure stack is a string and truncate if too long to prevent issues
             const stackString = typeof errorDetails.stack === 'string' ? errorDetails.stack : String(errorDetails.stack);
-            logContext.stack = stackString.substring(0, 2000); // Truncate stack to 2000 chars
+            logContext.stack = stackString.substring(0, 2000);
         } else if (typeof errorDetails === 'object' && errorDetails !== null) {
-            // Iterate over errorDetails properties and add them to logContext
-            // Be cautious about deeply nested objects or very large properties
             Object.keys(errorDetails).forEach(key => {
                 const value = errorDetails[key];
                 if (typeof value !== 'function' && (typeof value !== 'object' || value === null || key === 'status' || key === 'statusText')) {
-                     // Include primitives, nulls, or specific object properties like status/statusText
                     logContext[`error_${key}`] = value;
                 } else if (typeof value === 'object' && value !== null) {
-                    // For other objects, stringify them but truncate if too long
                     try {
                         logContext[`error_${key}`] = JSON.stringify(value).substring(0, 500);
                     } catch {
@@ -63,36 +73,41 @@ const clientLog = (
         }
     }
 
-    // Output to browser console
-    const consoleArgs = [`[Client - ${level.toUpperCase()}] ${message}`];
-    if (Object.keys(logContext).length > 0) consoleArgs.push(logContext);
+    const consoleArgs: any[] = [`[${level.toUpperCase()}] ${message}`];
+    if (Object.keys(logContext).length > 0) {
+      // Filter out the base client context before logging to console to reduce noise,
+      // but it will still be sent to the server if server-side logging is enabled.
+      const displayContext = { ...logContext };
+      delete displayContext.environment;
+      delete displayContext.clientTimestamp;
+      delete displayContext.source_client_component;
+      // We keep userId in console for easier debugging if it's set.
+      if(Object.keys(displayContext).length > 0) consoleArgs.push(displayContext);
+    }
+
 
     switch (level) {
         case 'error': console.error(...consoleArgs); break;
         case 'warn':  console.warn(...consoleArgs); break;
         case 'info':  console.info(...consoleArgs); break;
         case 'debug': console.debug(...consoleArgs); break;
+        case 'log':   console.log(...consoleArgs); break;
         default:      console.log(...consoleArgs); break;
     }
 
     // Send log to the server-side API endpoint for centralized logging
-    // This allows server to persist or forward logs (e.g., to a file or another service)
     if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_LOG_TO_SERVER === 'true') {
-        // Prepare a cleaner context for server-side logging if necessary
-        const serverLogContext = { ...logContext };
-        // Remove potentially problematic large fields like full stack if preferred for server logs
-        // For now, sending the truncated stack from logContext.stack
-
         fetch('/api/client-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                level: level,
-                message: message, // Send original message
-                context: serverLogContext, // Send potentially modified/cleaned context
+                level: level, // Send the original level
+                message: message,
+                context: logContext, // Send the full context including baseClientContext
             }),
         }).catch(fetchError => {
-            console.warn('Failed to send client log to server:', fetchError, { originalMessage: message, originalContext: context });
+            // Use original console.warn to avoid loop if logger itself fails to send
+            console.warn('Failed to send client log to server:', fetchError, { originalMessage: message, originalContext: logContext });
         });
     }
 };
@@ -110,8 +125,13 @@ export const logError = (message: string, error?: any, context?: Record<string, 
 };
 
 export const logDebug = (message: string, context?: Record<string, any>, userId?: string | null) => {
-    // Debug logs are often conditional on NODE_ENV for client-side
     if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS === 'true') {
         clientLog('debug', message, context, undefined, userId);
     }
 };
+
+// No direct export of a Logtail client instance from here anymore.
+// If Logtail (or another third-party logger) is needed application-wide,
+// it should be initialized in a provider or a global setup file.
+// For now, this logger focuses on console output and optional server-side forwarding.
+export { /* logtailClient removed */ };
