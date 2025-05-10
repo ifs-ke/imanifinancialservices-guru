@@ -63,7 +63,7 @@ export function useSyncManager() {
   const getDebtState = useDebtStore.getState;
   const getStatementState = useStatementStore.getState;
   const getBudgetState = useBudgetStore.getState;
-  const getWeeklyReviewState = useWeeklyReviewStore.getState;
+  const getWeeklyReviewState = useWeeklyReviewStore.getState; // Correctly using the imported hook
   const getNotificationState = useNotificationStore.getState;
 
   const updateSyncState = useCallback((partialState: Partial<SyncState>) => {
@@ -133,7 +133,7 @@ export function useSyncManager() {
     }
   }, [
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewStore, getNotificationState, updateSyncState
+    getWeeklyReviewState, getNotificationState, updateSyncState
   ]);
 
   const fetchData = useCallback(async (isRetry = false, skipHashCheck = false) => {
@@ -262,7 +262,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewStore, getNotificationState, updateSyncState, cleanupAsyncOperations, syncState.status 
+    getWeeklyReviewState, getNotificationState, updateSyncState, cleanupAsyncOperations, syncState.status 
   ]);
 
   const saveData = useCallback(async (isForceSave = false) => {
@@ -489,11 +489,11 @@ export function useSyncManager() {
         isSaving: isSavingRef.current, currentStatus: syncState.status,
       }, currentAuthUserId);
     }
+
+    const shouldCleanUp = isFetchingRef.current || isSavingRef.current;
     return () => {
-      // Only cleanup if an operation was actually started by *this* effect instance for the *current* user.
-      // This avoids aborting operations for a new user if the old user's effect cleanup runs late.
-      if ((isFetchingRef.current || isSavingRef.current) && (internalPreviousUserId.current === currentAuthUserId || !currentAuthUserId )) {
-         cleanupAsyncOperations('Auth effect cleanup for relevant user/state');
+      if (shouldCleanUp) {
+        cleanupAsyncOperations('Auth effect cleanup');
       }
     };
   }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState]); 
@@ -533,7 +533,7 @@ export function useSyncManager() {
       }
       triggerDebouncedSave();
     } else {
-      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or save trigger.', { 
+      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { 
         initialFetchDone: initialFetchDoneRef.current, 
         isFetching: isFetchingRef.current, 
         isSaving: isSavingRef.current,
