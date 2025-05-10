@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { NotificationItem, NotificationType } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils';
+import { logDebug } from '@/lib/logger';
 
 const MAX_NOTIFICATIONS = 50; 
 
@@ -32,7 +33,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
             return value;
         });
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage`, e); // Console log disabled
+        logDebug(`Failed to decode/parse item "${name}" from sessionStorage`, { error: e });
         return null;
       }
     },
@@ -48,7 +49,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify item "${name}" for sessionStorage`, e); // Console log disabled
+        logDebug(`Failed to encode/stringify item "${name}" for sessionStorage`, { error: e });
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -57,6 +58,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
 
 export interface NotificationState {
   notifications: NotificationItem[];
+  selectedNotificationIds: string[]; // New state for selected notifications
   isHydrated: boolean; 
   addNotification: (notificationData: Omit<NotificationItem, 'id' | 'timestamp' | 'read'>) => NotificationItem;
   markAsRead: (id: string) => void;
@@ -65,10 +67,16 @@ export interface NotificationState {
   clearAllNotifications: () => void;
   setNotifications: (notifications: NotificationItem[]) => void; 
   unreadCount: () => number;
+  toggleSelectNotification: (id: string) => void; // New action
+  toggleSelectAllNotifications: () => void; // New action
+  markSelectedAsRead: () => void; // New action
+  deleteSelectedNotifications: () => void; // New action
+  clearSelection: () => void; // New action
 }
 
 const initialState = {
   notifications: [], 
+  selectedNotificationIds: [],
   isHydrated: false,
 };
 
@@ -88,7 +96,7 @@ export const useNotificationStore = create<NotificationState>()(
              message: n.message || '',
           })).filter(n => n.timestamp instanceof Date && !isNaN(n.timestamp.getTime())); 
 
-          set({ notifications: sortNotifications(validatedNotifications).slice(0, MAX_NOTIFICATIONS), isHydrated: true });
+          set({ notifications: sortNotifications(validatedNotifications).slice(0, MAX_NOTIFICATIONS), isHydrated: true, selectedNotificationIds: [] });
       },
 
       addNotification: (notificationData) => {
@@ -115,29 +123,74 @@ export const useNotificationStore = create<NotificationState>()(
       markAllAsRead: () => {
         set((state) => ({
           notifications: state.notifications.map((n) => ({ ...n, read: true })),
+          selectedNotificationIds: [] // Clear selection after marking all as read
         }));
       },
 
       deleteNotification: (id) => {
         set((state) => ({
           notifications: state.notifications.filter((n) => n.id !== id),
+          selectedNotificationIds: state.selectedNotificationIds.filter(selectedId => selectedId !== id) // Remove from selection if deleted
         }));
       },
 
-      clearAllNotifications: () => set({ notifications: [], isHydrated: true }), 
+      clearAllNotifications: () => set({ notifications: [], selectedNotificationIds: [], isHydrated: true }), 
 
       unreadCount: () => get().notifications.filter(n => !n.read).length,
+
+      toggleSelectNotification: (id) => {
+        set((state) => {
+          const selectedIndex = state.selectedNotificationIds.indexOf(id);
+          if (selectedIndex > -1) {
+            return { selectedNotificationIds: state.selectedNotificationIds.filter(selectedId => selectedId !== id) };
+          } else {
+            return { selectedNotificationIds: [...state.selectedNotificationIds, id] };
+          }
+        });
+      },
+
+      toggleSelectAllNotifications: () => {
+        set((state) => {
+          if (state.selectedNotificationIds.length === state.notifications.length && state.notifications.length > 0) {
+            // All are selected, so deselect all
+            return { selectedNotificationIds: [] };
+          } else {
+            // Not all (or none) are selected, so select all
+            return { selectedNotificationIds: state.notifications.map(n => n.id) };
+          }
+        });
+      },
+
+      markSelectedAsRead: () => {
+        set((state) => ({
+          notifications: state.notifications.map((n) =>
+            state.selectedNotificationIds.includes(n.id) ? { ...n, read: true } : n
+          ),
+          selectedNotificationIds: [] // Clear selection
+        }));
+      },
+
+      deleteSelectedNotifications: () => {
+        set((state) => ({
+          notifications: state.notifications.filter((n) => !state.selectedNotificationIds.includes(n.id)),
+          selectedNotificationIds: [] // Clear selection
+        }));
+      },
+      
+      clearSelection: () => {
+        set({ selectedNotificationIds: [] });
+      }
     }),
     {
       name: 'ifcGuru_notifications', 
-      storage: createJSONStorage(createSessionStorageWithEncoding), // Use the new storage option
+      storage: createJSONStorage(createSessionStorageWithEncoding),
        onRehydrateStorage: () => (state) => {
          if (state) {
            state.isHydrated = true;
-            // console.log("Notification store rehydrated."); // Console log disabled
+           state.selectedNotificationIds = []; // Ensure selection is clear on rehydration
+           logDebug("Notification store rehydrated.");
          }
        },
-       // partialize: (state) => ({ notifications: state.notifications }),
     }
   )
 );

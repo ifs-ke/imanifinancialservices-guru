@@ -1,23 +1,42 @@
 // src/app/(dashboard)/notifications/page.tsx
 'use client';
 
-import React, { useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useEffect, useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, XCircle, Share2, RefreshCw, MessageSquareText } from 'lucide-react';
-import { useNotificationStore } from '@/store/notificationStore'; // Import the store
+import { Checkbox } from '@/components/ui/checkbox';
+import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, XCircle, Share2, MessageSquareText, ListChecks, Trash } from 'lucide-react';
+import { useNotificationStore } from '@/store/notificationStore';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
-import Link from 'next/link'; // Import Link for navigation
-import type { NotificationType } from '@/lib/types'; // Import NotificationType
+import Link from 'next/link';
+import type { NotificationType } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
 
 export default function NotificationsPage() {
-  const { notifications, markAsRead, markAllAsRead, deleteNotification, clearAllNotifications } = useNotificationStore();
+  const { 
+    notifications, 
+    selectedNotificationIds,
+    markAsRead, 
+    markAllAsRead, 
+    deleteNotification, 
+    clearAllNotifications,
+    toggleSelectNotification,
+    toggleSelectAllNotifications,
+    markSelectedAsRead,
+    deleteSelectedNotifications,
+    clearSelection
+  } = useNotificationStore();
+  const { toast } = useToast();
 
-  // Mark all as read when the page loads (optional behavior)
-  // useEffect(() => {
-  //   markAllAsRead();
-  // }, [markAllAsRead]);
+  // Clear selection when notifications change (e.g., after delete all)
+  useEffect(() => {
+    return () => {
+        clearSelection();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   const getIconForType = (type: NotificationType) => {
       switch (type) {
@@ -31,6 +50,29 @@ export default function NotificationsPage() {
       }
   };
 
+  const isAllSelected = useMemo(() => {
+    return notifications.length > 0 && selectedNotificationIds.length === notifications.length;
+  }, [notifications, selectedNotificationIds]);
+
+  const handleToggleSelectAll = () => {
+    toggleSelectAllNotifications();
+  };
+
+  const handleMarkSelectedRead = () => {
+    if (selectedNotificationIds.length > 0) {
+      markSelectedAsRead();
+      toast({ title: "Notifications Updated", description: `${selectedNotificationIds.length} notification(s) marked as read.` });
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedNotificationIds.length > 0) {
+      const count = selectedNotificationIds.length;
+      deleteSelectedNotifications();
+      toast({ title: "Notifications Deleted", description: `${count} notification(s) deleted.` });
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -42,8 +84,8 @@ export default function NotificationsPage() {
             View application updates, budget alerts, and collaboration requests.
           </p>
         </div>
-        <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={notifications.every(n => n.read)}>
+        <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={notifications.every(n => n.read) || notifications.length === 0}>
                 <Check className="mr-1 h-4 w-4" /> Mark All Read
             </Button>
             <Button variant="destructive" size="sm" onClick={clearAllNotifications} disabled={notifications.length === 0}>
@@ -54,27 +96,46 @@ export default function NotificationsPage() {
 
       <main className="flex-1">
         <Card>
-          <CardHeader>
-            <CardTitle>Your Notifications</CardTitle>
-            <CardDescription>Updates related to your account and application activity.</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="select-all-notifications"
+                checked={isAllSelected}
+                onCheckedChange={handleToggleSelectAll}
+                disabled={notifications.length === 0}
+                aria-label="Select all notifications"
+              />
+              <label htmlFor="select-all-notifications" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Select All ({selectedNotificationIds.length} selected)
+              </label>
+            </div>
+            <CardDescription className="text-xs">{notifications.length} total notifications</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {notifications.length === 0 ? (
               <div className="text-center text-muted-foreground py-10">
                 <Bell className="mx-auto h-12 w-12 text-muted-foreground/50 mb-2" />
                 You have no notifications yet.
               </div>
             ) : (
-              <ul className="space-y-3">
+              <ul className="divide-y divide-border">
                 {notifications.map((notification) => (
                   <li
                     key={notification.id}
                     className={cn(
-                      "flex items-start gap-3 p-3 border rounded-lg transition-colors",
-                      notification.read ? 'bg-card' : 'bg-primary/5 border-primary/20 hover:bg-primary/10',
+                      "flex items-start gap-3 p-3 transition-colors hover:bg-muted/50",
+                      notification.read ? 'bg-card' : 'bg-primary/5 ',
+                      selectedNotificationIds.includes(notification.id) && 'bg-accent/20'
                     )}
                   >
-                    <div className="mt-1 flex-shrink-0">
+                    <Checkbox
+                      id={`select-notification-${notification.id}`}
+                      checked={selectedNotificationIds.includes(notification.id)}
+                      onCheckedChange={() => toggleSelectNotification(notification.id)}
+                      className="mt-1 flex-shrink-0"
+                      aria-label={`Select notification: ${notification.title}`}
+                    />
+                    <div className="mt-0.5 flex-shrink-0">
                        {getIconForType(notification.type)}
                     </div>
                     <div className="flex-grow">
@@ -99,7 +160,7 @@ export default function NotificationsPage() {
                              variant="ghost"
                              size="sm"
                              className="h-6 px-1.5 text-xs"
-                             onClick={() => markAsRead(notification.id)}
+                             onClick={(e) => { e.stopPropagation(); markAsRead(notification.id);}}
                              title="Mark as read"
                            >
                              <Check className="h-3 w-3"/>
@@ -109,7 +170,7 @@ export default function NotificationsPage() {
                              variant="ghost"
                              size="sm"
                              className="h-6 px-1.5 text-xs text-destructive hover:text-destructive"
-                             onClick={() => deleteNotification(notification.id)}
+                             onClick={(e) => { e.stopPropagation(); deleteNotification(notification.id);}}
                              title="Delete notification"
                            >
                               <Trash2 className="h-3 w-3" />
@@ -120,6 +181,26 @@ export default function NotificationsPage() {
               </ul>
             )}
           </CardContent>
+          {notifications.length > 0 && (
+            <CardFooter className="p-3 border-t flex justify-start gap-2">
+                <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleMarkSelectedRead}
+                    disabled={selectedNotificationIds.length === 0}
+                >
+                    <ListChecks className="mr-1 h-4 w-4" /> Mark Selected Read
+                </Button>
+                <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleDeleteSelected}
+                    disabled={selectedNotificationIds.length === 0}
+                >
+                    <Trash className="mr-1 h-4 w-4" /> Delete Selected
+                </Button>
+            </CardFooter>
+          )}
         </Card>
       </main>
     </div>
