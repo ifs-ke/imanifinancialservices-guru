@@ -38,7 +38,7 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
 import { UserButton, useUser } from "@clerk/nextjs"; 
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ScrollArea } from "../ui/scroll-area";
+import { ScrollArea } from "./scroll-area"; 
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
 
 interface SidebarMenuItem {
@@ -86,8 +86,8 @@ interface SidebarProviderProps {
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   children,
 }) => {
-  const isMobile = useIsMobile();
-  const [state, setState] = React.useState<SidebarState>("expanded"); 
+  const isMobileClient = useIsMobile(); // This hook now correctly handles SSR default
+  const [clientDeterminedState, setClientDeterminedState] = React.useState<SidebarState>("expanded");
   const [hasMounted, setHasMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -95,42 +95,46 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   }, []);
 
   React.useEffect(() => {
-    if (hasMounted) { 
-      if (isMobile) {
-        setState("collapsed"); 
+    if (hasMounted) {
+      if (isMobileClient) {
+        setClientDeterminedState("collapsed");
       } else {
         const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
-        setState(storedState || "expanded");
+        if (storedState) {
+          setClientDeterminedState(storedState);
+        } else {
+          setClientDeterminedState("expanded"); // Default for desktop if nothing in localStorage
+        }
       }
     }
-  }, [isMobile, hasMounted]);
+  }, [isMobileClient, hasMounted]);
 
   React.useEffect(() => {
-    if (hasMounted && !isMobile) { 
-      localStorage.setItem("sidebarState", state);
+    if (hasMounted && !isMobileClient && clientDeterminedState) {
+      localStorage.setItem("sidebarState", clientDeterminedState);
     }
-  }, [state, isMobile, hasMounted]);
+  }, [clientDeterminedState, isMobileClient, hasMounted]);
 
-
-  const collapseSidebar = () => setState("collapsed");
-  const expandSidebar = () => setState("expanded");
+  const collapseSidebar = () => setClientDeterminedState("collapsed");
+  const expandSidebar = () => setClientDeterminedState("expanded");
   const toggleSidebar = () => {
-    setState(prev => {
-      const newState = prev === "collapsed" ? "expanded" : "collapsed";
-      return newState;
-    });
+    setClientDeterminedState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
   };
 
-  const value = React.useMemo(() => ({
-    isMobile,
-    state,
+  // The `state` exposed to context will be fixed for SSR ("expanded")
+  // and will update to `clientDeterminedState` only after the client has mounted.
+  const currentDisplayState = hasMounted ? clientDeterminedState : "expanded";
+
+  const contextValue = React.useMemo(() => ({
+    isMobile: isMobileClient, // use the client-aware isMobile
+    state: currentDisplayState,
     collapseSidebar,
     expandSidebar,
     toggleSidebar,
-  }), [isMobile, state]);
+  }), [isMobileClient, currentDisplayState]);
 
   return (
-    <SidebarContext.Provider value={value}>
+    <SidebarContext.Provider value={contextValue}>
       {children}
     </SidebarContext.Provider>
   );
@@ -138,7 +142,7 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
 
 const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
-    const { state, toggleSidebar } = useSidebar();
+    const { state, toggleSidebar } = useSidebar(); // state here will be "expanded" on SSR
     const pathname = usePathname();
     const unreadCount = useNotificationStore(state => state.unreadCount());
     const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
@@ -314,7 +318,6 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                     <Link href="/sign-in"><Users size={18} className="text-muted-foreground" /></Link>
                  </Button>
             ) : (
-              // Placeholder while Clerk is loading
               <div className="h-8 w-8 flex items-center justify-center">
                 <RefreshCw size={18} className="text-muted-foreground animate-spin" />
               </div>
@@ -338,7 +341,7 @@ export const Sidebar = React.forwardRef<
     side?: "left" | "right";
   }
 >(({ className, side = "left", ...props }, ref) => {
-  const { isMobile, state } = useSidebar();
+  const { isMobile } = useSidebar(); // Removed state from here as it's used in SidebarContent
 
   if (isMobile) {
     return (
@@ -355,19 +358,15 @@ export const Sidebar = React.forwardRef<
       </Sheet>
     );
   }
-
+  // For desktop, SidebarContent will get the state from context.
   return (
     <div
       ref={ref}
       className={cn(
-        "group/sidebar peer hidden md:block text-sidebar-foreground", 
-        "fixed inset-y-0 z-40", 
-        side === "left" ? "left-0" : "right-0 border-l",
-        state === "expanded" ? "w-64" : "w-14", // Dynamic width for desktop
+        "fixed inset-y-0 left-0 z-40 hidden md:flex", // Base classes
         className
       )}
-      data-state={state} // For potential CSS targeting based on state
-      {...props}
+      // data-state attribute and dynamic width will be handled by SidebarContent itself
     >
       <SidebarContent />
     </div>
@@ -402,11 +401,17 @@ export const SidebarInset = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
+  const { state, isMobile } = useSidebar();
+  // Apply margin based on sidebar state only for desktop
+  const marginLeftClass = isMobile ? 'ml-0' : (state === 'expanded' ? 'md:ml-64' : 'md:ml-14');
+
+
   return (
     <div
       ref={ref}
       className={cn(
-        "flex-1",
+        "flex-1 transition-[margin-left] duration-200 ease-linear",
+        marginLeftClass,
         className
       )}
       {...props}
