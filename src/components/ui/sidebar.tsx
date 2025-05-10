@@ -25,7 +25,7 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ClipboardList, // Changed from Logger
+  ClipboardList,
   RefreshCw,
   Menu,
   PieChart,
@@ -33,13 +33,16 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
-import { ThemeToggle } from "../ui/ThemeToggle";
+import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
 import { UserButton, useUser } from "@clerk/nextjs"; 
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area"; 
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
+import { Skeleton } from "@/components/ui/skeleton"; 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 
 interface SidebarMenuItem {
   href: string;
@@ -81,67 +84,85 @@ export const useSidebar = () => {
 
 interface SidebarProviderProps {
   children: React.ReactNode;
+  variant?: "sidebar" | "inset";
+  width?: string;
+  widthIcon?: string;
+  collapsible?: "icon" | "button";
 }
 
-export const SidebarProvider: React.FC<SidebarProviderProps> = ({
-  children,
-}) => {
-  const isMobileClient = useIsMobile(); 
-  // Default to 'expanded' for SSR and initial client render to avoid mismatch
-  const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded");
-  const [hasMounted, setHasMounted] = React.useState(false);
+export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithChildren<SidebarProviderProps>>(
+  ({ children, variant = "sidebar", width = "16rem", widthIcon = "3.5rem", collapsible = "button", ...props }, ref) => {
+    const isMobileClient = useIsMobile();
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded");
+    const [hasMounted, setHasMounted] = React.useState(false);
 
-  React.useEffect(() => {
-    setHasMounted(true);
-  }, []);
+    React.useEffect(() => {
+      setHasMounted(true);
+    }, []);
 
-  React.useEffect(() => {
-    if (hasMounted) {
-      if (isMobileClient) {
-        setSidebarState("collapsed");
-      } else {
-        const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
-        if (storedState) {
-          setSidebarState(storedState);
+    React.useEffect(() => {
+      if (hasMounted) {
+        if (isMobileClient) {
+          setSidebarState("collapsed");
         } else {
-           setSidebarState("expanded"); // Default for desktop if nothing in localStorage after mount
+          const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
+          if (storedState) {
+            setSidebarState(storedState);
+          } else {
+            setSidebarState("expanded");
+          }
         }
       }
-    }
-  }, [isMobileClient, hasMounted]);
+    }, [isMobileClient, hasMounted]);
 
-  React.useEffect(() => {
-    if (hasMounted && !isMobileClient) {
-      localStorage.setItem("sidebarState", sidebarState);
-    }
-  }, [sidebarState, isMobileClient, hasMounted]);
+    React.useEffect(() => {
+      if (hasMounted && !isMobileClient) {
+        localStorage.setItem("sidebarState", sidebarState);
+      }
+    }, [sidebarState, isMobileClient, hasMounted]);
 
-  const collapseSidebar = () => setSidebarState("collapsed");
-  const expandSidebar = () => setSidebarState("expanded");
-  const toggleSidebar = () => {
-    setSidebarState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
-  };
-  
-  // The `state` exposed to context will be `sidebarState` which updates after mount.
-  // The initial server render will use the default "expanded" from useState.
-  const contextValue = React.useMemo(() => ({
-    isMobile: isMobileClient,
-    state: sidebarState, // Use the state that updates after mount
-    collapseSidebar,
-    expandSidebar,
-    toggleSidebar,
-  }), [isMobileClient, sidebarState]);
+    const collapseSidebar = () => setSidebarState("collapsed");
+    const expandSidebar = () => setSidebarState("expanded");
+    const toggleSidebar = () => {
+      setSidebarState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
+    };
 
-  return (
-    <SidebarContext.Provider value={contextValue}>
-      {children}
-    </SidebarContext.Provider>
-  );
-};
+    const contextValue = React.useMemo(() => ({
+      isMobile: isMobileClient,
+      state: sidebarState,
+      collapseSidebar,
+      expandSidebar,
+      toggleSidebar,
+    }), [isMobileClient, sidebarState]);
+
+    return (
+      <SidebarContext.Provider value={contextValue}>
+        <div
+          className={cn(
+            "group/sidebar-wrapper flex min-h-svh w-full",
+            variant === "inset" && "has-[[data-variant=inset]]:bg-sidebar"
+          )}
+          style={
+            {
+              "--sidebar-width": width,
+              "--sidebar-width-icon": widthIcon,
+            } as React.CSSProperties
+          }
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </div>
+      </SidebarContext.Provider>
+    );
+  }
+);
+SidebarProvider.displayName = "SidebarProvider";
+
 
 const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
-    const { state, toggleSidebar, isMobile } = useSidebar(); 
+    const { state, toggleSidebar } = useSidebar(); 
     const pathname = usePathname();
     const unreadCount = useNotificationStore(state => state.unreadCount());
     const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
@@ -211,7 +232,6 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
               onClick={toggleSidebar}
               aria-label={state === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              {/* Ensure icon changes correctly based on actual sidebar state */}
               {state === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
             </Button>
             <span
@@ -306,21 +326,32 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
               "flex items-center w-full",
               state === 'collapsed' ? "justify-center py-1" : "p-1"
           )}>
-            {isClerkLoaded && isSignedIn && user ? (
+            {!isClerkLoaded ? (
+              <Skeleton className={cn("rounded-full", state === 'collapsed' ? "w-7 h-7" : "w-8 h-8")} />
+            ) : isSignedIn && user ? (
               <UserButton afterSignOutUrl="/" appearance={{
                   elements: {
                       userButtonAvatarBox: state === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
                       userButtonPopoverCard: "bg-popover border-border",
                   }
               }}/>
-            ) : isClerkLoaded && !isSignedIn ? (
-                 <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                    <Link href="/sign-in"><Users size={18} className="text-muted-foreground" /></Link>
-                 </Button>
             ) : (
-              <div className="h-8 w-8 flex items-center justify-center">
-                <RefreshCw size={18} className="text-muted-foreground animate-spin" />
-              </div>
+               <TooltipProvider delayDuration={100}>
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" className={cn(state === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} asChild>
+                         <Link href="/sign-in" aria-label="Sign In">
+                            <Users size={state === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
+                         </Link>
+                      </Button>
+                   </TooltipTrigger>
+                   {state === "collapsed" && (
+                        <TooltipContent side="right" align="center">
+                          Sign In
+                        </TooltipContent>
+                   )}
+                 </Tooltip>
+               </TooltipProvider>
             )}
             {state === 'expanded' && isClerkLoaded && isSignedIn && user && (
               <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>

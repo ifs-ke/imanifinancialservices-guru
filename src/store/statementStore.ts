@@ -57,7 +57,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
   };
 };
 
-interface StatementState {
+export interface StatementState {
     assetItems: StatementItem[];
     otherLiabilityItems: OtherLiabilityItem[];
     startDate: Date | undefined;

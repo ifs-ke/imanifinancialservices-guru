@@ -17,12 +17,12 @@ import type {
 } from '@/lib/types';
 
 // Store imports
-import { useTransactionsStore } from '@/store/transactionsStore';
-import { useDebtStore } from '@/store/debtStore';
-import { useStatementStore } from '@/store/statementStore';
-import { useBudgetStore } from '@/store/budgetStore';
-import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
-import { useNotificationStore } from '@/store/notificationStore';
+import { useTransactionsStore, TransactionsState } from '@/store/transactionsStore';
+import { useDebtStore, DebtState } from '@/store/debtStore';
+import { useStatementStore, StatementState } from '@/store/statementStore';
+import { useBudgetStore, BudgetState } from '@/store/budgetStore';
+import { useWeeklyReviewStore, WeeklyReviewState } from '@/store/weeklyReviewStore';
+import { useNotificationStore, NotificationState } from '@/store/notificationStore';
 
 // Constants
 const SYNC_API_ENDPOINT = '/api/sync';
@@ -34,7 +34,7 @@ const STORE_KEYS = [
   'ifcGuru_budgetItems',
   'ifcGuru_weeklyReviews',
   'ifcGuru_notifications'
-];
+] as const;
 
 // Types
 type SyncStatus = 'idle' | 'syncing' | 'synced' | 'local' | 'error';
@@ -56,10 +56,26 @@ interface SyncedData {
   ownedReviews: Record<string, WeeklyReviewData>;
   sharedReviews: Record<string, WeeklyReviewData>;
   notifications: NotificationItem[];
-  startDate?: string;
-  endDate?: string;
+  startDate?: Date;
+  endDate?: Date;
   gettingStartedDismissed: boolean;
 }
+
+interface SyncData extends Omit<SyncedData, 'startDate' | 'endDate'> {
+  startDate?: Date;
+  endDate?: Date;
+}
+
+type StoreType = 
+  | TransactionsState 
+  | DebtState 
+  | StatementState 
+  | BudgetState 
+  | WeeklyReviewState 
+  | NotificationState;
+
+type ClearableStore = { clear: () => void };
+type ResettableStore = { reset: () => void };
 
 export function useSyncManager() {
   // Hooks
@@ -84,7 +100,7 @@ export function useSyncManager() {
   const hasLocalChangesRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Store getters
+  // Store getters with proper typing
   const storeGetters = useMemo(() => ({
     transactions: useTransactionsStore.getState,
     debts: useDebtStore.getState,
@@ -116,10 +132,14 @@ export function useSyncManager() {
     try {
       logInfo('Clearing local state', { userId: contextUserId });
 
-      // Clear all stores
+      // Clear all stores with proper type checking
       Object.values(storeGetters).forEach(store => {
-        if ('clear' in store()) store().clear();
-        else if ('reset' in store()) store().reset();
+        const storeInstance = store();
+        if ('clear' in storeInstance) {
+          (storeInstance as ClearableStore).clear();
+        } else if ('reset' in storeInstance) {
+          (storeInstance as ResettableStore).reset();
+        }
       });
 
       // Clear session storage
@@ -146,6 +166,105 @@ export function useSyncManager() {
     }
   }, [storeGetters, updateSyncState]);
 
+  // Centralized error handling
+  const handleError = useCallback((operation: string, error: unknown, fallbackMessage: string) => {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logError(`${operation} error`, error, { userId });
+    
+    return {
+      title: `${operation} Failed`,
+      description: `${fallbackMessage} ${errorMessage ? `(${errorMessage})` : ''}`.trim(),
+      variant: 'destructive' as const
+    };
+  }, [userId]);
+
+  const verifyDataHash = useCallback(async (data: SyncedData, serverHash: string) => {
+    const preparedData = prepareDataForHashing(data);
+    const dataString = stringify(preparedData);
+    const isValid = await verifyHash(dataString, serverHash);
+    
+    if (!isValid) {
+      logError('Data integrity check failed', {
+        serverHash,
+        clientHashInput: dataString.substring(0, 200),
+        userId
+      });
+    }
+    
+    return isValid;
+  }, [userId]);
+
+  const handleHashMismatch = useCallback(() => {
+    updateSyncState({ 
+      status: 'error', 
+      hashMismatch: true, 
+      isMismatchDialogOpen: true 
+    });
+    
+    toast({
+      title: 'Data Sync Mismatch',
+      description: "Local and server data don't match. Please resolve the conflict.",
+      variant: 'destructive',
+      link: '#'
+    });
+  }, [toast, updateSyncState]);
+
+  const getCurrentState = useCallback((): SyncData => {
+    const state = {
+      transactions: storeGetters.transactions().transactions,
+      debts: storeGetters.debts().debts,
+      assetItems: storeGetters.statement().assetItems,
+      otherLiabilityItems: storeGetters.statement().otherLiabilityItems,
+      budgetItems: storeGetters.budget().budgetItems,
+      ownedReviews: storeGetters.weeklyReview().ownedReviews,
+      sharedReviews: storeGetters.weeklyReview().sharedReviews,
+      notifications: storeGetters.notification().notifications,
+      startDate: storeGetters.statement().startDate,
+      endDate: storeGetters.statement().endDate,
+      gettingStartedDismissed: syncState.gettingStartedDismissed,
+    };
+
+    return state;
+  }, [storeGetters, syncState.gettingStartedDismissed]);
+
+  const prepareDataForSave = useCallback(async (currentState: SyncData) => {
+    const preparedData = prepareDataForHashing(currentState);
+    const dataString = stringify(preparedData);
+    const dataHash = await hashData(dataString);
+    logDebug('Client hash calculated', { hash: dataHash, userId });
+    return { preparedData, dataHash };
+  }, [userId]);
+
+  const parseErrorResponse = useCallback(async (response: Response) => {
+    try {
+      return await response.json();
+    } catch {
+      return { error: `Request failed with status ${response.status}` };
+    }
+  }, []);
+
+  const updateStoresWithFetchedData = useCallback(async (fetchedData: SyncedData) => {
+    const currentState = getCurrentState();
+    const preparedFetched = prepareDataForHashing(fetchedData);
+    const preparedLocal = prepareDataForHashing(currentState);
+    
+    if (stringify(preparedFetched) !== stringify(preparedLocal)) {
+      logInfo('Updating stores with fetched data', { userId });
+      storeGetters.transactions().setTransactions(fetchedData.transactions ?? []);
+      storeGetters.debts().setDebts(fetchedData.debts ?? []);
+      storeGetters.statement().setAssetItems(fetchedData.assetItems ?? []);
+      storeGetters.statement().setOtherLiabilityItems(fetchedData.otherLiabilityItems ?? []);
+      storeGetters.budget().setBudgetItems(fetchedData.budgetItems ?? []);
+      storeGetters.weeklyReview().setOwnedReviews(fetchedData.ownedReviews ?? {});
+    }
+
+    // Always update these secondary stores
+    storeGetters.weeklyReview().setSharedReviews(fetchedData.sharedReviews ?? {});
+    storeGetters.notification().setNotifications(fetchedData.notifications ?? []);
+    storeGetters.statement().setStartDate(fetchedData.startDate ? new Date(fetchedData.startDate) : undefined);
+    storeGetters.statement().setEndDate(fetchedData.endDate ? new Date(fetchedData.endDate) : undefined);
+  }, [getCurrentState, storeGetters, userId]);
+
   const fetchData = useCallback(async (isRetry = false, skipHashCheck = false) => {
     // Validation
     if (!isClerkLoaded || !isSignedIn || !userId) {
@@ -154,7 +273,7 @@ export function useSyncManager() {
       initialFetchDoneRef.current = true;
       return false;
     }
-
+  
     if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) {
       logDebug('Fetch aborted - operation in progress', {
         isSaving: isSavingRef.current,
@@ -164,48 +283,48 @@ export function useSyncManager() {
       });
       return false;
     }
-
+  
     // Setup
     isFetchingRef.current = true;
     updateSyncState({ status: 'syncing' });
     if (!skipHashCheck) updateSyncState({ hashMismatch: false, isMismatchDialogOpen: false });
-
+  
     cleanupAsyncOperations('Starting new fetch');
     abortControllerRef.current = new AbortController();
-
+  
     try {
       // API call
       const response = await fetch(SYNC_API_ENDPOINT, {
         signal: abortControllerRef.current.signal
       });
-
+  
       if (abortControllerRef.current?.signal.aborted) {
         logDebug('Fetch aborted by signal', { userId });
         updateSyncState({ status: 'local' });
         return false;
       }
-
+  
       if (!response.ok) {
         const errorData = await parseErrorResponse(response);
         throw new Error(errorData.error || 'Fetch failed');
       }
-
+  
       // Process response
       const data: SyncedData & { dataHash?: string } = await response.json();
       const { dataHash: serverHash, ...fetchedData } = data;
-
+  
       // Verify hash if needed
       if (!skipHashCheck && serverHash) {
         const isValid = await verifyDataHash(fetchedData, serverHash);
         if (!isValid) {
-          handleHashMismatch('Server data integrity check failed');
+          handleHashMismatch();
           return false;
         }
       }
-
+  
       // Update stores
       await updateStoresWithFetchedData(fetchedData);
-
+  
       // Update sync state
       updateSyncState({
         status: 'synced',
@@ -214,23 +333,52 @@ export function useSyncManager() {
         hashMismatch: false,
         isMismatchDialogOpen: false
       });
-
+  
       hasLocalChangesRef.current = false;
       initialFetchDoneRef.current = true;
-
+  
       if (isRetry || skipHashCheck) {
         toast({ title: 'Sync Successful', description: 'Data successfully loaded from the cloud.' });
       }
-
+  
       return true;
-    } catch (error: any) {
-      handleFetchError(error);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        logDebug('Fetch aborted intentionally', { userId, reason: error.message });
+        updateSyncState((prev: { status: string; }) => ({
+          ...prev,
+          status: prev.status === 'syncing' ? 'local' : prev.status
+        }));
+        return false;
+      }
+  
+      const { title, description } = handleError(
+        'Sync Load',
+        error,
+        'Could not load data. Your local data (if any) is preserved. Click cloud icon to retry.'
+      );
+  
+      toast({ title, description });
+      updateSyncState({ status: 'error' });
       return false;
     } finally {
       isFetchingRef.current = false;
       logDebug('Fetch operation complete', { userId });
     }
-  }, [isClerkLoaded, isSignedIn, userId, toast, updateSyncState, cleanupAsyncOperations]);
+  }, [
+    isClerkLoaded,
+    isSignedIn,
+    userId,
+    toast,
+    updateSyncState,
+    cleanupAsyncOperations,
+    parseErrorResponse,
+    verifyDataHash,
+    handleHashMismatch,
+    updateStoresWithFetchedData,
+    handleError
+  ]);
+  
 
   const saveData = useCallback(async (isForceSave = false) => {
     // Validation
@@ -290,12 +438,33 @@ export function useSyncManager() {
 
       if (!response.ok) {
         const errorData = await parseErrorResponse(response);
-        handleSaveError(response.status, errorData);
+        
+        if (response.status === 400 && errorData.error?.includes('integrity check failed')) {
+          handleHashMismatch();
+          return false;
+        }
+
+        let description = 'Could not save data';
+        if (response.status === 401) {
+          description = 'Please refresh or log in again.';
+        } else if (response.status === 429) {
+          description = 'Please wait a moment and try again.';
+        } else if (errorData.error) {
+          description += ` (${errorData.error})`;
+        }
+
+        toast({
+          title: response.status === 401 ? 'Session Expired' : 
+                response.status === 429 ? 'Too Many Requests' : 'Save Failed',
+          description,
+          variant: 'destructive'
+        });
+        
         return false;
       }
 
       // Success
-      const result = await response.json();
+      await response.json();
       updateSyncState({
         status: 'synced',
         lastSyncTime: new Date(),
@@ -306,145 +475,49 @@ export function useSyncManager() {
       hasLocalChangesRef.current = false;
       toast({ title: 'Data Saved', description: 'Changes saved to cloud.' });
       return true;
-    } catch (error: any) {
-      handleSaveError(0, { error: error.message });
+    } catch (error: unknown) {
+      const { title, description } = handleError(
+        'Save',
+        error,
+        'Could not save data.'
+      );
+      
+      toast({ title, description });
       return false;
     } finally {
       isSavingRef.current = false;
       logDebug('Save operation complete', { userId });
     }
-  }, [isClerkLoaded, isSignedIn, userId, fetchData, toast, updateSyncState, cleanupAsyncOperations]);
+  }, [
+    isClerkLoaded,
+    isSignedIn,
+    userId,
+    fetchData,
+    toast,
+    updateSyncState,
+    cleanupAsyncOperations,
+    getCurrentState,
+    prepareDataForSave,
+    parseErrorResponse,
+    handleHashMismatch,
+    handleError
+  ]);
 
-  // Helper functions for DRY
-  const verifyDataHash = async (data: SyncedData, serverHash: string) => {
-    const preparedData = prepareDataForHashing(data);
-    const dataString = stringify(preparedData);
-    const isValid = await verifyHash(dataString, serverHash);
-    
-    if (!isValid) {
-      logError('Data integrity check failed', {
-        serverHash,
-        clientHashInput: dataString.substring(0, 200),
-        userId
-      });
-    }
-    
-    return isValid;
-  };
-
-  const handleHashMismatch = (message: string) => {
-    updateSyncState({ status: 'error', hashMismatch: true, isMismatchDialogOpen: true });
-    toast({
-      title: 'Data Sync Mismatch',
-      description: "Local and server data don't match. Please resolve the conflict.",
-      variant: 'destructive',
-      link: '#'
-    });
-    logError(message, { userId });
-  };
-
-  const updateStoresWithFetchedData = async (fetchedData: SyncedData) => {
-    const currentState = getCurrentState();
-    const preparedFetched = prepareDataForHashing(fetchedData);
-    const preparedLocal = prepareDataForHashing(currentState);
-    
-    if (stringify(preparedFetched) !== stringify(preparedLocal)) {
-      logInfo('Updating stores with fetched data', { userId });
-      storeGetters.transactions().setTransactions(fetchedData.transactions ?? []);
-      storeGetters.debts().setDebts(fetchedData.debts ?? []);
-      storeGetters.statement().setAssetItems(fetchedData.assetItems ?? []);
-      storeGetters.statement().setOtherLiabilityItems(fetchedData.otherLiabilityItems ?? []);
-      storeGetters.budget().setBudgetItems(fetchedData.budgetItems ?? []);
-      storeGetters.weeklyReview().setOwnedReviews(fetchedData.ownedReviews ?? {});
-    }
-
-    // Always update these secondary stores
-    storeGetters.weeklyReview().setSharedReviews(fetchedData.sharedReviews ?? {});
-    storeGetters.notification().setNotifications(fetchedData.notifications ?? []);
-    storeGetters.statement().setStartDate(fetchedData.startDate ? new Date(fetchedData.startDate) : undefined);
-    storeGetters.statement().setEndDate(fetchedData.endDate ? new Date(fetchedData.endDate) : undefined);
-  };
-
-  const getCurrentState = () => ({
-    transactions: storeGetters.transactions().transactions,
-    debts: storeGetters.debts().debts,
-    assetItems: storeGetters.statement().assetItems,
-    otherLiabilityItems: storeGetters.statement().otherLiabilityItems,
-    budgetItems: storeGetters.budget().budgetItems,
-    ownedReviews: storeGetters.weeklyReview().ownedReviews,
-    startDate: storeGetters.statement().startDate,
-    endDate: storeGetters.statement().endDate,
-    gettingStartedDismissed: syncState.gettingStartedDismissed,
-  });
-
-  const prepareDataForSave = async (currentState: any) => {
-    const preparedData = prepareDataForHashing(currentState);
-    const dataString = stringify(preparedData);
-    const dataHash = await hashData(dataString);
-    logDebug('Client hash calculated', { hash: dataHash, userId });
-    return { preparedData, dataHash };
-  };
-
-  const parseErrorResponse = async (response: Response) => {
-    try {
-      return await response.json();
-    } catch {
-      return { error: `Request failed with status ${response.status}` };
-    }
-  };
-
-  const handleFetchError = (error: any) => {
-    if (error.name === 'AbortError') {
-      logDebug('Fetch aborted intentionally', { userId, reason: error.message });
-      updateSyncState((prev: { status: string; }) => ({ ...prev, status: prev.status === 'syncing' ? 'local' : prev.status }));
+  // Store change handler
+  const handleStoreChange = useCallback(() => {
+    if (isFetchingRef.current || isSavingRef.current || isClearingRef.current) {
       return;
     }
 
-    logError('Fetch error', error, { userId });
-    updateSyncState({ status: 'error' });
-
-    let description = 'Could not load data.';
-    if (error.message?.includes('Failed to fetch')) {
-      description = 'Network error. Please check connection.';
-    } else if (error.message?.includes('Failed to parse')) {
-      description = 'Failed to parse server response.';
-    } else if (error.message) {
-      description += ` (${error.message})`;
+    if (!hasLocalChangesRef.current) {
+      logInfo('First local change detected', { userId });
     }
+    hasLocalChangesRef.current = true;
 
-    toast({
-      title: 'Sync Load Failed',
-      description: `${description} Your local data (if any) is preserved. Click cloud icon to retry.`,
-      variant: 'destructive'
-    });
-  };
-
-  const handleSaveError = (status: number, errorData: { error?: string }) => {
-    if (status === 400 && errorData.error?.includes('integrity check failed')) {
-      handleHashMismatch('Server-side integrity check failed');
-    } else if (status === 401) {
-      logError('Unauthorized save attempt', { userId });
-      toast({
-        title: 'Session Expired',
-        description: 'Please refresh or log in again.',
-        variant: 'destructive'
-      });
-    } else if (status === 429) {
-      toast({
-        title: 'Too Many Requests',
-        description: 'Please wait a moment and try again.',
-        variant: 'destructive'
-      });
-    } else {
-      const message = errorData.error || 'Unknown error occurred';
-      logError('Save failed', { status, message, userId });
-      toast({
-        title: 'Save Failed',
-        description: `Could not save data. ${message}`,
-        variant: 'destructive'
-      });
+    if (['synced', 'idle', 'error'].includes(syncState.status)) {
+      updateSyncState({ status: 'local' });
     }
-  };
+  }, [syncState.status, updateSyncState, userId]);
 
   // Effect hooks
   useEffect(() => {
@@ -506,24 +579,9 @@ export function useSyncManager() {
 
   // Store change subscription
   useEffect(() => {
-    if (!isClerkLoaded || !isSignedIn || !userId || !initialFetchDoneRef.current || syncState.hashMismatch) {
+    if (!isClerkLoaded || !isSignedIn || !userId || !initialFetchDoneRef.current) {
       return;
     }
-
-    const handleStoreChange = () => {
-      if (isFetchingRef.current || isSavingRef.current || isClearingRef.current) {
-        return;
-      }
-
-      if (!hasLocalChangesRef.current) {
-        logInfo('First local change detected', { userId });
-      }
-      hasLocalChangesRef.current = true;
-
-      if (['synced', 'idle', 'error'].includes(syncState.status) && !syncState.hashMismatch) {
-        updateSyncState({ status: 'local' });
-      }
-    };
 
     const storesToWatch = [
       useTransactionsStore,
@@ -535,12 +593,16 @@ export function useSyncManager() {
 
     const unsubscribes = storesToWatch.map(store => store.subscribe(handleStoreChange));
     return () => unsubscribes.forEach(unsub => unsub());
-  }, [isClerkLoaded, isSignedIn, userId, syncState.status, syncState.hashMismatch, updateSyncState]);
+  }, [isClerkLoaded, isSignedIn, userId, handleStoreChange]);
 
   // Public API
   const forceSaveLocal = useCallback(async () => {
     if (!userId || !isSignedIn) {
-      toast({ title: 'Error', description: 'Cannot force save without an authenticated user.', variant: 'destructive' });
+      toast({ 
+        title: 'Error', 
+        description: 'Cannot force save without an authenticated user.', 
+        variant: 'destructive' 
+      });
       return false;
     }
 
@@ -548,7 +610,10 @@ export function useSyncManager() {
     const success = await saveData(true);
     
     if (success) {
-      toast({ title: 'Conflict Resolved', description: 'Local data successfully saved to the cloud.' });
+      toast({ 
+        title: 'Conflict Resolved', 
+        description: 'Local data successfully saved to the cloud.' 
+      });
     }
     
     return success;
@@ -556,7 +621,11 @@ export function useSyncManager() {
 
   const forceFetchServer = useCallback(async () => {
     if (!userId || !isSignedIn) {
-      toast({ title: 'Error', description: 'Cannot force fetch without an authenticated user.', variant: 'destructive' });
+      toast({ 
+        title: 'Error', 
+        description: 'Cannot force fetch without an authenticated user.', 
+        variant: 'destructive' 
+      });
       return false;
     }
 
@@ -564,7 +633,10 @@ export function useSyncManager() {
     const success = await fetchData(false, true);
     
     if (success) {
-      toast({ title: 'Conflict Resolved', description: 'Server data loaded. Any unsaved local changes were discarded.' });
+      toast({ 
+        title: 'Conflict Resolved', 
+        description: 'Server data loaded. Any unsaved local changes were discarded.' 
+      });
     }
     
     return success;
@@ -572,12 +644,20 @@ export function useSyncManager() {
 
   const retrySync = useCallback(async () => {
     if (!isClerkLoaded) {
-      toast({ title: 'Cannot Sync', description: 'Authentication status loading...', variant: 'default' });
+      toast({ 
+        title: 'Cannot Sync', 
+        description: 'Authentication status loading...', 
+        variant: 'default' 
+      });
       return;
     }
 
     if (!isSignedIn || !userId) {
-      toast({ title: 'Cannot Sync', description: 'Please sign in to sync your data.', variant: 'destructive' });
+      toast({ 
+        title: 'Cannot Sync', 
+        description: 'Please sign in to sync your data.', 
+        variant: 'destructive' 
+      });
       return;
     }
 

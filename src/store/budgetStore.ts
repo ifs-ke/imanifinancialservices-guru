@@ -65,7 +65,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
   };
 };
 
-interface BudgetState {
+export interface BudgetState {
     budgetItems: BudgetItem[]; 
     budgetPeriod: string; 
     isHydrated: boolean; 

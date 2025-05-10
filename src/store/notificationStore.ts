@@ -55,7 +55,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
   };
 };
 
-interface NotificationState {
+export interface NotificationState {
   notifications: NotificationItem[];
   isHydrated: boolean; 
   addNotification: (notificationData: Omit<NotificationItem, 'id' | 'timestamp' | 'read'>) => NotificationItem;

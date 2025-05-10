@@ -63,7 +63,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
   };
 };
 
-interface TransactionsState {
+export interface TransactionsState {
     transactions: TransactionWithId[];
     isHydrated: boolean; 
     setTransactions: (transactions: TransactionWithId[]) => void;

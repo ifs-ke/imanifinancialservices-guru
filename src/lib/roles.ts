@@ -5,14 +5,9 @@
 
  export type AppRole = 'admin' | 'user';
 
- // No longer need placeholders
- // const CLERK_DISABLED_PLACEHOLDER_USER_ID = 'user_2wXc4D8KBDKGhxagoRStZOXnP2Y';
- // const CLERK_DISABLED_DEFAULT_ROLE = 'user' as AppRole;
-
-
  export const hasRole = (role: AppRole): boolean => {
    const { sessionClaims, userId } = auth(); // Use actual Clerk auth
-   const userRole = sessionClaims?.publicMetadata?.role as AppRole | undefined; // Get role from Clerk metadata
+   const userRole = sessionClaims?.privateMetadata?.role as AppRole | undefined; // Get role from Clerk metadata
    logInfo(`Role check for user ${userId || 'unauthenticated'}: requested role '${role}', actual role '${userRole || 'none'}'`, { userId, requestedRole: role, actualRole: userRole });
    return userRole === role;
  };

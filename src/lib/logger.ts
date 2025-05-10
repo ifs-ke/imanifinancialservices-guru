@@ -2,7 +2,7 @@
 'use client';
 
 import { useAuth } from '@clerk/nextjs';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 // Types
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log'; // 'log' for generic console.log

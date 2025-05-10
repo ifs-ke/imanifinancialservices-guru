@@ -38,7 +38,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
   };
 };
 
-interface WeeklyReviewState {
+export interface WeeklyReviewState {
   ownedReviews: Record<string, WeeklyReviewData>;
   sharedReviews: Record<string, WeeklyReviewData>;
   isHydrated: boolean;

@@ -46,7 +46,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
   };
 };
 
-interface DebtState {
+export interface DebtState {
     debts: DebtItem[];
     isHydrated: boolean; 
     setDebts: (debts: DebtItem[]) => void; 
