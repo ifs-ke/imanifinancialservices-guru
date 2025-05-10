@@ -25,7 +25,7 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ClipboardList,
+  ClipboardList, // Changed from Logger
   RefreshCw,
   Menu,
   PieChart,
@@ -86,8 +86,9 @@ interface SidebarProviderProps {
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   children,
 }) => {
-  const isMobileClient = useIsMobile(); // This hook now correctly handles SSR default
-  const [clientDeterminedState, setClientDeterminedState] = React.useState<SidebarState>("expanded");
+  const isMobileClient = useIsMobile(); 
+  // Default to 'expanded' for SSR and initial client render to avoid mismatch
+  const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded");
   const [hasMounted, setHasMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -97,41 +98,39 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   React.useEffect(() => {
     if (hasMounted) {
       if (isMobileClient) {
-        setClientDeterminedState("collapsed");
+        setSidebarState("collapsed");
       } else {
         const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
         if (storedState) {
-          setClientDeterminedState(storedState);
+          setSidebarState(storedState);
         } else {
-          setClientDeterminedState("expanded"); // Default for desktop if nothing in localStorage
+           setSidebarState("expanded"); // Default for desktop if nothing in localStorage after mount
         }
       }
     }
   }, [isMobileClient, hasMounted]);
 
   React.useEffect(() => {
-    if (hasMounted && !isMobileClient && clientDeterminedState) {
-      localStorage.setItem("sidebarState", clientDeterminedState);
+    if (hasMounted && !isMobileClient) {
+      localStorage.setItem("sidebarState", sidebarState);
     }
-  }, [clientDeterminedState, isMobileClient, hasMounted]);
+  }, [sidebarState, isMobileClient, hasMounted]);
 
-  const collapseSidebar = () => setClientDeterminedState("collapsed");
-  const expandSidebar = () => setClientDeterminedState("expanded");
+  const collapseSidebar = () => setSidebarState("collapsed");
+  const expandSidebar = () => setSidebarState("expanded");
   const toggleSidebar = () => {
-    setClientDeterminedState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
+    setSidebarState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
   };
-
-  // The `state` exposed to context will be fixed for SSR ("expanded")
-  // and will update to `clientDeterminedState` only after the client has mounted.
-  const currentDisplayState = hasMounted ? clientDeterminedState : "expanded";
-
+  
+  // The `state` exposed to context will be `sidebarState` which updates after mount.
+  // The initial server render will use the default "expanded" from useState.
   const contextValue = React.useMemo(() => ({
-    isMobile: isMobileClient, // use the client-aware isMobile
-    state: currentDisplayState,
+    isMobile: isMobileClient,
+    state: sidebarState, // Use the state that updates after mount
     collapseSidebar,
     expandSidebar,
     toggleSidebar,
-  }), [isMobileClient, currentDisplayState]);
+  }), [isMobileClient, sidebarState]);
 
   return (
     <SidebarContext.Provider value={contextValue}>
@@ -142,7 +141,7 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
 
 const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
-    const { state, toggleSidebar } = useSidebar(); // state here will be "expanded" on SSR
+    const { state, toggleSidebar, isMobile } = useSidebar(); 
     const pathname = usePathname();
     const unreadCount = useNotificationStore(state => state.unreadCount());
     const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
@@ -212,6 +211,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
               onClick={toggleSidebar}
               aria-label={state === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
             >
+              {/* Ensure icon changes correctly based on actual sidebar state */}
               {state === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
             </Button>
             <span
@@ -341,7 +341,7 @@ export const Sidebar = React.forwardRef<
     side?: "left" | "right";
   }
 >(({ className, side = "left", ...props }, ref) => {
-  const { isMobile } = useSidebar(); // Removed state from here as it's used in SidebarContent
+  const { isMobile } = useSidebar(); 
 
   if (isMobile) {
     return (
@@ -358,15 +358,13 @@ export const Sidebar = React.forwardRef<
       </Sheet>
     );
   }
-  // For desktop, SidebarContent will get the state from context.
   return (
     <div
       ref={ref}
       className={cn(
-        "fixed inset-y-0 left-0 z-40 hidden md:flex", // Base classes
+        "fixed inset-y-0 left-0 z-40 hidden md:flex", 
         className
       )}
-      // data-state attribute and dynamic width will be handled by SidebarContent itself
     >
       <SidebarContent />
     </div>
@@ -402,7 +400,6 @@ export const SidebarInset = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
   const { state, isMobile } = useSidebar();
-  // Apply margin based on sidebar state only for desktop
   const marginLeftClass = isMobile ? 'ml-0' : (state === 'expanded' ? 'md:ml-64' : 'md:ml-14');
 
 

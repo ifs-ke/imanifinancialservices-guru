@@ -1,6 +1,6 @@
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+// import { auth } from '@clerk/nextjs/server'; // Clerk disabled
 import { ClientLogPayloadSchema } from '@/lib/schemas'; // Import Zod schema
 
 interface ClientLogPayload {
@@ -14,7 +14,8 @@ export async function POST(request: Request) {
   let logContextBase: Record<string, any> = {};
 
   try {
-    const { userId: clerkUserId } = auth();
+    // const { userId: clerkUserId } = auth(); // Clerk disabled
+    const clerkUserId = null; // Mock when clerk is disabled
     
     let rawPayload;
     try {
@@ -51,8 +52,6 @@ export async function POST(request: Request) {
     };
 
     // Use server-side console for logging.
-    // If a dedicated server-side logger (like Winston with Logtail transport) was configured,
-    // it would be used here instead. For now, direct console logging.
     const serverLevel = payload.level === 'log' ? 'info' : payload.level;
     const logMessage = `[Server API - Client ${payload.level.toUpperCase()}] ${payload.message}`;
 
