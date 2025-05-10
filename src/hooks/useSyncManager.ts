@@ -38,7 +38,7 @@ interface SyncState {
   isMismatchDialogOpen: boolean;
 }
 
-const DEBOUNCE_SAVE_DELAY = 10000; // Increased debounce delay to 10 seconds
+const DEBOUNCE_SAVE_DELAY = 10000; 
 
 export function useSyncManager() {
   const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth();
@@ -165,10 +165,13 @@ export function useSyncManager() {
     updateSyncState({ status: 'syncing' });
     if (!skipHashCheck) updateSyncState({ hashMismatch: false, isMismatchDialogOpen: false });
     
-    if (!isRetry || !abortControllerRef.current) {
-      cleanupAsyncOperations(`Starting new fetch operation for user ${userId}`);
-      abortControllerRef.current = new AbortController();
+    // Ensure previous AbortController is cleaned up IF this is not a retry of the same operation
+    // or if the previous operation had a different controller.
+    // For a new fetch, we always create a new controller.
+    if (abortControllerRef.current && (!isRetry || abortControllerRef.current.signal.aborted)) {
+        cleanupAsyncOperations(`Starting new fetch operation for user ${userId}`);
     }
+    abortControllerRef.current = new AbortController();
 
 
     try {
@@ -250,6 +253,7 @@ export function useSyncManager() {
     } finally {
       isFetchingRef.current = false;
       initialFetchDoneRef.current = true; 
+      // Nullify controller only if it wasn't aborted by an external cleanup
       if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) { 
           abortControllerRef.current = null; 
       }
@@ -283,9 +287,10 @@ export function useSyncManager() {
       logInfo('Save: Fetching latest data before saving to check for conflicts...', { currentUserId: userId });
       const preSaveFetchSuccess = await fetchData(false, false); 
       if (!preSaveFetchSuccess) {
-        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', { errorDetails: 'Pre-save fetch failed' }, { operationStatus: 'pre-save-fetch-failed', currentUserId: userId });
+        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', undefined, { operationStatus: 'pre-save-fetch-failed', currentUserId: userId });
         isSavingRef.current = false; 
-        if(!syncState.hashMismatch) updateSyncState({ status: 'local' }); 
+        // If hashMismatch is true, keep status as error, otherwise set to local if pre-save fetch simply failed without mismatch
+        if(!syncState.hashMismatch && syncState.status !== 'error') updateSyncState({ status: 'local' }); 
         return false;
       }
       logInfo('Save: Pre-save fetch successful, proceeding with save.', { currentUserId: userId });
@@ -294,7 +299,9 @@ export function useSyncManager() {
       logInfo('Save: Force save initiated, skipping pre-fetch check, proceeding with save.', { currentUserId: userId });
     }
     
-    cleanupAsyncOperations(`Starting new save operation for user ${userId}`);
+    if (abortControllerRef.current) { // If there's an existing controller (e.g., from a debounced save that was superseded)
+        cleanupAsyncOperations(`Starting new save operation for user ${userId}`);
+    }
     abortControllerRef.current = new AbortController();
 
     try {
@@ -436,35 +443,37 @@ export function useSyncManager() {
 
   useEffect(() => {
     if (!isClerkLoaded) {
-      logDebug('Auth Effect: Auth state not ready. Waiting for load.', { currentUserId: userId });
+      logDebug('Auth Effect: Auth state not ready. Waiting for load.', undefined, userId);
       updateSyncState({ status: 'idle' });
-      return () => cleanupAsyncOperations('Auth effect unmount while not loaded');
+      return; 
     }
     
-    const currentAuthUserId = userId;
+    const previousUserIdForEffect = internalPreviousUserId.current;
+    const currentAuthUserIdForEffect = userId;
 
-    if (currentAuthUserId && currentAuthUserId !== internalPreviousUserId.current) {
-      logInfo(`Auth Effect: User signed IN or SWITCHED. New: ${currentAuthUserId}, Old: ${internalPreviousUserId.current ?? 'none'}. Clearing local state and fetching new data.`, {
-        oldUserId: internalPreviousUserId.current, newUserId: currentAuthUserId
-      }, currentAuthUserId);
-      cleanupAsyncOperations(`User changed from ${internalPreviousUserId.current} to ${currentAuthUserId}`);
+    if (currentAuthUserIdForEffect && currentAuthUserIdForEffect !== previousUserIdForEffect) {
+      logInfo(`Auth Effect: User signed IN or SWITCHED. New: ${currentAuthUserIdForEffect}, Old: ${previousUserIdForEffect ?? 'none'}. Clearing local state and fetching new data.`, {
+        oldUserId: previousUserIdForEffect, newUserId: currentAuthUserIdForEffect
+      }, currentAuthUserIdForEffect);
+      
+      cleanupAsyncOperations(`User changed from ${previousUserIdForEffect} to ${currentAuthUserIdForEffect}`);
       isFetchingRef.current = false; 
       isSavingRef.current = false;
       isClearingRef.current = false;
 
       clearLocalState(); 
-      internalPreviousUserId.current = currentAuthUserId;
+      internalPreviousUserId.current = currentAuthUserIdForEffect;
       initialFetchDoneRef.current = false; 
       hasLocalChangesRef.current = false;
       updateSyncState({ hashMismatch: false, isMismatchDialogOpen: false, status: 'idle' }); 
 
-      logDebug("Auth Effect: Triggering initial fetch for new/switched user.", { currentAuthUserId });
+      logDebug("Auth Effect: Triggering initial fetch for new/switched user.", { currentAuthUserId: currentAuthUserIdForEffect });
       fetchData().then(() => { initialFetchDoneRef.current = true; });
       
-    } else if (!currentAuthUserId && internalPreviousUserId.current) {
-      logInfo(`Auth Effect: User signed OUT. Was: ${internalPreviousUserId.current}. Clearing local state.`, {
-        oldUserId: internalPreviousUserId.current
-      }, internalPreviousUserId.current);
+    } else if (!currentAuthUserIdForEffect && previousUserIdForEffect) {
+      logInfo(`Auth Effect: User signed OUT. Was: ${previousUserIdForEffect}. Clearing local state.`, {
+        oldUserId: previousUserIdForEffect
+      }, previousUserIdForEffect);
       cleanupAsyncOperations('User signed out');
       isFetchingRef.current = false;
       isSavingRef.current = false;
@@ -474,31 +483,39 @@ export function useSyncManager() {
       initialFetchDoneRef.current = false;
       hasLocalChangesRef.current = false;
       updateSyncState({ status: 'local', lastSyncTime: null, hashMismatch: false, isMismatchDialogOpen: false });
-    } else if (currentAuthUserId && currentAuthUserId === internalPreviousUserId.current && !initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && syncState.status !== 'synced' && syncState.status !== 'error') {
+    } else if (currentAuthUserIdForEffect && currentAuthUserIdForEffect === previousUserIdForEffect && !initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && syncState.status !== 'synced' && syncState.status !== 'error') {
       logInfo('Auth Effect: Same user session, initial fetch not completed or sync not confirmed. Triggering fetch...', {
-        currentAuthUserId, currentStatus: syncState.status
-      }, currentAuthUserId);
+        currentAuthUserId: currentAuthUserIdForEffect, currentStatus: syncState.status
+      }, currentAuthUserIdForEffect);
       fetchData().then(() => { initialFetchDoneRef.current = true; });
-    } else if (!currentAuthUserId && !internalPreviousUserId.current && !initialFetchDoneRef.current) {
+    } else if (!currentAuthUserIdForEffect && !previousUserIdForEffect && !initialFetchDoneRef.current) {
       logInfo('Auth Effect: Initial load, no active user session. Setting status to local.', { currentUserId: userId }, userId);
       updateSyncState({ status: 'local', lastSyncTime: null, hashMismatch: false, isMismatchDialogOpen: false });
       initialFetchDoneRef.current = true; 
     } else {
       logDebug('Auth Effect: No primary auth-driven data clear/fetch action taken. Review conditions.', {
-        isClerkLoaded, currentAuthUserId, previousUserId: internalPreviousUserId.current,
+        isClerkLoaded, currentAuthUserId: currentAuthUserIdForEffect, previousUserId: previousUserIdForEffect,
         initialFetchDone: initialFetchDoneRef.current, isFetching: isFetchingRef.current,
         isSaving: isSavingRef.current, isClearing: isClearingRef.current, currentStatus: syncState.status,
-      }, currentAuthUserId);
+      }, currentAuthUserIdForEffect);
     }
 
-    // Only clean up if there's an actual operation to cancel
-    const shouldCleanUp = isFetchingRef.current || isSavingRef.current;
     return () => {
-      logDebug("Auth Effect: Cleanup triggered.", { currentUserId: userId, isFetching: isFetchingRef.current, isSaving: isSavingRef.current });
-      if (shouldCleanUp || (userId !== internalPreviousUserId.current && (isFetchingRef.current || isSavingRef.current))) {
-          cleanupAsyncOperations(`User ID changed (${userId} vs ${internalPreviousUserId.current}) or unmount during auth effect cleanup`);
-      }
-  };
+        if (userId !== currentAuthUserIdForEffect || (!isSignedIn && currentAuthUserIdForEffect)) {
+             logDebug(`Auth Effect Cleanup: Triggering due to user change or sign-out. Effect's User: ${currentAuthUserIdForEffect}, Current User: ${userId}, SignedIn: ${isSignedIn}`, {
+                 effectUserId: currentAuthUserIdForEffect,
+                 currentGlobalUserId: userId,
+                 currentIsSignedIn: isSignedIn
+             });
+            cleanupAsyncOperations(`Auth state changed. Effect User: ${currentAuthUserIdForEffect}, New User: ${userId}`);
+        } else {
+            logDebug(`Auth Effect Cleanup: Skipped as auth state relevant to this effect instance appears stable. Effect's User: ${currentAuthUserIdForEffect}, Current User: ${userId}, SignedIn: ${isSignedIn}`, {
+                 effectUserId: currentAuthUserIdForEffect,
+                 currentGlobalUserId: userId,
+                 currentIsSignedIn: isSignedIn
+            });
+        }
+    };
   }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState]); 
 
   useEffect(() => {
@@ -517,8 +534,9 @@ export function useSyncManager() {
     return () => {
       logDebug('Change Subscription: Unsubscribing from store changes.', { currentUserId: userId });
       unsubscribes.forEach(unsub => unsub());
+      // No cleanupAsyncOperations here, as it might interfere with debounced save on unmount
     };
-  }, [isClerkLoaded, isSignedIn, userId, initialFetchDoneRef.current, syncState.hashMismatch, handleStoreChange, updateSyncState, syncState.status]);
+  }, [isClerkLoaded, isSignedIn, userId, initialFetchDoneRef.current, syncState.status, syncState.hashMismatch, handleStoreChange, updateSyncState, cleanupAsyncOperations]);
 
   useEffect(() => {
     if (!isClerkLoaded || !isSignedIn || !userId || !initialFetchDoneRef.current) return;
@@ -546,7 +564,7 @@ export function useSyncManager() {
         currentStatus: syncState.status 
       });
     }
-  }, [syncState.gettingStartedDismissed, isClerkLoaded, isSignedIn, userId, syncState.hashMismatch, triggerDebouncedSave, syncState.status, updateSyncState]);
+  }, [syncState.gettingStartedDismissed, isClerkLoaded, isSignedIn, userId, syncState.hashMismatch, triggerDebouncedSave, syncState.status, updateSyncState, cleanupAsyncOperations]);
 
   const forceSaveLocal = useCallback(async () => {
     if (!userId || !isSignedIn) { toast({ title: 'Error', description: 'Cannot force save without an authenticated user.', variant: 'destructive' }); return false; }
