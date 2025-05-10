@@ -13,6 +13,8 @@ import { hashData, verifyHash } from '@/lib/storage-utils';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
+import { SaveDataPayloadSchema } from '@/lib/schemas';
+
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -53,12 +55,10 @@ export function useSyncManager() {
   const isFetchingRef = useRef(false);
   const isSavingRef = useRef(false);
   const isClearingRef = useRef(false);
-  const initialFetchDoneForCurrentUserRef = useRef<string | null>(null); // Stores the userId for whom initial fetch completed
+  const initialFetchDoneForCurrentUserRef = useRef<string | null>(null);
   const internalPreviousUserId = useRef<string | null | undefined>(undefined);
   const hasLocalChangesRef = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // retryCountRef is not actively used in the current retry logic but kept for potential future enhancements
-  const retryCountRef = useRef(0); 
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const getTransactionsState = useTransactionsStore.getState;
@@ -95,7 +95,7 @@ export function useSyncManager() {
       getDebtState().clearDebts();
       getStatementState().clearStatementItems();
       getBudgetState().clearBudgetItems();
-      getWeeklyReviewStore().clearReviews();
+      getWeeklyReviewState().clearReviews();
       getNotificationState().clearAllNotifications();
 
       const storeKeys = [
@@ -163,7 +163,9 @@ export function useSyncManager() {
 
       if (abortControllerRef.current?.signal.aborted) {
         logDebug('Fetch Aborted: Operation was cancelled before response.', { userId: currentUserId, reason: abortControllerRef.current.signal.reason });
-        // Do not change status here if aborted, let the calling context decide.
+        if (abortControllerRef.current.signal.reason === "cleanupAsyncOperations: New operation or unmount") {
+           if(syncState.status === 'syncing') updateSyncState({ status: 'local' });
+        }
         return false;
       }
 
@@ -218,7 +220,7 @@ export function useSyncManager() {
       });
       
       hasLocalChangesRef.current = false; 
-      retryCountRef.current = 0; 
+      initialFetchDoneForCurrentUserRef.current = currentUserId;
       logInfo('Fetch: Successfully synced with DB.', { userId: currentUserId });
       if (isRetry || skipHashCheck) toast({ title: 'Sync Successful', description: 'Data successfully loaded from the cloud.' });
       return true;
@@ -226,8 +228,12 @@ export function useSyncManager() {
     } catch (error: any) {
       if (error.name === 'AbortError') {
         logDebug('Fetch Aborted: Intentionally cancelled.', { userId: currentUserId, reason: error.message });
-        // If aborted, status might already be changing due to user action (e.g. logout), avoid overwriting.
-        if(syncState.status === 'syncing') updateSyncState({ status: 'local' }); // Revert to local if it was syncing
+        if (error.message === "cleanupAsyncOperations: New operation or unmount") {
+            if(syncState.status === 'syncing') updateSyncState({ status: 'local' });
+        } else {
+            updateSyncState({ status: 'error' });
+            toast({ title: 'Fetch Cancelled', description: `The data fetch operation was cancelled: ${error.message}.`, variant: 'default' });
+        }
         return false;
       }
       logError('Fetch Error:', error, { userId: currentUserId });
@@ -242,8 +248,10 @@ export function useSyncManager() {
       return false;
     } finally {
       isFetchingRef.current = false;
-      if (currentUserId && !initialFetchDoneForCurrentUserRef.current) { // Check currentUserId before setting ref
-         initialFetchDoneForCurrentUserRef.current = currentUserId;
+      if (currentUserId && initialFetchDoneForCurrentUserRef.current !== currentUserId) { 
+         // If fetch didn't complete successfully for this user, mark it as attempted at least
+         // to avoid immediate re-fetch loops if the initial problem was auth state related.
+         if (!initialFetchDoneForCurrentUserRef.current) initialFetchDoneForCurrentUserRef.current = 'fetch_attempted_anonymous';
       }
       abortControllerRef.current = null;
       logDebug('Fetch: Operation complete.', { userId: currentUserId });
@@ -251,7 +259,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status // Added syncState.status to dependencies of fetchData
+    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status
   ]);
 
   const saveData = useCallback(async (isForceSave = false) => {
@@ -316,25 +324,35 @@ export function useSyncManager() {
         startDate: getStatementState().startDate,
         endDate: getStatementState().endDate,
         gettingStartedDismissed: syncState.gettingStartedDismissed,
-        notifications: [], 
-        sharedReviews: {},
       };
+      
+      const validationResult = SaveDataPayloadSchema.omit({ dataHash: true }).safeParse(prepareDataForHashing(currentState as any));
+      if (!validationResult.success) {
+        logError('Save Aborted: Client-side data validation failed before hashing.', validationResult.error.flatten(), { userId: invokingUserId });
+        toast({ title: 'Save Error', description: 'Invalid data format. Please check your inputs.', variant: 'destructive'});
+        updateSyncState({ status: 'error' });
+        isSavingRef.current = false;
+        return false;
+      }
+      const validatedPreparedData = validationResult.data;
 
-      const preparedData = prepareDataForHashing(currentState as SyncedData);
-      const dataString = stringify(preparedData);
+
+      const dataString = stringify(validatedPreparedData);
       const dataHash = await hashData(dataString);
       logDebug(`Save Client: Calculated client hash: ${dataHash}`, { userId: invokingUserId });
 
       const response = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...preparedData, dataHash }),
+        body: JSON.stringify({ ...validatedPreparedData, dataHash }),
         signal: abortControllerRef.current.signal
       });
       
       if (abortControllerRef.current?.signal.aborted) {
         logDebug('Save Aborted: Operation was cancelled before response.', { userId: invokingUserId, reason: abortControllerRef.current.signal.reason });
-        if(syncState.status === 'syncing') updateSyncState({ status: 'local' });
+        if (abortControllerRef.current.signal.reason === "cleanupAsyncOperations: New operation or unmount") {
+            if(syncState.status === 'syncing') updateSyncState({ status: 'local' });
+        }
         return false;
       }
 
@@ -370,7 +388,6 @@ export function useSyncManager() {
       const result = await response.json();
       updateSyncState({ status: 'synced', lastSyncTime: new Date(), hashMismatch: false, isMismatchDialogOpen: false });
       hasLocalChangesRef.current = false; 
-      retryCountRef.current = 0;
       logInfo(`Save Successful. Server: ${result.message}`, { userId: invokingUserId });
       toast({ title: 'Data Saved', description: 'Changes saved to cloud.' });
       return true;
@@ -378,7 +395,12 @@ export function useSyncManager() {
     } catch (error: any) {
       if (error.name === 'AbortError') {
         logDebug('Save Aborted: Intentionally cancelled.', { userId: invokingUserId, reason: error.message });
-        if(syncState.status === 'syncing') updateSyncState({ status: 'local' });
+        if (abortControllerRef.current.signal.reason === "cleanupAsyncOperations: New operation or unmount") {
+            if(syncState.status === 'syncing') updateSyncState({ status: 'local' });
+        } else {
+            updateSyncState({ status: 'error' });
+            toast({ title: 'Save Cancelled', description: `The data save operation was cancelled: ${error.message}.`, variant: 'default' });
+        }
         return false;
       }
       logError('Save Error:', error, { userId: invokingUserId });
@@ -400,7 +422,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast, syncState.gettingStartedDismissed,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, fetchData, updateSyncState, syncState.hashMismatch, syncState.status // Added syncState.status
+    getWeeklyReviewState, fetchData, updateSyncState, syncState.hashMismatch, syncState.status
   ]);
   
   const triggerAutoSave = useCallback(() => {
@@ -420,7 +442,7 @@ export function useSyncManager() {
     
     saveTimeoutRef.current = setTimeout(() => {
       logInfo('AutoSave: Timeout reached. Initiating save.', { userId: currentUserId });
-      saveData(); 
+      saveData(false); // Pass false, as this is not a force save
     }, 3000); 
   }, [saveData, isSignedIn, userId, syncState.hashMismatch, syncState.status, cleanupAsyncOperations, updateSyncState]);
 
@@ -547,14 +569,30 @@ export function useSyncManager() {
       return;
     }
         
-    logDebug('Getting Started Tracker: Dismissal state checked/changed.', { 
-        gettingStartedDismissed: syncState.gettingStartedDismissed, 
-        currentUserId 
-    });
-    // Auto-save is triggered by handleStoreChange if gettingStartedDismissed is part of a monitored store
-    // If it's only in useSyncManager's state, setGettingStartedDismissed should call handleStoreChange or triggerAutoSave.
-
-  }, [syncState.gettingStartedDismissed, isClerkLoaded, isSignedIn, userId, syncState.hashMismatch, triggerAutoSave]); 
+    if (initialFetchDoneForCurrentUserRef.current === currentUserId && (syncState.status === 'local' || syncState.status === 'synced')) {
+        logDebug('Getting Started Tracker: Dismissal state change detected and conditions met for potential save.', { 
+            gettingStartedDismissed: syncState.gettingStartedDismissed, 
+            currentUserId,
+            currentStatus: syncState.status
+        });
+        // This will trigger the debounced save if `gettingStartedDismissed` has changed
+        // and other conditions in `handleStoreChange` are met.
+         // No direct call to triggerAutoSave here, rely on the global store change handler
+         // This ensures `hasLocalChangesRef` is correctly set.
+         // If `gettingStartedDismissed` is the *only* change, `handleStoreChange` might not be
+         // triggered by its own store. We need to explicitly mark that local changes exist if `gettingStartedDismissed`
+         // is part of the global sync payload.
+         // This effect *only* cares about `gettingStartedDismissed` changing.
+         // The actual save is managed by the broader `handleStoreChange` and `triggerAutoSave`.
+    } else {
+        logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent save trigger or status already implies save is pending.', { 
+            initialFetchDone: initialFetchDoneForCurrentUserRef.current, 
+            currentUserId: userId, 
+            currentStatus: syncState.status 
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncState.gettingStartedDismissed]); // Only track this specific state from syncState
 
   const forceSaveLocal = useCallback(async () => {
     const currentUserId = userId; 
@@ -614,10 +652,12 @@ export function useSyncManager() {
     if (hasLocalChangesRef.current || (syncState.status === 'error' && !syncState.hashMismatch)) { 
       logInfo('Manual Sync: Local changes or non-mismatch error. Attempting to save data to cloud...', { userId: currentUserId });
       await saveData(false); 
-    } else { 
-      logInfo('Manual Sync: No local changes. Fetching latest data from cloud...', { userId: currentUserId });
+    } else if (syncState.status === 'synced' || syncState.status === 'idle' || syncState.status === 'local' && !hasLocalChangesRef.current) { 
+      logInfo('Manual Sync: No local changes or already local. Fetching latest data from cloud...', { userId: currentUserId });
       toast({ title: 'Checking for Updates', description: 'Fetching latest data from cloud...' });
       await fetchData(true); 
+    }  else if (syncState.status === 'syncing') {
+      toast({ title: 'Sync Busy', description: 'Please wait for the current operation to complete.'});
     }
   }, [
     syncState.status, syncState.hashMismatch, saveData, fetchData, toast, 
@@ -631,10 +671,8 @@ export function useSyncManager() {
     setGettingStartedDismissed: (dismissed: boolean) => {
         const previousDismissed = syncState.gettingStartedDismissed;
         updateSyncState({ gettingStartedDismissed: dismissed });
-        // Trigger a save only if the state actually changed due to this call
-        // and user is authenticated & initial sync is done for this user
         if (dismissed !== previousDismissed && isSignedIn && userId && initialFetchDoneForCurrentUserRef.current === userId) {
-            logInfo('Getting Started state changed by user action, triggering save.', { userId, newDismissedState: dismissed });
+            logInfo('Getting Started state changed by user action, triggering potential save.', { userId, newDismissedState: dismissed });
             handleStoreChange(); 
         }
     },
@@ -646,4 +684,3 @@ export function useSyncManager() {
     lastSyncTime: syncState.lastSyncTime,
   };
 }
-
