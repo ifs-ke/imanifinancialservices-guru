@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { TransactionWithId } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils'; 
-import { logInfo } from '@/lib/logger'; // Import logger
+import { logInfo, logDebug } from '@/lib/logger'; 
 
 const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -40,7 +40,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
             return value;
         });
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); 
+        logDebug(`Failed to decode/parse item "${name}" from sessionStorage.`, { error: e }); 
         return null;
       }
     },
@@ -57,7 +57,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); 
+        logDebug(`Failed to encode/stringify and set item "${name}" for sessionStorage`, { error: e }); 
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -149,4 +149,3 @@ export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-```

@@ -150,4 +150,3 @@ export const selectTotalOtherLiabilities = (state: StatementState): number =>
 export const selectStartDate = (state: StatementState): Date | undefined => state.startDate;
 
 export const selectEndDate = (state: StatementState): Date | undefined => state.endDate;
-```

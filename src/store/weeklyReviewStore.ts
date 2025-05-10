@@ -4,7 +4,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { encode, decode } from '@/lib/storage-utils';
 import type { WeeklyReviewData } from '@/lib/types'; 
 import { getISOWeek, getYear } from 'date-fns';
-import { logInfo } from '@/lib/logger'; // Import logger
+import { logInfo, logWarn } from '@/lib/logger'; 
 
 
 const createSessionStorageWithEncoding = (): StateStorage => {
@@ -61,12 +61,12 @@ export const getWeekKey = (date: Date): string => {
       const year = getYear(date);
       const weekNumber = getISOWeek(date);
       if (weekNumber < 1 || weekNumber > 53) {
-          // console.warn(`Invalid week number ${weekNumber} calculated for date ${date}. Defaulting to year-01.`); 
+          logWarn(`Invalid week number ${weekNumber} calculated for date ${date}. Defaulting to year-01.`); 
           return `${year}-01`; 
       }
       return `${year}-${weekNumber.toString().padStart(2, '0')}`;
   } catch (error) {
-       // console.error("Error generating week key:", error); 
+       logError("Error generating week key:", error); 
        return "invalid-week-key";
   }
 };
@@ -87,7 +87,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
         set((state) => {
              const currentReview = state.ownedReviews[weekKey] || { ownerId: ownerId, journal: '', transactionComments: {}, sharedWith: [] };
              if (currentReview.ownerId !== ownerId) {
-                 // console.warn(`Attempted to set journal for review not owned by ${ownerId}.`); 
+                 logWarn(`Attempted to set journal for review not owned by ${ownerId}.`); 
                  return state;
              }
              return {
@@ -105,7 +105,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
              }
 
              if (reviewToUpdate.ownerId !== ownerId) {
-                 // console.warn(`Attempted to set comment for review not owned by ${ownerId}.`); 
+                 logWarn(`Attempted to set comment for review not owned by ${ownerId}.`); 
                  return state; 
              }
 
@@ -119,7 +119,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
          set((state) => {
              const reviewToUpdate = state.ownedReviews[weekKey];
              if (!reviewToUpdate || reviewToUpdate.ownerId !== ownerId || !reviewToUpdate.transactionComments) {
-                 // console.warn(`Attempted to delete comment for review not found, not owned, or without comments.`); 
+                 logWarn(`Attempted to delete comment for review not found, not owned, or without comments.`); 
                  return state; 
              }
              const newComments = { ...reviewToUpdate.transactionComments };
@@ -138,7 +138,7 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
                 if (Array.isArray(sharedReview.sharedWith) && sharedReview.sharedWith.includes(currentUserId)) {
                     return sharedReview;
                 } else {
-                    // console.warn(`Access Denied: Attempt to access shared review without permission.`, { weekKey, ownerId, currentUserId }); 
+                    logWarn(`Access Denied: Attempt to access shared review without permission.`, { weekKey, ownerId, currentUserId }); 
                     return undefined;
                 }
            }
@@ -165,4 +165,3 @@ export const useWeeklyReviewStore = create<WeeklyReviewState>()(
     }
   )
 );
-```
