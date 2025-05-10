@@ -14,7 +14,7 @@ import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses,
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import DebtFormSheet from './DebtFormSheet'; // Updated import path
+import DebtFormSheet from '@/components/debt/DebtFormSheet'; // Updated import path
 import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet';
 import DebtAnalysisDialog from '@/components/debt/DebtAnalysisDialog';
 import { analyzeDebtStrategy, type DebtAnalysisInput, type DebtAnalysisOutput } from '@/ai/flows/debt-analysis-flow';
@@ -224,3 +224,4 @@ export default function DebtPage() {
     </div>
   );
 }
+
