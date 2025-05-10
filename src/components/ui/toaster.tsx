@@ -1,7 +1,7 @@
 
 "use client"
 
-import { Button } from "@/components/ui/button"
+import { Button, type ButtonProps } from "@/components/ui/button" // Import ButtonProps
 import { useToast } from "@/hooks/use-toast"
 import {
   Toast,
@@ -11,10 +11,10 @@ import {
   ToastTitle,
   ToastViewport,
 } from "@/components/ui/toast"
-import { Copy } from "lucide-react" // Import Copy icon
+import { Copy } from "lucide-react" 
 
 export function Toaster() {
-  const { toasts, toast: displayToast } = useToast() // Get the toast function for confirmations
+  const { toasts, toast: displayToast } = useToast() 
 
   const handleCopy = async (description: React.ReactNode) => {
     if (typeof description !== 'string' || !navigator.clipboard) {
@@ -47,19 +47,18 @@ export function Toaster() {
       {toasts.map(function ({ id, title, description, action, variant, ...props }) {
         return (
           <Toast key={id} variant={variant} {...props}>
-             <div className="grid gap-1 flex-grow mr-2"> {/* Allow content to grow */}
+             <div className="grid gap-1 flex-grow mr-2"> 
               {title && <ToastTitle>{title}</ToastTitle>}
               {description && (
                 <ToastDescription>{description}</ToastDescription>
               )}
             </div>
             {action}
-             {/* Add Copy button for destructive toasts with a description */}
              {variant === "destructive" && typeof description === 'string' && (
                <Button
                  variant="ghost"
                  size="icon"
-                 className="h-8 w-8 text-destructive-foreground hover:bg-destructive/80" // Style for destructive toast
+                 className="h-8 w-8 text-destructive-foreground hover:bg-destructive/80" 
                  onClick={() => handleCopy(description)}
                >
                  <Copy className="h-4 w-4" />
@@ -74,3 +73,4 @@ export function Toaster() {
     </ToastProvider>
   )
 }
+

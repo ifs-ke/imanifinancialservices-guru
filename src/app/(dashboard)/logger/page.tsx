@@ -9,22 +9,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ClipboardList, Filter, RotateCw, XCircle, AlertTriangle, Info, MessageSquare, Terminal } from 'lucide-react'; // Added Terminal for debug
+import { ClipboardList, Filter, RotateCw, XCircle, AlertTriangle, Info, MessageSquare, Terminal, Copy, Eye, CopyCheck } from 'lucide-react'; // Added Copy, Eye, CopyCheck
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 // Define a more specific type for log entries captured by this page
 interface CapturedLogEntry {
+  id: string; // Add an ID for selection purposes
   timestamp: Date;
   level: 'debug' | 'info' | 'warn' | 'error' | 'log'; // 'log' for generic console.log
   message: string;
   context?: string; // Store context as a string for display
 }
 
+let logIdCounter = 0;
+const generateLogId = () => `log_${logIdCounter++}_${Date.now()}`;
+
 export default function LoggerPage() {
   const [capturedLogs, setCapturedLogs] = useState<CapturedLogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const { toast } = useToast();
+
+  const [selectedLogDetail, setSelectedLogDetail] = useState<CapturedLogEntry | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Capture console logs
   useEffect(() => {
@@ -54,6 +72,7 @@ export default function LoggerPage() {
         }
       });
       return {
+        id: generateLogId(),
         timestamp: new Date(),
         level,
         message: messageParts.join(' ') || 'No message',
@@ -110,10 +129,10 @@ export default function LoggerPage() {
   const getBadgeVariant = (level: CapturedLogEntry['level']): 'default' | 'secondary' | 'destructive' | 'outline' => {
     switch (level.toLowerCase()) {
       case 'error': return 'destructive';
-      case 'warn': return 'secondary'; // Yellowish/Orange in dark mode usually
-      case 'info': return 'default'; // Primary color
-      case 'debug': return 'outline'; // Subtle
-      case 'log': return 'outline';   // Subtle for generic logs
+      case 'warn': return 'secondary';
+      case 'info': return 'default';
+      case 'debug': return 'outline';
+      case 'log': return 'outline';
       default: return 'outline';
     }
   };
@@ -123,8 +142,8 @@ export default function LoggerPage() {
       case 'error': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'warn': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
       case 'info': return <Info className="h-4 w-4 text-primary" />;
-      case 'debug': return <Terminal className="h-4 w-4 text-muted-foreground" />; // Using Terminal for debug
-      case 'log': return <MessageSquare className="h-4 w-4 text-muted-foreground" />; // Generic message icon
+      case 'debug': return <Terminal className="h-4 w-4 text-muted-foreground" />;
+      case 'log': return <MessageSquare className="h-4 w-4 text-muted-foreground" />;
       default: return <Info className="h-4 w-4 text-muted-foreground" />;
     }
   };
@@ -132,6 +151,41 @@ export default function LoggerPage() {
   const handleClearLogs = () => {
     setCapturedLogs([]);
     console.info("LoggerPage: Cleared locally captured session logs.");
+  };
+
+  const formatLogForCopy = (log: CapturedLogEntry): string => {
+    return `[${format(log.timestamp, 'PPpp')}] [${log.level.toUpperCase()}] ${log.message}${log.context ? `\nContext:\n${log.context}` : ''}`;
+  };
+
+  const handleCopyLog = async (log: CapturedLogEntry) => {
+    const logString = formatLogForCopy(log);
+    try {
+      await navigator.clipboard.writeText(logString);
+      toast({ title: "Log Copied", description: "Log entry copied to clipboard." });
+    } catch (err) {
+      toast({ title: "Copy Failed", description: "Could not copy log to clipboard.", variant: "destructive" });
+      console.error("Failed to copy log:", err);
+    }
+  };
+
+  const handleCopyAllVisibleLogs = async () => {
+    if (filteredLogs.length === 0) {
+      toast({ title: "No Logs", description: "There are no logs to copy." });
+      return;
+    }
+    const allLogsString = filteredLogs.map(formatLogForCopy).join('\n\n---\n\n');
+    try {
+      await navigator.clipboard.writeText(allLogsString);
+      toast({ title: "All Visible Logs Copied", description: `${filteredLogs.length} log entries copied.` });
+    } catch (err) {
+      toast({ title: "Copy Failed", description: "Could not copy logs.", variant: "destructive" });
+      console.error("Failed to copy all logs:", err);
+    }
+  };
+
+  const handleViewLogDetails = (log: CapturedLogEntry) => {
+    setSelectedLogDetail(log);
+    setIsDetailModalOpen(true);
   };
 
   return (
@@ -151,15 +205,15 @@ export default function LoggerPage() {
             <CardTitle>Session Log Entries</CardTitle>
             <CardDescription>Live events and errors from your current browser session.</CardDescription>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
             <Input
               placeholder="Search logs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-xs h-9"
+              className="max-w-xs h-9 flex-grow sm:flex-grow-0"
             />
             <Select value={levelFilter} onValueChange={setLevelFilter}>
-              <SelectTrigger className="w-[120px] h-9">
+              <SelectTrigger className="w-full sm:w-[120px] h-9">
                 <Filter className="h-3 w-3 mr-1" />
                 <SelectValue placeholder="Level" />
               </SelectTrigger>
@@ -172,6 +226,9 @@ export default function LoggerPage() {
                 <SelectItem value="log">Log</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline" size="sm" onClick={handleCopyAllVisibleLogs} className="h-9" disabled={filteredLogs.length === 0}>
+              <CopyCheck className="h-4 w-4 mr-1" /> Copy Visible
+            </Button>
             <Button variant="outline" size="icon" onClick={handleClearLogs} className="h-9 w-9">
               <RotateCw className="h-4 w-4" />
               <span className="sr-only">Clear Session Logs</span>
@@ -186,13 +243,18 @@ export default function LoggerPage() {
                   <TableHead className="w-[180px]">Timestamp</TableHead>
                   <TableHead className="w-[100px]">Level</TableHead>
                   <TableHead>Message</TableHead>
-                  <TableHead className="w-[250px]">Context / Details</TableHead>
+                  <TableHead className="w-[100px] text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLogs.length > 0 ? (
-                  filteredLogs.map((log, index) => (
-                    <TableRow key={index} className="text-xs">
+                  filteredLogs.map((log) => (
+                    <TableRow 
+                        key={log.id} 
+                        className="text-xs hover:bg-muted/50 cursor-pointer" 
+                        onClick={() => handleViewLogDetails(log)}
+                        title="Click to view details"
+                    >
                       <TableCell className="font-mono whitespace-nowrap">
                         {format(log.timestamp, 'PPpp')}
                       </TableCell>
@@ -202,15 +264,14 @@ export default function LoggerPage() {
                           <span>{log.level}</span>
                         </Badge>
                       </TableCell>
-                      <TableCell className="whitespace-pre-wrap break-words">{log.message}</TableCell>
-                      <TableCell className="font-mono text-muted-foreground ">
-                        {log.context ? (
-                            <ScrollArea className="h-16 max-w-full whitespace-pre-wrap break-all">
-                                {log.context}
-                            </ScrollArea>
-                        ) : (
-                            <span className="italic">No context</span>
-                        )}
+                      <TableCell className="whitespace-pre-wrap break-words max-w-xl truncate" title={log.message}>{log.message}</TableCell>
+                      <TableCell className="text-center">
+                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleCopyLog(log);}} title="Copy this log" className="h-7 w-7">
+                            <Copy className="h-4 w-4" />
+                        </Button>
+                         <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleViewLogDetails(log);}} title="View details" className="h-7 w-7">
+                            <Eye className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -226,6 +287,48 @@ export default function LoggerPage() {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {/* Log Detail Modal */}
+      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedLogDetail && getIconForLevel(selectedLogDetail.level)}
+              Log Details
+            </DialogTitle>
+            {selectedLogDetail && (
+                <DialogDescription>
+                    {format(selectedLogDetail.timestamp, 'PPPPpppp')} - Level: {selectedLogDetail.level.toUpperCase()}
+                </DialogDescription>
+            )}
+          </DialogHeader>
+          {selectedLogDetail && (
+            <ScrollArea className="max-h-[60vh] mt-4 pr-2">
+              <div className="space-y-3">
+                <div>
+                  <h4 className="font-semibold text-sm mb-1">Message:</h4>
+                  <p className="text-sm whitespace-pre-wrap break-words bg-muted p-2 rounded-md">{selectedLogDetail.message}</p>
+                </div>
+                {selectedLogDetail.context && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-1">Context / Details:</h4>
+                    <pre className="text-xs whitespace-pre-wrap break-all bg-muted p-3 rounded-md overflow-x-auto">{selectedLogDetail.context}</pre>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+          <DialogFooter className="mt-4">
+            {selectedLogDetail && (
+                 <Button variant="outline" onClick={() => handleCopyLog(selectedLogDetail)}><Copy className="mr-2 h-4 w-4"/>Copy Details</Button>
+            )}
+            <DialogClose asChild>
+              <Button type="button">Close</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

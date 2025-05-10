@@ -4,24 +4,26 @@
 // Inspired by react-hot-toast library
 import * as React from "react"
 
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast"
-import { useNotificationStore } from "@/store/notificationStore"; // Import notification store
-import type { NotificationType } from "@/lib/types"; // Import NotificationType
+import type { ToastProps } from "@/components/ui/toast"
+import type { ButtonProps } from "@/components/ui/button" // Import ButtonProps
+import { useNotificationStore } from "@/store/notificationStore"; 
+import type { NotificationType } from "@/lib/types"; 
 
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
+// Update ToastActionElement to allow ButtonProps
+type ToastActionElement = React.ReactElement<ButtonProps>;
+
+
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
-  action?: ToastActionElement
-  link?: string; // Optional link for related notification
-  notificationType?: NotificationType; // Optional explicit notification type
+  action?: ToastActionElement // Updated type
+  link?: string; 
+  notificationType?: NotificationType; 
 }
 
 const actionTypes = {
@@ -146,25 +148,23 @@ function dispatch(action: Action) {
   })
 }
 
-// Define the input type for the toast function
-// Added notificationType and link here
+
 type ToastInput = Omit<ToasterToast, "id"> & {
-    notificationType?: NotificationType; // Optional explicit type for notification
-    link?: string; // Optional link for notification
+    notificationType?: NotificationType; 
+    link?: string; 
 };
 
-// Function to map toast variant to notification type (can be customized)
+
 const mapVariantToNotificationType = (variant?: 'default' | 'destructive'): NotificationType => {
     switch (variant) {
         case 'destructive': return 'error';
-        // Add more mappings if needed (e.g., for a 'success' variant)
-        default: return 'info'; // Default to 'info'
+        default: return 'info'; 
     }
 };
 
 function toast({ notificationType, link, ...props }: ToastInput) {
   const id = genId()
-  const addNotification = useNotificationStore.getState().addNotification; // Get notification action
+  const addNotification = useNotificationStore.getState().addNotification; 
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -185,11 +185,10 @@ function toast({ notificationType, link, ...props }: ToastInput) {
     },
   })
 
-  // ---- Add Notification Here ----
-  // Ensure title and message are strings for the notification
+  
   const notificationTitle = typeof props.title === 'string' ? props.title : 'Notification';
   const notificationMessage = typeof props.description === 'string' ? props.description : 'Details unavailable.';
-  // Determine notification type: use explicit type if provided, otherwise map from variant
+  
   const finalNotificationType = notificationType || mapVariantToNotificationType(props.variant);
 
 
@@ -197,9 +196,9 @@ function toast({ notificationType, link, ...props }: ToastInput) {
       type: finalNotificationType,
       title: notificationTitle,
       message: notificationMessage,
-      link: link, // Pass the link if provided
+      link: link, 
   });
-  // -------------------------------
+  
 
   return {
     id: id,
@@ -229,4 +228,5 @@ function useToast() {
 }
 
 export { useToast, toast }
+
 
