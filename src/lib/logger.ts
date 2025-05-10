@@ -2,7 +2,9 @@
 'use client';
 
 import { useAuth } from '@clerk/nextjs';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState }
+// Comment: Removed 'useEffect' as it's not used in this simplified logger
+from 'react';
 
 // Types
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log'; // 'log' for generic console.log
@@ -17,14 +19,14 @@ interface LoggerOptions {
 // Default configuration
 const DEFAULT_OPTIONS: LoggerOptions = {
   enableServerLogging: process.env.NEXT_PUBLIC_LOG_TO_SERVER === 'true',
-  maxErrorStackLength: 2000, // Max length for error stack strings
+  maxErrorStackLength: 2000,
   debugLogsInProduction: process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS === 'true',
 };
 
 // Helper to get base context without hooks, for direct log functions
 const getBaseContextForDirectLog = (userIdForLog?: string | null): LogContext => {
   return {
-    userId: userIdForLog ?? 'anonymous_or_server', // Default if no specific userId passed
+    userId: userIdForLog ?? 'anonymous_or_server',
     environment: process.env.NODE_ENV || 'unknown_env',
     clientTimestamp: new Date().toISOString(),
     source_client_component: typeof window !== 'undefined' ? window.location.pathname : 'server_or_unknown_path',
@@ -46,22 +48,20 @@ const prepareErrorContextForLog = (error?: unknown, maxStackLength: number = DEF
     if (typeof error === 'object' && error !== null) {
       const errorContext: LogContext = {};
       for (const [key, value] of Object.entries(error)) {
-        if (typeof value === 'function') continue; // Skip functions
+        if (typeof value === 'function') continue; 
         
         try {
-          // Attempt to stringify objects, limit length for very large objects
           errorContext[`error_${key}`] = typeof value === 'object' 
-            ? JSON.stringify(value).substring(0, 500) // Limit stringified object length
+            ? JSON.stringify(value).substring(0, 500)
             : value;
         } catch {
-          // Handle potential circular references or unstringifiable objects
           errorContext[`error_${key}`] = '[Unserializable Data]';
         }
       }
       return errorContext;
     }
 
-    return { errorDetails: String(error) }; // Fallback for other error types
+    return { errorDetails: String(error) };
 };
 
 
@@ -75,7 +75,6 @@ const sendLogToServer = async (level: LogLevel, message: string, context: LogCon
         body: JSON.stringify({ level, message, context }),
       });
     } catch (error) {
-      // Fallback to console if server logging fails
       console.warn('Failed to send log to server API:', { 
         originalLevel: level, 
         originalMessage: message, 
@@ -86,9 +85,8 @@ const sendLogToServer = async (level: LogLevel, message: string, context: LogCon
 };
 
 const logToConsole = (level: LogLevel, message: string, context: LogContext) => {
-    const consoleArgs: any[] = [`[${level.toUpperCase()}] ${message}`];
+    const consoleArgs: any[] = [`[Client - ${level.toUpperCase()}] ${message}`]; // Added "Client - " prefix for clarity
     
-    // Filter out some noisy context fields for cleaner console output
     const { environment, clientTimestamp, source_client_component, userAgent, ...filteredContext } = context;
     if (Object.keys(filteredContext).length > 0) {
       consoleArgs.push(filteredContext);
@@ -103,8 +101,6 @@ const logToConsole = (level: LogLevel, message: string, context: LogContext) => 
     }
 };
 
-// Direct logging functions (callable from anywhere, client or server if adapted)
-// These do not use React hooks directly.
 const directLog = (
     level: LogLevel,
     message: string,
@@ -141,17 +137,16 @@ export const logDebug = (message: string, context?: LogContext, userId?: string 
 };
 
 
-// React hook for component-specific logging, uses useAuth
 export const useLogger = (componentName?: string) => {
   const { userId, sessionId, orgId } = useAuth();
-  const [options] = useState<LoggerOptions>(DEFAULT_OPTIONS); // Options can be made dynamic if needed
+  const [options] = useState<LoggerOptions>(DEFAULT_OPTIONS);
 
   const getBaseContextWithAuth = useCallback((): LogContext => {
     return {
       userId: userId ?? 'anonymous_hook_user',
       sessionId: sessionId,
       orgId: orgId,
-      componentName: componentName, // Add component name if provided
+      componentName: componentName,
       environment: process.env.NODE_ENV || 'unknown_env',
       clientTimestamp: new Date().toISOString(),
       source_client_component: typeof window !== 'undefined' ? window.location.pathname : 'server_or_unknown_path',
