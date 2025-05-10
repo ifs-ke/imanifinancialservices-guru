@@ -38,6 +38,8 @@ interface SyncState {
   isMismatchDialogOpen: boolean;
 }
 
+const DEBOUNCE_SAVE_DELAY = 10000; // Increased debounce delay to 10 seconds
+
 export function useSyncManager() {
   const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth();
   const { toast } = useToast();
@@ -148,18 +150,14 @@ export function useSyncManager() {
       return false;
     }
     
-    if (isFetchingRef.current && !isRetry) { 
-      logDebug('Fetch Aborted: Another fetch operation is already in progress.', { 
-        currentUserId: userId 
-      });
-      return false;
-    }
-    
-    if (isSavingRef.current || isClearingRef.current) {
-        logDebug('Fetch: Aborting ongoing save/clear operation to prioritize fetch.', {isSaving: isSavingRef.current, isClearing: isClearingRef.current, currentUserId: userId});
-        cleanupAsyncOperations(`Starting new fetch operation for user ${userId}`);
-        isSavingRef.current = false; 
-        isClearingRef.current = false;
+    if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) {
+        logDebug('Fetch Aborted: Operation already in progress.', { 
+            isSaving: isSavingRef.current, 
+            isFetching: isFetchingRef.current, 
+            isClearing: isClearingRef.current, 
+            currentUserId: userId 
+        });
+        return false;
     }
 
     logInfo(`Fetch Triggered${isRetry ? ' (Retry)' : ''}${skipHashCheck ? ' (Skip Hash Check)' : ''}...`, { currentUserId: userId });
@@ -206,7 +204,7 @@ export function useSyncManager() {
         const dataString = stringify(preparedDataToVerify);
         const isValid = await verifyHash(dataString, dataHash);
         if (!isValid) {
-          logError('Fetch Error: Data integrity check failed during fetch!', { serverHash: dataHash, clientHashCalculationInputTruncated: dataString.substring(0, 200), currentUserId: userId });
+          logError('Fetch Error: Data integrity check failed during fetch!', { clientHash: dataHash, serverHash: await hashData(dataString), dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : ""), currentUserId: userId });
           updateSyncState({ status: 'error', hashMismatch: true, isMismatchDialogOpen: true });
           toast({ title: 'Data Sync Mismatch', description: "Local and server data don't match. Resolve using the cloud icon.", variant: 'destructive', link: '#' });
           isFetchingRef.current = false; 
@@ -267,15 +265,14 @@ export function useSyncManager() {
     if (!isClerkLoaded) { logDebug('Save Aborted: Auth not loaded yet.', { currentUserId: userId }); return false; }
     if (!isSignedIn || !userId) { logWarn('Save Aborted: User not signed in or userId not available.', { currentUserId: userId, isSignedIn }); updateSyncState({ status: 'local' }); return false; }
     
-    if (isSavingRef.current) { 
-      logDebug('Save Aborted: Another save operation is already in progress.', { currentUserId: userId }); 
-      return false; 
-    }
-    if (isFetchingRef.current || isClearingRef.current) {
-        logDebug('Save: Aborting ongoing fetch/clear operation to prioritize save.', {isFetching: isFetchingRef.current, isClearing: isClearingRef.current, currentUserId: userId});
-        cleanupAsyncOperations(`Starting new save operation for user ${userId}`);
-        isFetchingRef.current = false;
-        isClearingRef.current = false;
+    if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) {
+        logDebug('Save Aborted: Operation already in progress.', { 
+            isSaving: isSavingRef.current, 
+            isFetching: isFetchingRef.current, 
+            isClearing: isClearingRef.current, 
+            currentUserId: userId 
+        });
+        return false;
     }
 
     logInfo(`Save Triggered${isForceSave ? ' (Force)' : ''}...`, { currentUserId: userId });
@@ -286,7 +283,7 @@ export function useSyncManager() {
       logInfo('Save: Fetching latest data before saving to check for conflicts...', { currentUserId: userId });
       const preSaveFetchSuccess = await fetchData(false, false); 
       if (!preSaveFetchSuccess) {
-        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', undefined, { operationStatus: 'pre-save-fetch-failed', currentUserId: userId });
+        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', { errorDetails: 'Pre-save fetch failed' }, { operationStatus: 'pre-save-fetch-failed', currentUserId: userId });
         isSavingRef.current = false; 
         if(!syncState.hashMismatch) updateSyncState({ status: 'local' }); 
         return false;
@@ -415,7 +412,7 @@ export function useSyncManager() {
     saveTimeoutRef.current = setTimeout(() => { 
       logInfo('Debounced Save: Timeout reached. Initiating save.', { currentUserId: userId }); 
       saveData(); 
-    }, 3000);
+    }, DEBOUNCE_SAVE_DELAY);
   }, [saveData, isSignedIn, userId, syncState.hashMismatch, cleanupAsyncOperations, updateSyncState, syncState.status]);
 
   const handleStoreChange = useCallback(() => {
@@ -477,7 +474,7 @@ export function useSyncManager() {
       initialFetchDoneRef.current = false;
       hasLocalChangesRef.current = false;
       updateSyncState({ status: 'local', lastSyncTime: null, hashMismatch: false, isMismatchDialogOpen: false });
-    } else if (currentAuthUserId && currentAuthUserId === internalPreviousUserId.current && !initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && syncState.status !== 'synced') {
+    } else if (currentAuthUserId && currentAuthUserId === internalPreviousUserId.current && !initialFetchDoneRef.current && !isFetchingRef.current && !isSavingRef.current && syncState.status !== 'synced' && syncState.status !== 'error') {
       logInfo('Auth Effect: Same user session, initial fetch not completed or sync not confirmed. Triggering fetch...', {
         currentAuthUserId, currentStatus: syncState.status
       }, currentAuthUserId);
@@ -494,13 +491,14 @@ export function useSyncManager() {
       }, currentAuthUserId);
     }
 
+    // Only clean up if there's an actual operation to cancel
     const shouldCleanUp = isFetchingRef.current || isSavingRef.current;
     return () => {
-        logDebug("Auth Effect: Cleanup triggered.", { currentUserId: userId, isFetching: isFetchingRef.current, isSaving: isSavingRef.current });
-        if (shouldCleanUp || (userId !== internalPreviousUserId.current && (isFetchingRef.current || isSavingRef.current))) {
-            cleanupAsyncOperations(`User ID changed (${userId} vs ${internalPreviousUserId.current}) or unmount during auth effect cleanup`);
-        }
-    };
+      logDebug("Auth Effect: Cleanup triggered.", { currentUserId: userId, isFetching: isFetchingRef.current, isSaving: isSavingRef.current });
+      if (shouldCleanUp || (userId !== internalPreviousUserId.current && (isFetchingRef.current || isSavingRef.current))) {
+          cleanupAsyncOperations(`User ID changed (${userId} vs ${internalPreviousUserId.current}) or unmount during auth effect cleanup`);
+      }
+  };
   }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState]); 
 
   useEffect(() => {
