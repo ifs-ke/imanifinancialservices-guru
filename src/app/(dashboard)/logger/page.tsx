@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ClipboardList, Filter, RotateCw, XCircle, AlertTriangle, Info, MessageSquare, Terminal, Copy, Eye, CopyCheck } from 'lucide-react'; // Added Copy, Eye, CopyCheck
+import { ClipboardList, Filter, RotateCw, XCircle, AlertTriangle, Info, MessageSquare, Terminal, Copy, Eye, CopyCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -23,13 +23,12 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 
-// Define a more specific type for log entries captured by this page
 interface CapturedLogEntry {
-  id: string; // Add an ID for selection purposes
+  id: string; 
   timestamp: Date;
-  level: 'debug' | 'info' | 'warn' | 'error' | 'log'; // 'log' for generic console.log
+  level: 'debug' | 'info' | 'warn' | 'error' | 'log';
   message: string;
-  context?: string; // Store context as a string for display
+  context?: string; 
 }
 
 let logIdCounter = 0;
@@ -38,22 +37,20 @@ const generateLogId = () => `log_${logIdCounter++}_${Date.now()}`;
 export default function LoggerPage() {
   const [capturedLogs, setCapturedLogs] = useState<CapturedLogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<string>('all');
-  const [isHydrated, setIsHydrated] = useState(false); // State to track hydration
+  const [isHydrated, setIsHydrated] = useState(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const { toast } = useToast();
 
   const [selectedLogDetail, setSelectedLogDetail] = useState<CapturedLogEntry | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  // Capture console logs
-  // Load logs from localStorage on mount
   useEffect(() => {
     const savedLogs = localStorage.getItem('capturedLogs');
     if (savedLogs) {
       try {
         const parsedLogs: CapturedLogEntry[] = JSON.parse(savedLogs).map((log: any) => ({
           ...log,
-          timestamp: new Date(log.timestamp), // Convert timestamp string back to Date object
+          timestamp: new Date(log.timestamp),
         }));
         setCapturedLogs(parsedLogs);
       } catch (error) {
@@ -96,35 +93,33 @@ export default function LoggerPage() {
 
     console.log = (...args: any[]) => {
       originalConsole.log(...args);
-      setCapturedLogs(prev => [createLogEntry('log', args), ...prev]); // Keep all logs for now, trim before saving if needed
+      setCapturedLogs(prev => [createLogEntry('log', args), ...prev.slice(0, 499)]);
     };
     console.info = (...args: any[]) => {
       originalConsole.info(...args);
-      setCapturedLogs(prev => [createLogEntry('info', args), ...prev]);
+      setCapturedLogs(prev => [createLogEntry('info', args), ...prev.slice(0, 499)]);
     };
     console.warn = (...args: any[]) => {
       originalConsole.warn(...args);
-      setCapturedLogs(prev => [createLogEntry('warn', args), ...prev]);
+      setCapturedLogs(prev => [createLogEntry('warn', args), ...prev.slice(0, 499)]);
     };
     console.error = (...args: any[]) => {
       originalConsole.error(...args);
-      setCapturedLogs(prev => [createLogEntry('error', args), ...prev]);
+      setCapturedLogs(prev => [createLogEntry('error', args), ...prev.slice(0, 499)]);
     };
     console.debug = (...args: any[]) => {
       originalConsole.debug(...args);
-      setCapturedLogs(prev => [createLogEntry('debug', args), ...prev]);
+      setCapturedLogs(prev => [createLogEntry('debug', args), ...prev.slice(0, 499)]);
     };
 
-    // Initial message to confirm logger page is active
     console.info("LoggerPage: Live log capture activated.");
-    setIsHydrated(true); // Mark as hydrated after initial load and setup
+    setIsHydrated(true);
 
     return () => {
-      // Restore original console methods on unmount
       console.log = originalConsole.log;
       console.info = originalConsole.info;
       console.warn = originalConsole.warn;
-      console.error = originalConsole.error; // Fixed typo here, was console.debug
+      console.error = originalConsole.error;
       console.debug = originalConsole.debug;
     };
   }, []);
@@ -141,26 +136,23 @@ export default function LoggerPage() {
     });
   }, [capturedLogs, levelFilter, searchTerm]);
 
-  // Save logs to localStorage whenever capturedLogs changes
   useEffect(() => {
-    // Only save if hydrated to prevent saving empty state initially
     if (isHydrated) {
-      // Keep a reasonable number of logs, e.g., 1000, to avoid exceeding localStorage limits
-      localStorage.setItem('capturedLogs', JSON.stringify(capturedLogs.slice(0, 1000)));
+      localStorage.setItem('capturedLogs', JSON.stringify(capturedLogs.slice(0, 500)));
     }
   }, [capturedLogs, isHydrated]);
 
   const getBadgeVariant = (level: CapturedLogEntry['level']): 'default' | 'secondary' | 'destructive' | 'outline' => {
     switch (level.toLowerCase()) {
       case 'error': return 'destructive';
-      case 'warn': return 'secondary';
-      case 'info': return 'default';
+      case 'warn': return 'secondary'; // Using 'secondary' for warning, which is often yellow-ish
+      case 'info': return 'default'; // 'default' is often blue/primary
       case 'debug': return 'outline';
       case 'log': return 'outline';
       default: return 'outline';
     }
   };
-
+  
   const getIconForLevel = (level: CapturedLogEntry['level']) => {
     switch (level.toLowerCase()) {
       case 'error': return <XCircle className="h-4 w-4 text-destructive" />;
@@ -225,12 +217,12 @@ export default function LoggerPage() {
       </header>
 
       <Card>
-        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6">
           <div>
-            <CardTitle>Session Log Entries</CardTitle>
+            <CardTitle className="text-lg">Session Log Entries</CardTitle>
             <CardDescription>Live events and errors from your current browser session.</CardDescription>
           </div>
-          <div className="flex gap-2 w-full sm:w-auto flex-wrap items-center"> {/* Added items-center */}
+          <div className="flex gap-2 w-full sm:w-auto flex-wrap items-center">
             <Input
               placeholder="Search logs..."
               value={searchTerm}
@@ -251,28 +243,27 @@ export default function LoggerPage() {
                 <SelectItem value="log">Log</SelectItem>
               </SelectContent>
             </Select>
-            {/* Clear Logs Button - Moved next to the select dropdown */}
             <Button variant="outline" size="sm" onClick={handleClearLogs} className="h-9">
-              <XCircle className="h-4 w-4 mr-1 text-destructive" /> Clear All
+              <XCircle className="h-4 w-4 mr-2 text-destructive" /> Clear All
             </Button>
             <Button variant="outline" size="sm" onClick={handleCopyAllVisibleLogs} className="h-9" disabled={filteredLogs.length === 0}>
-              <CopyCheck className="h-4 w-4 mr-1" /> Copy Visible
+              <CopyCheck className="h-4 w-4 mr-2" /> Copy Visible
             </Button>
-            <Button variant="outline" size="sm" onClick={() => localStorage.clear()} className="h-9">
-              <RotateCw className="h-4 w-4" />
-              <span className="sr-only">Clear Session Logs</span>
-            </Button>
+             {/* Refresh button can be re-added if a manual fetch/refresh mechanism is implemented beyond live capture */}
+            {/* <Button variant="outline" size="sm" onClick={() => { /* Implement refresh logic if needed * / }} className="h-9">
+              <RotateCw className="h-4 w-4 mr-2" /> Refresh
+            </Button> */}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <ScrollArea className="h-[60vh] w-full">
             <Table>
               <TableHeader className="sticky top-0 bg-background z-10">
                 <TableRow>
-                  <TableHead className="w-[180px]">Timestamp</TableHead>
-                  <TableHead className="w-[100px]">Level</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead className="w-[100px] text-center">Actions</TableHead>
+                  <TableHead className="w-[180px] pl-6 pr-3">Timestamp</TableHead>
+                  <TableHead className="w-[100px] px-3">Level</TableHead>
+                  <TableHead className="px-3">Message</TableHead>
+                  <TableHead className="w-[100px] text-center pr-6 pl-3">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -284,17 +275,17 @@ export default function LoggerPage() {
                         onClick={() => handleViewLogDetails(log)}
                         title="Click to view details"
                     >
-                      <TableCell className="font-mono whitespace-nowrap">
+                      <TableCell className="font-mono whitespace-nowrap pl-6 pr-3">
                         {format(log.timestamp, 'PPpp')}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-3">
                         <Badge variant={getBadgeVariant(log.level)} className="capitalize flex items-center gap-1">
                           {getIconForLevel(log.level)}
                           <span>{log.level}</span>
                         </Badge>
                       </TableCell>
-                      <TableCell className="whitespace-pre-wrap break-words max-w-xl truncate" title={log.message}>{log.message}</TableCell>
-                      <TableCell className="text-center">
+                      <TableCell className="whitespace-pre-wrap break-words max-w-xl truncate px-3" title={log.message}>{log.message}</TableCell>
+                      <TableCell className="text-center pr-6 pl-3">
                         <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleCopyLog(log);}} title="Copy this log" className="h-7 w-7">
                             <Copy className="h-4 w-4" />
                         </Button>
@@ -317,7 +308,6 @@ export default function LoggerPage() {
         </CardContent>
       </Card>
 
-      {/* Log Detail Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -336,7 +326,7 @@ export default function LoggerPage() {
               <div className="space-y-3">
                 <div>
                   <h4 className="font-semibold text-sm mb-1">Message:</h4>
-                  <p className="text-sm whitespace-pre-wrap break-words bg-muted p-2 rounded-md">{selectedLogDetail.message}</p>
+                  <p className="text-sm whitespace-pre-wrap break-words bg-muted p-3 rounded-md">{selectedLogDetail.message}</p>
                 </div>
                 {selectedLogDetail.context && (
                   <div>
@@ -360,4 +350,3 @@ export default function LoggerPage() {
     </div>
   );
 }
-

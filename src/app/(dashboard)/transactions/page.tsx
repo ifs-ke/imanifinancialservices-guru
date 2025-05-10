@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/transactions/page.tsx
 'use client';
 
@@ -10,12 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, FileUp, FileDown } from 'lucide-react'; // Removed Upload icon, kept FileUp/Down
+import { PlusCircle, Edit, Trash2, FileUp, FileDown } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -33,14 +31,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import shared types
-import Link from 'next/link'; // Import Link
-import { format } from 'date-fns'; // For date formatting
-import { cn } from '@/lib/utils'; // For conditional classes
-import EditTransactionDialog from './EditTransactionDialog'; // Import the new Edit Dialog
+import { useTransactionsStore } from '@/store/transactionsStore';
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types';
+import Link from 'next/link';
+import { format } from 'date-fns';
+import { cn, formatCurrency } from '@/lib/utils'; // Import formatCurrency
+import EditTransactionDialog from './EditTransactionDialog';
 
-// Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
     const dateObj = typeof date === 'string' ? new Date(date) : date;
     if (isNaN(dateObj.getTime())) {
@@ -56,7 +53,6 @@ const formatDateForInput = (date: Date | string): string => {
     return `${year}-${month}-${day}`;
 };
 
-// Initial form data structure including categorization fields
 const initialFormData = {
     date: formatDateForInput(new Date()),
     description: '',
@@ -67,34 +63,27 @@ const initialFormData = {
 };
 
 export default function TransactionsPage() {
-  // Use Zustand store hook for transaction state management
-  const { transactions, addTransaction, deleteTransaction } = useTransactionsStore(); // Removed updateTransaction, will be handled by EditTransactionDialog
+  const { transactions, addTransaction, deleteTransaction } = useTransactionsStore(); 
 
-  // Local state for dialogs, editing, deleting, and form data
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); // State to control edit dialog
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); 
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
-  const [formData, setFormData] = useState(initialFormData); // Primarily for Add dialog now
+  const [formData, setFormData] = useState(initialFormData);
   const { toast } = useToast();
 
-  // Reset add form data when add dialog closes
   useEffect(() => {
     if (!isAddDialogOpen) {
         setFormData(initialFormData);
     }
   }, [isAddDialogOpen]);
 
-  // Reset editing state when edit dialog closes
   useEffect(() => {
       if (!isEditDialogOpen) {
           setEditingTransaction(null);
       }
   }, [isEditDialogOpen]);
 
-  // --- CRUD Operations using Zustand Store ---
-
-  // CREATE (remains in this component, uses standard Dialog)
   const handleAddTransactionSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const { date, description, amount, modeOfPayment, frequency, variability } = formData;
@@ -122,13 +111,11 @@ export default function TransactionsPage() {
     toast({ title: 'Transaction Added', description: 'Successfully added.' });
   };
 
-  // UPDATE (moved to EditTransactionDialog, this handler now just opens the dialog)
   const handleEditClick = (transaction: TransactionWithId) => {
     setEditingTransaction(transaction);
     setIsEditDialogOpen(true);
   };
 
-  // DELETE (remains the same)
   const handleDeleteClick = (transaction: TransactionWithId) => {
     setTransactionToDelete(transaction);
   };
@@ -140,8 +127,6 @@ export default function TransactionsPage() {
     toast({ title: 'Transaction Deleted', description: 'Successfully removed.' });
   };
 
-  // --- Other Handlers (for Add Dialog) ---
-
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -149,12 +134,6 @@ export default function TransactionsPage() {
 
   const handleSelectChange = (name: string, value: string) => {
      setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-   // --- Formatting (remain the same) ---
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
   };
 
   const formatDate = (date: Date | string) => {
@@ -168,7 +147,6 @@ export default function TransactionsPage() {
       return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
-  // --- Export Functionality (remain the same) ---
   const handleExportCsv = useCallback(() => {
     if (transactions.length === 0) {
       toast({ title: "No data to export", description: "Add transactions to export a CSV file.", variant: "default" });
@@ -220,35 +198,33 @@ export default function TransactionsPage() {
             View, import, and manage your financial transactions.
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap"> {/* Added flex-wrap */}
-          {/* Add Transaction Dialog (Standard Dialog) */}
+        <div className="flex gap-2 flex-wrap">
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[450px]"> {/* Consistent width */}
               <DialogHeader>
                 <DialogTitle>Add New Transaction</DialogTitle>
                 <DialogDescription>Manually enter details below.</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleAddTransactionSubmit} className="grid gap-4 py-4">
-                {/* Input Fields */}
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="add-date" className="text-right">Date</Label>
+                  <Label htmlFor="add-date" className="text-right col-span-1">Date</Label>
                   <Input id="add-date" name="date" type="date" value={formData.date} onChange={handleInputChange} className="col-span-3" required />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="add-description" className="text-right">Description</Label>
+                  <Label htmlFor="add-description" className="text-right col-span-1">Description</Label>
                   <Input id="add-description" name="description" value={formData.description} onChange={handleInputChange} className="col-span-3" placeholder="e.g., Coffee" required />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="add-amount" className="text-right">Amount (KES)</Label>
+                  <Label htmlFor="add-amount" className="text-right col-span-1">Amount (KES)</Label>
                   <Input id="add-amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleInputChange} className="col-span-3" placeholder="e.g., -550 or 10000" required />
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="add-modeOfPayment" className="text-right">Payment Mode</Label>
+                  <Label htmlFor="add-modeOfPayment" className="text-right col-span-1">Payment Mode</Label>
                   <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={(value) => handleSelectChange('modeOfPayment', value)} required>
                     <SelectTrigger id="add-modeOfPayment" className="col-span-3">
                       <SelectValue placeholder="Select mode" />
@@ -260,9 +236,8 @@ export default function TransactionsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Categorization Selects */}
                  <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="add-frequency" className="text-right">Frequency</Label>
+                  <Label htmlFor="add-frequency" className="text-right col-span-1">Frequency</Label>
                    <Select name="frequency" value={formData.frequency} onValueChange={(value) => handleSelectChange('frequency', value)}>
                     <SelectTrigger id="add-frequency" className="col-span-3">
                       <SelectValue placeholder="Optional: Select frequency" />
@@ -274,7 +249,7 @@ export default function TransactionsPage() {
                   </Select>
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="add-variability" className="text-right">Variability</Label>
+                  <Label htmlFor="add-variability" className="text-right col-span-1">Variability</Label>
                    <Select name="variability" value={formData.variability} onValueChange={(value) => handleSelectChange('variability', value)}>
                     <SelectTrigger id="add-variability" className="col-span-3">
                       <SelectValue placeholder="Optional: Select variability" />
@@ -285,7 +260,7 @@ export default function TransactionsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="pt-4">
                    <DialogClose asChild>
                         <Button type="button" variant="outline">Cancel</Button>
                    </DialogClose>
@@ -295,13 +270,11 @@ export default function TransactionsPage() {
             </DialogContent>
           </Dialog>
 
-           {/* Import Button */}
            <Button asChild variant="default">
              <Link href="/transactions/import">
                <FileUp className="mr-2 h-4 w-4" /> Import File
              </Link>
            </Button>
-            {/* Export Button */}
             <Button variant="secondary" onClick={handleExportCsv}>
               <FileDown className="mr-2 h-4 w-4" /> Export CSV
             </Button>
@@ -310,43 +283,41 @@ export default function TransactionsPage() {
 
       <main className="flex-1">
         <Card>
-          <CardHeader>
-            <CardTitle>Transaction History</CardTitle>
+          <CardHeader className="p-6">
+            <CardTitle className="text-lg">Transaction History</CardTitle>
             <CardDescription>Your recent financial activities.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             <ScrollArea className="h-[500px] w-full">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[100px]">Date</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="w-[90px]">Mode</TableHead>
-                    <TableHead className="w-[90px]">Frequency</TableHead>
-                    <TableHead className="w-[90px]">Variability</TableHead>
-                    <TableHead className="text-right w-[140px]">Amount (KES)</TableHead>
-                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                    <TableHead className="w-[100px] pl-6 pr-3">Date</TableHead>
+                    <TableHead className="px-3">Description</TableHead>
+                    <TableHead className="w-[90px] px-3">Mode</TableHead>
+                    <TableHead className="w-[90px] px-3">Frequency</TableHead>
+                    <TableHead className="w-[90px] px-3">Variability</TableHead>
+                    <TableHead className="text-right w-[140px] px-3">Amount (KES)</TableHead>
+                    <TableHead className="text-right w-[100px] pr-6 pl-3">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {transactions.length > 0 ? (
                     transactions.map((tx) => (
                       <TableRow key={tx.id}>
-                        <TableCell className="font-medium">{formatDate(tx.date)}</TableCell>
-                        <TableCell className="max-w-[250px] truncate" title={tx.description}>{tx.description}</TableCell>
-                        <TableCell>{tx.modeOfPayment}</TableCell>
-                        <TableCell className="text-xs">{formatCategory(tx.frequency)}</TableCell>
-                        <TableCell className="text-xs">{formatCategory(tx.variability)}</TableCell>
-                        <TableCell className={cn('text-right font-mono', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
+                        <TableCell className="font-medium pl-6 pr-3">{formatDate(tx.date)}</TableCell>
+                        <TableCell className="max-w-[250px] truncate px-3" title={tx.description}>{tx.description}</TableCell>
+                        <TableCell className="px-3">{tx.modeOfPayment}</TableCell>
+                        <TableCell className="text-xs px-3">{formatCategory(tx.frequency)}</TableCell>
+                        <TableCell className="text-xs px-3">{formatCategory(tx.variability)}</TableCell>
+                        <TableCell className={cn('text-right font-mono px-3', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
-                        <TableCell className="text-right">
-                           {/* Edit Button - Triggers Edit Dialog */}
+                        <TableCell className="text-right pr-6 pl-3">
                            <Button variant="ghost" size="icon" className="mr-1 h-7 w-7" onClick={() => handleEditClick(tx)}>
                              <Edit className="h-4 w-4" />
                              <span className="sr-only">Edit</span>
                            </Button>
-                           {/* Delete Button & Confirmation Dialog */}
                            <AlertDialog open={transactionToDelete?.id === tx.id} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
                              <AlertDialogTrigger asChild>
                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(tx)}>
@@ -355,7 +326,7 @@ export default function TransactionsPage() {
                                </Button>
                              </AlertDialogTrigger>
                              <AlertDialogContent>
-                               {transactionToDelete && transactionToDelete.id === tx.id && ( // Ensure correct transaction is targeted
+                               {transactionToDelete && transactionToDelete.id === tx.id && ( 
                                  <>
                                    <AlertDialogHeader>
                                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -389,7 +360,6 @@ export default function TransactionsPage() {
         </Card>
       </main>
 
-      {/* Edit Transaction Dialog Component */}
       {editingTransaction && (
           <EditTransactionDialog
               isOpen={isEditDialogOpen}
@@ -401,4 +371,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-

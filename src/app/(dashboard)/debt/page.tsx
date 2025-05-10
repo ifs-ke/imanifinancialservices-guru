@@ -10,34 +10,26 @@ import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle, CalendarClock } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore';
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedDebt } from '@/store/budgetStore'; // Import selectTotalBudgetedDebt
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedDebt } from '@/store/budgetStore';
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import DebtFormSheet from '@/components/debt/DebtFormSheet';
+import DebtFormSheet from './DebtFormSheet'; // Updated import path
 import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet';
 import DebtAnalysisDialog from '@/components/debt/DebtAnalysisDialog';
 import { analyzeDebtStrategy, type DebtAnalysisInput, type DebtAnalysisOutput } from '@/ai/flows/debt-analysis-flow';
+import { formatCurrency, cn } from '@/lib/utils'; // Import cn
 
-// Formatting Functions
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
+// Formatting Function (formatCurrency moved to utils)
 const formatPercentage = (rate: number) => {
     return `${rate.toFixed(2)}%`;
 };
 
 export default function DebtPage() {
   const { debts, deleteDebt } = useDebtStore();
-  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome); // Keep for AI analysis input
-  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); // Keep for AI analysis input
-  const totalBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt); // Get budgeted debt payment
+  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome); 
+  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); 
+  const totalBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt); 
   const { toast } = useToast();
 
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
@@ -49,10 +41,7 @@ export default function DebtPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
 
-
-   // --- Debt Payoff Timeline Calculation ---
    useEffect(() => {
-    // Use the explicitly budgeted amount for debt payments
     const fundsForDebtPayment = totalBudgetedDebtPayment;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
@@ -60,15 +49,11 @@ export default function DebtPage() {
         setDebtPayoffTimeline("Debt Free!");
         return;
     }
-
-    // Check if ANY funds are allocated for debt
     if (fundsForDebtPayment <= 0) {
         setDebtPayoffTimeline("Cannot estimate: No funds budgeted for debt.");
         return;
     }
-
     const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
-
     let interestWarning = false;
     debts.forEach(debt => {
         const monthlyInterest = debt.principal * (debt.interestRate / 100 / 12);
@@ -76,26 +61,19 @@ export default function DebtPage() {
             interestWarning = true;
         }
     });
-
-    // Check if budgeted amount covers minimums
     if (fundsForDebtPayment < totalMinPayments) {
         setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Budgeted debt funds < min payments.");
         return;
     }
 
-    // Proceed with calculation using the budgeted amount
     let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
-    const MAX_MONTHS = 720; // 60 years limit
+    const MAX_MONTHS = 720; 
 
     while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
         months++;
         let availablePayment = fundsForDebtPayment;
-
-        // Apply interest first
         currentDebts.forEach(debt => { if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12); });
-
-        // Apply minimum payments first (within available funds)
         currentDebts.forEach(debt => {
              if (debt.principal > 0 && availablePayment > 0.01) {
                  const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
@@ -103,25 +81,19 @@ export default function DebtPage() {
                  availablePayment -= payment;
              }
         });
-
-
-        // Apply remaining available funds using Avalanche method
         if (availablePayment > 0.01) {
-            // Sort by interest rate (highest first), then principal (highest first for tie-breaking)
              currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; });
-
              for (const debt of currentDebts) {
                  if (debt.principal > 0.01 && availablePayment > 0.01) {
                     const payment = Math.min(availablePayment, debt.principal);
                     debt.principal -= payment;
                     availablePayment -= payment;
                   }
-                  if(availablePayment <= 0.01) break; // Stop if no more funds
+                  if(availablePayment <= 0.01) break; 
               }
          }
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); // Remove paid-off debts
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); 
     }
-
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
        setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
@@ -133,41 +105,32 @@ export default function DebtPage() {
         if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
+   }, [debts, totalBudgetedDebtPayment]); 
 
-   }, [debts, totalBudgetedDebtPayment]); // Dependency is now totalBudgetedDebtPayment
-
-
-  // Handlers
   const handleAddClick = () => { setEditingDebt(null); setIsFormSheetOpen(true); };
   const handleEditClick = (debt: DebtItem) => { setEditingDebt(debt); setIsFormSheetOpen(true); };
   const handleFormSheetClose = () => { setIsFormSheetOpen(false); setEditingDebt(null); };
   const handleDeleteClick = (debt: DebtItem) => { setDebtToDelete(debt); };
   const confirmDeleteDebt = () => { if (!debtToDelete) return; deleteDebt(debtToDelete.id); setDebtToDelete(null); toast({ title: 'Debt Deleted' }); };
 
-  // --- AI Debt Analysis ---
   const handleAnalyzeDebt = async () => {
       setIsAnalyzing(true); setAnalysisError(null); setAnalysisResult(null); setIsAnalysisDialogOpen(true);
       if (debts.length === 0) { setAnalysisError("Add debts first."); setIsAnalyzing(false); return; }
-      // AI input still uses total income/expenses as context, not just debt allocation
       const analysisInput: DebtAnalysisInput = { debts, totalBudgetedIncome, totalBudgetedExpenses };
       try {
-          console.log("Calling AI flow with input:", analysisInput);
           const result = await analyzeDebtStrategy(analysisInput);
-           console.log("AI flow result:", result);
           setAnalysisResult(result);
       } catch (error: any) { console.error("Debt analysis failed:", error); setAnalysisError(`Analysis failed: ${error.message || 'Please try again.'}`); toast({ title: "Analysis Failed", variant: "destructive" }); }
       finally { setIsAnalyzing(false); }
   };
   const handleAnalysisDialogClose = () => { setIsAnalysisDialogOpen(false); };
 
-  // --- Export ---
   const handleExportCsv = useCallback(() => {
       if (debts.length === 0) { toast({ title: "No data to export" }); return; }
       const csvRows = [['Description', 'Principal (KES)', 'Interest Rate (%)', 'Min Payment (KES)', 'Term']];
       for (const debt of debts) { const sanitizedDesc = debt.description.replace(/"/g, "''"); csvRows.push([`"${sanitizedDesc}"`, debt.principal, debt.interestRate, debt.minPayment, debt.term].join(',')); }
       const csvData = csvRows.join('\n'); const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'debts_export.csv'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); toast({ title: "CSV Exported" });
   }, [debts, toast]);
-
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
@@ -186,12 +149,11 @@ export default function DebtPage() {
         </div>
       </header>
 
-      {/* Debt Summary Card */}
       <Card className="mb-6 shadow-md">
-        <CardHeader className="p-4"> {/* Adjusted padding */}
-          <CardTitle>Debt Overview</CardTitle>
+        <CardHeader className="p-6">
+          <CardTitle className="text-lg">Debt Overview</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm p-4"> {/* Adjusted padding */}
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm p-6">
           <div className="flex flex-col p-3 rounded-md border bg-destructive/10">
             <span className="text-muted-foreground mb-1">Total Outstanding Debt</span>
             <span className="font-bold text-lg font-mono text-destructive">{formatCurrency(debts.reduce((sum, d) => sum + d.principal, 0))}</span>
@@ -199,43 +161,41 @@ export default function DebtPage() {
            <div className="flex flex-col p-3 rounded-md border bg-primary/10">
              <span className="text-muted-foreground mb-1 flex items-center gap-1"><CalendarClock size={14}/> Estimated Payoff Timeline</span>
              <span className="font-bold text-lg font-mono text-primary">{debtPayoffTimeline}</span>
-             {/* Updated description */}
              <span className="text-xs text-muted-foreground">(Based on budgeted debt payments & avalanche method)</span>
            </div>
         </CardContent>
       </Card>
 
       <main className="flex-1">
-        <Card className="shadow-sm"> {/* Added shadow */}
-          <CardHeader className="p-4"> {/* Adjusted padding */}
-            <CardTitle>Debt List</CardTitle>
+        <Card className="shadow-sm">
+          <CardHeader className="p-6">
+            <CardTitle className="text-lg">Debt List</CardTitle>
             <CardDescription>Your current outstanding debts.</CardDescription>
           </CardHeader>
-          <CardContent className="p-0"> {/* Removed padding for full-width table */}
+          <CardContent className="p-0">
             <ScrollArea className="h-[500px] w-full">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-4 pr-2">Description</TableHead> {/* Added padding */}
-                    <TableHead className="text-center px-2">Term</TableHead> {/* Added padding */}
-                    <TableHead className="text-right px-2">Principal</TableHead> {/* Added padding */}
-                    <TableHead className="text-right px-2">Rate</TableHead> {/* Added padding */}
-                    <TableHead className="text-right px-2">Min. Payment</TableHead> {/* Added padding */}
-                    <TableHead className="text-right w-[130px] pr-4 pl-2">Actions</TableHead> {/* Added padding */}
+                    <TableHead className="pl-6 pr-3">Description</TableHead>
+                    <TableHead className="text-center px-3">Term</TableHead>
+                    <TableHead className="text-right px-3">Principal</TableHead>
+                    <TableHead className="text-right px-3">Rate</TableHead>
+                    <TableHead className="text-right px-3">Min. Payment</TableHead>
+                    <TableHead className="text-right w-[130px] pr-6 pl-3">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {debts.length > 0 ? (
                     debts.map((debt) => (
                       <TableRow key={debt.id}>
-                        <TableCell className="font-medium pl-4 pr-2">{debt.description}</TableCell> {/* Added padding */}
-                        <TableCell className="text-center text-xs capitalize text-muted-foreground px-2">{debt.term}</TableCell> {/* Added padding */}
-                        <TableCell className="text-right font-mono px-2">{formatCurrency(debt.principal)}</TableCell> {/* Added padding */}
-                        <TableCell className="text-right font-mono px-2">{formatPercentage(debt.interestRate)}</TableCell> {/* Added padding */}
-                        <TableCell className="text-right font-mono px-2">{formatCurrency(debt.minPayment)}</TableCell> {/* Added padding */}
-                        <TableCell className="text-right pr-4 pl-2 py-1"> {/* Adjusted padding */}
-                           {/* Actions aligned */}
-                           <div className="flex justify-end items-center gap-0.5"> {/* Reduced gap */}
+                        <TableCell className="font-medium pl-6 pr-3">{debt.description}</TableCell>
+                        <TableCell className="text-center text-xs capitalize text-muted-foreground px-3">{debt.term}</TableCell>
+                        <TableCell className="text-right font-mono px-3">{formatCurrency(debt.principal)}</TableCell>
+                        <TableCell className="text-right font-mono px-3">{formatPercentage(debt.interestRate)}</TableCell>
+                        <TableCell className="text-right font-mono px-3">{formatCurrency(debt.minPayment)}</TableCell>
+                        <TableCell className="text-right pr-6 pl-3 py-1">
+                           <div className="flex justify-end items-center gap-0.5">
                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditClick(debt)}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
                                <DebtAmortizationSheet debt={debt}><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Amortization for ${debt.description}`}><List className="h-4 w-4" /><span className="sr-only">Amortization</span></Button></DebtAmortizationSheet>
                                <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>

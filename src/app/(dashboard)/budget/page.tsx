@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -12,12 +11,12 @@ import { useBudgetStore, selectCurrentBudgetPeriod, selectBudgetItemsForCurrentP
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import BudgetItemFormSheet from '@/components/budget/BudgetItemFormSheet';
+import BudgetItemFormSheet from './BudgetItemFormSheet'; // Updated import path
 import * as Papa from 'papaparse';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar"; // Use shadcn Calendar
+import { Calendar } from "@/components/ui/calendar";
 import { format, startOfMonth, addMonths, subMonths } from 'date-fns';
 
 
@@ -51,10 +50,9 @@ export default function BudgetPage() {
   const { toast } = useToast();
   const budgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
   const setBudgetPeriod = useBudgetStore(state => state.setBudgetPeriod);
-  const allBudgetItems = useBudgetStore(state => state.budgetItems); // Get all items
-  const { deleteBudgetItem, addBudgetItem, importBudgetsBatch } = useBudgetStore(); // Get actions
+  const allBudgetItems = useBudgetStore(state => state.budgetItems);
+  const { deleteBudgetItem, importBudgetsBatch } = useBudgetStore(); 
 
-  // Get selectors that depend on the current state (including budgetPeriod)
   const totalIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
   const totalOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
@@ -63,25 +61,20 @@ export default function BudgetPage() {
   const totalDebtAllocation = useBudgetStore(selectTotalBudgetedDebt);
   const netBudgeted = useBudgetStore(selectNetBudgeted);
 
-  // State for managing UI elements
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<BudgetItem | null>(null);
   const [categoryForNewItem, setCategoryForNewItem] = useState<BudgetItemCategory>('recurring-expense');
-  const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(new Date()); // Local state for calendar
+  const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(new Date());
 
-  // Effect to set initial budget period in store based on local calendar state
   useEffect(() => {
       setBudgetPeriod(formatToPeriodKey(selectedMonthDate));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount
 
-  // Filter budget items for the currently selected period
   const budgetItemsForPeriod = useMemo(() => {
       return allBudgetItems.filter(item => item.period === budgetPeriod);
   }, [allBudgetItems, budgetPeriod]);
 
-  // Handlers
   const handleAddClick = (category: BudgetItemCategory) => {
       setCategoryForNewItem(category);
       setEditingItem(null);
@@ -109,16 +102,14 @@ export default function BudgetPage() {
       toast({ title: 'Budget Item Deleted', description: 'Successfully removed item.' });
   };
 
-   // Handle month selection from Calendar
    const handleMonthSelect = (date: Date | undefined) => {
        if (date) {
            const newPeriod = formatToPeriodKey(date);
-           setSelectedMonthDate(date); // Update local state for Calendar display
-           setBudgetPeriod(newPeriod); // Update store state
+           setSelectedMonthDate(date); 
+           setBudgetPeriod(newPeriod);
        }
    };
 
-    // Go to previous/next month
     const changeMonth = (direction: 'prev' | 'next') => {
         const newDate = direction === 'prev' ? subMonths(selectedMonthDate, 1) : addMonths(selectedMonthDate, 1);
         handleMonthSelect(newDate);
@@ -126,13 +117,8 @@ export default function BudgetPage() {
 
   const groupedBudgetItems = useMemo(() => {
       const groups: Record<BudgetItemCategory, BudgetItem[]> = {
-          income: [],
-          'recurring-expense': [],
-          'one-time-expense': [],
-          goal: [],
-          debt: [],
+          income: [], 'recurring-expense': [], 'one-time-expense': [], goal: [], debt: [],
       };
-      // Use the period-filtered items for grouping
       budgetItemsForPeriod.forEach(item => {
           if (groups[item.category]) {
               groups[item.category].push(item);
@@ -143,11 +129,7 @@ export default function BudgetPage() {
 
    const groupTotals = useMemo(() => {
        const totals: Record<BudgetItemCategory, number> = {
-           income: 0,
-           'recurring-expense': 0,
-           'one-time-expense': 0,
-           goal: 0,
-           debt: 0,
+           income: 0, 'recurring-expense': 0, 'one-time-expense': 0, goal: 0, debt: 0,
        };
        Object.entries(groupedBudgetItems).forEach(([category, items]) => {
            totals[category as BudgetItemCategory] = items.reduce((sum, item) => sum + item.amount, 0);
@@ -178,8 +160,7 @@ export default function BudgetPage() {
             const description = item.description;
             const amountStr = item.amount?.replace(/,/g, '');
             const amount = parseFloat(amountStr);
-            // Note: We ignore the 'period' column if present in CSV, items are imported to the *current* period.
-
+            
             const isValidCategory = category && ['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt'].includes(category);
             const isValidDescription = description && typeof description === 'string' && description.trim().length > 0;
             const isValidAmount = !isNaN(amount) && amount >= 0;
@@ -194,7 +175,7 @@ export default function BudgetPage() {
 
          if (itemsToAdd.length > 0) {
              try {
-                 importBudgetsBatch(itemsToAdd); // Import to the current period
+                 importBudgetsBatch(itemsToAdd); 
                  importedCount = itemsToAdd.length;
              } catch (error) {
                  toast({ title: 'Import Failed', description: 'Could not save imported items.', variant: 'destructive' });
@@ -202,7 +183,7 @@ export default function BudgetPage() {
          }
 
          toast({ title: 'CSV Import Complete', description: `${importedCount} items imported to ${formatPeriodForDisplay(budgetPeriod)}. ${errorCount} rows skipped.` });
-        e.target.value = ''; // Reset file input
+        e.target.value = ''; 
       },
        error: (error) => {
          toast({ title: 'CSV Parsing Failed', description: `Could not parse the file: ${error.message}`, variant: 'destructive' });
@@ -212,12 +193,11 @@ export default function BudgetPage() {
   };
 
   const handleExport = () => {
-    // Export only items for the current period
     if(budgetItemsForPeriod.length === 0) {
         toast({ title: "No Data", description: `Add budget items for ${formatPeriodForDisplay(budgetPeriod)} before exporting.` });
         return;
     }
-    const dataToExport = budgetItemsForPeriod.map(({ id, period, ...rest }) => rest); // Exclude id and period
+    const dataToExport = budgetItemsForPeriod.map(({ id, period, ...rest }) => rest); 
     const csvData = Papa.unparse(dataToExport, {
       header: true,
        columns: ['category', 'description', 'amount']
@@ -227,7 +207,7 @@ export default function BudgetPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `budget_${budgetPeriod}.csv`; // Include period in filename
+    link.download = `budget_${budgetPeriod}.csv`; 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -246,12 +226,9 @@ export default function BudgetPage() {
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <PieChartIcon className="h-6 w-6 text-primary" /> Budget Management
             </h1>
-            {/* Updated Description */}
-             <p className="text-muted-foreground">Plan your finances for a specific month.</p>
+             <p className="text-sm text-muted-foreground">Plan your finances for a specific month.</p>
         </div>
-         {/* Month Selector and Import/Export */}
          <div className="flex gap-2 items-center flex-wrap">
-             {/* Month Selector */}
              <div className="flex items-center gap-1 border rounded-md px-2 py-1">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeMonth('prev')}><ChevronLeft size={16} /></Button>
                  <Popover>
@@ -266,7 +243,6 @@ export default function BudgetPage() {
                              mode="single"
                              selected={selectedMonthDate}
                              onSelect={handleMonthSelect}
-                              // Customize calendar view for month selection
                              captionLayout="dropdown-buttons"
                              fromYear={2020}
                              toYear={new Date().getFullYear() + 5}
@@ -276,20 +252,18 @@ export default function BudgetPage() {
                  </Popover>
                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeMonth('next')}><ChevronRight size={16} /></Button>
              </div>
-              {/* Import/Export */}
               <Input type="file" id="budget-csv-import" accept=".csv" onChange={handleImport} className="hidden" />
-              <Button onClick={triggerFileInput} variant="outline" size="sm"><FileUp className="mr-2 h-4 w-4" /> Import</Button>
-              <Button onClick={handleExport} variant="secondary" size="sm" disabled={budgetItemsForPeriod.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export</Button>
+              <Button onClick={triggerFileInput} variant="outline" size="sm"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Button>
+              <Button onClick={handleExport} variant="secondary" size="sm" disabled={budgetItemsForPeriod.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
          </div>
       </header>
 
-      {/* Budget Summary Card - Reflects the selected period */}
       <Card className="mb-6 shadow-md">
-        <CardHeader>
+        <CardHeader className="p-6">
             <CardTitle>Budget Summary for {formatPeriodForDisplay(budgetPeriod)}</CardTitle>
             <CardDescription>Overview of your planned budget for the selected month.</CardDescription>
         </CardHeader>
-         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 text-sm">
+         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 text-sm p-6">
              <div className="flex flex-col p-3 rounded-md border bg-accent/10">
                 <span className="text-muted-foreground mb-1">Total Income</span>
                 <span className="font-bold text-lg font-mono text-accent">{formatCurrency(totalIncome)}</span>
@@ -315,7 +289,6 @@ export default function BudgetPage() {
          </CardContent>
       </Card>
 
-      {/* Budget Item Sections */}
       <main className="flex-1 grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
          {budgetCategories.map(({ name, key, icon: Icon }) => (
              <Card key={key} className={cn("flex flex-col shadow-sm", key === 'debt' && 'lg:col-span-1 xl:col-span-1')}>
@@ -372,14 +345,12 @@ export default function BudgetPage() {
          ))}
       </main>
 
-        {/* Budget History Section Placeholder */}
         <Separator className="my-8" />
         <Card className="shadow-sm">
-            <CardHeader><CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Budget History</CardTitle><CardDescription>View snapshots of your saved budgets from previous months. (Feature coming soon)</CardDescription></CardHeader>
-            <CardContent><div className="text-center text-muted-foreground py-10"><p>Budget history snapshots will be listed here once saved.</p></div></CardContent>
+            <CardHeader className="p-6"><CardTitle className="text-lg flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Budget History</CardTitle><CardDescription>View snapshots of your saved budgets from previous months. (Feature coming soon)</CardDescription></CardHeader>
+            <CardContent className="p-6"><div className="text-center text-muted-foreground py-10"><p>Budget history snapshots will be listed here once saved.</p></div></CardContent>
         </Card>
 
-        {/* Add/Edit Sheet */}
         <BudgetItemFormSheet isOpen={isFormSheetOpen} onClose={handleFormSheetClose} item={editingItem} initialCategory={categoryForNewItem} />
     </div>
   );

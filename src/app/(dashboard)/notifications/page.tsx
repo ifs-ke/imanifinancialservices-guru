@@ -29,14 +29,11 @@ export default function NotificationsPage() {
   } = useNotificationStore();
   const { toast } = useToast();
 
-  // Clear selection when notifications change (e.g., after delete all)
   useEffect(() => {
     return () => {
         clearSelection();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  }, [clearSelection]);
 
   const getIconForType = (type: NotificationType) => {
       switch (type) {
@@ -86,17 +83,17 @@ export default function NotificationsPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={notifications.every(n => n.read) || notifications.length === 0}>
-                <Check className="mr-1 h-4 w-4" /> Mark All Read
+                <Check className="mr-2 h-4 w-4" /> Mark All Read
             </Button>
             <Button variant="destructive" size="sm" onClick={clearAllNotifications} disabled={notifications.length === 0}>
-                 <Trash2 className="mr-1 h-4 w-4" /> Clear All
+                 <Trash2 className="mr-2 h-4 w-4" /> Clear All
             </Button>
         </div>
       </header>
 
       <main className="flex-1">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3 border-b">
+          <CardHeader className="flex flex-row items-center justify-between p-4 border-b">
             <div className="flex items-center space-x-3">
               <Checkbox
                 id="select-all-notifications"
@@ -113,7 +110,7 @@ export default function NotificationsPage() {
           </CardHeader>
           <CardContent className="p-0">
             {notifications.length === 0 ? (
-              <div className="text-center text-muted-foreground py-10">
+              <div className="text-center text-muted-foreground py-10 px-6">
                 <Bell className="mx-auto h-12 w-12 text-muted-foreground/50 mb-2" />
                 You have no notifications yet.
               </div>
@@ -123,7 +120,7 @@ export default function NotificationsPage() {
                   <li
                     key={notification.id}
                     className={cn(
-                      "flex items-start gap-3 p-3 transition-colors hover:bg-muted/50",
+                      "flex items-start gap-3 p-4 transition-colors hover:bg-muted/50", // Consistent padding
                       notification.read ? 'bg-card' : 'bg-primary/5 ',
                       selectedNotificationIds.includes(notification.id) && 'bg-accent/20'
                     )}
@@ -182,14 +179,14 @@ export default function NotificationsPage() {
             )}
           </CardContent>
           {notifications.length > 0 && (
-            <CardFooter className="p-3 border-t flex justify-start gap-2">
+            <CardFooter className="p-4 border-t flex justify-start gap-2">
                 <Button 
                     variant="outline" 
                     size="sm" 
                     onClick={handleMarkSelectedRead}
                     disabled={selectedNotificationIds.length === 0}
                 >
-                    <ListChecks className="mr-1 h-4 w-4" /> Mark Selected Read
+                    <ListChecks className="mr-2 h-4 w-4" /> Mark Selected Read
                 </Button>
                 <Button 
                     variant="destructive" 
@@ -197,7 +194,7 @@ export default function NotificationsPage() {
                     onClick={handleDeleteSelected}
                     disabled={selectedNotificationIds.length === 0}
                 >
-                    <Trash className="mr-1 h-4 w-4" /> Delete Selected
+                    <Trash className="mr-2 h-4 w-4" /> Delete Selected
                 </Button>
             </CardFooter>
           )}

@@ -23,34 +23,34 @@ const CardHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    className={cn("flex flex-col space-y-1.5 p-6", className)} // Default p-6
     {...props}
   />
 ))
 CardHeader.displayName = "CardHeader"
 
 const CardTitle = React.forwardRef<
-  HTMLDivElement, // Corrected type to HTMLDivElement
-  React.HTMLAttributes<HTMLHeadingElement> // Corrected attributes type to HTMLHeadingElement
->(({ className, children, ...props }, ref) => ( // Added children prop
-  <h3 // Changed to h3 for semantic correctness
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, children, ...props }, ref) => ( 
+  <h3 
     ref={ref}
     className={cn(
-      "text-lg font-semibold leading-none tracking-tight", // Adjusted text size
+      "text-lg font-semibold leading-none tracking-tight", // Default to text-lg
       className
     )}
     {...props}
   >
-    {children} {/* Render children */}
+    {children} 
     </h3>
 ))
 CardTitle.displayName = "CardTitle"
 
 const CardDescription = React.forwardRef<
-  HTMLParagraphElement, // Corrected type to HTMLParagraphElement
+  HTMLParagraphElement, 
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <p // Changed to p for semantic correctness
+  <p 
     ref={ref}
     className={cn("text-sm text-muted-foreground", className)}
     {...props}
@@ -62,7 +62,7 @@ const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} /> // Default p-6, pt-0
 ))
 CardContent.displayName = "CardContent"
 
@@ -72,7 +72,7 @@ const CardFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center p-6 pt-0", className)}
+    className={cn("flex items-center p-6 pt-0", className)} // Default p-6, pt-0
     {...props}
   />
 ))
