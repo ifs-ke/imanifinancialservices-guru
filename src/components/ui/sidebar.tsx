@@ -25,27 +25,26 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ClipboardList, // Corrected: Was Logger, Lucide has ClipboardList
+  ClipboardList,
   RefreshCw,
   Menu,
   PieChart,
-  Users, // Added for potential future use (e.g. admin/users page)
+  Users, 
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
-import { ThemeToggle } from "./ThemeToggle";
+import { ThemeToggle } from "../ui/ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { UserButton, useUser } from "@clerk/nextjs"; 
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ScrollArea } from "./scroll-area";
-import { logDebug, logInfo, logWarn } from "@/lib/logger";
-
+import { ScrollArea } from "../ui/scroll-area";
+import { logInfo, logWarn, logDebug } from "@/lib/logger";
 
 interface SidebarMenuItem {
   href: string;
   label: string;
-  icon: React.ReactNode; // Changed to React.ReactNode for flexibility
+  icon: React.ReactNode;
 }
 
 const menuItems: SidebarMenuItem[] = [
@@ -57,7 +56,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  { href: "/logger", label: "Logger", icon: <ClipboardList size={18} /> },
+  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
 ];
 
 export type SidebarState = "collapsed" | "expanded";
@@ -88,29 +87,26 @@ export const SidebarProvider: React.FC<SidebarProviderProps> = ({
   children,
 }) => {
   const isMobile = useIsMobile();
-  const [state, setState] = React.useState<SidebarState>("expanded"); // Default to expanded
+  const [state, setState] = React.useState<SidebarState>("expanded"); 
   const [hasMounted, setHasMounted] = React.useState(false);
 
   React.useEffect(() => {
     setHasMounted(true);
   }, []);
 
-  // Effect to adjust sidebar state based on isMobile, once mounted
   React.useEffect(() => {
-    if (hasMounted) { // Only run after client-side mount
+    if (hasMounted) { 
       if (isMobile) {
-        setState("collapsed"); // Collapse on mobile
+        setState("collapsed"); 
       } else {
-        // For desktop, retrieve from localStorage or default to expanded
         const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
         setState(storedState || "expanded");
       }
     }
   }, [isMobile, hasMounted]);
 
-  // Effect to save state to localStorage when it changes on desktop
   React.useEffect(() => {
-    if (hasMounted && !isMobile) { // Only run after mount and on desktop
+    if (hasMounted && !isMobile) { 
       localStorage.setItem("sidebarState", state);
     }
   }, [state, isMobile, hasMounted]);
@@ -148,7 +144,6 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
     const syncManager = useSyncManager();
     const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
-
 
     let PersistenceIcon: React.ElementType = CloudOff;
     let persistenceStatusText = 'Local';
@@ -314,9 +309,14 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                       userButtonPopoverCard: "bg-popover border-border",
                   }
               }}/>
+            ) : isClerkLoaded && !isSignedIn ? (
+                 <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                    <Link href="/sign-in"><Users size={18} className="text-muted-foreground" /></Link>
+                 </Button>
             ) : (
+              // Placeholder while Clerk is loading
               <div className="h-8 w-8 flex items-center justify-center">
-                 <Users size={18} className="text-muted-foreground" />
+                <RefreshCw size={18} className="text-muted-foreground animate-spin" />
               </div>
             )}
             {state === 'expanded' && isClerkLoaded && isSignedIn && user && (
@@ -338,7 +338,7 @@ export const Sidebar = React.forwardRef<
     side?: "left" | "right";
   }
 >(({ className, side = "left", ...props }, ref) => {
-  const { isMobile } = useSidebar();
+  const { isMobile, state } = useSidebar();
 
   if (isMobile) {
     return (
@@ -356,16 +356,17 @@ export const Sidebar = React.forwardRef<
     );
   }
 
-  // Desktop view (Div)
   return (
     <div
       ref={ref}
       className={cn(
-        "group/sidebar peer hidden md:block text-sidebar-foreground", // Base classes
-        "fixed inset-y-0 z-40", // Fixed position
+        "group/sidebar peer hidden md:block text-sidebar-foreground", 
+        "fixed inset-y-0 z-40", 
         side === "left" ? "left-0" : "right-0 border-l",
+        state === "expanded" ? "w-64" : "w-14", // Dynamic width for desktop
         className
       )}
+      data-state={state} // For potential CSS targeting based on state
       {...props}
     >
       <SidebarContent />
@@ -381,14 +382,13 @@ export const SidebarRail = React.forwardRef<
 >(({ className, ...props }, ref) => {
  const { state, isMobile } = useSidebar();
 
- if (isMobile) return null; // No rail on mobile
+ if (isMobile) return null; 
 
  return (
    <div
      ref={ref}
      className={cn(
        "hidden md:block flex-shrink-0 transition-[width] duration-200 ease-linear",
-       // This div takes up space equal to the sidebar's width
        state === "expanded" ? "w-64" : "w-14",
        className
      )}
@@ -402,16 +402,11 @@ export const SidebarInset = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
-  // Removed state and isMobile dependencies as margin is no longer dynamic here.
-  // SidebarRail now handles the layout pushing.
-  // The transition for margin-left is also removed, as SidebarRail's width transition
-  // will cause the content to shift smoothly.
   return (
     <div
       ref={ref}
       className={cn(
-        "flex-1", // Takes up remaining space
-        // No dynamic margin-left needed if SidebarRail is correctly sized
+        "flex-1",
         className
       )}
       {...props}
