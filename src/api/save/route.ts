@@ -34,7 +34,7 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
 
         const itemIdsToKeep = new Set(dataWithUserIdAndProcessed.map(d => d.id));
         const deleteFilter = { userId, id: { $nin: Array.from(itemIdsToKeep) } };
-        logDebug(`Save API: Performing deleteMany for ${collectionName} with filter: ${JSON.stringify(deleteFilter)}`, logContext);
+        logDebug(`Save API: Performing deleteMany for ${collectionName}`, logContext, {filter: deleteFilter});
         await collection.deleteMany(deleteFilter, { session });
 
         if (dataWithUserIdAndProcessed.length > 0) {
@@ -45,14 +45,14 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
                      upsert: true 
                  }
              }));
-             logDebug(`Save API: Performing bulkWrite for ${collectionName} with ${bulkOps.length} operations`, logContext);
+             logDebug(`Save API: Performing bulkWrite for ${collectionName}`, logContext, {opCount: bulkOps.length});
             await collection.bulkWrite(bulkOps, { session });
         } else {
              logDebug(`Save API: No data provided for ${collectionName}, deleted existing data.`, logContext);
         }
         logInfo(`Save API: Successfully processed ${collectionName}`, logContext);
     } catch (error: any) {
-        logError(`Save API: Error replacing ${collectionName}`, error, logContext);
+        logError(`Save API: DB Error replacing ${collectionName}`, error, logContext);
         throw new Error(`Failed to save ${collectionName}: ${error.message}`);
     }
 }
@@ -72,7 +72,7 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
         const bulkOps = reviewKeys.map(weekKey => {
             const reviewData = ownedReviews[weekKey];
              if (!reviewData || reviewData.ownerId !== userId) {
-                 logWarn(`Save API: SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData?.ownerId}). Skipping.`, logContext, userId);
+                 logWarn(`Save API: SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData?.ownerId}). Skipping.`, { ...logContext, expectedOwnerId: userId, actualOwnerId: reviewData?.ownerId });
                  return null;
              }
             const cleanSharedWith = Array.isArray(reviewData.sharedWith) ? reviewData.sharedWith : undefined;
@@ -88,14 +88,14 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
 
 
         if (bulkOps.length > 0) {
-             logDebug(`Save API: Performing bulkWrite for owned weeklyReviews with ${bulkOps.length} operations`, logContext);
+             logDebug(`Save API: Performing bulkWrite for owned weeklyReviews`, logContext, {opCount: bulkOps.length});
              await collection.bulkWrite(bulkOps as any, { session }); 
              logInfo(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews`, logContext);
          } else {
              logDebug(`Save API: No valid owned reviews to save.`, logContext);
          }
     } catch (error: any) {
-        logError(`Save API: Error saving owned weeklyReviews`, error, logContext);
+        logError(`Save API: DB Error saving owned weeklyReviews`, error, logContext);
         throw new Error(`Failed to save owned weekly reviews: ${error.message}`);
     }
 }
@@ -118,7 +118,7 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
                 updateDoc.statementStartDate = startDate ? new Date(startDate) : null; 
             } catch { 
                 updateDoc.statementStartDate = null; 
-                logWarn(`Save API: Invalid start date format received: ${startDate}`, logContext, userId); 
+                logWarn(`Save API: Invalid start date format received.`, { ...logContext, startDateValue: startDate }); 
             }
         }
         if (endDate !== undefined) {
@@ -126,7 +126,7 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
                 updateDoc.statementEndDate = endDate ? new Date(endDate) : null; 
             } catch { 
                 updateDoc.statementEndDate = null; 
-                logWarn(`Save API: Invalid end date format received: ${endDate}`, logContext, userId); 
+                logWarn(`Save API: Invalid end date format received.`, { ...logContext, endDateValue: endDate }); 
             }
         }
         if (gettingStartedDismissed !== undefined) {
@@ -134,7 +134,7 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
         }
 
         if (Object.keys(updateDoc).length > 0) {
-             logDebug(`Save API: Updating user profile with data: ${JSON.stringify(updateDoc)}`, logContext);
+             logDebug(`Save API: Updating user profile`, logContext, {updateData: updateDoc});
              await collection.updateOne(
                  { userId },
                  { $set: updateDoc },
@@ -145,7 +145,7 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
               logDebug(`Save API: No valid user profile fields to update.`, logContext);
          }
     } catch (error: any) {
-        logError(`Save API: Error saving user profile data`, error, logContext);
+        logError(`Save API: DB Error saving user profile data`, error, logContext);
         throw new Error(`Failed to save user profile data: ${error.message}`);
     }
 }
@@ -252,3 +252,4 @@ export async function POST(request: Request) {
      logDebug('Save API: MongoDB session ended.', logContextWithRateLimit);
   }
 }
+

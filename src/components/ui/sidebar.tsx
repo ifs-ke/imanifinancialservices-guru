@@ -162,12 +162,22 @@ SidebarProvider.displayName = "SidebarProvider";
 
 const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
-    const { state, toggleSidebar } = useSidebar(); 
+    const { state, toggleSidebar, isMobile } = useSidebar(); 
     const pathname = usePathname();
     const unreadCount = useNotificationStore(state => state.unreadCount());
+    const [clientUnreadCount, setClientUnreadCount] = React.useState(0);
+    const [hasMounted, setHasMounted] = React.useState(false);
+
     const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
     const syncManager = useSyncManager();
     const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
+
+
+    React.useEffect(() => {
+      setHasMounted(true);
+      setClientUnreadCount(unreadCount); // Sync unread count after mount
+    }, [unreadCount]);
+
 
     let PersistenceIcon: React.ElementType = CloudOff;
     let persistenceStatusText = 'Local';
@@ -210,12 +220,14 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
       if (isClickable) retrySync();
     };
 
+    const sidebarActualState = isMobile ? "collapsed" : state;
+
     return (
       <div
         ref={ref}
         className={cn(
           "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear border-r border-sidebar-border",
-          state === "expanded" ? "w-64" : "w-14",
+          sidebarActualState === "expanded" ? "w-64" : "w-14",
           className
         )}
         {...props}
@@ -223,21 +235,21 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
         <div data-sidebar="header" className="flex-shrink-0 border-b border-sidebar-border p-2.5 h-14 flex items-center">
           <div className={cn(
               "flex items-center gap-2 overflow-hidden w-full",
-              state === 'collapsed' && "justify-center"
+              sidebarActualState === 'collapsed' && "justify-center"
           )}>
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0"
               onClick={toggleSidebar}
-              aria-label={state === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={sidebarActualState === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              {state === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
+              {sidebarActualState === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
             </Button>
             <span
               className={cn(
                 "whitespace-nowrap text-lg font-semibold transition-opacity duration-200",
-                state === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
+                sidebarActualState === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
               )}
             >
               IFC - Guru
@@ -255,7 +267,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                       variant={pathname === item.href ? "primary" : "ghost"}
                       className={cn(
                         "w-full justify-start text-sm h-9",
-                        state === "collapsed" && "justify-center px-0 w-9 h-9",
+                        sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
                         pathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                       asChild
@@ -264,23 +276,23 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                         {React.cloneElement(item.icon as React.ReactElement, { size: 18, className: "flex-shrink-0" })}
                         <span className={cn(
                           "ml-2 truncate",
-                          state === "collapsed" && "hidden"
+                          sidebarActualState === "collapsed" && "hidden"
                         )}>
                           {item.label}
                         </span>
-                        {item.href === "/notifications" && unreadCount > 0 && (
-                          <Badge variant="destructive" className={cn("ml-auto", state === 'collapsed' && 'absolute top-0 right-0 h-4 w-4 p-0 flex items-center justify-center text-[10px]')}>
-                            {state === 'expanded' ? unreadCount : ''}
+                        {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
+                          <Badge variant="destructive" className={cn("ml-auto", sidebarActualState === 'collapsed' && 'absolute top-0 right-0 h-4 w-4 p-0 flex items-center justify-center text-[10px]')}>
+                            {sidebarActualState === 'expanded' ? clientUnreadCount : ''}
                           </Badge>
                         )}
                       </Link>
                     </Button>
                   </TooltipTrigger>
-                  {state === "collapsed" && (
+                  {sidebarActualState === "collapsed" && (
                     <TooltipContent side="right" align="center">
                       {item.label}
-                      {item.href === "/notifications" && unreadCount > 0 && (
-                        <span className="ml-1.5 text-xs">({unreadCount})</span>
+                      {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
+                        <span className="ml-1.5 text-xs">({clientUnreadCount})</span>
                       )}
                     </TooltipContent>
                   )}
@@ -291,7 +303,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
         </ScrollArea>
 
         <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
-          <ThemeToggle sidebarState={state} />
+          <ThemeToggle sidebarState={sidebarActualState} />
 
           <TooltipProvider delayDuration={100}>
             <Tooltip>
@@ -301,7 +313,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                   onClick={handleSyncClick}
                   className={cn(
                     "w-full justify-start text-sm h-9",
-                    state === "collapsed" && "justify-center px-0 w-9 h-9",
+                    sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
                     "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     isMismatchDialogOpen && "animate-pulse border-destructive ring-2 ring-destructive"
                   )}
@@ -309,12 +321,12 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                   disabled={!isClickable}
                 >
                   {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor, isMismatchDialogOpen && "text-destructive") })}
-                  <span className={cn("ml-2 truncate text-xs", state === "collapsed" && "hidden")}>
+                  <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
                     {persistenceStatusText}
                   </span>
                 </Button>
               </TooltipTrigger>
-              {state === "collapsed" && (
+              {sidebarActualState === "collapsed" && (
                 <TooltipContent side="right" align="center">
                   {persistenceTooltipText}
                 </TooltipContent>
@@ -324,14 +336,14 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
 
           <div className={cn(
               "flex items-center w-full",
-              state === 'collapsed' ? "justify-center py-1" : "p-1"
+              sidebarActualState === 'collapsed' ? "justify-center py-1" : "p-1"
           )}>
             {!isClerkLoaded ? (
-              <Skeleton className={cn("rounded-full", state === 'collapsed' ? "w-7 h-7" : "w-8 h-8")} />
+              <Skeleton className={cn("rounded-full", sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8")} />
             ) : isSignedIn && user ? (
               <UserButton afterSignOutUrl="/" appearance={{
                   elements: {
-                      userButtonAvatarBox: state === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
+                      userButtonAvatarBox: sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
                       userButtonPopoverCard: "bg-popover border-border",
                   }
               }}/>
@@ -339,13 +351,13 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                <TooltipProvider delayDuration={100}>
                  <Tooltip>
                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className={cn(state === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} asChild>
+                      <Button variant="ghost" size="icon" className={cn(sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} asChild>
                          <Link href="/sign-in" aria-label="Sign In">
-                            <Users size={state === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
+                            <Users size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
                          </Link>
                       </Button>
                    </TooltipTrigger>
-                   {state === "collapsed" && (
+                   {sidebarActualState === "collapsed" && (
                         <TooltipContent side="right" align="center">
                           Sign In
                         </TooltipContent>
@@ -353,7 +365,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                  </Tooltip>
                </TooltipProvider>
             )}
-            {state === 'expanded' && isClerkLoaded && isSignedIn && user && (
+            {sidebarActualState === 'expanded' && isClerkLoaded && isSignedIn && user && (
               <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
                   {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
               </span>
@@ -372,13 +384,13 @@ export const Sidebar = React.forwardRef<
     side?: "left" | "right";
   }
 >(({ className, side = "left", ...props }, ref) => {
-  const { isMobile } = useSidebar(); 
+  const { isMobile, toggleSidebar, state } = useSidebar(); 
 
   if (isMobile) {
     return (
-      <Sheet>
+      <Sheet open={state === "expanded"} onOpenChange={(open) => { if(!open) toggleSidebar()}}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="fixed top-3 left-3 z-50 md:hidden bg-background/80 backdrop-blur-sm h-10 w-10">
+          <Button variant="ghost" size="icon" className="fixed top-3 left-3 z-50 md:hidden bg-background/80 backdrop-blur-sm h-10 w-10" onClick={toggleSidebar}>
             <Menu size={24} />
             <span className="sr-only">Open sidebar</span>
           </Button>

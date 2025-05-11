@@ -27,7 +27,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
                  if (isNaN(parsedDate.getTime())) throw new Error("Invalid date string from DB");
                  item.date = parsedDate;
             } catch (e) {
-                 logWarn(`Sync API: Invalid date format in ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting date.`,{...logContext, itemDateValue: item.date}, userId);
+                 logWarn(`Sync API: Invalid date format in ${collectionName}, item ID ${item.id || 'N/A'}. Defaulting date.`,{...logContext, itemDateValue: item.date, itemId: item.id});
                  item.date = new Date(0); 
             }
         }
@@ -37,18 +37,18 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
                   if (isNaN(parsedTimestamp.getTime())) throw new Error("Invalid timestamp string from DB");
                   item.timestamp = parsedTimestamp;
              } catch (e) {
-                 logWarn(`Sync API: Invalid timestamp format in ${collectionName}, item ID ${item.id || 'N/A'}, user ${userId}. Defaulting timestamp.`, {...logContext, itemTimestampValue: item.timestamp}, userId);
+                 logWarn(`Sync API: Invalid timestamp format in ${collectionName}, item ID ${item.id || 'N/A'}. Defaulting timestamp.`, {...logContext, itemTimestampValue: item.timestamp, itemId: item.id});
                  item.timestamp = new Date(0); 
              }
         }
          if (collectionName === 'budgetItems' && !item.period) {
-             logWarn(`Sync API: Budget item missing period ID ${item.id || 'N/A'}, user ${userId}. Defaulting period.`, logContext, userId);
+             logWarn(`Sync API: Budget item missing period ID ${item.id || 'N/A'}. Defaulting period.`, {...logContext, itemId: item.id});
              item.period = 'unknown-period'; 
          }
         return item as T;
     });
-  } catch (error) {
-    logError(`Sync API: Error fetching ${collectionName} for user ${userId}:`, error, logContext);
+  } catch (error: any) {
+    logError(`Sync API: DB Error fetching ${collectionName}`, error, logContext);
     return [];
   }
 }
@@ -67,13 +67,13 @@ async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<st
              doc.sharedWith = Array.isArray(doc.sharedWith) ? doc.sharedWith : [];
              reviewsMap[doc.weekKey] = doc as WeeklyReviewData;
           } else {
-              logWarn(`Sync API: Found owned review with invalid/missing weekKey for user ${userId}. Skipping.`, { ...logContext, docId: doc._id }, userId);
+              logWarn(`Sync API: Found owned review with invalid/missing weekKey. Skipping.`, { ...logContext, docId: doc._id });
           }
       }
        logDebug(`Sync API: Fetched ${Object.keys(reviewsMap).length} owned weekly reviews`, logContext);
        return reviewsMap;
-    } catch (error) {
-       logError(`Sync API: Error fetching owned weeklyReviews for user ${userId}:`, error, logContext);
+    } catch (error: any) {
+       logError(`Sync API: DB Error fetching owned weeklyReviews`, error, logContext);
        return {};
     }
 }
@@ -95,13 +95,13 @@ async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<s
                 doc.sharedWith = Array.isArray(doc.sharedWith) ? doc.sharedWith : [];
                reviewsMap[doc.weekKey] = doc as WeeklyReviewData;
            } else {
-              logWarn(`Sync API: Found shared review with invalid/missing weekKey shared with user ${userId}. Skipping.`, { ...logContext, docId: doc._id, ownerId: doc.userId }, userId);
+              logWarn(`Sync API: Found shared review with invalid/missing weekKey. Skipping.`, { ...logContext, docId: doc._id, ownerId: doc.userId });
            }
        }
         logDebug(`Sync API: Fetched ${Object.keys(reviewsMap).length} shared weekly reviews`, logContext);
        return reviewsMap;
-    } catch (error) {
-       logError(`Sync API: Error fetching shared weeklyReviews for user ${userId}:`, error, logContext);
+    } catch (error: any) {
+       logError(`Sync API: DB Error fetching shared weeklyReviews`, error, logContext);
        return {};
     }
 }
@@ -109,7 +109,7 @@ async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<s
 async function getUserProfileData(db: any, userId: string): Promise<{ startDate?: string, endDate?: string, gettingStartedDismissed?: boolean }> {
     const collectionName = 'userProfiles';
     const logContext = { userId, collectionName, operation: 'getUserProfileData', apiRoute: '/api/sync' };
-    logDebug(`Sync API: Fetching user profile data for user ${userId} from collection '${collectionName}'`, logContext);
+    logDebug(`Sync API: Fetching user profile data from collection '${collectionName}'`, logContext);
     try {
         const collection = db.collection(collectionName);
         await collection.createIndex({ userId: 1 });
@@ -119,7 +119,7 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
             { projection: { _id: 0, statementStartDate: 1, statementEndDate: 1, gettingStartedDismissed: 1 } }
         );
 
-        logDebug(`Sync API: Found user profile for user ${userId}:`, { ...logContext, profileFound: !!userProfile });
+        logDebug(`Sync API: Found user profile`, { ...logContext, profileFound: !!userProfile, profileData: userProfile ? {...userProfile, statementStartDate: userProfile.statementStartDate?.toString(), statementEndDate: userProfile.statementEndDate?.toString()} : null });
 
         if (!userProfile) {
             return { gettingStartedDismissed: false }; 
@@ -129,8 +129,8 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
         const gettingStartedDismissed = userProfile?.gettingStartedDismissed ?? false;
 
         return { startDate, endDate, gettingStartedDismissed };
-    } catch (error) {
-        logError(`Sync API: Error fetching user profile data for user ${userId} from collection '${collectionName}':`, error, logContext);
+    } catch (error: any) {
+        logError(`Sync API: DB Error fetching user profile data from collection '${collectionName}'`, error, logContext);
         throw new Error(`Failed to fetch user profile data. DB Error: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
@@ -226,3 +226,4 @@ export async function GET() {
      return addCorsHeaders(response);
   }
 }
+
