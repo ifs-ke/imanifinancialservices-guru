@@ -36,12 +36,13 @@
 
 
    useEffect(() => {
-       // Use hashMismatch from syncManager directly
-       if (hashMismatch) {
-           logDebug("DashboardLayout: Hash mismatch detected, opening dialog.", { userId });
+       // This effect ensures the dialog is opened if a hash mismatch is detected
+       // and the dialog isn't already considered open by the syncManager's state.
+       if (hashMismatch && !isMismatchDialogOpen) {
+           logDebug("DashboardLayout: Hash mismatch detected, ensuring dialog is open.", { userId });
            setIsMismatchDialogOpen(true);
        }
-   }, [hashMismatch, setIsMismatchDialogOpen, userId]); // Depend on hashMismatch from the hook
+   }, [hashMismatch, isMismatchDialogOpen, setIsMismatchDialogOpen, userId]);
 
    // If Clerk is not loaded yet, show a loading state for the entire dashboard area
    if (!isClerkLoaded) {
@@ -55,9 +56,7 @@
    return (
      <div className="flex min-h-screen bg-background">
        <Sidebar />
-       {/* SidebarRail component removed */}
        <SidebarInset>
-         {/* Conditional rendering based on Clerk's loading state */}
          {isClerkLoaded ? children : null} 
        </SidebarInset>
        <FloatingChatButton />
