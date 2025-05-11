@@ -300,9 +300,14 @@ export function useSyncManager() {
       logInfo('Save: Fetching latest data before saving to check for conflicts...', { currentUserId: userId });
       const preSaveFetchSuccess = await fetchData(false, false); 
       if (!preSaveFetchSuccess) {
-        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', undefined, { operationStatus: 'pre-save-fetch-failed', currentUserId: userId });
+        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', undefined, { userId, operationStatus: 'pre-save-fetch-failed' });
         isSavingRef.current = false; 
-        if(!syncState.hashMismatch && syncState.status !== 'error') updateSyncState({ status: 'local' }); 
+         // If fetchData determined it was a hash mismatch, it would have already set isMismatchDialogOpen
+        if (syncState.hashMismatch) {
+            updateSyncState({ status: 'error', isMismatchDialogOpen: true }); // Ensure dialog stays open or opens
+        } else {
+            updateSyncState({ status: 'error' }); // General fetch error, not necessarily a mismatch
+        }
         return false;
       }
       logInfo('Save: Pre-save fetch successful, proceeding with save.', { currentUserId: userId });
@@ -434,7 +439,7 @@ export function useSyncManager() {
     saveTimeoutRef.current = setTimeout(() => { 
       logInfo('Debounced Save: Timeout reached. Initiating save.', { currentUserId: userId }); 
       saveData(); 
-    }, 3000); // 3 second debounce
+    }, 3000); 
   }, [saveData, isSignedIn, userId, syncState.hashMismatch, cleanupAsyncOperations, updateSyncState, syncState.status]); 
 
 
