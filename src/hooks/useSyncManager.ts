@@ -71,7 +71,7 @@ export function useSyncManager() {
   }, []);
 
   const cleanupAsyncOperations = useCallback((reason: string) => {
-    const currentUserIdForLog = internalPreviousUserId.current; 
+    const currentUserIdForLog = internalPreviousUserId.current;
     logDebug(`SyncManager: Cleanup initiated. Reason: ${reason}`, { currentUserId: currentUserIdForLog }, userId);
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -273,7 +273,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status
+    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status 
   ]);
 
   const saveData = useCallback(async (isForceSave = false) => {
@@ -302,7 +302,7 @@ export function useSyncManager() {
       preSaveFetchOk = await fetchData(false, false); 
 
       if (!preSaveFetchOk) {
-        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', { operationStatus: 'pre-save-fetch-failed' }, { currentUserId: userId }, userId);
+        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', { operationStatus: 'pre-save-fetch-failed' }, userId);
         if(syncState.hashMismatch) updateSyncState({ isMismatchDialogOpen: true });
         else updateSyncState({ status: 'error' }); 
         isSavingRef.current = false; 
@@ -444,7 +444,7 @@ export function useSyncManager() {
     saveTimeoutRef.current = setTimeout(() => { 
       logInfo('Debounced Save: Timeout reached. Initiating save.', { currentUserId: userId }, userId); 
       saveData(); 
-    }, 30000);  // Increased to 30 seconds
+    }, 30000);
   }, [saveData, isSignedIn, userId, syncState.hashMismatch, cleanupAsyncOperations, updateSyncState, syncState.status]); 
 
 
@@ -522,11 +522,10 @@ export function useSyncManager() {
       }, currentAuthUserId);
     }
 
-    const shouldCleanUp = isFetchingRef.current || isSavingRef.current;
+    // Ensure cleanup is specific to this effect's context
+    const effectSpecificCleanupReason = `AuthEffectCleanup-${currentAuthUserId || 'noUser'}`;
     return () => {
-        if (shouldCleanUp) { 
-            cleanupAsyncOperations(`AuthEffectCleanup-${currentAuthUserId || 'noUser'}`);
-        }
+        cleanupAsyncOperations(effectSpecificCleanupReason);
     };
   }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState]); 
 
@@ -579,7 +578,15 @@ export function useSyncManager() {
       }
       triggerDebouncedSave();
     } else {
-      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { initialFetchDone: initialFetchDoneRef.current, isFetching: isFetchingRef.current, isSaving: isSavingRef.current, isClearing: isClearingRef.current, hashMismatch: syncState.hashMismatch, currentUserId: userId, currentStatus: syncState.status }, userId);
+      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { 
+        initialFetchDone: initialFetchDoneRef.current, 
+        isFetching: isFetchingRef.current, 
+        isSaving: isSavingRef.current, 
+        isClearing: isClearingRef.current, 
+        hashMismatch: syncState.hashMismatch, 
+        currentUserId: userId, 
+        currentStatus: syncState.status 
+    }, userId);
     }
   }, [syncState.gettingStartedDismissed, isClerkLoaded, isSignedIn, userId, syncState.hashMismatch, triggerDebouncedSave, syncState.status, updateSyncState]);
 
