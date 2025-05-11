@@ -275,7 +275,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status // Added syncState.status
+    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status 
   ]);
 
   const saveData = useCallback(async (isForceSave = false) => {
@@ -434,7 +434,7 @@ export function useSyncManager() {
     saveTimeoutRef.current = setTimeout(() => { 
       logInfo('Debounced Save: Timeout reached. Initiating save.', { currentUserId: userId }); 
       saveData(); 
-    }, 10000);
+    }, 3000); // 3 second debounce
   }, [saveData, isSignedIn, userId, syncState.hashMismatch, cleanupAsyncOperations, updateSyncState, syncState.status]); 
 
 
@@ -501,7 +501,7 @@ export function useSyncManager() {
       }, currentAuthUserId);
       fetchData();
     } else if (!currentAuthUserId && !internalPreviousUserId.current && !initialFetchDoneRef.current) {
-      logInfo('Auth Effect: Initial load, no active user session. Setting status to local.', { currentUserId: userId });
+      logInfo('Auth Effect: Initial load, no active user session. Setting status to local.', { currentUserId: userId }, userId);
       updateSyncState({ status: 'local', lastSyncTime: null, hashMismatch: false, isMismatchDialogOpen: false });
       initialFetchDoneRef.current = true; 
     } else {
@@ -544,8 +544,9 @@ export function useSyncManager() {
     return () => {
       logDebug('Change Subscription: Unsubscribing from store changes.', { currentUserId: userId });
       unsubscribes.forEach(unsub => unsub());
+      cleanupAsyncOperations(`Unsubscribing from store changes for user ${userId || 'unknown'}`);
     };
-  }, [isClerkLoaded, isSignedIn, userId, syncState.status, syncState.hashMismatch, handleStoreChange, updateSyncState]); 
+  }, [isClerkLoaded, isSignedIn, userId, syncState.status, syncState.hashMismatch, handleStoreChange, updateSyncState, cleanupAsyncOperations]); 
 
   useEffect(() => {
     if (!isClerkLoaded || !isSignedIn || !userId || !initialFetchDoneRef.current) return;
