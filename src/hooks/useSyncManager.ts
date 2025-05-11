@@ -54,7 +54,7 @@ export function useSyncManager() {
   const isSavingRef = useRef(false);
   const isClearingRef = useRef(false);
   const initialFetchDoneRef = useRef(false);
-  const internalPreviousUserId = useRef<string | null | undefined>(userId); // Initialize with current userId
+  const internalPreviousUserId = useRef<string | null | undefined>(undefined);
   const hasLocalChangesRef = useRef(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -169,21 +169,16 @@ export function useSyncManager() {
     updateSyncState({ status: 'syncing' });
     if (!skipHashCheck) updateSyncState({ hashMismatch: false, isMismatchDialogOpen: false });
     
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const controllerForThisFetch = new AbortController();
+    abortControllerRef.current = controllerForThisFetch;
+    let responseOk = false;
 
     try {
       const response = await fetch('/api/sync', {
-        signal: controller.signal
+        signal: controllerForThisFetch.signal
       });
+      responseOk = response.ok;
 
-      if (controller.signal.aborted) {
-        logDebug(`Fetch Aborted: Operation was cancelled. Reason: ${controller.signal.reason}`, { currentUserId: userId });
-        if (syncState.status === 'syncing') { 
-            updateSyncState({ status: 'local' });
-        }
-        return false;
-      }
 
       if (!response.ok) {
         let errorPayload: any = { message: `Fetch failed: ${response.statusText} (Status: ${response.status})` };
@@ -209,6 +204,9 @@ export function useSyncManager() {
           updateSyncState({ status: 'error', hashMismatch: true, isMismatchDialogOpen: true });
           toast({ title: 'Data Sync Mismatch', description: "Local and server data don't match. Resolve using the cloud icon.", variant: 'destructive', link: '#' });
           isFetchingRef.current = false; 
+          if (abortControllerRef.current === controllerForThisFetch) {
+            abortControllerRef.current = null;
+          }
           return false;
         }
       }
@@ -228,17 +226,41 @@ export function useSyncManager() {
       hasLocalChangesRef.current = false;
       logInfo('Fetch: Successfully synced with DB.', { currentUserId: userId });
       if (isRetry || skipHashCheck) toast({ title: 'Sync Successful', description: 'Data successfully loaded from the cloud.' });
+      
+      if (abortControllerRef.current === controllerForThisFetch) {
+        abortControllerRef.current = null;
+      }
+      isFetchingRef.current = false;
+      initialFetchDoneRef.current = true; 
+      logDebug('Fetch: Operation complete (successful path).', { currentUserId: userId });
       return true;
 
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        logDebug(`Fetch Aborted by signal: ${error.message}`, { currentUserId: userId });
-        if (syncState.status === 'syncing') { 
-             updateSyncState({ status: 'local' });
-        }
-        return false;
+      isFetchingRef.current = false;
+      initialFetchDoneRef.current = true;
+      if (abortControllerRef.current === controllerForThisFetch) {
+        abortControllerRef.current = null;
       }
-      logError('Fetch Error:', error, { cause: error.cause, currentUserId: userId });
+
+      if (error.name === 'AbortError') {
+        const abortReason = controllerForThisFetch.signal.reason || 'Fetch operation was cancelled.';
+        logDebug(`Fetch Aborted by signal: ${abortReason}`, { currentUserId: userId });
+
+        if (abortReason.includes('Auth effect cleanup')) {
+          logWarn(`Fetch was aborted due to auth effect cleanup. Current status: ${syncState.status}`, { currentUserId: userId, reason: abortReason });
+          if (syncState.status === 'syncing') {
+            updateSyncState({ status: 'local' });
+          }
+        } else {
+          logInfo(`Fetch aborted for reason: ${abortReason}. Current status: ${syncState.status}`, { currentUserId: userId });
+           if (syncState.status === 'syncing') {
+            updateSyncState({ status: 'local' });
+          }
+        }
+        return false; 
+      }
+
+      logError('Fetch Error (Non-Abort):', error, { cause: error.cause, currentUserId: userId });
       updateSyncState({ status: 'error' });
       let friendlyErrorMessage = 'Could not load data.';
       if (error.message?.includes('Internal Server Error')) friendlyErrorMessage += ` Server error encountered.`;
@@ -247,19 +269,13 @@ export function useSyncManager() {
       else friendlyErrorMessage += ` An unknown error occurred (${error.message || String(error)}).`;
       friendlyErrorMessage += ' Your local data (if any) is preserved. Click cloud icon to retry.';
       toast({ title: 'Sync Load Failed', description: friendlyErrorMessage, variant: 'destructive' });
+      
       return false;
-    } finally {
-      if (abortControllerRef.current === controller) { 
-        abortControllerRef.current = null;
-      }
-      isFetchingRef.current = false;
-      initialFetchDoneRef.current = true; 
-      logDebug('Fetch: Operation complete.', { currentUserId: userId });
     }
   }, [
     isSignedIn, userId, isClerkLoaded, toast,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status 
+    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status // Added syncState.status
   ]);
 
   const saveData = useCallback(async (isForceSave = false) => {
@@ -295,8 +311,9 @@ export function useSyncManager() {
       logInfo('Save: Force save initiated, skipping pre-fetch check, proceeding with save.', { currentUserId: userId });
     }
     
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const controllerForThisSave = new AbortController();
+    abortControllerRef.current = controllerForThisSave;
+    let responseOk = false;
 
     try {
       const currentState = {
@@ -321,16 +338,10 @@ export function useSyncManager() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...preparedData, dataHash }),
-        signal: controller.signal
+        signal: controllerForThisSave.signal
       });
+      responseOk = response.ok;
 
-      if (controller.signal.aborted) {
-        logDebug(`Save Aborted: Operation was cancelled. Reason: ${controller.signal.reason}`, { currentUserId: userId });
-         if (syncState.status === 'syncing') { 
-            updateSyncState({ status: 'local' });
-        }
-        return false;
-      }
 
       if (!response.ok) {
         let errorPayload: any = { message: `Save failed: ${response.statusText} (Status: ${response.status})` };
@@ -359,6 +370,10 @@ export function useSyncManager() {
           updateSyncState({ status: 'error' });
           throw new Error(errorPayload.message, { cause: errorPayload });
         }
+        isSavingRef.current = false;
+        if (abortControllerRef.current === controllerForThisSave) {
+          abortControllerRef.current = null;
+        }
         return false;
       }
       const result = await response.json();
@@ -366,10 +381,22 @@ export function useSyncManager() {
       hasLocalChangesRef.current = false;
       logInfo(`Save Successful. Server: ${result.message}`, { currentUserId: userId });
       toast({ title: 'Data Saved', description: 'Changes saved to cloud.' });
+      
+      isSavingRef.current = false;
+      if (abortControllerRef.current === controllerForThisSave) {
+        abortControllerRef.current = null;
+      }
+      logDebug('Save: Operation complete (successful path).', { currentUserId: userId });
       return true;
     } catch (error: any) {
+      isSavingRef.current = false;
+      if (abortControllerRef.current === controllerForThisSave) {
+        abortControllerRef.current = null;
+      }
+
       if (error.name === 'AbortError') {
-        logDebug(`Save Aborted by signal: ${error.message}`, { currentUserId: userId });
+        const abortReason = controllerForThisSave.signal.reason || 'Save operation was cancelled.';
+        logDebug(`Save Aborted by signal: ${abortReason}`, { currentUserId: userId });
         if (syncState.status === 'syncing') {
             updateSyncState({ status: 'local' });
         }
@@ -386,12 +413,6 @@ export function useSyncManager() {
       friendlyErrorMessage += ' Your local data is preserved. Click cloud icon to retry.';
       toast({ title: 'Sync Save Failed', description: friendlyErrorMessage, variant: 'destructive' });
       return false;
-    } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
-      isSavingRef.current = false;
-      logDebug('Save: Operation complete.', { currentUserId: userId });
     }
   }, [
     isSignedIn, userId, isClerkLoaded, toast, 
@@ -413,8 +434,8 @@ export function useSyncManager() {
     saveTimeoutRef.current = setTimeout(() => { 
       logInfo('Debounced Save: Timeout reached. Initiating save.', { currentUserId: userId }); 
       saveData(); 
-    }, 10000); // Increased debounce delay to 10 seconds
-  }, [saveData, isSignedIn, userId, syncState.hashMismatch, cleanupAsyncOperations, updateSyncState, syncState.status]);
+    }, 10000);
+  }, [saveData, isSignedIn, userId, syncState.hashMismatch, cleanupAsyncOperations, updateSyncState, syncState.status]); 
 
 
   const handleStoreChange = useCallback(() => {
@@ -443,7 +464,7 @@ export function useSyncManager() {
 
   useEffect(() => {
     if (!isClerkLoaded) {
-      logDebug('Auth Effect: Auth state not ready. Waiting for load.', undefined, userId);
+      logDebug('Auth Effect: Auth state not ready. Waiting for load.', { currentUserId: userId });
       updateSyncState({ status: 'idle' });
       return () => cleanupAsyncOperations('Auth effect unmount while not loaded');
     }
@@ -480,7 +501,7 @@ export function useSyncManager() {
       }, currentAuthUserId);
       fetchData();
     } else if (!currentAuthUserId && !internalPreviousUserId.current && !initialFetchDoneRef.current) {
-      logInfo('Auth Effect: Initial load, no active user session. Setting status to local.', { currentUserId: userId }, userId);
+      logInfo('Auth Effect: Initial load, no active user session. Setting status to local.', { currentUserId: userId });
       updateSyncState({ status: 'local', lastSyncTime: null, hashMismatch: false, isMismatchDialogOpen: false });
       initialFetchDoneRef.current = true; 
     } else {
