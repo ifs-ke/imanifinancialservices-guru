@@ -17,7 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose
+  DialogClose,
+  DialogFooter // Added DialogFooter import
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -371,3 +372,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
