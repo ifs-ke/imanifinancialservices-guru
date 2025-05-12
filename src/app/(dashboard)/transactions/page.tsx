@@ -29,6 +29,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added missing import
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactionsStore } from '@/store/transactionsStore'; 
@@ -39,7 +40,7 @@ import Link from 'next/link';
 import { format, parse, isValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
-import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog'; // New import
+import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog'; 
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -80,7 +81,7 @@ export default function TransactionsPage() {
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); 
-  const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false); // New state
+  const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false); 
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
   const [formData, setFormData] = useState(initialFormData);
@@ -139,8 +140,8 @@ export default function TransactionsPage() {
       description: description,
       amount: parsedAmount,
       modeOfPayment: modeOfPayment as ModeOfPayment,
-      frequency: frequency || undefined,
-      variability: variability || undefined,
+      frequency: frequency as TransactionFrequency || undefined,
+      variability: variability as TransactionVariability || undefined,
       categoryName: processedCategoryName, 
     });
 
@@ -519,3 +520,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
