@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, FileUp, FileDown, PackageSearch } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, FileUp, FileDown, PackageSearch, CheckSquare, Square, ListX, XSquare } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -29,20 +29,22 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTransactionsStore } from '@/store/transactionsStore';
+import { useTransactionsStore } from '@/store/transactionsStore'; 
 import { useBudgetStore } from '@/store/budgetStore'; 
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem } from '@/lib/types';
+import type { TransactionFormData } from '@/lib/schemas';
 import Link from 'next/link';
 import { format, parse, isValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
+import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog'; // New import
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 
-const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; // Unique value for "None" option
-const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; // Unique value for disabled placeholder
+const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; 
+const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; 
 
 const formatDateForInput = (date: Date | string): string => {
     const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
@@ -64,11 +66,21 @@ const initialFormData = {
 };
 
 export default function TransactionsPage() {
-  const { transactions, addTransaction, deleteTransaction } = useTransactionsStore(); 
+  const { 
+    transactions, 
+    addTransaction, 
+    deleteTransaction,
+    selectedTransactionIds,
+    toggleSelectTransaction,
+    toggleSelectAllTransactions,
+    clearSelection,
+    deleteSelectedTransactions
+  } = useTransactionsStore(); 
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); 
+  const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false); // New state
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
   const [formData, setFormData] = useState(initialFormData);
@@ -85,6 +97,13 @@ export default function TransactionsPage() {
         return [];
     }
   }, [formData.date, allBudgetItems]);
+
+  // Clear selection when component unmounts or transactions list changes significantly
+  useEffect(() => {
+    return () => {
+        clearSelection();
+    }
+  }, [clearSelection, transactions.length]);
 
 
   useEffect(() => {
@@ -155,9 +174,8 @@ export default function TransactionsPage() {
   };
 
   const formatDateDisplay = (date: Date | string | null | undefined) => {
-    if (!date) return 'Date N/A'; // Handle null or undefined upfront
+    if (!date) return 'Date N/A'; 
     const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
-    // Check if it's a valid Date instance and if date-fns considers it valid
     if (!(dateObj instanceof Date) || !isValid(dateObj)) {
       return 'Invalid Date';
     }
@@ -187,7 +205,7 @@ export default function TransactionsPage() {
     csvRows.push(headers.join(','));
 
     for (const tx of transactions) {
-      const sanitizedDescription = tx.description.replace(/"/g, "''"); // Basic sanitization for CSV
+      const sanitizedDescription = tx.description.replace(/"/g, "''"); 
       const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date);
       const values = [
         !isValid(dateObj) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'),
@@ -214,6 +232,33 @@ export default function TransactionsPage() {
 
     toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
   }, [transactions, toast]);
+
+  const allVisibleTransactionIds = useMemo(() => transactions.map(tx => tx.id), [transactions]);
+  const isAllSelected = useMemo(() => 
+    allVisibleTransactionIds.length > 0 && allVisibleTransactionIds.every(id => selectedTransactionIds.includes(id)),
+    [allVisibleTransactionIds, selectedTransactionIds]
+  );
+
+  const handleToggleSelectAll = () => {
+    toggleSelectAllTransactions(allVisibleTransactionIds, selectedTransactionIds);
+  };
+
+  const handleDeleteSelectedClick = () => {
+    if (selectedTransactionIds.length === 0) {
+        toast({ title: "No Selection", description: "Please select transactions to delete.", variant: "default" });
+        return;
+    }
+    deleteSelectedTransactions();
+    toast({ title: "Transactions Deleted", description: `${selectedTransactionIds.length} transaction(s) deleted successfully.` });
+  };
+
+  const handleBatchUpdateClick = () => {
+    if (selectedTransactionIds.length === 0) {
+      toast({ title: "No Selection", description: "Please select transactions to update.", variant: "default" });
+      return;
+    }
+    setIsBatchUpdateDialogOpen(true);
+  };
 
   return (
     <div className="flex flex-col min-h-screen min-w-100 p-4 md:p-6 lg:p-8">
@@ -328,6 +373,38 @@ export default function TransactionsPage() {
             </Button>
          </div>
       </header>
+       {selectedTransactionIds.length > 0 && (
+        <div className="mb-4 p-3 border rounded-md bg-accent/10 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">{selectedTransactionIds.length} transaction(s) selected.</p>
+            <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={handleBatchUpdateClick}>
+                    <Edit className="mr-1 h-3 w-3" /> Batch Update
+                </Button>
+                 <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="destructive">
+                            <Trash2 className="mr-1 h-3 w-3" /> Delete Selected
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Selected Transactions?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Are you sure you want to delete {selectedTransactionIds.length} selected transaction(s)? This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteSelectedClick}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                 </AlertDialog>
+                <Button size="sm" variant="ghost" onClick={clearSelection} className="text-muted-foreground">
+                    <XSquare className="mr-1 h-3 w-3"/> Clear Selection
+                </Button>
+            </div>
+        </div>
+       )}
 
       <main className="flex-1">
         <Card>
@@ -336,11 +413,20 @@ export default function TransactionsPage() {
             <CardDescription>Your recent financial activities.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="h-[500px] w-full">
+            <ScrollArea className="h-[calc(100vh-16rem-4rem)] w-full"> {/* Adjusted height */}
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[100px] pl-6 pr-3">Date</TableHead>
+                    <TableHead className="w-[60px] pl-4">
+                       <Checkbox
+                        id="select-all-transactions"
+                        checked={isAllSelected}
+                        onCheckedChange={handleToggleSelectAll}
+                        aria-label="Select all transactions"
+                        disabled={transactions.length === 0}
+                       />
+                    </TableHead>
+                    <TableHead className="w-[100px] pr-3">Date</TableHead>
                     <TableHead className="px-3">Description</TableHead>
                     <TableHead className="w-[90px] px-3">Mode</TableHead>
                     <TableHead className="w-[150px] px-3">Recurrence</TableHead>
@@ -352,8 +438,16 @@ export default function TransactionsPage() {
                 <TableBody>
                   {transactions.length > 0 ? (
                     transactions.map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell className="font-medium pl-6 pr-3">{formatDateDisplay(tx.date)}</TableCell>
+                      <TableRow key={tx.id} data-state={selectedTransactionIds.includes(tx.id) ? "selected" : undefined}>
+                        <TableCell className="pl-4">
+                           <Checkbox
+                            id={`select-tx-${tx.id}`}
+                            checked={selectedTransactionIds.includes(tx.id)}
+                            onCheckedChange={() => toggleSelectTransaction(tx.id)}
+                            aria-label={`Select transaction ${tx.description}`}
+                           />
+                        </TableCell>
+                        <TableCell className="font-medium pr-3">{formatDateDisplay(tx.date)}</TableCell>
                         <TableCell className="max-w-[200px] sm:max-w-[250px] truncate px-3" title={tx.description}>{tx.description}</TableCell>
                         <TableCell className="px-3">{tx.modeOfPayment}</TableCell>
                         <TableCell className="px-3">{formatCategoryDisplay(tx.frequency, tx.variability)}</TableCell>
@@ -394,7 +488,7 @@ export default function TransactionsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground"> {/* Adjusted colSpan */}
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
                     </TableRow>
@@ -414,7 +508,14 @@ export default function TransactionsPage() {
               allBudgetItems={allBudgetItems}
           />
       )}
-
+       {isBatchUpdateDialogOpen && (
+         <BatchUpdateTransactionDialog
+            isOpen={isBatchUpdateDialogOpen}
+            onClose={() => setIsBatchUpdateDialogOpen(false)}
+            transactionIds={selectedTransactionIds}
+            allBudgetItems={allBudgetItems}
+         />
+       )}
     </div>
   );
 }

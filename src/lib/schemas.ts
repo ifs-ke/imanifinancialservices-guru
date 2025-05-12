@@ -26,6 +26,15 @@ export const TransactionFormDataSchema = z.object({
 });
 export type TransactionFormData = z.infer<typeof TransactionFormDataSchema>;
 
+// New Schema for Batch Update (all fields optional)
+export const BatchUpdateTransactionFormDataSchema = z.object({
+  modeOfPayment: ModeOfPaymentSchema.optional().or(z.literal("")), // Allow empty string to signify "leave unchanged"
+  frequency: TransactionFrequencySchema.optional().or(z.literal("")),
+  variability: TransactionVariabilitySchema.optional().or(z.literal("")),
+  categoryName: z.string().optional().nullable().or(z.literal("")), // Allow empty string, and null for clearing
+});
+export type BatchUpdateTransactionFormData = z.infer<typeof BatchUpdateTransactionFormDataSchema>;
+
 
 // --- Budget Schemas ---
 export const BudgetItemCategorySchema = z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt', 'unplanned-expense']);
