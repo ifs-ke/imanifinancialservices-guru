@@ -3,9 +3,9 @@
 
 import React, { useState, type ChangeEvent, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardHeader, CardTitle, CardContent } from '@/components/ui/card'; // Added CardContent
+import { Card, CardDescription, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // Label is still used in Add Transaction Dialog
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, FileUp, FileDown, PackageSearch, Edit, Trash2, XSquare } from 'lucide-react';
@@ -33,16 +33,27 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactionsStore } from '@/store/transactionsStore'; 
 import { useBudgetStore } from '@/store/budgetStore'; 
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem } from '@/lib/types';
-import type { TransactionFormData as AddTransactionFormData } from '@/lib/schemas'; // Renamed for clarity
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem, TransactionFormData as SharedTransactionFormData } from '@/lib/types';
 import Link from 'next/link';
 import { format, parse, isValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
 import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog'; 
-import { DataTable } from '@/components/ui/data-table'; // Import DataTable
-import { getColumns } from './columns'; // Import columns definition
-import { useReactTable, getCoreRowModel, Row } from '@tanstack/react-table';
+import { DataTable } from '@/components/ui/data-table'; 
+import { getColumns } from './columns'; 
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
+  type ColumnFiltersState,
+  type SortingState,
+  type VisibilityState,
+  type RowSelectionState, 
+} from '@tanstack/react-table';
 
 const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; 
 const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; 
@@ -56,14 +67,14 @@ const formatDateForInput = (date: Date | string): string => {
     return format(dateObj, 'yyyy-MM-dd');
 };
 
-const initialFormData: AddTransactionFormData = { // Use renamed type
+const initialFormData: SharedTransactionFormData = { 
     date: formatDateForInput(new Date()),
     description: '',
-    amount: 0, // Changed from '' to 0 to match schema
-    modeOfPayment: 'Bank', // Default to 'Bank' as it's a valid enum
-    frequency: undefined, // Keep as undefined
-    variability: undefined, // Keep as undefined
-    categoryName: null, // Changed from '' to null to match schema
+    amount: 0,
+    modeOfPayment: 'Bank', 
+    frequency: undefined, 
+    variability: undefined, 
+    categoryName: null, 
 };
 
 export default function TransactionsPage() {
@@ -71,11 +82,8 @@ export default function TransactionsPage() {
     transactions, 
     addTransaction, 
     deleteTransaction,
-    // selectedTransactionIds, // Managed by TanStack Table now
-    // toggleSelectTransaction,
-    // toggleSelectAllTransactions,
-    // clearSelection,
-    // deleteSelectedTransactions // Keep store action
+    batchUpdateTransactions, // Keep this store action
+    deleteSelectedTransactions, // Keep this store action
   } = useTransactionsStore(); 
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
 
@@ -84,16 +92,45 @@ export default function TransactionsPage() {
   const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false); 
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
-  const [addFormData, setAddFormData] = useState<AddTransactionFormData>(initialFormData); // Renamed state
+  const [addFormData, setAddFormData] = useState<SharedTransactionFormData>(initialFormData); 
   const { toast } = useToast();
 
-  // State for TanStack Table
-  const [rowSelection, setRowSelection] = React.useState({});
+  // TanStack Table state
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
 
-  const selectedTransactionIds = useMemo(() => {
-    return Object.keys(rowSelection).filter(key => rowSelection[key as keyof typeof rowSelection]);
-  }, [rowSelection]);
+  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), []);
+
+  const table = useReactTable({
+    data: transactions,
+    columns,
+    state: {
+      sorting,
+      columnVisibility,
+      rowSelection,
+      globalFilter,
+      columnFilters,
+    },
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
+  });
+
+  const getSelectedTransactionIdsFromTable = (): string[] => {
+    return table.getSelectedRowModel().rows.map(row => row.original.id);
+  };
 
   const handleEditClick = (transaction: TransactionWithId) => {
     setEditingTransaction(transaction);
@@ -103,25 +140,6 @@ export default function TransactionsPage() {
   const handleDeleteClick = (transaction: TransactionWithId) => {
     setTransactionToDelete(transaction);
   };
-  
-  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), []);
-
-  const table = useReactTable({
-    data: transactions,
-    columns,
-    state: {
-      rowSelection,
-      globalFilter,
-    },
-    enableRowSelection: true,
-    onRowSelectionChange: setRowSelection,
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getCoreRowModel(), // Adjust as needed, might need getFilteredRowModel()
-    getPaginationRowModel: getCoreRowModel(), // Adjust for pagination
-    getSortedRowModel: getCoreRowModel(), // Adjust for sorting
-  });
-
 
   const budgetItemsForSelectedMonth = useMemo(() => {
     if (!addFormData.date) return [];
@@ -155,7 +173,7 @@ export default function TransactionsPage() {
     event.preventDefault();
     const { date, description, amount, modeOfPayment, frequency, variability, categoryName } = addFormData;
 
-    if (!date || !description || amount === undefined || amount === null || !modeOfPayment) { // Check amount explicitly
+    if (!date || !description || amount === undefined || amount === null || !modeOfPayment) { 
       toast({ title: 'Missing Information', description: 'Please fill out required fields (Date, Desc, Amount, Mode).', variant: 'destructive' });
       return;
     }
@@ -165,7 +183,7 @@ export default function TransactionsPage() {
     addTransaction({
       date: parse(date, 'yyyy-MM-dd', new Date()), 
       description: description,
-      amount: amount, // Amount is already a number due to schema
+      amount: amount,
       modeOfPayment: modeOfPayment as ModeOfPayment,
       frequency: frequency || undefined,
       variability: variability || undefined,
@@ -183,7 +201,7 @@ export default function TransactionsPage() {
     toast({ title: 'Transaction Deleted', description: 'Successfully removed.' });
   };
 
-  const handleAddInputChange = (event: ChangeEvent<HTMLInputElement>) => { // Renamed
+  const handleAddInputChange = (event: ChangeEvent<HTMLInputElement>) => { 
     const { name, value, type } = event.target;
     setAddFormData(prev => ({ 
         ...prev, 
@@ -191,7 +209,7 @@ export default function TransactionsPage() {
     }));
   };
 
-  const handleAddSelectChange = (name: string, value: string) => { // Renamed
+  const handleAddSelectChange = (name: string, value: string) => { 
      setAddFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -234,18 +252,14 @@ export default function TransactionsPage() {
     toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
   }, [transactions, toast]);
   
-  const getSelectedTransactionIdsFromTable = (): string[] => {
-    return table.getSelectedRowModel().rows.map(row => row.original.id);
-  };
-
   const handleDeleteSelectedClick = () => {
     const idsToDelete = getSelectedTransactionIdsFromTable();
     if (idsToDelete.length === 0) {
         toast({ title: "No Selection", description: "Please select transactions to delete.", variant: "default" });
         return;
     }
-    idsToDelete.forEach(id => deleteTransaction(id)); // Call store action
-    table.resetRowSelection(); // Clear selection in table
+    deleteSelectedTransactions(idsToDelete); // Call store action
+    table.resetRowSelection(); 
     toast({ title: "Transactions Deleted", description: `${idsToDelete.length} transaction(s) deleted successfully.` });
   };
 
@@ -255,7 +269,7 @@ export default function TransactionsPage() {
       toast({ title: "No Selection", description: "Please select transactions to update.", variant: "default" });
       return;
     }
-    setIsBatchUpdateDialogOpen(true);
+    setIsBatchUpdateDialogOpen(true); 
   };
   
   const clearTableSelection = () => {
@@ -417,11 +431,12 @@ export default function TransactionsPage() {
                 <CardDescription>Your recent financial activities.</CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6">
-                <DataTable
+                 <DataTable
                     columns={columns}
                     data={transactions}
                     searchColumn="description"
                     searchPlaceholder="Search descriptions..."
+                    table={table} // Pass the table instance
                 />
             </CardContent>
         </Card>
@@ -441,10 +456,10 @@ export default function TransactionsPage() {
             onClose={() => setIsBatchUpdateDialogOpen(false)}
             transactionIds={getSelectedTransactionIdsFromTable()}
             allBudgetItems={allBudgetItems}
+            onComplete={() => table.resetRowSelection()}
          />
        )}
 
-      {/* Delete confirmation dialog (managed by AlertDialog inside DataTable actions) */}
       <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
         {transactionToDelete && (
           <AlertDialogContent>

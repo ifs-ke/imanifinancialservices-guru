@@ -18,7 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 import { useTransactionsStore } from '@/store/transactionsStore';
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem } from '@/lib/types';
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem, TransactionFormData as SharedTransactionFormData } from '@/lib/types';
 import { BatchUpdateTransactionFormDataSchema, type BatchUpdateTransactionFormData } from '@/lib/schemas';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { format, parse, isValid } from 'date-fns';
@@ -32,6 +32,7 @@ interface BatchUpdateTransactionDialogProps {
   onClose: () => void;
   transactionIds: string[];
   allBudgetItems: BudgetItem[]; 
+  onComplete?: () => void; // Callback for when update is complete
 }
 
 const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> = ({
@@ -39,6 +40,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
   onClose,
   transactionIds,
   allBudgetItems,
+  onComplete,
 }) => {
   const { batchUpdateTransactions } = useTransactionsStore();
   const { toast } = useToast();
@@ -96,7 +98,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
 
   const onSubmit = (data: BatchUpdateTransactionFormData) => {
     try {
-      const updatesToApply: Partial<TransactionFormData> = {};
+      const updatesToApply: Partial<SharedTransactionFormData> = {};
       
       if (data.modeOfPayment !== LEAVE_UNCHANGED_VALUE) updatesToApply.modeOfPayment = data.modeOfPayment;
       if (data.frequency !== LEAVE_UNCHANGED_VALUE) updatesToApply.frequency = data.frequency;
@@ -115,6 +117,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
       batchUpdateTransactions(batchUpdates);
 
       toast({ title: 'Batch Update Successful', description: `${transactionIds.length} transaction(s) updated.` });
+      if(onComplete) onComplete(); // Call onComplete callback
       onClose();
     } catch (error) {
       toast({ title: 'Error Updating', description: 'Could not update transactions.', variant: 'destructive' });

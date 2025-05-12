@@ -4,17 +4,9 @@
 import * as React from 'react';
 import {
   ColumnDef,
-  ColumnFiltersState,
-  SortingState,
-  VisibilityState,
   flexRender,
-  getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useReactTable, // Removed as table instance is passed in
+  type Table as TanStackTableInstance, // Added to type the table prop
 } from '@tanstack/react-table';
 
 import {
@@ -35,47 +27,44 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, ListFilter } from 'lucide-react';
+import { ListFilter } from 'lucide-react'; // Changed from ChevronDown for view button
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  searchColumn?: string; // ID of the column to use for global search
+  searchColumn?: string; 
   searchPlaceholder?: string;
+  table: TanStackTableInstance<TData>; // Add table instance as a prop
 }
 
 export function DataTable<TData, TValue>({
-  columns,
-  data,
+  columns, // columns is still needed by table.getHeaderGroups() and table.getRowModel()
+  // data, // data is now part of the table instance
   searchColumn,
   searchPlaceholder = 'Search...',
+  table, // Destructure the table instance
 }: DataTableProps<TData, TValue>) {
-  const [rowSelection, setRowSelection] = React.useState({});
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-
-  const table = useReactTable({
-    data,
-    columns,
-    state: {
-      sorting,
-      columnVisibility,
-      rowSelection,
-      columnFilters,
-    },
-    enableRowSelection: true,
-    onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
-  });
+  // const table = useReactTable({ // Table instance is now passed as a prop
+  //   data,
+  //   columns,
+  //   state: {
+  //     sorting,
+  //     columnVisibility,
+  //     rowSelection,
+  //     columnFilters,
+  //   },
+  //   enableRowSelection: true,
+  //   onRowSelectionChange: setRowSelection,
+  //   onSortingChange: setSorting,
+  //   onColumnFiltersChange: setColumnFilters,
+  //   onColumnVisibilityChange: setColumnVisibility,
+  //   getCoreRowModel: getCoreRowModel(),
+  //   getFilteredRowModel: getFilteredRowModel(),
+  //   getPaginationRowModel: getPaginationRowModel(),
+  //   getSortedRowModel: getSortedRowModel(),
+  //   getFacetedRowModel: getFacetedRowModel(),
+  //   getFacetedUniqueValues: getFacetedUniqueValues(),
+  // });
 
   return (
     <div className="space-y-4">
@@ -125,7 +114,7 @@ export function DataTable<TData, TValue>({
       </div>
       <div className="rounded-md border">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 bg-background z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
