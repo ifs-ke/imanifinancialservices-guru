@@ -82,7 +82,7 @@ export default function TransactionsPage() {
     addTransaction, 
     deleteTransaction,
     deleteSelectedTransactions,
-    batchUpdateTransactions,
+    // batchUpdateTransactions is not used directly here, but in BatchUpdateTransactionDialog
   } = useTransactionsStore(); 
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
 
@@ -146,15 +146,16 @@ export default function TransactionsPage() {
         const transactionDate = parse(addFormData.date, 'yyyy-MM-dd', new Date());
         if (!isValid(transactionDate)) return [];
         const periodKey = format(transactionDate, 'yyyy-MM');
+        const isIncome = addFormData.amount >= 0;
         return allBudgetItems.filter(item => 
             item.period === periodKey && 
-            item.category !== 'income' &&
+            (isIncome ? item.category === 'income' : item.category !== 'income') &&
             item.description && item.description.trim() !== '' 
         ); 
     } catch(e) {
         return [];
     }
-  }, [addFormData.date, allBudgetItems]);
+  }, [addFormData.date, addFormData.amount, allBudgetItems]);
 
   useEffect(() => {
     if (!isAddDialogOpen) {
@@ -334,9 +335,9 @@ export default function TransactionsPage() {
                       <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                       {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          item.description && item.description.trim() !== '' && (
+                          item.description && item.description.trim() !== '' && ( // Ensure description is not empty
                             <SelectItem key={item.id} value={item.description}>
-                              {item.description} ({item.category})
+                              {item.description} ({item.category === 'income' ? 'Income' : 'Expense/Goal/Debt'})
                             </SelectItem>
                           )
                         ))
@@ -479,3 +480,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+

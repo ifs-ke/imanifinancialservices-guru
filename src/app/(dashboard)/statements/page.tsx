@@ -173,26 +173,19 @@ export default function StatementsPage() {
             const isIncomeTx = tx.amount > 0;
             let matchedBudgetItem: BudgetItem | undefined = undefined;
 
-            // Try to match using categoryName (linked budget item's description)
             if (tx.categoryName) {
                 matchedBudgetItem = budgetItemsForSelectedPeriod.find(
-                    bi => bi.description === tx.categoryName && (isIncomeTx ? bi.category === 'income' : bi.category !== 'income')
+                    bi => bi.description === tx.categoryName && 
+                          (isIncomeTx ? bi.category === 'income' : bi.category !== 'income')
                 );
             }
-
-            // Fallback to description matching if not matched by categoryName
-            if (!matchedBudgetItem) {
-                matchedBudgetItem = budgetItemsForSelectedPeriod.find(
-                    bi => bi.description.toLowerCase() === tx.description.toLowerCase() && (isIncomeTx ? bi.category === 'income' : bi.category !== 'income')
-                );
-            }
-
+            
             let category: ExtendedBudgetItemCategory;
             let keyDescription: string;
 
             if (isIncomeTx) {
-                if (matchedBudgetItem) {
-                    category = matchedBudgetItem.category as 'income'; // Should be 'income'
+                if (matchedBudgetItem && matchedBudgetItem.category === 'income') {
+                    category = 'income';
                     keyDescription = matchedBudgetItem.description;
                 } else {
                     category = 'unbudgeted-income';
@@ -237,13 +230,16 @@ export default function StatementsPage() {
         const stmtStart = startDate && isDateValid(startDate) ? startDate : dfnsStartOfMonth(new Date());
         const stmtEnd = endDate && isDateValid(endDate) ? endDate : dfnsEndOfMonth(new Date());
         const budgetMonthDate = parse(budgetPeriod, 'yyyy-MM', new Date());
+        
+        if (!isDateValid(budgetMonthDate)) return initialVarianceByCategory; // Guard against invalid budgetPeriod
+
         const budgetMonthStart = dfnsStartOfMonth(budgetMonthDate);
         const budgetMonthEnd = dfnsEndOfMonth(budgetMonthDate);
         const daysInBudgetMonth = getDaysInMonth(budgetMonthDate);
 
         budgetItemsForSelectedPeriod.forEach(item => {
             const descKey = item.description.toLowerCase().trim();
-            const categoryKey = item.category;
+            const categoryKey = item.category; // This is BudgetItemCategoryZodInternal
             const actualGroupKey = `${categoryKey}-${descKey}`;
             
             const actualGroup = actualSpendingByCategory[actualGroupKey];
@@ -264,6 +260,7 @@ export default function StatementsPage() {
                  budgetAmountToCompare = 0;
             }
             
+            // Use categoryKey (BudgetItemCategoryZodInternal) for indexing initialVarianceByCategory
             if (initialVarianceByCategory[categoryKey]) {
                 initialVarianceByCategory[categoryKey].push({ description: item.description, budgeted: budgetAmountToCompare, actual: actualAmount });
                 if (actualGroup) actualsTracked.add(actualGroupKey);
@@ -273,7 +270,7 @@ export default function StatementsPage() {
         Object.entries(actualSpendingByCategory).forEach(([groupKey, data]) => {
             if (!actualsTracked.has(groupKey)) {
                  const targetCategoryArray = initialVarianceByCategory[data.category];
-                if (targetCategoryArray) { 
+                 if (targetCategoryArray) { 
                      targetCategoryArray.push({
                          description: `* ${data.originalDescription}`,
                          budgeted: 0,
@@ -312,12 +309,14 @@ export default function StatementsPage() {
 
         Object.entries(varianceDataByCategory).forEach(([categoryStringKey, items]) => {
             const catKey = categoryStringKey as ExtendedBudgetItemCategory;
-            if (totals[catKey]) { 
+             if (totals[catKey]) { 
                 items.forEach(item => {
                     totals[catKey].budgeted += (item.budgeted || 0);
                     totals[catKey].actual += (item.actual ?? 0);
                 });
-            }
+             } else {
+                // console.warn(`Category key "${catKey}" not found in totals during variance calculation.`);
+             }
         });
        const totalBudgetedIncome = totals.income.budgeted;
        const totalActualIncomeCalculated = totals.income.actual + totals['unbudgeted-income'].actual; 
@@ -423,17 +422,17 @@ export default function StatementsPage() {
          const budgetedValue = budgeted;
          const isUnbudgeted = description.startsWith('* ');
          const displayDescription = isUnbudgeted ? description.substring(2) : description;
-         const isIncome = category === 'income' || category === 'unbudgeted-income';
+         const isIncomeCategory = category === 'income' || category === 'unbudgeted-income';
          
-         let variance = isIncome ? actualValue - budgetedValue : budgetedValue - actualValue;
+         let variance = isIncomeCategory ? actualValue - budgetedValue : budgetedValue - actualValue;
     
          let statusText = '-';
          let statusColor = 'text-muted-foreground';
          const isFavorable = variance >= 0; 
     
           if (actual === null && budgetedValue === 0 && !isUnbudgeted) statusText = '-';
-          else if (isUnbudgeted) { statusText = `${isIncome ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`; statusColor = isIncome ? 'text-accent' : 'text-destructive'; }
-          else if (actual === null) { statusText = `${isIncome ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncome ? 'Received' : 'Spent'})`; statusColor = isIncome ? 'text-destructive' : 'text-accent'; }
+          else if (isUnbudgeted) { statusText = `${isIncomeCategory ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`; statusColor = isIncomeCategory ? 'text-accent' : 'text-destructive'; }
+          else if (actual === null) { statusText = `${isIncomeCategory ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncomeCategory ? 'Received' : 'Spent'})`; statusColor = isIncomeCategory ? 'text-destructive' : 'text-accent'; }
           else {
              const threshold = Math.max(Math.abs(budgetedValue * 0.05), 50); 
              if (Math.abs(variance) <= threshold) { statusText = 'On Track'; statusColor = 'text-primary'; }
@@ -495,7 +494,7 @@ export default function StatementsPage() {
                  <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/>Actuals marked with * are unbudgeted or unlinked. Variance is (Net Actual - Net Budgeted).</p>
             </CardHeader>
             <CardContent>
-                 <Accordion type="multiple" className="w-full" defaultValue={['income-variance', 'recurring-expense-variance', 'one-time-expense-variance', 'unplanned-expense-variance', 'goal-variance', 'debt-variance', 'unbudgeted-income-variance']}>
+                 <Accordion type="multiple" className="w-full" defaultValue={[]}>
                       <AccordionItem value="income-variance">
                          <AccordionTriggerWithSum label="Budgeted Income" icon={TrendingUp} sum={varianceTotalsByCategory.income.actual} budgetedSum={varianceTotalsByCategory.income.budgeted} variance={varianceTotalsByCategory.income.actual - varianceTotalsByCategory.income.budgeted} className="text-accent hover:text-accent-foreground data-[state=closed]:border-b" />
                           <AccordionContent>{varianceDataByCategory.income.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.income.map(item => renderVarianceRow('income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No budgeted income data for variance.</p>)}</AccordionContent>
@@ -560,3 +559,4 @@ export default function StatementsPage() {
     </div>
   );
 }
+

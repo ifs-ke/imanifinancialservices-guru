@@ -32,7 +32,7 @@ interface BatchUpdateTransactionDialogProps {
   onClose: () => void;
   transactionIds: string[];
   allBudgetItems: BudgetItem[]; 
-  onComplete?: () => void; // Callback for when update is complete
+  onComplete?: () => void; 
 }
 
 const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> = ({
@@ -42,7 +42,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
   allBudgetItems,
   onComplete,
 }) => {
-  const { batchUpdateTransactions } = useTransactionsStore();
+  const { batchUpdateTransactions, transactions: allStoreTransactions } = useTransactionsStore();
   const { toast } = useToast();
 
   const form = useForm<BatchUpdateTransactionFormData>({
@@ -56,45 +56,54 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
   });
 
   const [referenceDateForBudgetItems, setReferenceDateForBudgetItems] = useState<string | null>(null);
-  
-  const firstSelectedTransaction = useTransactionsStore(state => 
-    state.transactions.find(tx => transactionIds.includes(tx.id))
-  );
+  const [isIncomeBatch, setIsIncomeBatch] = useState<boolean | null>(null); // null if mixed, true if all income, false if all expense
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && transactionIds.length > 0) {
       form.reset({ 
         modeOfPayment: LEAVE_UNCHANGED_VALUE as ModeOfPayment | typeof LEAVE_UNCHANGED_VALUE,
         frequency: LEAVE_UNCHANGED_VALUE as TransactionFrequency | typeof LEAVE_UNCHANGED_VALUE,
         variability: LEAVE_UNCHANGED_VALUE as TransactionVariability | typeof LEAVE_UNCHANGED_VALUE,
         categoryName: LEAVE_UNCHANGED_VALUE,
       });
-      if (firstSelectedTransaction?.date) {
-          const dateObj = firstSelectedTransaction.date instanceof Date ? firstSelectedTransaction.date : new Date(firstSelectedTransaction.date);
-          if (isValid(dateObj)) {
-            setReferenceDateForBudgetItems(format(dateObj, 'yyyy-MM'));
-          } else {
-            setReferenceDateForBudgetItems(null);
-          }
+
+      const selectedTransactions = allStoreTransactions.filter(tx => transactionIds.includes(tx.id));
+      if (selectedTransactions.length > 0) {
+        const firstTx = selectedTransactions[0];
+        const dateObj = firstTx.date instanceof Date ? firstTx.date : new Date(firstTx.date);
+        if (isValid(dateObj)) {
+          setReferenceDateForBudgetItems(format(dateObj, 'yyyy-MM'));
+        } else {
+          setReferenceDateForBudgetItems(format(new Date(), 'yyyy-MM')); // Default to current month if first tx date is invalid
+        }
+
+        const allPositive = selectedTransactions.every(tx => tx.amount >= 0);
+        const allNegative = selectedTransactions.every(tx => tx.amount < 0);
+
+        if (allPositive) setIsIncomeBatch(true);
+        else if (allNegative) setIsIncomeBatch(false);
+        else setIsIncomeBatch(null); // Mixed signs
+
       } else {
-          setReferenceDateForBudgetItems(null);
+        setReferenceDateForBudgetItems(format(new Date(), 'yyyy-MM')); // Default if no transactions found (should not happen)
+        setIsIncomeBatch(null);
       }
     }
-  }, [firstSelectedTransaction, isOpen, form, transactionIds]);
+  }, [isOpen, transactionIds, allStoreTransactions, form]);
 
 
   const budgetItemsForSelectedMonth = useMemo(() => {
     if (!referenceDateForBudgetItems) return [];
     try {
         return allBudgetItems.filter(item => 
-            item.period === referenceDateForBudgetItems && 
-            item.category !== 'income' &&
+            item.period === referenceDateForBudgetItems &&
+            (isIncomeBatch === true ? item.category === 'income' : isIncomeBatch === false ? item.category !== 'income' : true) && // If mixed, show all
             item.description && item.description.trim() !== '' 
         );
     } catch(e) {
         return [];
     }
-  }, [referenceDateForBudgetItems, allBudgetItems]);
+  }, [referenceDateForBudgetItems, allBudgetItems, isIncomeBatch]);
 
   const onSubmit = (data: BatchUpdateTransactionFormData) => {
     try {
@@ -117,7 +126,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
       batchUpdateTransactions(batchUpdates);
 
       toast({ title: 'Batch Update Successful', description: `${transactionIds.length} transaction(s) updated.` });
-      if(onComplete) onComplete(); // Call onComplete callback
+      if(onComplete) onComplete(); 
       onClose();
     } catch (error) {
       toast({ title: 'Error Updating', description: 'Could not update transactions.', variant: 'destructive' });
@@ -131,6 +140,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
           <DialogTitle>Batch Update Transactions</DialogTitle>
           <DialogDescription>
             Update fields for {transactionIds.length} selected transaction(s). Only fields with new values will be updated.
+            {isIncomeBatch === null && <p className="text-xs text-yellow-600 mt-1">Warning: Selected transactions have mixed signs (income/expense). Budget category linking might be less precise.</p>}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -175,15 +185,15 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
                        <SelectItem value={NONE_CATEGORY_VALUE}>None (Clear Category)</SelectItem>
                        {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          item.description && item.description.trim() !== '' && (
+                          item.description && item.description.trim() !== '' && ( // Ensure description is not empty
                             <SelectItem key={item.id} value={item.description}>
-                              {item.description} ({item.category})
+                              {item.description} ({item.category === 'income' ? 'Income' : 'Expense/Goal/Debt'})
                             </SelectItem>
                           )
                         ))
                       ) : (
                         <SelectItem value={NO_ITEMS_PLACEHOLDER_VALUE} disabled>
-                            No budget items for transaction month(s)
+                            No {isIncomeBatch === true ? "income" : isIncomeBatch === false ? "expense/goal/debt" : ""} budget items for transaction month(s)
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -252,3 +262,4 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
 };
 
 export default BatchUpdateTransactionDialog;
+
