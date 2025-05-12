@@ -31,7 +31,6 @@ const createSessionStorageWithEncoding = (): StateStorage => {
       if (!str) return null;
       try {
         const decodedStr = decode(str);
-        // Deserialize Date objects
         return JSON.parse(decodedStr, (key, value) => {
             if (key === 'date' && typeof value === 'string') {
                 const parsedDate = new Date(value);
@@ -47,7 +46,6 @@ const createSessionStorageWithEncoding = (): StateStorage => {
     setItem: (name, value) => {
       if (!storage) return;
       try {
-        // Serialize Date objects to ISO strings
         const stringifiedValue = JSON.stringify(value, (key, val) => {
             if (key === 'date' && val instanceof Date) {
                 return val.toISOString();
@@ -88,6 +86,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                  const validatedTransactions = (transactions || []).map(tx => ({
                      ...tx,
                      date: tx.date instanceof Date && !isNaN(tx.date.getTime()) ? tx.date : new Date(0),
+                     categoryName: tx.categoryName || null, // Ensure categoryName is present
                  }));
                  set({ transactions: sortTransactions(validatedTransactions), isHydrated: true });
              },
@@ -96,6 +95,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                     id: generateId(),
                     ...transactionData,
                     date: transactionData.date instanceof Date && !isNaN(transactionData.date.getTime()) ? transactionData.date : new Date(0),
+                    categoryName: transactionData.categoryName || null, // Handle categoryName
                 };
                 set((state) => ({ transactions: sortTransactions([...state.transactions, newTransaction]) }));
                 return newTransaction; 
@@ -106,7 +106,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                      : new Date(0); 
                 set((state) => ({
                     transactions: sortTransactions(
-                        state.transactions.map(tx => tx.id === updatedTransaction.id ? { ...updatedTransaction, date: validatedDate } : tx)
+                        state.transactions.map(tx => tx.id === updatedTransaction.id ? { ...updatedTransaction, date: validatedDate, categoryName: updatedTransaction.categoryName || null } : tx)
                     )
                 }));
             },
@@ -118,6 +118,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                      id: generateId(),
                      ...txData,
                      date: txData.date instanceof Date && !isNaN(txData.date.getTime()) ? txData.date : new Date(0),
+                     categoryName: txData.categoryName || null, // Handle categoryName
                  }));
                  set((state) => ({ transactions: sortTransactions([...state.transactions, ...newTransactionsWithIds]) }));
                  return newTransactionsWithIds; 

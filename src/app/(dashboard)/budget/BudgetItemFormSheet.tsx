@@ -1,4 +1,4 @@
-// src/components/budget/BudgetItemFormSheet.tsx
+// src/app/(dashboard)/budget/BudgetItemFormSheet.tsx
 'use client';
 
 import React, { useEffect } from 'react';
@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { useToast } from '@/hooks/use-toast';
 import { useBudgetStore } from '@/store/budgetStore';
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
-import { BudgetItemFormValidationSchema, type BudgetItemFormData } from '@/lib/schemas'; // Import Zod schema
+import { BudgetItemFormDataSchema, type BudgetItemFormData } from '@/lib/schemas'; // Import Zod schema
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 
@@ -33,7 +33,7 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
   const { toast } = useToast();
 
   const form = useForm<BudgetItemFormData>({
-    resolver: zodResolver(BudgetItemFormValidationSchema),
+    resolver: zodResolver(BudgetItemFormDataSchema),
     defaultValues: {
       description: '',
       amount: 0,
@@ -154,3 +154,4 @@ const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
 };
 
 export default BudgetItemFormSheet;
+

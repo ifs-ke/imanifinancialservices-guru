@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { useToast } from '@/hooks/use-toast';
 import { useDebtStore } from '@/store/debtStore';
 import type { DebtItem } from '@/lib/types';
-import { DebtItemFormValidationSchema, type DebtItemFormData } from '@/lib/schemas'; // Import Zod schema
+import { DebtItemFormDataSchema, type DebtItemFormData } from '@/lib/schemas'; // Changed DebtItemFormValidationSchema to DebtItemFormDataSchema
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 
@@ -25,7 +25,7 @@ const DebtFormSheet: React.FC<DebtFormSheetProps> = ({ isOpen, onClose, debt }) 
   const { toast } = useToast();
 
   const form = useForm<DebtItemFormData>({
-    resolver: zodResolver(DebtItemFormValidationSchema),
+    resolver: zodResolver(DebtItemFormDataSchema), // Changed DebtItemFormValidationSchema to DebtItemFormDataSchema
     defaultValues: {
       description: '',
       principal: 0,
@@ -179,3 +179,4 @@ const DebtFormSheet: React.FC<DebtFormSheetProps> = ({ isOpen, onClose, debt }) 
 };
 
 export default DebtFormSheet;
+

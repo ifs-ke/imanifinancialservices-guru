@@ -1,7 +1,7 @@
 // src/app/(dashboard)/transactions/EditTransactionDialog.tsx
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -18,15 +18,17 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 import { useTransactionsStore } from '@/store/transactionsStore';
-import type { TransactionWithId } from '@/lib/types';
-import { TransactionFormValidationSchema, type TransactionFormData } from '@/lib/schemas';
+import type { TransactionWithId, BudgetItem } from '@/lib/types';
+import { TransactionFormDataSchema } from '@/lib/schemas';
+import type { TransactionFormData } from '@/lib/schemas';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-
+import { format, parse } from 'date-fns';
 
 interface EditTransactionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   transaction: TransactionWithId;
+  allBudgetItems: BudgetItem[]; // Pass all budget items
 }
 
 const formatDateForInput = (date: Date | string): string => {
@@ -42,12 +44,13 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
   isOpen,
   onClose,
   transaction,
+  allBudgetItems,
 }) => {
   const { updateTransaction } = useTransactionsStore();
   const { toast } = useToast();
 
   const form = useForm<TransactionFormData>({
-    resolver: zodResolver(TransactionFormValidationSchema),
+    resolver: zodResolver(TransactionFormDataSchema),
     defaultValues: {
       date: '',
       description: '',
@@ -55,8 +58,24 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       modeOfPayment: 'Bank',
       frequency: undefined,
       variability: undefined,
+      categoryName: '', // Initialize categoryName
     },
   });
+
+  const transactionDateStr = form.watch('date');
+
+  const budgetItemsForSelectedMonth = useMemo(() => {
+    if (!transactionDateStr) return [];
+    try {
+      const transactionDate = parse(transactionDateStr, 'yyyy-MM-dd', new Date());
+      if (isNaN(transactionDate.getTime())) return [];
+      const periodKey = format(transactionDate, 'yyyy-MM');
+      return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income');
+    } catch (e) {
+      // console.error("Error parsing date for budget items filter:", e);
+      return [];
+    }
+  }, [transactionDateStr, allBudgetItems]);
 
   useEffect(() => {
     if (transaction && isOpen) {
@@ -67,6 +86,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         modeOfPayment: transaction.modeOfPayment,
         frequency: transaction.frequency || undefined,
         variability: transaction.variability || undefined,
+        categoryName: transaction.categoryName || '', // Set categoryName
       });
     }
   }, [transaction, isOpen, form]);
@@ -81,18 +101,19 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         modeOfPayment: data.modeOfPayment,
         frequency: data.frequency,
         variability: data.variability,
+        categoryName: data.categoryName || null, // Ensure categoryName is saved
       });
       toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
       onClose();
     } catch (error) {
-      console.error("Error updating transaction:", error);
+      // console.error("Error updating transaction:", error);
       toast({ title: 'Error Updating', description: 'Could not update the transaction.', variant: 'destructive' });
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[450px]">
+      <DialogContent className="sm:max-w-[480px]"> {/* Slightly wider */}
         <DialogHeader>
           <DialogTitle>Edit Transaction</DialogTitle>
           <DialogDescription>Update the details for this transaction.</DialogDescription>
@@ -163,13 +184,42 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                 </FormItem>
               )}
             />
+             <FormField
+              control={form.control}
+              name="categoryName"
+              render={({ field }) => (
+                <FormItem className="grid grid-cols-4 items-center gap-4">
+                  <FormLabel className="text-right col-span-1">Budget Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''}>
+                    <FormControl className="col-span-3">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Optional: Select budget item" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                       <SelectItem value="">None</SelectItem>
+                       {budgetItemsForSelectedMonth.length > 0 ? (
+                        budgetItemsForSelectedMonth.map(item => (
+                          <SelectItem key={item.id} value={item.description}>
+                            {item.description} ({item.category})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="" disabled>No budget items for selected month</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage className="col-span-4 text-right" />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="frequency"
               render={({ field }) => (
                 <FormItem className="grid grid-cols-4 items-center gap-4">
                   <FormLabel className="text-right col-span-1">Frequency</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ''}> {/* Handle undefined value */}
+                  <Select onValueChange={field.onChange} value={field.value || ''}>
                     <FormControl className="col-span-3">
                       <SelectTrigger>
                         <SelectValue placeholder="Optional: Select frequency" />
@@ -190,7 +240,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
               render={({ field }) => (
                 <FormItem className="grid grid-cols-4 items-center gap-4">
                   <FormLabel className="text-right col-span-1">Variability</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ''}> {/* Handle undefined value */}
+                  <Select onValueChange={field.onChange} value={field.value || ''}>
                     <FormControl className="col-span-3">
                       <SelectTrigger>
                         <SelectValue placeholder="Optional: Select variability" />

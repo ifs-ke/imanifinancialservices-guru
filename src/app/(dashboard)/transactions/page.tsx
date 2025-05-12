@@ -1,7 +1,7 @@
 // src/app/(dashboard)/transactions/page.tsx
 'use client';
 
-import React, { useState, type ChangeEvent, useEffect, useCallback } from 'react';
+import React, { useState, type ChangeEvent, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogClose,
-  DialogFooter
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -33,27 +33,21 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactionsStore } from '@/store/transactionsStore';
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types';
+import { useBudgetStore, selectCurrentBudgetPeriod } from '@/store/budgetStore'; // Import budget store
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem } from '@/lib/types';
 import Link from 'next/link';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
 import { Badge } from '@/components/ui/badge';
-
 
 const formatDateForInput = (date: Date | string): string => {
     const dateObj = typeof date === 'string' ? new Date(date) : date;
     if (isNaN(dateObj.getTime())) {
         const today = new Date();
-        const year = today.getFullYear();
-        const month = (today.getMonth() + 1).toString().padStart(2, '0');
-        const day = today.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return today.toISOString().split('T')[0];
     }
-    const year = dateObj.getFullYear();
-    const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-    const day = dateObj.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return dateObj.toISOString().split('T')[0];
 };
 
 const initialFormData = {
@@ -61,12 +55,15 @@ const initialFormData = {
     description: '',
     amount: '',
     modeOfPayment: '' as ModeOfPayment | '',
-    frequency: '' as TransactionFrequency | '', // Added
-    variability: '' as TransactionVariability | '', // Added
+    frequency: '' as TransactionFrequency | '',
+    variability: '' as TransactionVariability | '',
+    categoryName: '' as string | '', // New field for category selection
 };
 
 export default function TransactionsPage() {
   const { transactions, addTransaction, deleteTransaction } = useTransactionsStore(); 
+  const allBudgetItems = useBudgetStore(state => state.budgetItems);
+  // No need to get budgetPeriod from here, it will be derived from transaction date
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); 
@@ -74,6 +71,15 @@ export default function TransactionsPage() {
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
   const [formData, setFormData] = useState(initialFormData);
   const { toast } = useToast();
+
+  // Get budget items for the month of the currently selected transaction date
+  const budgetItemsForSelectedMonth = useMemo(() => {
+    if (!formData.date) return [];
+    const transactionDate = parse(formData.date, 'yyyy-MM-dd', new Date());
+    const periodKey = format(transactionDate, 'yyyy-MM');
+    return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income'); // Exclude income items from being categories for expenses
+  }, [formData.date, allBudgetItems]);
+
 
   useEffect(() => {
     if (!isAddDialogOpen) {
@@ -89,7 +95,7 @@ export default function TransactionsPage() {
 
   const handleAddTransactionSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const { date, description, amount, modeOfPayment, frequency, variability } = formData;
+    const { date, description, amount, modeOfPayment, frequency, variability, categoryName } = formData;
 
     if (!date || !description || !amount || !modeOfPayment) {
       toast({ title: 'Missing Information', description: 'Please fill out required fields (Date, Desc, Amount, Mode).', variant: 'destructive' });
@@ -102,12 +108,13 @@ export default function TransactionsPage() {
     }
 
     addTransaction({
-      date: new Date(date + 'T00:00:00'), // Ensure time part is considered for correct date
+      date: new Date(date + 'T00:00:00'),
       description: description,
       amount: parsedAmount,
       modeOfPayment: modeOfPayment as ModeOfPayment,
-      frequency: frequency || undefined, // Pass as undefined if empty
-      variability: variability || undefined, // Pass as undefined if empty
+      frequency: frequency || undefined,
+      variability: variability || undefined,
+      categoryName: categoryName || null, // Add categoryName
     });
 
     setIsAddDialogOpen(false);
@@ -139,10 +146,10 @@ export default function TransactionsPage() {
      setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const formatDate = (date: Date | string) => {
+  const formatDateDisplay = (date: Date | string) => {
      const dateObj = typeof date === 'string' ? new Date(date) : date;
       if (isNaN(dateObj.getTime())) return 'Invalid Date';
-    return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return format(dateObj, 'PP'); // PP for 'Mar 2, 2021' style
   };
 
   const formatCategoryDisplay = (freq?: TransactionFrequency | null, vari?: TransactionVariability | null) => {
@@ -157,7 +164,6 @@ export default function TransactionsPage() {
     return <div className="flex items-center gap-1">{badges}</div>;
   };
 
-
   const handleExportCsv = useCallback(() => {
     if (transactions.length === 0) {
       toast({ title: "No data to export", description: "Add transactions to export a CSV file.", variant: "default" });
@@ -165,21 +171,20 @@ export default function TransactionsPage() {
     }
 
     const csvRows = [];
-    // Include Frequency and Variability in headers
-    const headers = ['Date', 'Description', 'Amount (KES)', 'Mode of Payment', 'Frequency', 'Variability'];
+    const headers = ['Date', 'Description', 'Amount (KES)', 'Mode of Payment', 'Frequency', 'Variability', 'Budget Category'];
     csvRows.push(headers.join(','));
 
     for (const tx of transactions) {
-      const sanitizedDescription = tx.description.replace(/"/g, "''"); // Basic sanitization for CSV
-       const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date);
-
+      const sanitizedDescription = tx.description.replace(/"/g, "''");
+      const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date);
       const values = [
         isNaN(dateObj.getTime()) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'),
         `"${sanitizedDescription}"`,
         tx.amount,
         tx.modeOfPayment,
-        tx.frequency || '', // Add frequency
-        tx.variability || '' // Add variability
+        tx.frequency || '',
+        tx.variability || '',
+        tx.categoryName || '' // Add categoryName
       ].join(',');
       csvRows.push(values);
     }
@@ -189,7 +194,7 @@ export default function TransactionsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'transactions_export.csv'; // Filename for download
+    link.download = 'transactions_export.csv';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -197,7 +202,6 @@ export default function TransactionsPage() {
 
     toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
   }, [transactions, toast]);
-
 
   return (
     <div className="flex flex-col min-h-screen min-w-100 p-4 md:p-6 lg:p-8">
@@ -217,7 +221,7 @@ export default function TransactionsPage() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]">
+            <DialogContent className="sm:max-w-[480px]"> {/* Slightly wider for new field */}
               <DialogHeader>
                 <DialogTitle>Add New Transaction</DialogTitle>
                 <DialogDescription>Manually enter details below.</DialogDescription>
@@ -245,6 +249,25 @@ export default function TransactionsPage() {
                       <SelectItem value="Cash">Cash</SelectItem>
                       <SelectItem value="Bank">Bank</SelectItem>
                       <SelectItem value="Mpesa">Mpesa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                 <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="add-categoryName" className="text-right col-span-1">Budget Category</Label>
+                  <Select name="categoryName" value={formData.categoryName} onValueChange={(value) => handleSelectChange('categoryName', value)}>
+                    <SelectTrigger id="add-categoryName" className="col-span-3">
+                      <SelectValue placeholder="Optional: Select budget item" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {budgetItemsForSelectedMonth.length > 0 ? (
+                        budgetItemsForSelectedMonth.map(item => (
+                          <SelectItem key={item.id} value={item.description}>
+                            {item.description} ({item.category})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="" disabled>No budget items for selected month</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -307,7 +330,8 @@ export default function TransactionsPage() {
                     <TableHead className="w-[100px] pl-6 pr-3">Date</TableHead>
                     <TableHead className="px-3">Description</TableHead>
                     <TableHead className="w-[90px] px-3">Mode</TableHead>
-                    <TableHead className="w-[150px] px-3">Category</TableHead> {/* Added Category Header */}
+                    <TableHead className="w-[150px] px-3">Recurrence</TableHead>
+                    <TableHead className="w-[150px] px-3">Budget Category</TableHead>
                     <TableHead className="text-right w-[140px] px-3">Amount (KES)</TableHead>
                     <TableHead className="text-right w-[100px] pr-6 pl-3">Actions</TableHead>
                   </TableRow>
@@ -316,10 +340,11 @@ export default function TransactionsPage() {
                   {transactions.length > 0 ? (
                     transactions.map((tx) => (
                       <TableRow key={tx.id}>
-                        <TableCell className="font-medium pl-6 pr-3">{formatDate(tx.date)}</TableCell>
-                        <TableCell className="max-w-[250px] truncate px-3" title={tx.description}>{tx.description}</TableCell>
+                        <TableCell className="font-medium pl-6 pr-3">{formatDateDisplay(tx.date)}</TableCell>
+                        <TableCell className="max-w-[200px] sm:max-w-[250px] truncate px-3" title={tx.description}>{tx.description}</TableCell>
                         <TableCell className="px-3">{tx.modeOfPayment}</TableCell>
-                        <TableCell className="px-3">{formatCategoryDisplay(tx.frequency, tx.variability)}</TableCell> {/* Added Category Cell */}
+                        <TableCell className="px-3">{formatCategoryDisplay(tx.frequency, tx.variability)}</TableCell>
+                        <TableCell className="px-3 text-xs text-muted-foreground">{tx.categoryName || 'N/A'}</TableCell>
                         <TableCell className={cn('text-right font-mono px-3', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
@@ -342,7 +367,7 @@ export default function TransactionsPage() {
                                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                      <AlertDialogDescription>
                                        This action cannot be undone. This will permanently delete the transaction: <br/>
-                                       <strong>{formatDate(transactionToDelete.date)} - {transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
+                                       <strong>{formatDateDisplay(transactionToDelete.date)} - {transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
                                      </AlertDialogDescription>
                                    </AlertDialogHeader>
                                    <AlertDialogFooter>
@@ -358,7 +383,7 @@ export default function TransactionsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground"> {/* Updated colSpan */}
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
                     </TableRow>
@@ -375,6 +400,8 @@ export default function TransactionsPage() {
               isOpen={isEditDialogOpen}
               onClose={() => setIsEditDialogOpen(false)}
               transaction={editingTransaction}
+              // Pass allBudgetItems to allow EditTransactionDialog to filter for its specific transaction date
+              allBudgetItems={allBudgetItems}
           />
       )}
 

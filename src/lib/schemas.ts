@@ -22,14 +22,12 @@ export const TransactionFormDataSchema = z.object({
   modeOfPayment: ModeOfPaymentSchema,
   frequency: TransactionFrequencySchema,
   variability: TransactionVariabilitySchema,
+  categoryName: z.string().optional().nullable(), // New field for budget category link
 });
 export type TransactionFormData = z.infer<typeof TransactionFormDataSchema>;
-export const TransactionFormValidationSchema = TransactionFormDataSchema;
 
 
 // --- Budget Schemas ---
-// Added 'unplanned-expense' to allow for this category in budget variance reporting.
-// It's not meant for user selection during budget creation, but for categorizing actuals.
 export const BudgetItemCategorySchema = z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt', 'unplanned-expense']);
 export type BudgetItemCategory = z.infer<typeof BudgetItemCategorySchema>;
 
@@ -39,14 +37,11 @@ export const BudgetItemFormDataSchema = z.object({
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }).positive({ message: "Amount must be positive" }),
-  // Ensure 'unplanned-expense' is not a selectable option for user input form if this schema is reused.
-  // For forms, you might use a more restrictive schema: z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt'])
   category: BudgetItemCategorySchema.refine(val => val !== 'unplanned-expense', {
     message: "Unplanned Expense is not a valid category for manual budgeting."
-  }).or(z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt'])), // Fallback to ensure it's one of the valid ones for form
+  }).or(z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt'])),
 });
 export type BudgetItemFormData = z.infer<typeof BudgetItemFormDataSchema>;
-export const BudgetItemFormValidationSchema = BudgetItemFormDataSchema;
 
 
 // --- Debt Schemas ---
@@ -70,7 +65,6 @@ export const DebtItemFormDataSchema = z.object({
   term: DebtTermSchema,
 });
 export type DebtItemFormData = z.infer<typeof DebtItemFormDataSchema>;
-export const DebtItemFormValidationSchema = DebtItemFormDataSchema;
 
 
 // --- API Payload Schemas ---
@@ -93,6 +87,7 @@ const TransactionItemSchema = BaseItemSchema.extend({
   modeOfPayment: ModeOfPaymentSchema,
   frequency: TransactionFrequencySchema.nullable(),
   variability: TransactionVariabilitySchema.nullable(),
+  categoryName: z.string().optional().nullable(), // New field for budget category link
 });
 
 const DebtItemAPISchema = z.object({
@@ -108,7 +103,7 @@ const BudgetItemAPISchema = z.object({
   id: z.string(),
   description: z.string(),
   amount: z.number(),
-  category: BudgetItemCategorySchema, // Allows 'unplanned-expense' if data comes this way
+  category: BudgetItemCategorySchema,
   period: z.string(),
 });
 

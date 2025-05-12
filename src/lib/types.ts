@@ -26,8 +26,9 @@ export interface TransactionWithId {
   description: string;
   amount: number;
   modeOfPayment: ModeOfPayment;
-  frequency?: TransactionFrequency | null; // Updated to allow null
-  variability?: TransactionVariability | null; // Updated to allow null
+  frequency?: TransactionFrequency | null; 
+  variability?: TransactionVariability | null; 
+  categoryName?: string | null; // New field to link to budget item description
 }
 
 

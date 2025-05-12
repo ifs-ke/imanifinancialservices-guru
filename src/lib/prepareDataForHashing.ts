@@ -1,16 +1,16 @@
 // src/lib/prepareDataForHashing.ts
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types';
-import stringify from 'fast-json-stable-stringify'; // Ensure stable stringify is imported
+import stringify from 'fast-json-stable-stringify'; 
 
 interface SyncData {
   transactions: TransactionWithId[];
   debts: DebtItem[];
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
-  budgetItems: BudgetItem[]; // Includes period field now
+  budgetItems: BudgetItem[]; 
   ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews?: Record<string, WeeklyReviewData>;
-  notifications: NotificationItem[];
+  sharedReviews?: Record<string, WeeklyReviewData>; // Optional
+  notifications: NotificationItem[]; // Kept for completeness of SyncedData, but excluded from hash
   startDate?: Date;
   endDate?: Date;
   gettingStartedDismissed?: boolean;
@@ -24,6 +24,7 @@ interface SyncData {
  * - Handling potential null/undefined arrays/objects defensively.
  * - EXCLUDING notifications and sharedReviews from the final hashed object.
  * - Including the 'period' field for budget items.
+ * - Including the 'categoryName' field for transactions.
  */
 export function prepareDataForHashing(data: SyncData): any {
 
@@ -61,7 +62,6 @@ export function prepareDataForHashing(data: SyncData): any {
 
     const sortBudgetItems = (items: BudgetItem[]): BudgetItem[] => {
         if (!Array.isArray(items)) return [];
-        // Sort by period first (descending), then description
         return [...items].sort((a, b) => {
             const periodDiff = (b.period || '').localeCompare(a.period || '');
             if (periodDiff !== 0) return periodDiff;
@@ -99,17 +99,16 @@ export function prepareDataForHashing(data: SyncData): any {
         return sortedReviews;
     };
 
-
-    // Return only the data relevant for hashing/saving
     return {
         transactions: sortTransactions(transactions).map(tx => ({
             ...tx,
             date: (tx.date instanceof Date && !isNaN(tx.date.getTime()) ? tx.date : new Date(0)).toISOString(),
+            categoryName: tx.categoryName || null, // Ensure categoryName is part of the hashed data
         })),
         debts: sortDebts(debts),
         assetItems: sortStatementItems(assetItems),
         otherLiabilityItems: sortStatementItems(otherLiabilityItems),
-        budgetItems: sortBudgetItems(budgetItems), // Includes period field
+        budgetItems: sortBudgetItems(budgetItems),
         ownedReviews: formatReviewData(ownedReviews),
         startDate: data.startDate instanceof Date && !isNaN(data.startDate.getTime()) ? data.startDate.toISOString() : undefined,
         endDate: data.endDate instanceof Date && !isNaN(data.endDate.getTime()) ? data.endDate.toISOString() : undefined,
