@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Target as TargetIcon, AlertTriangle as AlertTriangleIcon, PieChart as PieChartIcon, CheckCircle } from 'lucide-react';
+import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Target as TargetIcon, AlertTriangle as AlertTriangleIcon, PieChart as PieChartIcon, HelpCircle, DollarSign } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
@@ -54,10 +54,20 @@ const formatCategoryBadge = (value: string | undefined) => {
     return <Badge variant={variant} className="ml-2 text-xs font-normal">{text}</Badge>;
 }
 
+type ExtendedBudgetItemCategory = BudgetItemCategory | 'unplanned-expense' | 'unbudgeted-income';
+
+
 // Accordion Trigger Component with Sum
 const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; budgetedSum?: number | null; variance?: number | null; itemCount?: number, icon?: React.ElementType }
+  React.ComponentProps<typeof AccordionTrigger> & { 
+    label: string; 
+    sum: number; 
+    budgetedSum?: number | null; 
+    variance?: number | null; 
+    itemCount?: number, 
+    icon?: React.ElementType 
+  }
 >(({ label, sum, budgetedSum, variance, itemCount, icon: Icon, children, className, ...props }, ref) => {
     const hasBudget = budgetedSum !== undefined && budgetedSum !== null;
     const hasVariance = variance !== undefined && variance !== null;
@@ -154,31 +164,51 @@ export default function StatementsPage() {
   const netWorth = totalAssets - totalLiabilities;
 
    const actualSpendingByCategory = useMemo(() => {
-        const actuals: Record<string, { amount: number; count: number, category: BudgetItemCategory | 'unplanned-expense', originalDescription: string }> = {};
+        const actuals: Record<string, { amount: number; count: number; category: ExtendedBudgetItemCategory; originalDescription: string }> = {};
         const budgetItemsForSelectedPeriod = allBudgetItems.filter(item => item.period === budgetPeriod);
 
         filteredTransactions.forEach(tx => {
             if (tx.amount === 0) return; 
 
-            const isIncome = tx.amount > 0;
+            const isIncomeTx = tx.amount > 0;
             let matchedBudgetItem: BudgetItem | undefined = undefined;
 
-            if (!isIncome) {
+            // Try to match using categoryName (linked budget item's description)
+            if (tx.categoryName) {
                 matchedBudgetItem = budgetItemsForSelectedPeriod.find(
-                    bi => bi.description.toLowerCase() === tx.description.toLowerCase() &&
-                          (BudgetItemCategorySchema.options as ReadonlyArray<string>).includes(bi.category) && 
-                          bi.category !== 'income' 
+                    bi => bi.description === tx.categoryName && (isIncomeTx ? bi.category === 'income' : bi.category !== 'income')
                 );
             }
 
-            const category: BudgetItemCategory | 'unplanned-expense' = isIncome
-                ? 'income'
-                : matchedBudgetItem
-                  ? matchedBudgetItem.category
-                  : 'unplanned-expense';
+            // Fallback to description matching if not matched by categoryName
+            if (!matchedBudgetItem) {
+                matchedBudgetItem = budgetItemsForSelectedPeriod.find(
+                    bi => bi.description.toLowerCase() === tx.description.toLowerCase() && (isIncomeTx ? bi.category === 'income' : bi.category !== 'income')
+                );
+            }
 
-            const keyDescription = matchedBudgetItem ? matchedBudgetItem.description : tx.description;
-            const groupKey = `${category}-${keyDescription.toLowerCase()}`; 
+            let category: ExtendedBudgetItemCategory;
+            let keyDescription: string;
+
+            if (isIncomeTx) {
+                if (matchedBudgetItem) {
+                    category = matchedBudgetItem.category as 'income'; // Should be 'income'
+                    keyDescription = matchedBudgetItem.description;
+                } else {
+                    category = 'unbudgeted-income';
+                    keyDescription = tx.description; 
+                }
+            } else { // Expense Transaction
+                if (matchedBudgetItem) {
+                    category = matchedBudgetItem.category;
+                    keyDescription = matchedBudgetItem.description;
+                } else {
+                    category = 'unplanned-expense';
+                    keyDescription = tx.description;
+                }
+            }
+            
+            const groupKey = `${category}-${keyDescription.toLowerCase().trim()}`;
             const amount = Math.abs(tx.amount);
 
             if (!actuals[groupKey]) {
@@ -192,13 +222,14 @@ export default function StatementsPage() {
 
 
     const varianceDataByCategory = useMemo(() => {
-        const initialVarianceByCategory: Record<BudgetItemCategory | 'unplanned-expense', { description: string; budgeted: number; actual: number | null }[]> = {
+        const initialVarianceByCategory: Record<ExtendedBudgetItemCategory, { description: string; budgeted: number; actual: number | null }[]> = {
             income: [],
             'recurring-expense': [],
             'one-time-expense': [],
             goal: [],
             debt: [],
             'unplanned-expense': [],
+            'unbudgeted-income': [], 
         };
         const actualsTracked: Set<string> = new Set();
         const budgetItemsForSelectedPeriod = allBudgetItems.filter(item => item.period === budgetPeriod);
@@ -211,7 +242,7 @@ export default function StatementsPage() {
         const daysInBudgetMonth = getDaysInMonth(budgetMonthDate);
 
         budgetItemsForSelectedPeriod.forEach(item => {
-            const descKey = item.description.toLowerCase();
+            const descKey = item.description.toLowerCase().trim();
             const categoryKey = item.category;
             const actualGroupKey = `${categoryKey}-${descKey}`;
             
@@ -242,25 +273,19 @@ export default function StatementsPage() {
         Object.entries(actualSpendingByCategory).forEach(([groupKey, data]) => {
             if (!actualsTracked.has(groupKey)) {
                  const targetCategoryArray = initialVarianceByCategory[data.category];
-                if (targetCategoryArray) { // Check if the category exists in initialVarianceByCategory
+                if (targetCategoryArray) { 
                      targetCategoryArray.push({
                          description: `* ${data.originalDescription}`,
                          budgeted: 0,
                          actual: data.amount,
                      });
-                 } else if (data.category === 'unplanned-expense') { // Explicitly handle unplanned-expense if somehow missed
-                      initialVarianceByCategory['unplanned-expense'].push({
-                          description: `* ${data.originalDescription}`,
-                          budgeted: 0,
-                          actual: data.amount,
-                      });
                  }
             }
-        });
+       });
 
        Object.keys(initialVarianceByCategory).forEach(key => {
-           const catKey = key as BudgetItemCategory | 'unplanned-expense';
-            if (initialVarianceByCategory[catKey]) { // Check if category array exists before sorting
+           const catKey = key as ExtendedBudgetItemCategory;
+            if (initialVarianceByCategory[catKey]) { 
                 initialVarianceByCategory[catKey].sort((a, b) => {
                     const aUnbudgeted = a.description.startsWith('* ');
                     const bUnbudgeted = b.description.startsWith('* ');
@@ -275,17 +300,18 @@ export default function StatementsPage() {
 
 
    const varianceTotalsByCategory = useMemo(() => {
-        const totals: Record<BudgetItemCategory | 'unplanned-expense', { budgeted: number; actual: number }> = {
+        const totals: Record<ExtendedBudgetItemCategory, { budgeted: number; actual: number }> = {
             income: { budgeted: 0, actual: 0 },
             'recurring-expense': { budgeted: 0, actual: 0 },
             'one-time-expense': { budgeted: 0, actual: 0 },
             goal: { budgeted: 0, actual: 0 },
             debt: { budgeted: 0, actual: 0 },
             'unplanned-expense': { budgeted: 0, actual: 0 },
+            'unbudgeted-income': { budgeted: 0, actual: 0 },
         };
 
         Object.entries(varianceDataByCategory).forEach(([categoryStringKey, items]) => {
-            const catKey = categoryStringKey as BudgetItemCategory | 'unplanned-expense';
+            const catKey = categoryStringKey as ExtendedBudgetItemCategory;
             if (totals[catKey]) { 
                 items.forEach(item => {
                     totals[catKey].budgeted += (item.budgeted || 0);
@@ -293,10 +319,16 @@ export default function StatementsPage() {
                 });
             }
         });
-       const netBudgeted = totals.income.budgeted - totals['recurring-expense'].budgeted - totals['one-time-expense'].budgeted - totals.goal.budgeted - totals.debt.budgeted;
-       const netActual = totals.income.actual - totals['recurring-expense'].actual - totals['one-time-expense'].actual - totals.goal.actual - totals.debt.actual - totals['unplanned-expense'].actual;
+       const totalBudgetedIncome = totals.income.budgeted;
+       const totalActualIncomeCalculated = totals.income.actual + totals['unbudgeted-income'].actual; 
+
+       const totalBudgetedSpending = totals['recurring-expense'].budgeted + totals['one-time-expense'].budgeted + totals.goal.budgeted + totals.debt.budgeted;
+       const totalActualSpending = totals['recurring-expense'].actual + totals['one-time-expense'].actual + totals.goal.actual + totals.debt.actual + totals['unplanned-expense'].actual;
+       
+       const netBudgeted = totalBudgetedIncome - totalBudgetedSpending;
+       const netActual = totalActualIncomeCalculated - totalActualSpending;
        const overallVariance = netActual - netBudgeted;
-       return { ...totals, netBudgeted, netActual, overallVariance };
+       return { ...totals, netBudgeted, netActual, overallVariance, totalActualIncome: totalActualIncomeCalculated, totalBudgetedIncome };
    }, [varianceDataByCategory]);
 
 
@@ -386,12 +418,12 @@ export default function StatementsPage() {
         </TableRow>
     );
 
-    const renderVarianceRow = (category: BudgetItemCategory | 'unplanned-expense', description: string, budgeted: number, actual: number | null) => {
+    const renderVarianceRow = (category: ExtendedBudgetItemCategory, description: string, budgeted: number, actual: number | null) => {
          const actualValue = actual ?? 0;
          const budgetedValue = budgeted;
-         const isUnbudgetedActual = description.startsWith('* ');
-         const displayDescription = isUnbudgetedActual ? description.substring(2) : description;
-         const isIncome = category === 'income';
+         const isUnbudgeted = description.startsWith('* ');
+         const displayDescription = isUnbudgeted ? description.substring(2) : description;
+         const isIncome = category === 'income' || category === 'unbudgeted-income';
          
          let variance = isIncome ? actualValue - budgetedValue : budgetedValue - actualValue;
     
@@ -399,8 +431,8 @@ export default function StatementsPage() {
          let statusColor = 'text-muted-foreground';
          const isFavorable = variance >= 0; 
     
-          if (actual === null && budgetedValue === 0 && !isUnbudgetedActual) statusText = '-';
-          else if (isUnbudgetedActual) { statusText = `${isIncome ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`; statusColor = isIncome ? 'text-accent' : 'text-destructive'; }
+          if (actual === null && budgetedValue === 0 && !isUnbudgeted) statusText = '-';
+          else if (isUnbudgeted) { statusText = `${isIncome ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`; statusColor = isIncome ? 'text-accent' : 'text-destructive'; }
           else if (actual === null) { statusText = `${isIncome ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncome ? 'Received' : 'Spent'})`; statusColor = isIncome ? 'text-destructive' : 'text-accent'; }
           else {
              const threshold = Math.max(Math.abs(budgetedValue * 0.05), 50); 
@@ -411,8 +443,8 @@ export default function StatementsPage() {
     
         return (
             <TableRow key={`${category}-${description}`} className="text-sm">
-                 <TableCell className={cn("pl-2 py-1.5", isUnbudgetedActual && "pl-6 italic text-muted-foreground")}>{displayDescription}</TableCell>
-                 <TableCell className="text-right font-mono py-1.5">{budgetedValue > 0 ? formatCurrency(budgetedValue) : (isUnbudgetedActual || actual === null ? '-' : formatCurrency(0))}</TableCell>
+                 <TableCell className={cn("pl-2 py-1.5", isUnbudgeted && "pl-6 italic text-muted-foreground")}>{displayDescription}</TableCell>
+                 <TableCell className="text-right font-mono py-1.5">{budgetedValue > 0 ? formatCurrency(budgetedValue) : (isUnbudgeted || actual === null ? '-' : formatCurrency(0))}</TableCell>
                  <TableCell className="text-right font-mono py-1.5">{actual !== null ? formatCurrency(actual) : '-'}</TableCell>
                  <TableCell className={cn("text-right font-mono text-xs py-1.5", statusColor)}>{statusText}</TableCell>
             </TableRow>
@@ -460,13 +492,17 @@ export default function StatementsPage() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
                  <CardDescription>Compares the budget for <span className='font-semibold'>{budgetPeriod && isDateValid(parse(budgetPeriod, 'yyyy-MM', new Date())) ? format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy') : 'Selected Period'}</span> with actual transactions from <span className='font-semibold'>{formatDateForStatements(startDate)}</span> to <span className='font-semibold'>{formatDateForStatements(endDate)}</span>.</CardDescription>
-                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/>Actuals marked with * are unbudgeted. Variance is (Actual Net - Budgeted Net).</p>
+                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/>Actuals marked with * are unbudgeted or unlinked. Variance is (Net Actual - Net Budgeted).</p>
             </CardHeader>
             <CardContent>
-                 <Accordion type="multiple" className="w-full" defaultValue={[]}>
+                 <Accordion type="multiple" className="w-full" defaultValue={['income-variance', 'recurring-expense-variance', 'one-time-expense-variance', 'unplanned-expense-variance', 'goal-variance', 'debt-variance', 'unbudgeted-income-variance']}>
                       <AccordionItem value="income-variance">
-                         <AccordionTriggerWithSum label="Income" icon={TrendingUp} sum={varianceTotalsByCategory.income.actual} budgetedSum={varianceTotalsByCategory.income.budgeted} variance={varianceTotalsByCategory.income.actual - varianceTotalsByCategory.income.budgeted} className="text-accent hover:text-accent-foreground data-[state=closed]:border-b" />
-                          <AccordionContent>{varianceDataByCategory.income.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.income.map(item => renderVarianceRow('income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No income data for variance.</p>)}</AccordionContent>
+                         <AccordionTriggerWithSum label="Budgeted Income" icon={TrendingUp} sum={varianceTotalsByCategory.income.actual} budgetedSum={varianceTotalsByCategory.income.budgeted} variance={varianceTotalsByCategory.income.actual - varianceTotalsByCategory.income.budgeted} className="text-accent hover:text-accent-foreground data-[state=closed]:border-b" />
+                          <AccordionContent>{varianceDataByCategory.income.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.income.map(item => renderVarianceRow('income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No budgeted income data for variance.</p>)}</AccordionContent>
+                      </AccordionItem>
+                      <AccordionItem value="unbudgeted-income-variance">
+                         <AccordionTriggerWithSum label="Unbudgeted Income" icon={DollarSign} sum={varianceTotalsByCategory['unbudgeted-income'].actual} budgetedSum={0} variance={varianceTotalsByCategory['unbudgeted-income'].actual} className="text-accent/80 hover:text-accent-foreground/80 data-[state=closed]:border-b" />
+                          <AccordionContent>{varianceDataByCategory['unbudgeted-income'].length > 0 ? (<ScrollArea className="h-[150px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['unbudgeted-income'].map(item => renderVarianceRow('unbudgeted-income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No unbudgeted income.</p>)}</AccordionContent>
                       </AccordionItem>
 
                      <AccordionItem value="recurring-expense-variance">
@@ -480,7 +516,7 @@ export default function StatementsPage() {
                      </AccordionItem>
 
                       <AccordionItem value="unplanned-expense-variance">
-                          <AccordionTriggerWithSum label="Unplanned Expenses" icon={AlertTriangleIcon} sum={varianceTotalsByCategory['unplanned-expense'].actual} budgetedSum={0} variance={0 - varianceTotalsByCategory['unplanned-expense'].actual} className="text-destructive hover:text-destructive-foreground data-[state=closed]:border-b" />
+                          <AccordionTriggerWithSum label="Unplanned Expenses" icon={HelpCircle} sum={varianceTotalsByCategory['unplanned-expense'].actual} budgetedSum={0} variance={0 - varianceTotalsByCategory['unplanned-expense'].actual} className="text-destructive hover:text-destructive-foreground data-[state=closed]:border-b" />
                           <AccordionContent>{varianceDataByCategory['unplanned-expense'].length > 0 ? (<ScrollArea className="h-[150px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['unplanned-expense'].map(item => renderVarianceRow('unplanned-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No unplanned expenses.</p>)}</AccordionContent>
                       </AccordionItem>
 
@@ -524,4 +560,3 @@ export default function StatementsPage() {
     </div>
   );
 }
-

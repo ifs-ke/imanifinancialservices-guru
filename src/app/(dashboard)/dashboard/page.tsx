@@ -4,17 +4,17 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, BookOpen, XCircle } from 'lucide-react'; // Added XCircle
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, BookOpen, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
-import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore';
+import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedDebt } from '@/store/budgetStore';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
-import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, differenceInDays, parse, getDaysInMonth } from 'date-fns';
+import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, differenceInDays, parse, getDaysInMonth, isValid as isDateValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
-import type { BudgetItemCategory } from '@/lib/types';
+import type { BudgetItem } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useSyncManager } from '@/hooks/useSyncManager';
 
@@ -41,8 +41,8 @@ export default function DashboardPage() {
   const { gettingStartedDismissed, setGettingStartedDismissed } = useSyncManager();
 
    const filteredTransactions = useMemo(() => {
-       const start = startDate ? startDate.getTime() : 0; 
-       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now(); 
+       const start = startDate && isDateValid(startDate) ? startDate.getTime() : 0; 
+       const end = endDate && isDateValid(endDate) ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now(); 
        return allTransactions.filter(tx => {
            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
            if (isNaN(txDate.getTime())) return false;
@@ -151,47 +151,79 @@ export default function DashboardPage() {
      }
    }, [debts, monthlyBudgetedDebtPayment]); 
 
-   const budgetVariance = useMemo(() => {
-       const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
-       const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
-       
-       const start = startDate || dfnsStartOfMonth(new Date());
-       const end = endDate || dfnsEndOfMonth(new Date());
-       const daysInStatementPeriod = differenceInDays(end, start) + 1;
-       
-       const budgetMonthDate = parse(currentBudgetPeriod, 'yyyy-MM', new Date());
-       const daysInActualBudgetMonth = getDaysInMonth(budgetMonthDate);
-       const budgetMultiplier = daysInActualBudgetMonth > 0 ? daysInStatementPeriod / daysInActualBudgetMonth : 0;
+  const budgetVariance = useMemo(() => {
+    // Actuals for the statement period
+    const actualIncomeForStatementPeriod = filteredTransactions
+        .filter(tx => tx.amount > 0)
+        .reduce((sum, tx) => sum + tx.amount, 0);
 
-       const proratedBudgetedIncome = budgetItemsForCurrentPeriod
-           .filter(item => item.category === 'income')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedExpenses = budgetItemsForCurrentPeriod
-           .filter(item => item.category === 'recurring-expense' || item.category === 'one-time-expense')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedGoals = budgetItemsForCurrentPeriod
-           .filter(item => item.category === 'goal')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedDebt = budgetItemsForCurrentPeriod
-           .filter(item => item.category === 'debt')
-           .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
+    const actualExpensesForStatementPeriod = filteredTransactions
+        .filter(tx => tx.amount < 0)
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    
+    // Budget items for the *current budget month*
+    const budgetItemsForCurrentBudgetMonth = allBudgetItems.filter(item => item.period === currentBudgetPeriod);
 
-       if ((proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0 && proratedBudgetedDebt === 0) || (actualIncome === 0 && actualExpenses === 0)) {
-           return { value: null, status: 'no-data' as const };
-       }
+    const stmtStart = startDate && isDateValid(startDate) ? startDate : dfnsStartOfMonth(new Date());
+    const stmtEnd = endDate && isDateValid(endDate) ? endDate : dfnsEndOfMonth(new Date());
+    const daysInStatementPeriod = differenceInDays(stmtEnd, stmtStart) + 1;
+    
+    const budgetMonthDate = parse(currentBudgetPeriod, 'yyyy-MM', new Date());
+    const daysInActualBudgetMonth = isDateValid(budgetMonthDate) ? getDaysInMonth(budgetMonthDate) : 0;
+    
+    // Calculate budgetMultiplier: proportion of the budget month that overlaps with the statement period
+    let budgetMultiplier = 0;
+    if (daysInStatementPeriod > 0 && daysInActualBudgetMonth > 0) {
+        const budgetMonthStart = dfnsStartOfMonth(budgetMonthDate);
+        const budgetMonthEnd = dfnsEndOfMonth(budgetMonthDate);
+        
+        const overlapStart = stmtStart > budgetMonthStart ? stmtStart : budgetMonthStart;
+        const overlapEnd = stmtEnd < budgetMonthEnd ? stmtEnd : budgetMonthEnd;
 
-        const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals - proratedBudgetedDebt;
-       const netActual = actualIncome - actualExpenses; 
-       const variance = netActual - netBudgetedProrated; 
-       const threshold = Math.max(Math.abs(netBudgetedProrated * 0.01), 50); 
-       let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
+        if (overlapEnd >= overlapStart) {
+            const effectiveDaysInStatementForBudget = differenceInDays(overlapEnd, overlapStart) + 1;
+            budgetMultiplier = effectiveDaysInStatementForBudget / daysInActualBudgetMonth;
+        }
+    }
 
-       if (Math.abs(variance) <= threshold) status = 'on-track';
-       else if (variance > 0) status = 'under-budget'; 
-       else status = 'over-budget'; 
 
-       return { value: variance, status };
-   }, [filteredTransactions, budgetItemsForCurrentPeriod, startDate, endDate, currentBudgetPeriod]);
+    let proratedBudgetedIncome = 0;
+    let proratedBudgetedExpenses = 0; // Includes expenses, goals, debt allocations
+
+    budgetItemsForCurrentBudgetMonth.forEach(item => {
+        const proratedAmount = item.amount * budgetMultiplier;
+        if (item.category === 'income') {
+            proratedBudgetedIncome += proratedAmount;
+        } else if (item.category !== 'unplanned-expense') { 
+            proratedBudgetedExpenses += proratedAmount;
+        }
+    });
+
+    if (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && actualIncomeForStatementPeriod === 0 && actualExpensesForStatementPeriod === 0) {
+       return { value: null, status: 'no-data' as const };
+    }
+    
+    const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses;
+    const netActualForPeriod = actualIncomeForStatementPeriod - actualExpensesForStatementPeriod;
+    const variance = netActualForPeriod - netBudgetedProrated;
+    
+    // More refined threshold: 5% of budgeted net or 50 KES, whichever is larger.
+    // Use absolute of netBudgetedProrated as it can be negative.
+    const threshold = Math.max(Math.abs(netBudgetedProrated * 0.05), 50); 
+    let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
+
+    if ( (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0) && (actualIncomeForStatementPeriod === 0 && actualExpensesForStatementPeriod === 0) ) {
+        status = 'no-data';
+    } else if (Math.abs(variance) <= threshold) {
+        status = 'on-track';
+    } else if (variance > 0) { // Actual net is better than budgeted net
+        status = 'under-budget'; // Favorable
+    } else { // Actual net is worse than budgeted net
+        status = 'over-budget'; // Unfavorable
+    }
+
+    return { value: variance, status };
+  }, [filteredTransactions, allBudgetItems, currentBudgetPeriod, startDate, endDate]);
 
   useEffect(() => {
     setFormattedNetWorth(formatCurrency(financialData.netWorth));
@@ -279,7 +311,7 @@ export default function DashboardPage() {
                     High-level overview. Budget Variance uses range:
                     {startDate || endDate ? (
                         <span className='font-semibold ml-1'>
-                            {startDate ? format(startDate, 'PP') : 'Start'} - {endDate ? format(endDate, 'PP') : 'End'}
+                            {startDate && isDateValid(startDate) ? format(startDate, 'PP') : 'Start'} - {endDate && isDateValid(endDate) ? format(endDate, 'PP') : 'End'}
                         </span>
                     ) : (
                         <span className='font-semibold ml-1'>All Time</span>

@@ -9,7 +9,7 @@ import type {
     TransactionFrequency as TransactionFrequencyZod,
     TransactionVariability as TransactionVariabilityZod,
     DebtTerm as DebtTermZod,
-    BudgetItemCategory as BudgetItemCategoryZod,
+    BudgetItemCategory as BudgetItemCategoryZodInternal, // Renamed to avoid conflict
     ClientLogPayload as ClientLogPayloadZod,
     SaveDataPayload as SaveDataPayloadZod
 } from './schemas';
@@ -57,15 +57,15 @@ export interface OtherLiabilityItem {
     amount: number;
 }
 
-
-export type BudgetItemCategory = BudgetItemCategoryZod;
+// Extend BudgetItemCategory to include special categories for variance reporting
+export type BudgetItemCategory = BudgetItemCategoryZodInternal | 'unplanned-expense' | 'unbudgeted-income';
 
 
 export interface BudgetItem {
     id: string;
     description: string;
     amount: number;
-    category: BudgetItemCategory;
+    category: BudgetItemCategoryZodInternal; // Budget items should only use the original categories
     period: string; 
 }
 
@@ -76,6 +76,8 @@ export interface WeeklyReviewData {
   journal: string;
   transactionComments?: Record<string, string>;
   sharedWith?: string[];
+  // Added to store weekKey within the object itself if needed, though often it's the Record key
+  weekKey?: string; 
 }
 
 
