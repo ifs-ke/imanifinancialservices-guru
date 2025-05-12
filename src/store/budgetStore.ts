@@ -5,6 +5,11 @@ import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils'; 
 import { format } from 'date-fns'; 
 import { logInfo } from '@/lib/logger'; // Import logger
+import { BudgetItemCategorySchema as BudgetItemCategoryValidationSchema } from '@/lib/schemas'; // For validation if needed
+
+// Exporting the schema if it's intended to be used elsewhere for validation directly from this store module
+export { BudgetItemCategoryValidationSchema as BudgetItemCategorySchema };
+
 
 const generateId = (): string => `budget_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
