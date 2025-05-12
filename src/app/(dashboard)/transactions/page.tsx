@@ -5,8 +5,7 @@ import React, { useState, type ChangeEvent, useEffect, useCallback, useMemo } fr
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Label is still used in Add Transaction Dialog
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label'; 
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, FileUp, FileDown, PackageSearch, Edit, Trash2, XSquare } from 'lucide-react';
 import {
@@ -82,8 +81,8 @@ export default function TransactionsPage() {
     transactions, 
     addTransaction, 
     deleteTransaction,
-    batchUpdateTransactions, // Keep this store action
-    deleteSelectedTransactions, // Keep this store action
+    deleteSelectedTransactions,
+    batchUpdateTransactions,
   } = useTransactionsStore(); 
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
 
@@ -101,6 +100,15 @@ export default function TransactionsPage() {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+
+  const handleEditClick = (transaction: TransactionWithId) => {
+    setEditingTransaction(transaction);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeleteClick = (transaction: TransactionWithId) => {
+    setTransactionToDelete(transaction);
+  };
 
   const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), []);
 
@@ -130,15 +138,6 @@ export default function TransactionsPage() {
 
   const getSelectedTransactionIdsFromTable = (): string[] => {
     return table.getSelectedRowModel().rows.map(row => row.original.id);
-  };
-
-  const handleEditClick = (transaction: TransactionWithId) => {
-    setEditingTransaction(transaction);
-    setIsEditDialogOpen(true);
-  };
-
-  const handleDeleteClick = (transaction: TransactionWithId) => {
-    setTransactionToDelete(transaction);
   };
 
   const budgetItemsForSelectedMonth = useMemo(() => {
@@ -258,7 +257,7 @@ export default function TransactionsPage() {
         toast({ title: "No Selection", description: "Please select transactions to delete.", variant: "default" });
         return;
     }
-    deleteSelectedTransactions(idsToDelete); // Call store action
+    deleteSelectedTransactions(idsToDelete); 
     table.resetRowSelection(); 
     toast({ title: "Transactions Deleted", description: `${idsToDelete.length} transaction(s) deleted successfully.` });
   };
@@ -436,7 +435,7 @@ export default function TransactionsPage() {
                     data={transactions}
                     searchColumn="description"
                     searchPlaceholder="Search descriptions..."
-                    table={table} // Pass the table instance
+                    table={table} 
                 />
             </CardContent>
         </Card>
