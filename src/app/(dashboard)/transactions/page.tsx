@@ -422,7 +422,7 @@ export default function TransactionsPage() {
           <CardContent className="p-0">
             <ScrollArea className="h-[calc(100vh-16rem-4rem)] w-full"> 
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                   <TableRow>
                     <TableHead className="w-[60px] pl-4">
                        <Checkbox
