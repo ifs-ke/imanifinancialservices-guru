@@ -21,7 +21,7 @@ const ratelimit = new Ratelimit({
 
 async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[], session: ClientSession) { 
     const logContext = { userId, collectionName, operation: 'replaceCollectionData', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting replace for ${collectionName}`, logContext);
+    logDebug(`Save API: Starting replace for ${collectionName}`, logContext, userId);
     try {
         const collection: Collection = db.collection(collectionName);
         const dataWithUserIdAndProcessed = (data || []).map(item => ({
@@ -34,7 +34,7 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
 
         const itemIdsToKeep = new Set(dataWithUserIdAndProcessed.map(d => d.id));
         const deleteFilter = { userId, id: { $nin: Array.from(itemIdsToKeep) } };
-        logDebug(`Save API: Performing deleteMany for ${collectionName}`, logContext, {filter: deleteFilter});
+        logDebug(`Save API: Performing deleteMany for ${collectionName}`, logContext, {filter: deleteFilter}, userId);
         await collection.deleteMany(deleteFilter, { session });
 
         if (dataWithUserIdAndProcessed.length > 0) {
@@ -45,34 +45,34 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
                      upsert: true 
                  }
              }));
-             logDebug(`Save API: Performing bulkWrite for ${collectionName}`, logContext, {opCount: bulkOps.length});
+             logDebug(`Save API: Performing bulkWrite for ${collectionName}`, logContext, {opCount: bulkOps.length}, userId);
             await collection.bulkWrite(bulkOps, { session });
         } else {
-             logDebug(`Save API: No data provided for ${collectionName}, deleted existing data.`, logContext);
+             logDebug(`Save API: No data provided for ${collectionName}, deleted existing data.`, logContext, userId);
         }
-        logInfo(`Save API: Successfully processed ${collectionName}`, logContext);
+        logInfo(`Save API: Successfully processed ${collectionName}`, logContext, userId);
     } catch (error: any) {
-        logError(`Save API: DB Error replacing ${collectionName}`, error, logContext);
+        logError(`Save API: DB Error replacing ${collectionName}`, error, logContext, userId);
         throw new Error(`Failed to save ${collectionName}: ${error.message}`);
     }
 }
 
 async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Record<string, WeeklyReviewData>, session: ClientSession) { 
     const logContext = { userId, operation: 'saveOwnedWeeklyReviews', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting save for owned weekly reviews`, logContext);
+    logDebug(`Save API: Starting save for owned weekly reviews`, logContext, userId);
     try {
         const collection: Collection = db.collection('weeklyReviews');
         const reviewKeys = Object.keys(ownedReviews || {});
 
         if (reviewKeys.length === 0) {
-             logDebug(`Save API: No owned reviews provided to save.`, logContext);
+             logDebug(`Save API: No owned reviews provided to save.`, logContext, userId);
              return;
         }
 
         const bulkOps = reviewKeys.map(weekKey => {
             const reviewData = ownedReviews[weekKey];
              if (!reviewData || reviewData.ownerId !== userId) {
-                 logWarn(`Save API: SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData?.ownerId}). Skipping.`, { ...logContext, expectedOwnerId: userId, actualOwnerId: reviewData?.ownerId });
+                 logWarn(`Save API: SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData?.ownerId}). Skipping.`, { ...logContext, expectedOwnerId: userId, actualOwnerId: reviewData?.ownerId }, userId);
                  return null;
              }
             const cleanSharedWith = Array.isArray(reviewData.sharedWith) ? reviewData.sharedWith : undefined;
@@ -88,24 +88,24 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
 
 
         if (bulkOps.length > 0) {
-             logDebug(`Save API: Performing bulkWrite for owned weeklyReviews`, logContext, {opCount: bulkOps.length});
+             logDebug(`Save API: Performing bulkWrite for owned weeklyReviews`, logContext, {opCount: bulkOps.length}, userId);
              await collection.bulkWrite(bulkOps as any, { session }); 
-             logInfo(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews`, logContext);
+             logInfo(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews`, logContext, userId);
          } else {
-             logDebug(`Save API: No valid owned reviews to save.`, logContext);
+             logDebug(`Save API: No valid owned reviews to save.`, logContext, userId);
          }
     } catch (error: any) {
-        logError(`Save API: DB Error saving owned weeklyReviews`, error, logContext);
+        logError(`Save API: DB Error saving owned weeklyReviews`, error, logContext, userId);
         throw new Error(`Failed to save owned weekly reviews: ${error.message}`);
     }
 }
 
 async function saveUserProfileData(db: any, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean, session?: ClientSession) { 
     const logContext = { userId, operation: 'saveUserProfileData', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting save for user profile data`, logContext);
+    logDebug(`Save API: Starting save for user profile data`, logContext, userId);
 
     if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) {
-        logDebug(`Save API: No user profile data fields provided. Skipping profile update.`, logContext);
+        logDebug(`Save API: No user profile data fields provided. Skipping profile update.`, logContext, userId);
         return;
     }
 
@@ -118,7 +118,7 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
                 updateDoc.statementStartDate = startDate ? new Date(startDate) : null; 
             } catch { 
                 updateDoc.statementStartDate = null; 
-                logWarn(`Save API: Invalid start date format received.`, { ...logContext, startDateValue: startDate }); 
+                logWarn(`Save API: Invalid start date format received.`, { ...logContext, startDateValue: startDate }, userId); 
             }
         }
         if (endDate !== undefined) {
@@ -126,7 +126,7 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
                 updateDoc.statementEndDate = endDate ? new Date(endDate) : null; 
             } catch { 
                 updateDoc.statementEndDate = null; 
-                logWarn(`Save API: Invalid end date format received.`, { ...logContext, endDateValue: endDate }); 
+                logWarn(`Save API: Invalid end date format received.`, { ...logContext, endDateValue: endDate }, userId); 
             }
         }
         if (gettingStartedDismissed !== undefined) {
@@ -134,18 +134,18 @@ async function saveUserProfileData(db: any, userId: string, startDate?: string, 
         }
 
         if (Object.keys(updateDoc).length > 0) {
-             logDebug(`Save API: Updating user profile`, logContext, {updateData: updateDoc});
+             logDebug(`Save API: Updating user profile`, logContext, {updateData: updateDoc}, userId);
              await collection.updateOne(
                  { userId },
                  { $set: updateDoc },
                  session ? { upsert: true, session } : { upsert: true }
              );
-             logInfo(`Save API: Successfully saved user profile data`, logContext);
+             logInfo(`Save API: Successfully saved user profile data`, logContext, userId);
          } else {
-              logDebug(`Save API: No valid user profile fields to update.`, logContext);
+              logDebug(`Save API: No valid user profile fields to update.`, logContext, userId);
          }
     } catch (error: any) {
-        logError(`Save API: DB Error saving user profile data`, error, logContext);
+        logError(`Save API: DB Error saving user profile data`, error, logContext, userId);
         throw new Error(`Failed to save user profile data: ${error.message}`);
     }
 }
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
   const logContextBase = { userId: userId || 'unknown-save-post', operation: 'POST /api/save', apiRoute: '/api/save' };
 
   if (!userId) {
-    logWarn('Save API: Unauthorized save attempt: User not logged in.', logContextBase);
+    logWarn('Save API: Unauthorized save attempt: User not logged in.', logContextBase, userId);
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response);
   }
@@ -171,24 +171,24 @@ export async function POST(request: Request) {
   const logContextWithRateLimit = { ...logContextBase, rateLimit: { limit, remaining, reset } };
 
   if (!success) {
-      logWarn('Save API: Rate limit exceeded.', logContextWithRateLimit);
+      logWarn('Save API: Rate limit exceeded.', logContextWithRateLimit, userId);
        const response = NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
        return addCorsHeaders(response);
   }
-  logDebug('Save API: Rate limit check passed.', logContextWithRateLimit);
+  logDebug('Save API: Rate limit check passed.', logContextWithRateLimit, userId);
 
   let rawPayload: any;
   try {
     rawPayload = await request.json();
   } catch (error: any) {
-    logError('Save API: Invalid request body - JSON parsing failed.', error, logContextWithRateLimit);
+    logError('Save API: Invalid request body - JSON parsing failed.', error, logContextWithRateLimit, userId);
     const response = NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     return addCorsHeaders(response);
   }
 
   const validationResult = SaveDataPayloadSchema.safeParse(rawPayload);
   if (!validationResult.success) {
-    logWarn('Save API: Invalid payload structure or data types.', { ...logContextWithRateLimit, errors: validationResult.error.flatten() });
+    logWarn('Save API: Invalid payload structure or data types.', { ...logContextWithRateLimit, errors: validationResult.error.flatten() }, userId);
     const response = NextResponse.json({ error: 'Invalid payload structure or data types.', details: validationResult.error.flatten() }, { status: 400 });
     return addCorsHeaders(response);
   }
@@ -199,23 +199,23 @@ export async function POST(request: Request) {
   const dataString = stringify(preparedDataForVerification);
   const calculatedServerHash = await hashData(dataString);
 
-  logDebug(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`, logContextWithRateLimit);
+  logDebug(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`, logContextWithRateLimit, userId);
 
   const isValid = await verifyHash(dataString, dataHash);
 
   if (!isValid) {
-    logError('Save API: Data integrity check failed!', { clientHash: dataHash, serverHash: calculatedServerHash, dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : "") }, logContextWithRateLimit);
+    logError('Save API: Data integrity check failed!', { clientHash: dataHash, serverHash: calculatedServerHash, dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : "") }, logContextWithRateLimit, userId);
     const response = NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
     return addCorsHeaders(response);
   }
-  logInfo('Save API: Data integrity check passed. Proceeding with save.', logContextWithRateLimit);
+  logInfo('Save API: Data integrity check passed. Proceeding with save.', logContextWithRateLimit, userId);
 
   const client = await connectToDatabase();
   const db = client.db();
   const session = client.startSession(); 
 
   try {
-    logInfo('Save API: Starting MongoDB transaction.', logContextWithRateLimit);
+    logInfo('Save API: Starting MongoDB transaction.', logContextWithRateLimit, userId);
     await session.withTransaction(async () => {
         const {
           transactions = [],
@@ -239,17 +239,16 @@ export async function POST(request: Request) {
             saveUserProfileData(db, userId, startDate?.toString(), endDate?.toString(), gettingStartedDismissed, session)
         ]);
     });
-    logInfo('Save API: MongoDB transaction committed successfully.', logContextWithRateLimit);
+    logInfo('Save API: MongoDB transaction committed successfully.', logContextWithRateLimit, userId);
      const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
      return addCorsHeaders(response);
   } catch (error: any) {
-    logError('Save API: MongoDB transaction failed or aborted.', error, logContextWithRateLimit);
+    logError('Save API: MongoDB transaction failed or aborted.', error, logContextWithRateLimit, userId);
     const errorMessage = error instanceof Error ? `Failed to save data: ${error.message}` : 'An unknown error occurred during save.';
      const response = NextResponse.json({ error: errorMessage }, { status: 500 });
      return addCorsHeaders(response);
   } finally {
      await session.endSession(); 
-     logDebug('Save API: MongoDB session ended.', logContextWithRateLimit);
+     logDebug('Save API: MongoDB session ended.', logContextWithRateLimit, userId);
   }
 }
-

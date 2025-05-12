@@ -1,36 +1,42 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'; // Re-enable Clerk
-import type { NextRequest, NextResponse } from 'next/server'; // Keep for type safety if needed
+import type { NextRequest, NextResponse } from 'next/server';
+// import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'; // Clerk disabled
 
- // Define routes that should be protected
- // Security: This list defines which parts of the application require authentication.
- // Ensure all routes containing sensitive user data are included here.
- const isProtectedRoute = createRouteMatcher([
-   '/dashboard(.*)', // Protect dashboard and all its sub-routes
-   '/transactions(.*)',
-   '/income-expenses(.*)',
-   '/debt(.*)',
-   '/statements(.*)',
-   '/budget(.*)',
-   '/weekly-review(.*)',
-   '/notifications(.*)', // Protect notifications page
-   '/logger(.*)', // Protect logger page (if it's meant to be restricted)
-   '/api/(save|sync|client-log)(.*)', // Protect the data sync/save API endpoints and client-log
-   '/actions/(shareActions)(.*)', // Protect server actions related to sharing
- ]);
+// Define routes that could be protected
+// Security: This list defines which parts of the application might require authentication.
+// Ensure all routes containing sensitive user data are included here if re-enabling auth.
+// const isProtectedRoute = createRouteMatcher([
+//   '/dashboard(.*)',
+//   '/transactions(.*)',
+//   '/income-expenses(.*)',
+//   '/debt(.*)',
+//   '/statements(.*)',
+//   '/budget(.*)',
+//   '/weekly-review(.*)',
+//   '/notifications(.*)',
+//   '/logger(.*)',
+//   '/api/(save|sync|client-log)(.*)',
+//   '/actions/(shareActions)(.*)',
+// ]);
 
- export default clerkMiddleware((auth, req) => {
-   // Security: If the requested route matches the protected patterns...
-   if (isProtectedRoute(req)) {
-     auth().protect(); // ...require the user to be authenticated via Clerk.
-   }
- });
+// When Clerk is disabled, this middleware can be simplified or removed if not handling other logic.
+// For now, it will just pass through requests.
+export function middleware(req: NextRequest) {
+  // console.log('Middleware running for path:', req.nextUrl.pathname); // For debugging if needed
 
+  // If Clerk were enabled, auth logic would be here:
+  // if (isProtectedRoute(req)) {
+  //   auth().protect();
+  // }
 
- export const config = {
-   matcher: [
-     // Skip Next.js internals and static files (e.g., images, fonts)
-     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-     // Match all routes including api/trpc routes (Clerk middleware needs to run on API routes for auth checks)
-     '/(api|trpc|actions)(.*)', // Ensure Clerk runs on API routes and server actions
-   ],
- };
+  // Pass through the request if Clerk is disabled or for public routes
+  return; // NextResponse.next() is implicit if nothing is returned
+}
+
+export const config = {
+  matcher: [
+    // Skip Next.js internals and static files
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Match all routes including api/trpc routes (if Clerk were enabled, it would need to run here)
+    '/(api|trpc|actions)(.*)',
+  ],
+};

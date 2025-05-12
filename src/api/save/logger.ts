@@ -25,9 +25,9 @@ const DEFAULT_OPTIONS: LoggerOptions = {
 class ClientLogger {
   private options: LoggerOptions;
   private authData: {
-    userId: string | null;
-    sessionId: string | null;
-    orgId: string | null;
+    userId: string | null| undefined;
+    sessionId: string | null | undefined;
+    orgId: string | null | undefined;
   } = { userId: null, sessionId: null, orgId: null };
 
   constructor(options: Partial<LoggerOptions> = {}) {

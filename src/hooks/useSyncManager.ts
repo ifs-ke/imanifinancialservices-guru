@@ -150,14 +150,18 @@ export function useSyncManager() {
       return false;
     }
     
-    if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) {
-        logDebug('Fetch Aborted: Another fetch or clear operation already in progress.', { 
-            isFetching: isFetchingRef.current, 
+    if (isSavingRef.current || isClearingRef.current) {
+        logDebug('Fetch Aborted: Save or clear operation in progress.', { 
             isSaving: isSavingRef.current,
             isClearing: isClearingRef.current, 
             currentUserId: userId 
         }, userId);
         return false;
+    }
+    
+    if (isFetchingRef.current) {
+        logDebug('Fetch Aborted: Another fetch operation already in progress. Aborting previous.', { currentUserId: userId }, userId);
+        cleanupAsyncOperations(`Superseded by new fetch for user ${userId}`);
     }
 
 
@@ -273,7 +277,7 @@ export function useSyncManager() {
   }, [
     isSignedIn, userId, isClerkLoaded, toast,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status 
+    getWeeklyReviewState, getNotificationState, updateSyncState, syncState.status, cleanupAsyncOperations
   ]);
 
   const saveData = useCallback(async (isForceSave = false) => {
@@ -289,8 +293,8 @@ export function useSyncManager() {
         return false;
     }
     if (isSavingRef.current) {
-        logWarn('Save Aborted: Another save operation is already in progress.', { userId }, userId);
-        return false; 
+        logWarn('Save Aborted: Another save operation is already in progress. Aborting previous.', { userId }, userId);
+        cleanupAsyncOperations(`Superseded by new save for user ${userId}`);
     }
 
     logInfo(`Save Triggered${isForceSave ? ' (Force)' : ''}...`, { currentUserId: userId }, userId);
@@ -302,7 +306,7 @@ export function useSyncManager() {
       preSaveFetchOk = await fetchData(false, false); 
 
       if (!preSaveFetchOk) {
-        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', { operationStatus: 'pre-save-fetch-failed' }, userId);
+        logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', { operationStatus: 'pre-save-fetch-failed' }, { userId: userId });
         if(syncState.hashMismatch) updateSyncState({ isMismatchDialogOpen: true });
         else updateSyncState({ status: 'error' }); 
         isSavingRef.current = false; 
@@ -428,7 +432,7 @@ export function useSyncManager() {
     isSignedIn, userId, isClerkLoaded, toast, 
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
     getWeeklyReviewState, fetchData, syncState.gettingStartedDismissed, syncState.hashMismatch, 
-    updateSyncState, syncState.status 
+    updateSyncState, syncState.status, cleanupAsyncOperations
   ]);
 
   const triggerDebouncedSave = useCallback(() => {
@@ -522,11 +526,7 @@ export function useSyncManager() {
       }, currentAuthUserId);
     }
 
-    // Ensure cleanup is specific to this effect's context
-    const effectSpecificCleanupReason = `AuthEffectCleanup-${currentAuthUserId || 'noUser'}`;
-    return () => {
-        cleanupAsyncOperations(effectSpecificCleanupReason);
-    };
+    return () => cleanupAsyncOperations(`AuthEffectCleanup-${currentAuthUserId || 'noUser'}`);
   }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState]); 
 
 
@@ -535,7 +535,7 @@ export function useSyncManager() {
       logDebug('Change Subscription: Conditions not met (auth not ready or initial fetch not done).', { 
         isClerkLoaded, isSignedIn, currentUserId: userId, initialFetchDone: initialFetchDoneRef.current 
       }, userId);
-      return;
+      return cleanupAsyncOperations(`Change Subscription Unmount: Conditions not met for user ${userId}`);
     }
     if (syncState.hashMismatch) {
       logWarn('Change Subscription: Blocked due to hash mismatch. Data is local but potentially conflicting.', { 
@@ -544,7 +544,7 @@ export function useSyncManager() {
       if (syncState.status !== 'error') {
         updateSyncState({ status: 'error' });
       }
-      return; 
+      return cleanupAsyncOperations(`Change Subscription Unmount: Hash mismatch for user ${userId}`); 
     }
     logDebug('Change Subscription: Subscribing to store changes...', { currentUserId: userId }, userId);
     const storesToWatch = [useTransactionsStore, useDebtStore, useStatementStore, useBudgetStore, useWeeklyReviewStore];
@@ -553,8 +553,9 @@ export function useSyncManager() {
     return () => {
       logDebug('Change Subscription: Unsubscribing from store changes.', { currentUserId: userId }, userId);
       unsubscribes.forEach(unsub => unsub());
+      cleanupAsyncOperations(`Change Subscription Unmount for user ${userId}`);
     };
-  }, [isClerkLoaded, isSignedIn, userId, syncState.status, syncState.hashMismatch, handleStoreChange, updateSyncState]); 
+  }, [isClerkLoaded, isSignedIn, userId, syncState.status, syncState.hashMismatch, handleStoreChange, updateSyncState, cleanupAsyncOperations]); 
 
   useEffect(() => {
     if (!isClerkLoaded || !isSignedIn || !userId || !initialFetchDoneRef.current) return;

@@ -10,9 +10,9 @@ if (!uri) {
   // Throw error during build or server start if URI is missing
   // Avoid doing this at runtime in API routes if possible, handle connection errors there
   if (process.env.NODE_ENV !== 'production' || typeof process.env.BUILD_TIME !== 'undefined') { // Check BUILD_TIME flag if set during build
-      // console.warn('MONGODB_URI environment variable is not defined. Database connectivity will fail.'); // Console log commented out
+      console.warn('MONGODB_URI environment variable is not defined. Database connectivity will fail.'); // Console log commented out
       // In a build step, you might want to throw an error:
-      // throw new Error('Please define the MONGODB_URI environment variable inside .env');
+      throw new Error('Please define the MONGODB_URI environment variable inside .env');
   }
   // It's generally better to let the connection attempt fail later than to throw here during runtime requests.
 }
@@ -86,35 +86,35 @@ const connectToDatabase = async (): Promise<MongoClient> => {
        try {
            client = new MongoClient(uri, options);
            clientPromise = client.connect();
-           // // console.log("MongoDB: Establishing new connection (production)..."); // Console log commented out // Console log commented out
+           console.log("MongoDB: Establishing new connection (production)..."); // Console log commented out // Console log commented out
 
            // Optimization Opportunity: Apply schema validation on connect (or separately)
-           // clientPromise.then(async (connectedClient) => {
-           //   try {
-           //     const db = connectedClient.db();
-           //     await db.command({
-           //       collMod: 'transactions',
-           //       validator: { $jsonSchema: { /* Define your transaction schema rules here */ } }
-           //     });
-           //      await db.command({
-           //       collMod: 'debts',
-           //       validator: { $jsonSchema: { /* Define your debt schema rules here */ } }
-           //     });
-           //     // Add validation for other collections...
-           //     console.log("MongoDB: Schema validation applied/checked.");
-           //   } catch (validationError) {
-           //     console.error("MongoDB: Failed to apply schema validation:", validationError);
-           //     // Decide if this should be a fatal error or just a warning
-           //   }
-           // });
+           clientPromise.then(async (connectedClient) => {
+             try {
+               const db = connectedClient.db();
+               await db.command({
+                 collMod: 'transactions',
+                 validator: { $jsonSchema: { /* Define your transaction schema rules here */ } }
+               });
+                await db.command({
+                 collMod: 'debts',
+                 validator: { $jsonSchema: { /* Define your debt schema rules here */ } }
+               });
+               // Add validation for other collections...
+               console.log("MongoDB: Schema validation applied/checked.");
+             } catch (validationError) {
+               console.error("MongoDB: Failed to apply schema validation:", validationError);
+               // Decide if this should be a fatal error or just a warning
+             }
+           });
 
        } catch (error) {
-           // console.error("MongoDB: Failed to create client (production):", error); // Console log commented out
+           console.error("MongoDB: Failed to create client (production):", error); // Console log commented out
            clientPromise = null; // Clear the promise
            throw new Error("Failed to initialize MongoDB client."); // Re-throw
        }
     } else {
-        // // console.log("MongoDB: Reusing existing connection promise (production)."); // Console log commented out // Console log commented out
+        console.log("MongoDB: Reusing existing connection promise (production)."); // Console log commented out // Console log commented out
     }
   }
 
@@ -124,10 +124,10 @@ const connectToDatabase = async (): Promise<MongoClient> => {
     // Ping the database to confirm connection before returning
     // This adds a small overhead but guarantees the connection is active
     await connectedClient.db("admin").command({ ping: 1 });
-    // // console.log("MongoDB: Connection successful and ping verified."); // Console log commented out // Console log commented out
+    console.log("MongoDB: Connection successful and ping verified."); // Console log commented out // Console log commented out
     return connectedClient;
   } catch (error) {
-    // console.error("MongoDB: Connection or ping verification failed:", error); // Console log commented out
+    console.error("MongoDB: Connection or ping verification failed:", error); // Console log commented out
     // Reset the promise so the next call attempts to reconnect.
     clientPromise = null;
     if (process.env.NODE_ENV === 'development') {

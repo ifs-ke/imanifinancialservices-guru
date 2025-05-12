@@ -189,7 +189,7 @@ export default function TransactionsPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
+    <div className="flex flex-col min-h-screen min-w-100 p-4 md:p-6 lg:p-8">
       <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
