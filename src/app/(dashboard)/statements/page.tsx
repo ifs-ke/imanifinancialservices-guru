@@ -240,7 +240,8 @@ export default function StatementsPage() {
 
         budgetItemsForSelectedPeriod.forEach(item => {
             const descKey = item.description.toLowerCase().trim();
-            const categoryKey = item.category; 
+            const categoryKey = item.category as BudgetItemCategory; // Original category from budget item
+            
             const actualGroupKey = `${categoryKey}-${descKey}`;
             
             const actualGroup = actualSpendingByCategory[actualGroupKey];
@@ -272,8 +273,8 @@ export default function StatementsPage() {
                  const targetCategoryArray = initialVarianceByCategory[data.category];
                  if (targetCategoryArray) { 
                      targetCategoryArray.push({
-                         description: `* ${data.originalDescription}`,
-                         budgeted: 0,
+                         description: `* ${data.originalDescription}`, // Prefix to indicate unbudgeted/unplanned
+                         budgeted: 0, // No budget for these by definition
                          actual: data.amount,
                      });
                  }
@@ -286,7 +287,7 @@ export default function StatementsPage() {
                 initialVarianceByCategory[catKey].sort((a, b) => {
                     const aUnbudgeted = a.description.startsWith('* ');
                     const bUnbudgeted = b.description.startsWith('* ');
-                    if (aUnbudgeted && !bUnbudgeted) return 1;
+                    if (aUnbudgeted && !bUnbudgeted) return 1; // Unbudgeted items last
                     if (!aUnbudgeted && bUnbudgeted) return -1;
                     return a.description.localeCompare(b.description);
                 });
@@ -489,7 +490,7 @@ export default function StatementsPage() {
             <CardHeader className="p-6">
                 <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
                  <CardDescription>Compares the budget for <span className='font-semibold'>{budgetPeriod && isDateValid(parse(budgetPeriod, 'yyyy-MM', new Date())) ? format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy') : 'Selected Period'}</span> with actual transactions from <span className='font-semibold'>{formatDateForStatements(startDate)}</span> to <span className='font-semibold'>{formatDateForStatements(endDate)}</span>.</CardDescription>
-                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/>Actuals marked with * are unbudgeted or unlinked. Variance is (Net Actual - Net Budgeted).</p>
+                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/>Actuals marked with * are unbudgeted or unplanned. Variance is (Net Actual - Net Budgeted).</p>
             </CardHeader>
             <CardContent className="p-6 pt-0">
                  <Accordion type="multiple" className="w-full" defaultValue={[]}>
@@ -550,4 +551,3 @@ export default function StatementsPage() {
     </div>
   );
 }
-

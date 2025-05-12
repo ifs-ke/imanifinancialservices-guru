@@ -72,8 +72,9 @@ export const getColumns = (
       );
     },
     cell: ({ row }) => {
-      const date = row.getValue('date') as Date;
-      return <div className="font-medium">{format(date, 'PP')}</div>;
+      const date = row.getValue('date') as Date | string; // Can be string from API, Date in store
+      const validDate = date instanceof Date ? date : new Date(date);
+      return <div className="font-medium">{isValid(validDate) ? format(validDate, 'PP') : 'Invalid Date'}</div>;
     },
   },
   {
@@ -156,3 +157,7 @@ export const getColumns = (
     enableHiding: false,
   },
 ];
+
+function isValid(date: Date) {
+  return date instanceof Date && !isNaN(date.getTime());
+}

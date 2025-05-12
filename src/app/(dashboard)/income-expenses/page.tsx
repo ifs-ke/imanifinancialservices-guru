@@ -57,7 +57,7 @@ AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 
 
 export default function IncomeExpensesPage() {
-  const { transactions } => useTransactionsStore();
+  const { transactions } = useTransactionsStore();
 
   // Filter transactions
   const incomeTransactions = useMemo(() => transactions.filter(tx => tx.amount > 0), [transactions]);
@@ -211,7 +211,7 @@ export default function IncomeExpensesPage() {
         {/* Income Details Section */}
         <section className="space-y-2">
             <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingUp className="text-accent"/> Income Details</h2>
-            <Accordion type="multiple" className="w-full space-y-2">
+            <Accordion type="multiple" className="w-full space-y-2" defaultValue={[]}>
                  {/* Render each income category using the updated component */}
                  {renderCategorySection("income-rf", "Recurring - Fixed", "Regular income, same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
                  {renderCategorySection("income-rv", "Recurring - Variable", "Regular income, amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
@@ -224,7 +224,7 @@ export default function IncomeExpensesPage() {
         {/* Expense Details Section */}
          <section className="space-y-2">
              <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingDown className="text-destructive"/> Expense Details</h2>
-             <Accordion type="multiple" className="w-full space-y-2">
+             <Accordion type="multiple" className="w-full space-y-2" defaultValue={[]}>
                   {/* Render each expense category using the updated component */}
                   {renderCategorySection("expense-rf", "Recurring - Fixed", "Regular expenses, same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
                   {renderCategorySection("expense-rv", "Recurring - Variable", "Regular expenses, amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
