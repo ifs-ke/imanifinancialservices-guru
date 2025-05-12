@@ -49,36 +49,46 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
       modeOfPayment: undefined,
       frequency: undefined,
       variability: undefined,
-      categoryName: undefined,
+      categoryName: undefined, // Default to undefined, meaning "leave unchanged"
     },
   });
 
   const [referenceDateForBudgetItems, setReferenceDateForBudgetItems] = useState<string | null>(null);
   
-  // Get the first selected transaction to use its date for populating budget items
   const firstSelectedTransaction = useTransactionsStore(state => 
     state.transactions.find(tx => transactionIds.includes(tx.id))
   );
 
   useEffect(() => {
-    if (firstSelectedTransaction?.date) {
-        const dateObj = firstSelectedTransaction.date instanceof Date ? firstSelectedTransaction.date : new Date(firstSelectedTransaction.date);
-        if (isValid(dateObj)) {
-          setReferenceDateForBudgetItems(format(dateObj, 'yyyy-MM'));
-        } else {
+    if (isOpen) {
+      form.reset({ // Reset form when dialog opens/transactionIds change
+        modeOfPayment: undefined,
+        frequency: undefined,
+        variability: undefined,
+        categoryName: undefined,
+      });
+      if (firstSelectedTransaction?.date) {
+          const dateObj = firstSelectedTransaction.date instanceof Date ? firstSelectedTransaction.date : new Date(firstSelectedTransaction.date);
+          if (isValid(dateObj)) {
+            setReferenceDateForBudgetItems(format(dateObj, 'yyyy-MM'));
+          } else {
+            setReferenceDateForBudgetItems(null);
+          }
+      } else {
           setReferenceDateForBudgetItems(null);
-        }
-    } else {
-        setReferenceDateForBudgetItems(null);
+      }
     }
-  }, [firstSelectedTransaction, isOpen]);
+  }, [firstSelectedTransaction, isOpen, form, transactionIds]);
 
 
   const budgetItemsForSelectedMonth = useMemo(() => {
     if (!referenceDateForBudgetItems) return [];
     try {
-        // referenceDateForBudgetItems is already in 'yyyy-MM' format
-        return allBudgetItems.filter(item => item.period === referenceDateForBudgetItems && item.category !== 'income');
+        return allBudgetItems.filter(item => 
+            item.period === referenceDateForBudgetItems && 
+            item.category !== 'income' &&
+            item.description && item.description.trim() !== '' // Ensure description is not empty
+        );
     } catch(e) {
         return [];
     }
@@ -86,12 +96,14 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
 
   const onSubmit = (data: BatchUpdateTransactionFormData) => {
     try {
-      const updatesToApply: Partial<TransactionFormData> = {};
-      if (data.modeOfPayment) updatesToApply.modeOfPayment = data.modeOfPayment;
-      if (data.frequency) updatesToApply.frequency = data.frequency;
-      if (data.variability) updatesToApply.variability = data.variability;
-      // Handle categoryName: if "None" is selected, explicitly set to null. Otherwise, use the selected value.
-      if (data.categoryName !== undefined) { // Check if user interacted with the category field
+      const updatesToApply: Partial<TransactionFormData> = {}; // Use TransactionFormData for partial updates
+      
+      // Only add to updatesToApply if a value was actually selected (not undefined or empty string for "leave unchanged")
+      if (data.modeOfPayment && data.modeOfPayment !== "") updatesToApply.modeOfPayment = data.modeOfPayment;
+      if (data.frequency && data.frequency !== "") updatesToApply.frequency = data.frequency;
+      if (data.variability && data.variability !== "") updatesToApply.variability = data.variability;
+      
+      if (data.categoryName !== undefined && data.categoryName !== "") { // Check if user interacted and didn't choose "leave unchanged"
         updatesToApply.categoryName = data.categoryName === NONE_CATEGORY_VALUE ? null : data.categoryName;
       }
 
@@ -106,7 +118,6 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
 
       toast({ title: 'Batch Update Successful', description: `${transactionIds.length} transaction(s) updated.` });
       onClose();
-      form.reset(); // Reset form after successful submission
     } catch (error) {
       toast({ title: 'Error Updating', description: 'Could not update transactions.', variant: 'destructive' });
     }
@@ -163,9 +174,12 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
                        <SelectItem value={NONE_CATEGORY_VALUE}>None (Clear Category)</SelectItem>
                        {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          <SelectItem key={item.id} value={item.description}>
-                            {item.description} ({item.category})
-                          </SelectItem>
+                          // Ensure item.description is not an empty string before rendering
+                          item.description && item.description.trim() !== '' && (
+                            <SelectItem key={item.id} value={item.description}>
+                              {item.description} ({item.category})
+                            </SelectItem>
+                          )
                         ))
                       ) : (
                         <SelectItem value={NO_ITEMS_PLACEHOLDER_VALUE} disabled>
@@ -224,7 +238,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
             />
             <DialogFooter className="pt-4">
               <DialogClose asChild>
-                <Button type="button" variant="outline" onClick={() => form.reset()}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={() => { form.reset(); onClose();}}>Cancel</Button>
               </DialogClose>
               <Button type="submit" disabled={form.formState.isSubmitting || transactionIds.length === 0}>
                 {form.formState.isSubmitting ? "Updating..." : "Update Selected"}

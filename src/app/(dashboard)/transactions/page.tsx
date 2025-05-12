@@ -29,7 +29,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added missing import
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactionsStore } from '@/store/transactionsStore'; 
@@ -93,13 +93,16 @@ export default function TransactionsPage() {
         const transactionDate = parse(formData.date, 'yyyy-MM-dd', new Date());
         if (!isValid(transactionDate)) return [];
         const periodKey = format(transactionDate, 'yyyy-MM');
-        return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income'); 
+        return allBudgetItems.filter(item => 
+            item.period === periodKey && 
+            item.category !== 'income' &&
+            item.description && item.description.trim() !== '' // Ensure description is not empty
+        ); 
     } catch(e) {
         return [];
     }
   }, [formData.date, allBudgetItems]);
 
-  // Clear selection when component unmounts or transactions list changes significantly
   useEffect(() => {
     return () => {
         clearSelection();
@@ -176,7 +179,7 @@ export default function TransactionsPage() {
 
   const formatDateDisplay = (date: Date | string | null | undefined) => {
     if (!date) return 'Date N/A'; 
-    const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
     if (!(dateObj instanceof Date) || !isValid(dateObj)) {
       return 'Invalid Date';
     }
@@ -320,9 +323,12 @@ export default function TransactionsPage() {
                       <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                       {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          <SelectItem key={item.id} value={item.description}>
-                            {item.description} ({item.category})
-                          </SelectItem>
+                          // Ensure item.description is not an empty string before rendering
+                          item.description && item.description.trim() !== '' && (
+                            <SelectItem key={item.id} value={item.description}>
+                              {item.description} ({item.category})
+                            </SelectItem>
+                          )
                         ))
                       ) : (
                         <SelectItem value={NO_ITEMS_PLACEHOLDER_VALUE} disabled>No budget items for selected month</SelectItem>
@@ -414,7 +420,7 @@ export default function TransactionsPage() {
             <CardDescription>Your recent financial activities.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-16rem-4rem)] w-full"> {/* Adjusted height */}
+            <ScrollArea className="h-[calc(100vh-16rem-4rem)] w-full"> 
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -489,7 +495,7 @@ export default function TransactionsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground"> {/* Adjusted colSpan */}
+                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground"> 
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
                     </TableRow>
@@ -520,4 +526,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-

@@ -31,8 +31,8 @@ interface EditTransactionDialogProps {
   allBudgetItems: BudgetItem[]; 
 }
 
-const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; // Unique value for "None" option
-const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; // Unique value for disabled placeholder
+const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; 
+const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; 
 
 const formatDateForInput = (date: Date | string): string => {
     const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
@@ -73,7 +73,11 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       const transactionDate = parse(transactionDateStr, 'yyyy-MM-dd', new Date());
       if (!isValid(transactionDate)) return [];
       const periodKey = format(transactionDate, 'yyyy-MM');
-      return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income');
+      return allBudgetItems.filter(item => 
+        item.period === periodKey && 
+        item.category !== 'income' &&
+        item.description && item.description.trim() !== '' // Ensure description is not empty
+      );
     } catch (e) {
       return [];
     }
@@ -88,7 +92,6 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         modeOfPayment: transaction.modeOfPayment,
         frequency: transaction.frequency || undefined,
         variability: transaction.variability || undefined,
-        // Ensure categoryName is set to NONE_CATEGORY_VALUE if it's null/undefined for proper select display
         categoryName: transaction.categoryName || NONE_CATEGORY_VALUE, 
       });
     }
@@ -203,9 +206,12 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                        <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                        {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          <SelectItem key={item.id} value={item.description}>
-                            {item.description} ({item.category})
-                          </SelectItem>
+                          // Ensure item.description is not an empty string before rendering
+                           item.description && item.description.trim() !== '' && (
+                            <SelectItem key={item.id} value={item.description}>
+                              {item.description} ({item.category})
+                            </SelectItem>
+                          )
                         ))
                       ) : (
                         <SelectItem value={NO_ITEMS_PLACEHOLDER_VALUE} disabled>No budget items for selected month</SelectItem>
@@ -260,7 +266,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
             />
             <DialogFooter className="pt-4">
               <DialogClose asChild>
-                <Button type="button" variant="outline" onClick={() => form.reset()}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={() => {form.reset(); onClose();}}>Cancel</Button>
               </DialogClose>
               <Button type="submit" disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
