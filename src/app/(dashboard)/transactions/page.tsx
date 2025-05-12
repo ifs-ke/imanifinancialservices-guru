@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, FileUp, FileDown } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, FileUp, FileDown, PackageSearch } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -33,21 +33,21 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactionsStore } from '@/store/transactionsStore';
-import { useBudgetStore } from '@/store/budgetStore'; // Import budget store
+import { useBudgetStore } from '@/store/budgetStore'; 
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem } from '@/lib/types';
 import Link from 'next/link';
-import { format, parse } from 'date-fns';
+import { format, parse, isValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
 import { Badge } from '@/components/ui/badge';
 
 const formatDateForInput = (date: Date | string): string => {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    if (isNaN(dateObj.getTime())) {
+    const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
+    if (!isValid(dateObj)) {
         const today = new Date();
-        return today.toISOString().split('T')[0];
+        return format(today, 'yyyy-MM-dd');
     }
-    return dateObj.toISOString().split('T')[0];
+    return format(dateObj, 'yyyy-MM-dd');
 };
 
 const initialFormData = {
@@ -71,16 +71,14 @@ export default function TransactionsPage() {
   const [formData, setFormData] = useState(initialFormData);
   const { toast } = useToast();
 
-  // Get budget items for the month of the currently selected transaction date
   const budgetItemsForSelectedMonth = useMemo(() => {
     if (!formData.date) return [];
     try {
         const transactionDate = parse(formData.date, 'yyyy-MM-dd', new Date());
-        if (isNaN(transactionDate.getTime())) return [];
+        if (!isValid(transactionDate)) return [];
         const periodKey = format(transactionDate, 'yyyy-MM');
         return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income'); 
     } catch(e) {
-        // console.error("Error parsing date in budgetItemsForSelectedMonth (Add Dialog):", e);
         return [];
     }
   }, [formData.date, allBudgetItems]);
@@ -113,7 +111,7 @@ export default function TransactionsPage() {
     }
 
     addTransaction({
-      date: new Date(date + 'T00:00:00'), // Ensure correct date parsing for timezones
+      date: parse(date, 'yyyy-MM-dd', new Date()), 
       description: description,
       amount: parsedAmount,
       modeOfPayment: modeOfPayment as ModeOfPayment,
@@ -152,8 +150,8 @@ export default function TransactionsPage() {
   };
 
   const formatDateDisplay = (date: Date | string) => {
-     const dateObj = typeof date === 'string' ? new Date(date) : date;
-      if (isNaN(dateObj.getTime())) return 'Invalid Date';
+     const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
+      if (!isValid(dateObj)) return 'Invalid Date';
     return format(dateObj, 'PP'); 
   };
 
@@ -183,7 +181,7 @@ export default function TransactionsPage() {
       const sanitizedDescription = tx.description.replace(/"/g, "''");
       const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date);
       const values = [
-        isNaN(dateObj.getTime()) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'),
+        !isValid(dateObj) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'),
         `"${sanitizedDescription}"`,
         tx.amount,
         tx.modeOfPayment,
@@ -212,8 +210,8 @@ export default function TransactionsPage() {
     <div className="flex flex-col min-h-screen min-w-100 p-4 md:p-6 lg:p-8">
       <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Transactions
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center">
+             <PackageSearch className="h-6 w-6 mr-2 text-primary" /> Transactions
           </h1>
           <p className="text-muted-foreground">
             View, import, and manage your financial transactions.
@@ -259,12 +257,12 @@ export default function TransactionsPage() {
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-categoryName" className="text-right col-span-1">Budget Category</Label>
-                  <Select name="categoryName" value={formData.categoryName} onValueChange={(value) => handleSelectChange('categoryName', value === 'none' ? '' : value)}>
+                  <Select name="categoryName" value={formData.categoryName || ''} onValueChange={(value) => handleSelectChange('categoryName', value === '' ? '' : value)}>
                     <SelectTrigger id="add-categoryName" className="col-span-3">
                       <SelectValue placeholder="Optional: Link to budget item" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="">None</SelectItem>
                       {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
                           <SelectItem key={item.id} value={item.description}>
@@ -366,9 +364,8 @@ export default function TransactionsPage() {
                                  <span className="sr-only">Delete</span>
                                </Button>
                              </AlertDialogTrigger>
-                             <AlertDialogContent>
-                               {transactionToDelete && transactionToDelete.id === tx.id && ( 
-                                 <>
+                             {transactionToDelete && transactionToDelete.id === tx.id && ( 
+                               <AlertDialogContent>
                                    <AlertDialogHeader>
                                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                      <AlertDialogDescription>
@@ -380,9 +377,8 @@ export default function TransactionsPage() {
                                      <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
                                      <AlertDialogAction onClick={confirmDeleteTransaction}>Delete</AlertDialogAction>
                                    </AlertDialogFooter>
-                                 </>
-                                )}
                                </AlertDialogContent>
+                                )}
                            </AlertDialog>
                          </TableCell>
                       </TableRow>

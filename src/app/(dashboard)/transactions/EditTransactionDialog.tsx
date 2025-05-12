@@ -22,7 +22,7 @@ import type { TransactionWithId, BudgetItem } from '@/lib/types';
 import { TransactionFormDataSchema } from '@/lib/schemas';
 import type { TransactionFormData } from '@/lib/schemas';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { format, parse } from 'date-fns';
+import { format, parse, isValid } from 'date-fns';
 
 interface EditTransactionDialogProps {
   isOpen: boolean;
@@ -32,12 +32,12 @@ interface EditTransactionDialogProps {
 }
 
 const formatDateForInput = (date: Date | string): string => {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    if (isNaN(dateObj.getTime())) {
+    const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
+    if (!isValid(dateObj)) {
         const today = new Date();
-        return today.toISOString().split('T')[0];
+        return format(today, 'yyyy-MM-dd');
     }
-    return dateObj.toISOString().split('T')[0];
+    return format(dateObj, 'yyyy-MM-dd');
 };
 
 const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
@@ -68,11 +68,10 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
     if (!transactionDateStr) return [];
     try {
       const transactionDate = parse(transactionDateStr, 'yyyy-MM-dd', new Date());
-      if (isNaN(transactionDate.getTime())) return [];
+      if (!isValid(transactionDate)) return [];
       const periodKey = format(transactionDate, 'yyyy-MM');
       return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income');
     } catch (e) {
-      // console.error("Error parsing date for budget items filter (Edit Dialog):", e);
       return [];
     }
   }, [transactionDateStr, allBudgetItems]);
@@ -95,7 +94,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
     try {
       updateTransaction({
         ...transaction,
-        date: new Date(data.date + 'T00:00:00'), // Ensure correct date parsing
+        date: parse(data.date, 'yyyy-MM-dd', new Date()), 
         description: data.description,
         amount: data.amount,
         modeOfPayment: data.modeOfPayment,
@@ -106,7 +105,6 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
       onClose();
     } catch (error) {
-      // console.error("Error updating transaction:", error);
       toast({ title: 'Error Updating', description: 'Could not update the transaction.', variant: 'destructive' });
     }
   };
