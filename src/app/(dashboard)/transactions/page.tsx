@@ -41,6 +41,9 @@ import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
 import { Badge } from '@/components/ui/badge';
 
+const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; // Unique value for "None" option
+const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; // Unique value for disabled placeholder
+
 const formatDateForInput = (date: Date | string): string => {
     const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
     if (!isValid(dateObj)) {
@@ -109,6 +112,8 @@ export default function TransactionsPage() {
       toast({ title: 'Invalid Amount', description: 'Please enter a valid number.', variant: 'destructive' });
       return;
     }
+    
+    const processedCategoryName = categoryName === NONE_CATEGORY_VALUE ? null : categoryName;
 
     addTransaction({
       date: parse(date, 'yyyy-MM-dd', new Date()), 
@@ -117,7 +122,7 @@ export default function TransactionsPage() {
       modeOfPayment: modeOfPayment as ModeOfPayment,
       frequency: frequency || undefined,
       variability: variability || undefined,
-      categoryName: categoryName || null, 
+      categoryName: processedCategoryName, 
     });
 
     setIsAddDialogOpen(false);
@@ -257,12 +262,12 @@ export default function TransactionsPage() {
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-categoryName" className="text-right col-span-1">Budget Category</Label>
-                  <Select name="categoryName" value={formData.categoryName || ''} onValueChange={(value) => handleSelectChange('categoryName', value === '' ? '' : value)}>
+                  <Select name="categoryName" value={formData.categoryName || NONE_CATEGORY_VALUE} onValueChange={(value) => handleSelectChange('categoryName', value)}>
                     <SelectTrigger id="add-categoryName" className="col-span-3">
                       <SelectValue placeholder="Optional: Link to budget item" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                       {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
                           <SelectItem key={item.id} value={item.description}>
@@ -270,7 +275,7 @@ export default function TransactionsPage() {
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="" disabled>No budget items for selected month</SelectItem>
+                        <SelectItem value={NO_ITEMS_PLACEHOLDER_VALUE} disabled>No budget items for selected month</SelectItem>
                       )}
                     </SelectContent>
                   </Select>

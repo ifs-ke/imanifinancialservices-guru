@@ -31,6 +31,9 @@ interface EditTransactionDialogProps {
   allBudgetItems: BudgetItem[]; 
 }
 
+const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; // Unique value for "None" option
+const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; // Unique value for disabled placeholder
+
 const formatDateForInput = (date: Date | string): string => {
     const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
     if (!isValid(dateObj)) {
@@ -85,13 +88,15 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         modeOfPayment: transaction.modeOfPayment,
         frequency: transaction.frequency || undefined,
         variability: transaction.variability || undefined,
-        categoryName: transaction.categoryName || '', 
+        // Ensure categoryName is set to NONE_CATEGORY_VALUE if it's null/undefined for proper select display
+        categoryName: transaction.categoryName || NONE_CATEGORY_VALUE, 
       });
     }
   }, [transaction, isOpen, form]);
 
   const onSubmit = (data: TransactionFormData) => {
     try {
+      const processedCategoryName = data.categoryName === NONE_CATEGORY_VALUE ? null : data.categoryName;
       updateTransaction({
         ...transaction,
         date: parse(data.date, 'yyyy-MM-dd', new Date()), 
@@ -100,7 +105,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         modeOfPayment: data.modeOfPayment,
         frequency: data.frequency,
         variability: data.variability,
-        categoryName: data.categoryName || null, 
+        categoryName: processedCategoryName, 
       });
       toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
       onClose();
@@ -188,14 +193,14 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
               render={({ field }) => (
                 <FormItem className="grid grid-cols-4 items-center gap-4">
                   <FormLabel className="text-right col-span-1">Budget Category</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ''}>
+                  <Select onValueChange={field.onChange} value={field.value || NONE_CATEGORY_VALUE}>
                     <FormControl className="col-span-3">
                       <SelectTrigger>
                         <SelectValue placeholder="Optional: Link to budget item" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                       <SelectItem value="">None</SelectItem>
+                       <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                        {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
                           <SelectItem key={item.id} value={item.description}>
@@ -203,7 +208,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="" disabled>No budget items for selected month</SelectItem>
+                        <SelectItem value={NO_ITEMS_PLACEHOLDER_VALUE} disabled>No budget items for selected month</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
