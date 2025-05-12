@@ -34,14 +34,36 @@ interface EditTransactionDialogProps {
 const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; 
 const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; 
 
-const formatDateForInput = (date: Date | string): string => {
-    const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
-    if (!isValid(dateObj)) {
-        const today = new Date();
-        return format(today, 'yyyy-MM-dd');
+// Helper to format Date to YYYY-MM-DD for input[type=date]
+// Ensures that if an invalid date is passed, it doesn't just default to today
+// but tries to maintain the original invalidity or a sensible default like epoch start.
+const formatDateForInput = (date: Date | string | undefined | null): string => {
+    if (date instanceof Date) {
+        if (isValid(date)) {
+            return format(date, 'yyyy-MM-dd');
+        }
+        // console.warn(`Invalid Date object passed to formatDateForInput. Defaulting to epoch start.`);
+        return format(new Date(0), 'yyyy-MM-dd'); 
     }
-    return format(dateObj, 'yyyy-MM-dd');
+    if (typeof date === 'string') {
+        // Attempt to parse common date string formats
+        let parsedDate = new Date(date); // General purpose parsing for ISO strings etc.
+        if (isValid(parsedDate)) {
+            return format(parsedDate, 'yyyy-MM-dd');
+        }
+        // Try specific format if general parsing fails
+        parsedDate = parse(date, 'yyyy-MM-dd', new Date());
+        if (isValid(parsedDate)) {
+            return format(parsedDate, 'yyyy-MM-dd');
+        }
+        // console.warn(`Unparseable date string: ${date}. Defaulting to epoch start.`);
+        return format(new Date(0), 'yyyy-MM-dd');
+    }
+    // Fallback for undefined, null, or other types
+    // console.warn(`Invalid date type or value for formatDateForInput. Defaulting to epoch start.`);
+    return format(new Date(0), 'yyyy-MM-dd');
 };
+
 
 const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
   isOpen,
@@ -54,14 +76,14 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 
   const form = useForm<TransactionFormData>({
     resolver: zodResolver(TransactionFormDataSchema),
-    defaultValues: {
-      date: '',
+    defaultValues: { // Default values for a new form, overridden by useEffect for editing
+      date: formatDateForInput(new Date()), // Default to today if no transaction
       description: '',
       amount: 0,
       modeOfPayment: 'Bank',
       frequency: undefined,
       variability: undefined,
-      categoryName: '', 
+      categoryName: NONE_CATEGORY_VALUE, 
     },
   });
 
@@ -79,6 +101,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         item.description && item.description.trim() !== '' // Ensure description is not empty
       );
     } catch (e) {
+      // console.error("Error filtering budget items for month:", e);
       return [];
     }
   }, [transactionDateStr, allBudgetItems]);
@@ -101,8 +124,8 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
     try {
       const processedCategoryName = data.categoryName === NONE_CATEGORY_VALUE ? null : data.categoryName;
       updateTransaction({
-        ...transaction,
-        date: parse(data.date, 'yyyy-MM-dd', new Date()), 
+        ...transaction, // Spreads the original transaction ID and other potentially unedited fields
+        date: parse(data.date, 'yyyy-MM-dd', new Date()), // Ensure date is parsed back to Date object
         description: data.description,
         amount: data.amount,
         modeOfPayment: data.modeOfPayment,
@@ -113,6 +136,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
       onClose();
     } catch (error) {
+      // console.error("Error updating transaction:", error);
       toast({ title: 'Error Updating', description: 'Could not update the transaction.', variant: 'destructive' });
     }
   };
@@ -206,7 +230,6 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                        <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                        {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          // Ensure item.description is not an empty string before rendering
                            item.description && item.description.trim() !== '' && (
                             <SelectItem key={item.id} value={item.description}>
                               {item.description} ({item.category})
