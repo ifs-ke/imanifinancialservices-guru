@@ -28,7 +28,7 @@ interface EditTransactionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   transaction: TransactionWithId;
-  allBudgetItems: BudgetItem[]; // Pass all budget items
+  allBudgetItems: BudgetItem[]; 
 }
 
 const formatDateForInput = (date: Date | string): string => {
@@ -58,7 +58,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       modeOfPayment: 'Bank',
       frequency: undefined,
       variability: undefined,
-      categoryName: '', // Initialize categoryName
+      categoryName: '', 
     },
   });
 
@@ -72,7 +72,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       const periodKey = format(transactionDate, 'yyyy-MM');
       return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income');
     } catch (e) {
-      // console.error("Error parsing date for budget items filter:", e);
+      // console.error("Error parsing date for budget items filter (Edit Dialog):", e);
       return [];
     }
   }, [transactionDateStr, allBudgetItems]);
@@ -86,7 +86,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         modeOfPayment: transaction.modeOfPayment,
         frequency: transaction.frequency || undefined,
         variability: transaction.variability || undefined,
-        categoryName: transaction.categoryName || '', // Set categoryName
+        categoryName: transaction.categoryName || '', 
       });
     }
   }, [transaction, isOpen, form]);
@@ -95,13 +95,13 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
     try {
       updateTransaction({
         ...transaction,
-        date: new Date(data.date + 'T00:00:00'),
+        date: new Date(data.date + 'T00:00:00'), // Ensure correct date parsing
         description: data.description,
         amount: data.amount,
         modeOfPayment: data.modeOfPayment,
         frequency: data.frequency,
         variability: data.variability,
-        categoryName: data.categoryName || null, // Ensure categoryName is saved
+        categoryName: data.categoryName || null, 
       });
       toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
       onClose();
@@ -113,7 +113,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[480px]"> {/* Slightly wider */}
+      <DialogContent className="sm:max-w-[480px]"> 
         <DialogHeader>
           <DialogTitle>Edit Transaction</DialogTitle>
           <DialogDescription>Update the details for this transaction.</DialogDescription>
@@ -193,7 +193,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                   <Select onValueChange={field.onChange} value={field.value || ''}>
                     <FormControl className="col-span-3">
                       <SelectTrigger>
-                        <SelectValue placeholder="Optional: Select budget item" />
+                        <SelectValue placeholder="Optional: Link to budget item" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>

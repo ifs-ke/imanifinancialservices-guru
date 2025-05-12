@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTransactionsStore } from '@/store/transactionsStore';
-import { useBudgetStore, selectCurrentBudgetPeriod } from '@/store/budgetStore'; // Import budget store
+import { useBudgetStore } from '@/store/budgetStore'; // Import budget store
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem } from '@/lib/types';
 import Link from 'next/link';
 import { format, parse } from 'date-fns';
@@ -57,13 +57,12 @@ const initialFormData = {
     modeOfPayment: '' as ModeOfPayment | '',
     frequency: '' as TransactionFrequency | '',
     variability: '' as TransactionVariability | '',
-    categoryName: '' as string | '', // New field for category selection
+    categoryName: '' as string | '', 
 };
 
 export default function TransactionsPage() {
   const { transactions, addTransaction, deleteTransaction } = useTransactionsStore(); 
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
-  // No need to get budgetPeriod from here, it will be derived from transaction date
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); 
@@ -75,9 +74,15 @@ export default function TransactionsPage() {
   // Get budget items for the month of the currently selected transaction date
   const budgetItemsForSelectedMonth = useMemo(() => {
     if (!formData.date) return [];
-    const transactionDate = parse(formData.date, 'yyyy-MM-dd', new Date());
-    const periodKey = format(transactionDate, 'yyyy-MM');
-    return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income'); // Exclude income items from being categories for expenses
+    try {
+        const transactionDate = parse(formData.date, 'yyyy-MM-dd', new Date());
+        if (isNaN(transactionDate.getTime())) return [];
+        const periodKey = format(transactionDate, 'yyyy-MM');
+        return allBudgetItems.filter(item => item.period === periodKey && item.category !== 'income'); 
+    } catch(e) {
+        // console.error("Error parsing date in budgetItemsForSelectedMonth (Add Dialog):", e);
+        return [];
+    }
   }, [formData.date, allBudgetItems]);
 
 
@@ -108,13 +113,13 @@ export default function TransactionsPage() {
     }
 
     addTransaction({
-      date: new Date(date + 'T00:00:00'),
+      date: new Date(date + 'T00:00:00'), // Ensure correct date parsing for timezones
       description: description,
       amount: parsedAmount,
       modeOfPayment: modeOfPayment as ModeOfPayment,
       frequency: frequency || undefined,
       variability: variability || undefined,
-      categoryName: categoryName || null, // Add categoryName
+      categoryName: categoryName || null, 
     });
 
     setIsAddDialogOpen(false);
@@ -149,7 +154,7 @@ export default function TransactionsPage() {
   const formatDateDisplay = (date: Date | string) => {
      const dateObj = typeof date === 'string' ? new Date(date) : date;
       if (isNaN(dateObj.getTime())) return 'Invalid Date';
-    return format(dateObj, 'PP'); // PP for 'Mar 2, 2021' style
+    return format(dateObj, 'PP'); 
   };
 
   const formatCategoryDisplay = (freq?: TransactionFrequency | null, vari?: TransactionVariability | null) => {
@@ -184,7 +189,7 @@ export default function TransactionsPage() {
         tx.modeOfPayment,
         tx.frequency || '',
         tx.variability || '',
-        tx.categoryName || '' // Add categoryName
+        tx.categoryName || '' 
       ].join(',');
       csvRows.push(values);
     }
@@ -221,7 +226,7 @@ export default function TransactionsPage() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[480px]"> {/* Slightly wider for new field */}
+            <DialogContent className="sm:max-w-[480px]"> 
               <DialogHeader>
                 <DialogTitle>Add New Transaction</DialogTitle>
                 <DialogDescription>Manually enter details below.</DialogDescription>
@@ -254,11 +259,12 @@ export default function TransactionsPage() {
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-categoryName" className="text-right col-span-1">Budget Category</Label>
-                  <Select name="categoryName" value={formData.categoryName} onValueChange={(value) => handleSelectChange('categoryName', value)}>
+                  <Select name="categoryName" value={formData.categoryName} onValueChange={(value) => handleSelectChange('categoryName', value === 'none' ? '' : value)}>
                     <SelectTrigger id="add-categoryName" className="col-span-3">
-                      <SelectValue placeholder="Optional: Select budget item" />
+                      <SelectValue placeholder="Optional: Link to budget item" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
                       {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
                           <SelectItem key={item.id} value={item.description}>
@@ -400,7 +406,6 @@ export default function TransactionsPage() {
               isOpen={isEditDialogOpen}
               onClose={() => setIsEditDialogOpen(false)}
               transaction={editingTransaction}
-              // Pass allBudgetItems to allow EditTransactionDialog to filter for its specific transaction date
               allBudgetItems={allBudgetItems}
           />
       )}

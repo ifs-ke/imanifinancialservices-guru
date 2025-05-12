@@ -28,7 +28,7 @@ export interface TransactionWithId {
   modeOfPayment: ModeOfPayment;
   frequency?: TransactionFrequency | null; 
   variability?: TransactionVariability | null; 
-  categoryName?: string | null; // New field to link to budget item description
+  categoryName?: string | null; 
 }
 
 
@@ -104,4 +104,3 @@ export type ClientLogPayloadType = ClientLogPayloadZod;
 
 // Save Data Payload type (matches Zod schema, dates are strings)
 export type SaveDataPayloadType = SaveDataPayloadZod;
-

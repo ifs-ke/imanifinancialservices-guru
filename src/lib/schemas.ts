@@ -22,7 +22,7 @@ export const TransactionFormDataSchema = z.object({
   modeOfPayment: ModeOfPaymentSchema,
   frequency: TransactionFrequencySchema,
   variability: TransactionVariabilitySchema,
-  categoryName: z.string().optional().nullable(), // New field for budget category link
+  categoryName: z.string().optional().nullable(), 
 });
 export type TransactionFormData = z.infer<typeof TransactionFormDataSchema>;
 
@@ -87,7 +87,7 @@ const TransactionItemSchema = BaseItemSchema.extend({
   modeOfPayment: ModeOfPaymentSchema,
   frequency: TransactionFrequencySchema.nullable(),
   variability: TransactionVariabilitySchema.nullable(),
-  categoryName: z.string().optional().nullable(), // New field for budget category link
+  categoryName: z.string().optional().nullable(), 
 });
 
 const DebtItemAPISchema = z.object({
