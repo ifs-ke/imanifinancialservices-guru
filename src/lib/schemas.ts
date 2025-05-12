@@ -28,7 +28,9 @@ export const TransactionFormValidationSchema = TransactionFormDataSchema;
 
 
 // --- Budget Schemas ---
-export const BudgetItemCategorySchema = z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt']);
+// Added 'unplanned-expense' to allow for this category in budget variance reporting.
+// It's not meant for user selection during budget creation, but for categorizing actuals.
+export const BudgetItemCategorySchema = z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt', 'unplanned-expense']);
 export type BudgetItemCategory = z.infer<typeof BudgetItemCategorySchema>;
 
 export const BudgetItemFormDataSchema = z.object({
@@ -37,7 +39,11 @@ export const BudgetItemFormDataSchema = z.object({
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }).positive({ message: "Amount must be positive" }),
-  category: BudgetItemCategorySchema,
+  // Ensure 'unplanned-expense' is not a selectable option for user input form if this schema is reused.
+  // For forms, you might use a more restrictive schema: z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt'])
+  category: BudgetItemCategorySchema.refine(val => val !== 'unplanned-expense', {
+    message: "Unplanned Expense is not a valid category for manual budgeting."
+  }).or(z.enum(['income', 'recurring-expense', 'one-time-expense', 'goal', 'debt'])), // Fallback to ensure it's one of the valid ones for form
 });
 export type BudgetItemFormData = z.infer<typeof BudgetItemFormDataSchema>;
 export const BudgetItemFormValidationSchema = BudgetItemFormDataSchema;
@@ -102,7 +108,7 @@ const BudgetItemAPISchema = z.object({
   id: z.string(),
   description: z.string(),
   amount: z.number(),
-  category: BudgetItemCategorySchema,
+  category: BudgetItemCategorySchema, // Allows 'unplanned-expense' if data comes this way
   period: z.string(),
 });
 

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Tag, ChevronDown, ChevronRight, AlertTriangle, PieChart as PieChartIcon, CheckCircle, Target } from 'lucide-react';
+import { Trash2, TrendingUp, TrendingDown, Scale, Landmark, PlusCircle, Save, XCircle, Info, Calendar as CalendarIcon, Coins, MinusCircle, Target as TargetIcon, AlertTriangle as AlertTriangleIcon, PieChart as PieChartIcon, CheckCircle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useBudgetStore, selectCurrentBudgetPeriod } from '@/store/budgetStore';
-import { BudgetItemCategorySchema } from '@/lib/schemas'; // Import from schemas.ts
+import { BudgetItemCategorySchema } from '@/lib/schemas';
 import type { StatementItem, DebtItem, OtherLiabilityItem, TransactionWithId, BudgetItem, BudgetItemCategory } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -41,8 +41,8 @@ const calculateDebtTotal = (items: DebtItem[]) => items.reduce((sum, item) => su
 
 
 // Helper to format Date for display
-const formatDate = (date: Date | undefined) => {
-    if (!date || !isDateValid(date)) return <span>Pick a date</span>; // Check if date is valid
+const formatDateForStatements = (date: Date | undefined) => {
+    if (!date || !isDateValid(date)) return <span>Pick a date</span>;
     return format(date, "LLL dd, y");
 };
 
@@ -57,8 +57,8 @@ const formatCategoryBadge = (value: string | undefined) => {
 // Accordion Trigger Component with Sum
 const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; budgetedSum?: number | null; variance?: number | null; itemCount?: number }
->(({ label, sum, budgetedSum, variance, itemCount, children, ...props }, ref) => {
+  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; budgetedSum?: number | null; variance?: number | null; itemCount?: number, icon?: React.ElementType }
+>(({ label, sum, budgetedSum, variance, itemCount, icon: Icon, children, className, ...props }, ref) => {
     const hasBudget = budgetedSum !== undefined && budgetedSum !== null;
     const hasVariance = variance !== undefined && variance !== null;
     let varianceColor = 'text-muted-foreground';
@@ -66,9 +66,10 @@ const AccordionTriggerWithSum = React.forwardRef<
     if (hasVariance && variance < 0) varianceColor = 'text-destructive'; // Unfavorable
 
   return (
-      <AccordionTrigger ref={ref} {...props} className='hover:no-underline py-3 px-4 data-[state=open]:border-b'>
+      <AccordionTrigger ref={ref} {...props} className={cn('hover:no-underline py-3 px-4 data-[state=open]:border-b', className)}>
         <div className="flex justify-between items-center w-full">
-            <span className="flex items-center gap-1 text-base font-semibold">
+            <span className="flex items-center gap-2 text-base font-semibold">
+               {Icon && <Icon className="h-4 w-4" />}
               {label}
                {hasBudget && (
                     <span className="text-xs text-muted-foreground font-normal ml-1">(Budget: {formatCurrency(budgetedSum)})</span>
@@ -77,9 +78,9 @@ const AccordionTriggerWithSum = React.forwardRef<
             <div className="flex items-center gap-2">
                 {itemCount !== undefined && itemCount > 0 && <span className="text-xs text-muted-foreground">({itemCount} items)</span>}
                 {hasVariance && (
-                    <span className={cn("text-xs font-mono", varianceColor)}>
-                      ({variance >= 0 ? '+' : ''}{formatCurrency(variance)})
-                    </span>
+                    <Badge variant={isFinite(variance) ? (variance >=0 ? "default" : "destructive") : "outline"} className={cn("text-xs font-mono", varianceColor)}>
+                      {variance >= 0 ? '+' : ''}{isFinite(variance) ? formatCurrency(variance) : 'N/A'}
+                    </Badge>
                 )}
                 <span className="font-semibold font-mono text-base">{formatCurrency(sum)}</span>
             </div>
@@ -96,8 +97,6 @@ export default function StatementsPage() {
   const {
       assetItems, otherLiabilityItems,
       startDate, endDate, setStartDate, setEndDate,
-      // addAssetItem, addOtherLiabilityItem, updateAssetItem, updateOtherLiabilityItem,
-      // deleteAssetItem, deleteOtherLiabilityItem
   } = useStatementStore();
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
   const budgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
@@ -155,36 +154,57 @@ export default function StatementsPage() {
   const netWorth = totalAssets - totalLiabilities;
 
    const actualSpendingByCategory = useMemo(() => {
-       const actuals: Record<string, { amount: number; count: number }> = {};
-       filteredTransactions.forEach(tx => {
-           const categoryFromTx: BudgetItemCategory | null =
-               tx.amount > 0 ? 'income' :
-               (tx.frequency === 'recurring' && (tx.variability === 'fixed' || tx.variability === 'variable')) ? 'recurring-expense' :
-               (tx.frequency === 'one-time' && (tx.variability === 'fixed' || tx.variability === 'variable')) ? 'one-time-expense' :
-               null; 
-           
-           if (categoryFromTx) { 
-               const descKey = tx.description.toLowerCase();
-               const groupKey = `${categoryFromTx}-${descKey}`;
-               const amount = Math.abs(tx.amount);
-               if (!actuals[groupKey]) actuals[groupKey] = { amount: 0, count: 0 };
-               actuals[groupKey].amount += amount;
-               actuals[groupKey].count += 1;
-           }
-       });
-       return actuals;
-   }, [filteredTransactions]);
+        const actuals: Record<string, { amount: number; count: number, category: BudgetItemCategory | 'unplanned-expense', originalDescription: string }> = {};
+        const budgetItemsForSelectedPeriod = allBudgetItems.filter(item => item.period === budgetPeriod);
 
-   const varianceDataByCategory = useMemo(() => {
-        const initialVarianceByCategory: Record<BudgetItemCategory, { description: string; budgeted: number; actual: number | null }[]> = {
-            income: [], 'recurring-expense': [], 'one-time-expense': [], goal: [], debt: [],
+        filteredTransactions.forEach(tx => {
+            if (tx.amount === 0) return; 
+
+            const isIncome = tx.amount > 0;
+            let matchedBudgetItem: BudgetItem | undefined = undefined;
+
+            if (!isIncome) {
+                matchedBudgetItem = budgetItemsForSelectedPeriod.find(
+                    bi => bi.description.toLowerCase() === tx.description.toLowerCase() &&
+                          (BudgetItemCategorySchema.options as ReadonlyArray<string>).includes(bi.category) && // Ensure it's a valid budget category
+                          bi.category !== 'income' // Only match non-income budget items for expenses
+                );
+            }
+
+            const category: BudgetItemCategory | 'unplanned-expense' = isIncome
+                ? 'income'
+                : matchedBudgetItem
+                  ? matchedBudgetItem.category
+                  : 'unplanned-expense';
+
+            const keyDescription = matchedBudgetItem ? matchedBudgetItem.description : tx.description;
+            const groupKey = `${category}-${keyDescription.toLowerCase()}`; // Use category from logic above
+            const amount = Math.abs(tx.amount);
+
+            if (!actuals[groupKey]) {
+                actuals[groupKey] = { amount: 0, count: 0, category, originalDescription: keyDescription };
+            }
+            actuals[groupKey].amount += amount;
+            actuals[groupKey].count += 1;
+        });
+        return actuals;
+    }, [filteredTransactions, allBudgetItems, budgetPeriod]);
+
+
+    const varianceDataByCategory = useMemo(() => {
+        const initialVarianceByCategory: Record<BudgetItemCategory | 'unplanned-expense', { description: string; budgeted: number; actual: number | null }[]> = {
+            income: [],
+            'recurring-expense': [],
+            'one-time-expense': [],
+            goal: [],
+            debt: [],
+            'unplanned-expense': [],
         };
         const actualsTracked: Set<string> = new Set();
         const budgetItemsForSelectedPeriod = allBudgetItems.filter(item => item.period === budgetPeriod);
 
         const stmtStart = startDate && isDateValid(startDate) ? startDate : dfnsStartOfMonth(new Date());
         const stmtEnd = endDate && isDateValid(endDate) ? endDate : dfnsEndOfMonth(new Date());
-        
         const budgetMonthDate = parse(budgetPeriod, 'yyyy-MM', new Date());
         const budgetMonthStart = dfnsStartOfMonth(budgetMonthDate);
         const budgetMonthEnd = dfnsEndOfMonth(budgetMonthDate);
@@ -194,11 +214,11 @@ export default function StatementsPage() {
             const descKey = item.description.toLowerCase();
             const categoryKey = item.category;
             const actualGroupKey = `${categoryKey}-${descKey}`;
+            
             const actualGroup = actualSpendingByCategory[actualGroupKey];
             const actualAmount = actualGroup ? actualGroup.amount : null;
 
             let budgetAmountToCompare = item.amount;
-
             const statementOverlapsBudgetMonth = (stmtStart <= budgetMonthEnd && stmtEnd >= budgetMonthStart);
 
             if (statementOverlapsBudgetMonth && !(isEqual(stmtStart, budgetMonthStart) && isEqual(stmtEnd, budgetMonthEnd)) && daysInBudgetMonth > 0) {
@@ -213,39 +233,36 @@ export default function StatementsPage() {
                  budgetAmountToCompare = 0;
             }
             
-            if (Object.prototype.hasOwnProperty.call(initialVarianceByCategory, categoryKey)) { 
+            if (initialVarianceByCategory[categoryKey]) {
                 initialVarianceByCategory[categoryKey].push({ description: item.description, budgeted: budgetAmountToCompare, actual: actualAmount });
+                if (actualGroup) actualsTracked.add(actualGroupKey);
             }
-            if (actualGroup) actualsTracked.add(actualGroupKey);
         });
 
         Object.entries(actualSpendingByCategory).forEach(([groupKey, data]) => {
             if (!actualsTracked.has(groupKey)) {
-                const [categoryStr, ...descParts] = groupKey.split(/-(.*)/s);
-                const descKey = descParts.join('-');
-                
-                const isValidCategoryKey = (BudgetItemCategorySchema.options as ReadonlyArray<string>).includes(categoryStr as BudgetItemCategory);
-
-                if (isValidCategoryKey) {
-                    const category = categoryStr as BudgetItemCategory;
-                    const originalTx = filteredTransactions.find(tx => {
-                        let txCategoryAttempt: BudgetItemCategory | null = null;
-                        if (tx.amount > 0) txCategoryAttempt = 'income';
-                        else if (tx.frequency === 'recurring') txCategoryAttempt = 'recurring-expense';
-                        else if (tx.frequency === 'one-time') txCategoryAttempt = 'one-time-expense';
-                        return tx.description.toLowerCase() === descKey.toLowerCase() && txCategoryAttempt === category;
+                if (data.category === 'unplanned-expense') {
+                    initialVarianceByCategory['unplanned-expense'].push({
+                        description: `* ${data.originalDescription}`,
+                        budgeted: 0,
+                        actual: data.amount,
                     });
-                    const displayDescription = originalTx ? originalTx.description : descKey.charAt(0).toUpperCase() + descKey.slice(1);
-                    
-                    if(Object.prototype.hasOwnProperty.call(initialVarianceByCategory, category)) { 
-                        initialVarianceByCategory[category].push({ description: `* ${displayDescription}`, budgeted: 0, actual: data.amount });
-                    }
+                } else if (data.category === 'income' && !initialVarianceByCategory.income.some(i => i.description.toLowerCase() === data.originalDescription.toLowerCase())) {
+                    initialVarianceByCategory.income.push({
+                        description: `* ${data.originalDescription}`,
+                        budgeted: 0,
+                        actual: data.amount,
+                    });
                 }
+                // Note: other categories like 'goal' or 'debt' that have actual spending but no budget item
+                // would also appear as "unbudgeted" if we extended this logic.
+                // For now, focusing on "unplanned-expense" and unbudgeted income.
             }
         });
 
-       Object.values(initialVarianceByCategory).forEach(categoryItems => {
-           categoryItems.sort((a, b) => {
+       Object.keys(initialVarianceByCategory).forEach(key => {
+           const catKey = key as BudgetItemCategory | 'unplanned-expense';
+           initialVarianceByCategory[catKey].sort((a, b) => {
                const aUnbudgeted = a.description.startsWith('* ');
                const bUnbudgeted = b.description.startsWith('* ');
                if (aUnbudgeted && !bUnbudgeted) return 1;
@@ -256,30 +273,33 @@ export default function StatementsPage() {
        return initialVarianceByCategory;
    }, [allBudgetItems, budgetPeriod, actualSpendingByCategory, startDate, endDate, filteredTransactions]);
 
+
    const varianceTotalsByCategory = useMemo(() => {
-        const totals: Record<BudgetItemCategory, { budgeted: number; actual: number }> = {
+        const totals: Record<BudgetItemCategory | 'unplanned-expense', { budgeted: number; actual: number }> = {
             income: { budgeted: 0, actual: 0 },
             'recurring-expense': { budgeted: 0, actual: 0 },
             'one-time-expense': { budgeted: 0, actual: 0 },
             goal: { budgeted: 0, actual: 0 },
             debt: { budgeted: 0, actual: 0 },
+            'unplanned-expense': { budgeted: 0, actual: 0 },
         };
 
         Object.entries(varianceDataByCategory).forEach(([categoryStringKey, items]) => {
-            const catKey = categoryStringKey as BudgetItemCategory; 
-            
-            if (Object.prototype.hasOwnProperty.call(totals, catKey)) {
+            const catKey = categoryStringKey as BudgetItemCategory | 'unplanned-expense';
+            if (totals[catKey]) { // Ensure the key exists in totals
                 items.forEach(item => {
-                    totals[catKey].budgeted += (item.budgeted || 0); 
+                    totals[catKey].budgeted += (item.budgeted || 0);
                     totals[catKey].actual += (item.actual ?? 0);
                 });
             }
         });
        const netBudgeted = totals.income.budgeted - totals['recurring-expense'].budgeted - totals['one-time-expense'].budgeted - totals.goal.budgeted - totals.debt.budgeted;
-       const netActual = totals.income.actual - totals['recurring-expense'].actual - totals['one-time-expense'].actual - totals.goal.actual - totals.debt.actual;
+       // Unplanned expenses are subtracted from actual net income
+       const netActual = totals.income.actual - totals['recurring-expense'].actual - totals['one-time-expense'].actual - totals.goal.actual - totals.debt.actual - totals['unplanned-expense'].actual;
        const overallVariance = netActual - netBudgeted;
        return { ...totals, netBudgeted, netActual, overallVariance };
    }, [varianceDataByCategory]);
+
 
   const handleEditToggle = () => {
     if (!isEditing) {
@@ -367,34 +387,33 @@ export default function StatementsPage() {
         </TableRow>
     );
 
-    const renderVarianceRow = (category: BudgetItemCategory, description: string, budgeted: number, actual: number | null) => {
+    const renderVarianceRow = (category: BudgetItemCategory | 'unplanned-expense', description: string, budgeted: number, actual: number | null) => {
          const actualValue = actual ?? 0;
          const budgetedValue = budgeted;
          const isUnbudgetedActual = description.startsWith('* ');
          const displayDescription = isUnbudgetedActual ? description.substring(2) : description;
          const isIncome = category === 'income';
          
-         let variance = actualValue - budgetedValue; 
-         if (!isIncome) variance = budgetedValue - actualValue; 
+         let variance = isIncome ? actualValue - budgetedValue : budgetedValue - actualValue;
     
          let statusText = '-';
          let statusColor = 'text-muted-foreground';
          const isFavorable = variance >= 0; 
     
-          if (actual === null && budgetedValue === 0) statusText = '-';
+          if (actual === null && budgetedValue === 0 && !isUnbudgetedActual) statusText = '-';
           else if (isUnbudgetedActual) { statusText = `${isIncome ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`; statusColor = isIncome ? 'text-accent' : 'text-destructive'; }
           else if (actual === null) { statusText = `${isIncome ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncome ? 'Received' : 'Spent'})`; statusColor = isIncome ? 'text-destructive' : 'text-accent'; }
           else {
-             const threshold = Math.max(Math.abs(budgetedValue * 0.01), 50); 
-             if (Math.abs(variance) <= threshold && Math.abs(actualValue - budgetedValue) <= threshold) { statusText = 'On Track'; statusColor = 'text-primary'; }
+             const threshold = Math.max(Math.abs(budgetedValue * 0.05), 50); 
+             if (Math.abs(variance) <= threshold) { statusText = 'On Track'; statusColor = 'text-primary'; }
              else if (isFavorable) { statusText = `+${formatCurrency(Math.abs(variance))} (Favorable)`; statusColor = 'text-accent'; }
              else { statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`; statusColor = 'text-destructive'; }
          }
     
         return (
-            <TableRow key={description} className="text-sm">
+            <TableRow key={`${category}-${description}`} className="text-sm">
                  <TableCell className={cn("pl-2 py-1.5", isUnbudgetedActual && "pl-6 italic text-muted-foreground")}>{displayDescription}</TableCell>
-                 <TableCell className="text-right font-mono py-1.5">{budgetedValue > 0 ? formatCurrency(budgetedValue) : '-'}</TableCell>
+                 <TableCell className="text-right font-mono py-1.5">{budgetedValue > 0 ? formatCurrency(budgetedValue) : (isUnbudgetedActual || actual === null ? '-' : formatCurrency(0))}</TableCell>
                  <TableCell className="text-right font-mono py-1.5">{actual !== null ? formatCurrency(actual) : '-'}</TableCell>
                  <TableCell className={cn("text-right font-mono text-xs py-1.5", statusColor)}>{statusText}</TableCell>
             </TableRow>
@@ -410,9 +429,9 @@ export default function StatementsPage() {
 
       <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 border rounded-lg bg-card">
           <Label className="font-semibold">Select Date Range:</Label>
-           <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal h-8",!startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formatDate(startDate)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus/></PopoverContent></Popover>
+           <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal h-8",!startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formatDateForStatements(startDate)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus/></PopoverContent></Popover>
            <span className="text-muted-foreground hidden sm:inline">-</span>
-           <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0",!endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formatDate(endDate)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={endDate} onSelect={setEndDate} disabled={(date) => startDate ? date < startDate : false} initialFocus/></PopoverContent></Popover>
+           <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0",!endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formatDateForStatements(endDate)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={endDate} onSelect={setEndDate} disabled={(date) => startDate ? date < startDate : false} initialFocus/></PopoverContent></Popover>
        </div>
 
       <main className="flex-1 grid gap-6 lg:grid-cols-2">
@@ -420,8 +439,8 @@ export default function StatementsPage() {
           <CardHeader><CardTitle className="flex items-center gap-2">{cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}Cash Flow Statement</CardTitle><CardDescription className="flex items-center gap-1 text-xs pt-2"><Info size={14} className="text-muted-foreground"/> Derived from Transactions within the selected date range.</CardDescription></CardHeader>
            <CardContent>
              <Accordion type="multiple" className="w-full" defaultValue={['income', 'expenses']}>
-                <AccordionItem value="income"><AccordionTriggerWithSum label="Income" sum={totalActualIncome} itemCount={derivedIncomeItems.length} /><AccordionContent>{derivedIncomeItems.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableBody>{derivedIncomeItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'income'))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No income in selected range.</p>)}</AccordionContent></AccordionItem>
-                 <AccordionItem value="expenses" className="border-b-0"><AccordionTriggerWithSum label="Expenses" sum={totalActualExpenses} itemCount={derivedExpenseItems.length} /><AccordionContent>{derivedExpenseItems.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableBody>{derivedExpenseItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'expense'))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No expenses in selected range.</p>)}</AccordionContent></AccordionItem>
+                <AccordionItem value="income"><AccordionTriggerWithSum label="Income" sum={totalActualIncome} itemCount={derivedIncomeItems.length} icon={TrendingUp} className="text-accent hover:text-accent-foreground" /><AccordionContent>{derivedIncomeItems.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableBody>{derivedIncomeItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'income'))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No income in selected range.</p>)}</AccordionContent></AccordionItem>
+                 <AccordionItem value="expenses" className="border-b-0"><AccordionTriggerWithSum label="Expenses" sum={totalActualExpenses} itemCount={derivedExpenseItems.length} icon={TrendingDown} className="text-destructive hover:text-destructive-foreground" /><AccordionContent>{derivedExpenseItems.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableBody>{derivedExpenseItems.map(item => renderDerivedItemRow(item as TransactionWithId, 'expense'))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No expenses in selected range.</p>)}</AccordionContent></AccordionItem>
             </Accordion>
              <div className="mt-4 pt-4 border-t border-border"><div className="flex justify-between items-center text-lg font-bold"><span>Net Cash Flow</span><span className={`font-mono ${cashFlow >= 0 ? 'text-accent' : 'text-destructive'}`}>{formatCurrency(cashFlow)}</span></div></div>
           </CardContent>
@@ -431,8 +450,8 @@ export default function StatementsPage() {
           <CardHeader><CardTitle className="flex items-center gap-2"><Scale className="text-primary" />Net Worth Statement</CardTitle><CardDescription>Assets vs. Liabilities {isEditing ? '(Editing Assets & Other Liabilities)' : ''}</CardDescription></CardHeader>
            <CardContent>
              <Accordion type="multiple" className="w-full" defaultValue={['assets', 'liabilities']}>
-                 <AccordionItem value="assets"><AccordionTriggerWithSum label="Assets" sum={totalAssets} itemCount={(isEditing ? editingAssets : assetItems).length} /><AccordionContent><ScrollArea className="h-[200px] w-full pr-3"><Table><TableBody>{(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}</TableBody></Table></ScrollArea>{isEditing && (<div className="text-center py-2 border-t border-dashed mt-2"><Button variant="ghost" size="sm" onClick={() => handleAddItemClick('asset')}><PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item</Button></div>)}{(isEditing ? editingAssets : assetItems).length === 0 && !isEditing && (<p className="text-center text-muted-foreground py-4 text-sm">No assets recorded.</p>)}</AccordionContent></AccordionItem>
-                 <AccordionItem value="liabilities" className="border-b-0"><AccordionTrigger className="text-base font-semibold hover:no-underline"><div className="flex justify-between w-full pr-2"><span>Liabilities</span><span className="font-semibold font-mono">({formatCurrency(totalLiabilities)})</span></div></AccordionTrigger><AccordionContent><ScrollArea className="h-[200px] w-full pr-3"><Accordion type="multiple" className="w-full pl-4 border-l ml-2" defaultValue={['short-term-debts', 'long-term-debts', 'other-liabilities']}><AccordionItem value="short-term-debts"><AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} itemCount={shortTermDebts.length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" /><AccordionContent className="pb-2">{shortTermDebts.length > 0 ? (<Table><TableBody>{shortTermDebts.map(debt => renderDerivedDebtRow(debt))}</TableBody></Table>) : (<p className="text-center text-muted-foreground py-2 text-xs">No short-term debts.</p>)}</AccordionContent></AccordionItem><AccordionItem value="long-term-debts"><AccordionTriggerWithSum label="Long-Term Debts" sum={totalLongTermDebt} itemCount={longTermDebts.length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" /><AccordionContent className="pb-2">{longTermDebts.length > 0 ? (<Table><TableBody>{longTermDebts.map(debt => renderDerivedDebtRow(debt))}</TableBody></Table>) : (<p className="text-center text-muted-foreground py-2 text-xs">No long-term debts.</p>)}</AccordionContent></AccordionItem><AccordionItem value="other-liabilities" className="border-b-0"><AccordionTriggerWithSum label="Other Liabilities" sum={totalOtherLiabilities} itemCount={(isEditing ? editingOtherLiabilities : otherLiabilityItems).length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" /><AccordionContent className="pb-2"><Table><TableBody>{(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}</TableBody></Table>{isEditing && (<div className="text-center py-2 border-t border-dashed mt-2"><Button variant="ghost" size="sm" onClick={() => handleAddItemClick('otherLiability')}><MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability</Button></div>)}{(isEditing ? editingOtherLiabilities : otherLiabilityItems).length === 0 && !isEditing && (<p className="text-center text-muted-foreground py-4 text-sm">No other liabilities.</p>)}</AccordionContent></AccordionItem></Accordion></ScrollArea></AccordionContent></AccordionItem>
+                 <AccordionItem value="assets"><AccordionTriggerWithSum label="Assets" sum={totalAssets} itemCount={(isEditing ? editingAssets : assetItems).length} icon={Landmark} className="text-primary hover:text-primary-foreground" /><AccordionContent><ScrollArea className="h-[200px] w-full pr-3"><Table><TableBody>{(isEditing ? editingAssets : assetItems).map(item => renderEditableRow(item, 'asset'))}</TableBody></Table></ScrollArea>{isEditing && (<div className="text-center py-2 border-t border-dashed mt-2"><Button variant="ghost" size="sm" onClick={() => handleAddItemClick('asset')}><PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item</Button></div>)}{(isEditing ? editingAssets : assetItems).length === 0 && !isEditing && (<p className="text-center text-muted-foreground py-4 text-sm">No assets recorded.</p>)}</AccordionContent></AccordionItem>
+                 <AccordionItem value="liabilities" className="border-b-0"><AccordionTrigger className="text-base font-semibold hover:no-underline text-destructive hover:text-destructive-foreground"><div className="flex justify-between items-center w-full pr-2"><span className='flex items-center gap-2'><Coins className="h-4 w-4" />Liabilities</span><span className="font-semibold font-mono">({formatCurrency(totalLiabilities)})</span></div></AccordionTrigger><AccordionContent><ScrollArea className="h-[200px] w-full pr-3"><Accordion type="multiple" className="w-full pl-4 border-l ml-2" defaultValue={['short-term-debts', 'long-term-debts', 'other-liabilities']}><AccordionItem value="short-term-debts"><AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} itemCount={shortTermDebts.length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" /><AccordionContent className="pb-2">{shortTermDebts.length > 0 ? (<Table><TableBody>{shortTermDebts.map(debt => renderDerivedDebtRow(debt))}</TableBody></Table>) : (<p className="text-center text-muted-foreground py-2 text-xs">No short-term debts.</p>)}</AccordionContent></AccordionItem><AccordionItem value="long-term-debts"><AccordionTriggerWithSum label="Long-Term Debts" sum={totalLongTermDebt} itemCount={longTermDebts.length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" /><AccordionContent className="pb-2">{longTermDebts.length > 0 ? (<Table><TableBody>{longTermDebts.map(debt => renderDerivedDebtRow(debt))}</TableBody></Table>) : (<p className="text-center text-muted-foreground py-2 text-xs">No long-term debts.</p>)}</AccordionContent></AccordionItem><AccordionItem value="other-liabilities" className="border-b-0"><AccordionTriggerWithSum label="Other Liabilities" sum={totalOtherLiabilities} itemCount={(isEditing ? editingOtherLiabilities : otherLiabilityItems).length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2" /><AccordionContent className="pb-2"><Table><TableBody>{(isEditing ? editingOtherLiabilities : otherLiabilityItems).map(item => renderEditableRow(item, 'otherLiability'))}</TableBody></Table>{isEditing && (<div className="text-center py-2 border-t border-dashed mt-2"><Button variant="ghost" size="sm" onClick={() => handleAddItemClick('otherLiability')}><MinusCircle className="mr-2 h-4 w-4" /> Add Other Liability</Button></div>)}{(isEditing ? editingOtherLiabilities : otherLiabilityItems).length === 0 && !isEditing && (<p className="text-center text-muted-foreground py-4 text-sm">No other liabilities.</p>)}</AccordionContent></AccordionItem></Accordion></ScrollArea></AccordionContent></AccordionItem>
             </Accordion>
              <div className="mt-4 pt-4 border-t border-border"><div className="flex justify-between items-center text-lg font-bold"><span>Net Worth</span><span className={`font-mono ${netWorth >= 0 ? 'text-primary' : 'text-destructive'}`}>{formatCurrency(netWorth)}</span></div></div>
           </CardContent>
@@ -441,29 +460,39 @@ export default function StatementsPage() {
          <Card className="lg:col-span-2">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
-                 <CardDescription>Compares the budget for <span className='font-semibold'>{budgetPeriod && isDateValid(parse(budgetPeriod, 'yyyy-MM', new Date())) ? format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy') : 'Selected Period'}</span> with actual transactions from <span className='font-semibold'>{formatDate(startDate)}</span> to <span className='font-semibold'>{formatDate(endDate)}</span>.</CardDescription>
-                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/>Actuals marked with * are unbudgeted. Variance = Actual Net - Budgeted Net (for the respective periods).</p>
+                 <CardDescription>Compares the budget for <span className='font-semibold'>{budgetPeriod && isDateValid(parse(budgetPeriod, 'yyyy-MM', new Date())) ? format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy') : 'Selected Period'}</span> with actual transactions from <span className='font-semibold'>{formatDateForStatements(startDate)}</span> to <span className='font-semibold'>{formatDateForStatements(endDate)}</span>.</CardDescription>
+                 <p className='text-xs text-muted-foreground pt-2 flex items-center gap-1'><Info size={14}/>Actuals marked with * are unbudgeted. Variance is (Actual Net - Budgeted Net).</p>
             </CardHeader>
             <CardContent>
-                 <Accordion type="multiple" className="w-full" defaultValue={['income-variance', 'expenses-variance', 'goals-variance', 'debt-variance']}>
+                 <Accordion type="multiple" className="w-full" defaultValue={['income-variance', 'recurring-expense-variance', 'one-time-expense-variance', 'unplanned-expense-variance', 'goal-variance', 'debt-variance']}>
                       <AccordionItem value="income-variance">
-                         <AccordionTriggerWithSum label="Income" sum={varianceTotalsByCategory.income.actual} budgetedSum={varianceTotalsByCategory.income.budgeted} variance={varianceTotalsByCategory.income.actual - varianceTotalsByCategory.income.budgeted} className="text-accent" />
-                          <AccordionContent>{varianceDataByCategory.income.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[150px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.income.map(item => renderVarianceRow('income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No income data for variance.</p>)}</AccordionContent>
+                         <AccordionTriggerWithSum label="Income" icon={TrendingUp} sum={varianceTotalsByCategory.income.actual} budgetedSum={varianceTotalsByCategory.income.budgeted} variance={varianceTotalsByCategory.income.actual - varianceTotalsByCategory.income.budgeted} className="text-accent" />
+                          <AccordionContent>{varianceDataByCategory.income.length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.income.map(item => renderVarianceRow('income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No income data for variance.</p>)}</AccordionContent>
                       </AccordionItem>
 
-                     <AccordionItem value="expenses-variance">
-                          <AccordionTriggerWithSum label="Expenses" sum={varianceTotalsByCategory['recurring-expense'].actual + varianceTotalsByCategory['one-time-expense'].actual} budgetedSum={varianceTotalsByCategory['recurring-expense'].budgeted + varianceTotalsByCategory['one-time-expense'].budgeted} variance={(varianceTotalsByCategory['recurring-expense'].budgeted + varianceTotalsByCategory['one-time-expense'].budgeted) - (varianceTotalsByCategory['recurring-expense'].actual + varianceTotalsByCategory['one-time-expense'].actual)} className="text-destructive" />
-                          <AccordionContent>{(varianceDataByCategory['recurring-expense'].length > 0 || varianceDataByCategory['one-time-expense'].length > 0) ? (<ScrollArea className="h-[300px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[150px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['recurring-expense'].map(item => renderVarianceRow('recurring-expense', item.description, item.budgeted, item.actual))}{varianceDataByCategory['one-time-expense'].map(item => renderVarianceRow('one-time-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No expense data for variance.</p>)}</AccordionContent>
+                     <AccordionItem value="recurring-expense-variance">
+                          <AccordionTriggerWithSum label="Recurring Expenses" icon={TrendingDown} sum={varianceTotalsByCategory['recurring-expense'].actual} budgetedSum={varianceTotalsByCategory['recurring-expense'].budgeted} variance={varianceTotalsByCategory['recurring-expense'].budgeted - varianceTotalsByCategory['recurring-expense'].actual} className="text-destructive" />
+                          <AccordionContent>{varianceDataByCategory['recurring-expense'].length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['recurring-expense'].map(item => renderVarianceRow('recurring-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No recurring expense data for variance.</p>)}</AccordionContent>
+                     </AccordionItem>
+                     
+                     <AccordionItem value="one-time-expense-variance">
+                          <AccordionTriggerWithSum label="One-Time Expenses" icon={MinusCircle} sum={varianceTotalsByCategory['one-time-expense'].actual} budgetedSum={varianceTotalsByCategory['one-time-expense'].budgeted} variance={varianceTotalsByCategory['one-time-expense'].budgeted - varianceTotalsByCategory['one-time-expense'].actual} className="text-destructive" />
+                          <AccordionContent>{varianceDataByCategory['one-time-expense'].length > 0 ? (<ScrollArea className="h-[200px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['one-time-expense'].map(item => renderVarianceRow('one-time-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No one-time expense data for variance.</p>)}</AccordionContent>
                      </AccordionItem>
 
-                     <AccordionItem value="goals-variance">
-                          <AccordionTriggerWithSum label="Goals" sum={varianceTotalsByCategory.goal.actual} budgetedSum={varianceTotalsByCategory.goal.budgeted} variance={varianceTotalsByCategory.goal.budgeted - varianceTotalsByCategory.goal.actual} className="text-primary" />
-                          <AccordionContent>{varianceDataByCategory.goal.length > 0 ? (<ScrollArea className="h-[150px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[150px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.goal.map(item => renderVarianceRow('goal', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No goal data for variance.</p>)}</AccordionContent>
+                      <AccordionItem value="unplanned-expense-variance">
+                          <AccordionTriggerWithSum label="Unplanned Expenses" icon={AlertTriangleIcon} sum={varianceTotalsByCategory['unplanned-expense'].actual} budgetedSum={0} variance={0 - varianceTotalsByCategory['unplanned-expense'].actual} className="text-destructive" />
+                          <AccordionContent>{varianceDataByCategory['unplanned-expense'].length > 0 ? (<ScrollArea className="h-[150px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['unplanned-expense'].map(item => renderVarianceRow('unplanned-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No unplanned expenses.</p>)}</AccordionContent>
+                      </AccordionItem>
+
+                     <AccordionItem value="goal-variance">
+                          <AccordionTriggerWithSum label="Goals" icon={TargetIcon} sum={varianceTotalsByCategory.goal.actual} budgetedSum={varianceTotalsByCategory.goal.budgeted} variance={varianceTotalsByCategory.goal.budgeted - varianceTotalsByCategory.goal.actual} className="text-primary" />
+                          <AccordionContent>{varianceDataByCategory.goal.length > 0 ? (<ScrollArea className="h-[150px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.goal.map(item => renderVarianceRow('goal', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No goal data for variance.</p>)}</AccordionContent>
                      </AccordionItem>
 
                        <AccordionItem value="debt-variance" className="border-b-0">
-                         <AccordionTriggerWithSum label="Debt Allocation" sum={varianceTotalsByCategory.debt.actual} budgetedSum={varianceTotalsByCategory.debt.budgeted} variance={varianceTotalsByCategory.debt.budgeted - varianceTotalsByCategory.debt.actual} className="text-destructive/80" />
-                         <AccordionContent>{varianceDataByCategory.debt.length > 0 ? (<ScrollArea className="h-[150px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[150px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.debt.map(item => renderVarianceRow('debt', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No debt allocation data for variance.</p>)}</AccordionContent>
+                         <AccordionTriggerWithSum label="Debt Allocation" icon={Coins} sum={varianceTotalsByCategory.debt.actual} budgetedSum={varianceTotalsByCategory.debt.budgeted} variance={varianceTotalsByCategory.debt.budgeted - varianceTotalsByCategory.debt.actual} className="text-destructive/80" />
+                         <AccordionContent>{varianceDataByCategory.debt.length > 0 ? (<ScrollArea className="h-[150px] w-full pr-3"><Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Budget</TableHead><TableHead className="text-right">Actual</TableHead><TableHead className="text-right w-[180px]">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.debt.map(item => renderVarianceRow('debt', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No debt allocation data for variance.</p>)}</AccordionContent>
                      </AccordionItem>
                  </Accordion>
 
@@ -471,10 +500,19 @@ export default function StatementsPage() {
                      <Table>
                          <TableFooter>
                              <TableRow className="bg-muted/30 font-bold text-lg">
-                                 <TableCell>Net Totals</TableCell>
-                                 <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell>
-                                 <TableCell className="text-right font-mono">{formatCurrency(varianceTotalsByCategory.netActual)}</TableCell>
-                                 <TableCell className={cn("text-right font-mono text-sm", varianceTotalsByCategory.overallVariance >= 0 ? 'text-accent' : 'text-destructive')}>
+                                 <TableCell>Net Budgeted</TableCell>
+                                 <TableCell className="text-right font-mono" colSpan={2}>{formatCurrency(varianceTotalsByCategory.netBudgeted)}</TableCell>
+                                 <TableCell className="text-right font-mono">&nbsp;</TableCell> 
+                              </TableRow>
+                              <TableRow className="font-bold text-lg">
+                                 <TableCell>Net Actual</TableCell>
+                                 <TableCell className="text-right font-mono" colSpan={2}>{formatCurrency(varianceTotalsByCategory.netActual)}</TableCell>
+                                 <TableCell className="text-right font-mono">&nbsp;</TableCell>
+                              </TableRow>
+                             <TableRow className="bg-muted/30 font-bold text-xl border-t-2 border-primary">
+                                 <TableCell>Overall Variance</TableCell>
+                                 <TableCell colSpan={2}>&nbsp;</TableCell>
+                                 <TableCell className={cn("text-right font-mono", varianceTotalsByCategory.overallVariance >= 0 ? 'text-accent' : 'text-destructive')}>
                                      {varianceTotalsByCategory.overallVariance >= 0 ? '+' : ''}{formatCurrency(varianceTotalsByCategory.overallVariance)}
                                  </TableCell>
                               </TableRow>
