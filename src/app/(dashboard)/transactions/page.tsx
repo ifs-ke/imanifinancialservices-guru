@@ -154,10 +154,14 @@ export default function TransactionsPage() {
      setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const formatDateDisplay = (date: Date | string) => {
-     const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
-      if (!isValid(dateObj)) return 'Invalid Date';
-    return format(dateObj, 'PP'); 
+  const formatDateDisplay = (date: Date | string | null | undefined) => {
+    if (!date) return 'Date N/A'; // Handle null or undefined upfront
+    const dateObj = typeof date === 'string' ? parse(date, 'yyyy-MM-dd', new Date()) : date;
+    // Check if it's a valid Date instance and if date-fns considers it valid
+    if (!(dateObj instanceof Date) || !isValid(dateObj)) {
+      return 'Invalid Date';
+    }
+    return format(dateObj, 'PP');
   };
 
   const formatCategoryDisplay = (freq?: TransactionFrequency | null, vari?: TransactionVariability | null) => {
@@ -183,7 +187,7 @@ export default function TransactionsPage() {
     csvRows.push(headers.join(','));
 
     for (const tx of transactions) {
-      const sanitizedDescription = tx.description.replace(/"/g, "''");
+      const sanitizedDescription = tx.description.replace(/"/g, "''"); // Basic sanitization for CSV
       const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date);
       const values = [
         !isValid(dateObj) ? 'Invalid Date' : format(dateObj, 'yyyy-MM-dd'),
