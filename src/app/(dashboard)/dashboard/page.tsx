@@ -4,7 +4,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, BookOpen } from 'lucide-react';
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, BookOpen, XCircle } from 'lucide-react'; // Added XCircle
 import Link from 'next/link';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
@@ -149,7 +149,7 @@ export default function DashboardPage() {
         if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
-   }, [debts, monthlyBudgetedDebtPayment]);
+   }, [debts, monthlyBudgetedDebtPayment]); 
 
    const budgetVariance = useMemo(() => {
        const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
@@ -331,7 +331,7 @@ export default function DashboardPage() {
                                 Set a budget
                             </Link>{" "}
                             to plan your spending.
-                        </li>
+                         </li>
                         <li>
                             <Link href="/statements" className="text-primary hover:underline">
                                 Review statements
@@ -343,7 +343,7 @@ export default function DashboardPage() {
                                 Perform a weekly review
                             </Link>{" "}
                             to add comments and journal entries.
-                        </li>
+                         </li>
                     </ol>
                      <p className="text-xs text-muted-foreground pt-2">Dismiss this card using the 'X' icon.</p>
                 </CardContent>
