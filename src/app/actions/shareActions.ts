@@ -1,7 +1,7 @@
 // src/app/actions/shareActions.ts
 'use server';
 
-import { auth, clerkClient } from '@clerk/nextjs/server';
+// import { auth, clerkClient } from '@clerk/nextjs/server'; // Clerk disabled
 import connectToDatabase from '@/lib/mongodb';
 import type { UserShareInfo, WeeklyReviewData } from '@/lib/types';
 import { Collection } from 'mongodb';
@@ -13,6 +13,29 @@ import {
 } from '@/lib/schemas'; 
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
+// Mock implementation for user search when Clerk is disabled
+async function mockSearchUserByEmail(email: string): Promise<UserShareInfo | null> {
+    // In a real non-Clerk scenario, you'd query your user database here.
+    // For this mock, we'll return a predictable user if the email matches a pattern,
+    // or null otherwise. This allows testing the sharing flow.
+    if (email.startsWith('shared_user_')) {
+        const mockId = `mock_user_id_for_${email.replace('@example.com', '')}`;
+        return {
+            userId: mockId,
+            email: email,
+            name: email.split('@')[0].replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()), // e.g., "Shared User 1"
+        };
+    }
+    if (email === process.env.NEXT_PUBLIC_MOCK_USER_EMAIL) { // If you have a mock email for the main user
+        return {
+            userId: process.env.NEXT_PUBLIC_MOCK_USER_ID!,
+            email: process.env.NEXT_PUBLIC_MOCK_USER_EMAIL!,
+            name: "Mock User (Self)"
+        }
+    }
+    return null;
+}
+
 export async function searchUserByEmailApi(email: string): Promise<UserShareInfo | null> {
     const validationResult = SearchUserByEmailInputSchema.safeParse({ email });
     if (!validationResult.success) {
@@ -22,34 +45,29 @@ export async function searchUserByEmailApi(email: string): Promise<UserShareInfo
     }
     const validatedEmail = validationResult.data.email;
 
-    const { userId: currentUserId } = auth();
+    // const { userId: currentUserId } = auth(); // Clerk disabled
+    const currentUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
     const logContext = { currentUserId, targetEmail: validatedEmail, operation: 'searchUserByEmailApi', apiAction: 'searchUserByEmailApi' };
 
     if (!currentUserId) {
-        logError('Unauthorized search: User not logged in.', undefined, { ...logContext, errorType: 'Unauthorized' });
-        throw new Error('Unauthorized: User not logged in.');
+        logError('Unauthorized search: Mock user ID not set.', undefined, { ...logContext, errorType: 'Unauthorized' });
+        throw new Error('Unauthorized: Mock user ID not set.');
     }
 
-    logDebug(`Searching for user by email.`, logContext);
+    logDebug(`Searching for user by email (mock).`, logContext);
 
     try {
-        const users = await clerkClient.users.getUserList({
-            emailAddress: [validatedEmail.trim().toLowerCase()],
-        });
+        // Replace Clerk call with mock implementation
+        const userResult = await mockSearchUserByEmail(validatedEmail.trim().toLowerCase());
 
-        if (users && users.length > 0) {
-            const foundUser = users[0];
-            logInfo(`User found by email.`, { ...logContext, foundUserId: foundUser.id });
-            return {
-                userId: foundUser.id,
-                email: foundUser.primaryEmailAddress?.emailAddress || validatedEmail.trim().toLowerCase(),
-                name: foundUser.fullName || foundUser.firstName || foundUser.primaryEmailAddress?.emailAddress,
-            };
+        if (userResult) {
+            logInfo(`User found by email (mock).`, { ...logContext, foundUserId: userResult.userId });
+            return userResult;
         }
-        logInfo("User not found by email.", logContext);
+        logInfo("User not found by email (mock).", logContext);
         return null;
     } catch (error: any) {
-        logError("Clerk API error searching user by email", error, logContext);
+        logError("Mock search user by email error", error, logContext); // Should not happen with current mock
         return null; 
     }
 }
@@ -64,11 +82,18 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
     const { weekKey: validatedWeekKey, targetUserId: validatedTargetUserId } = validationResult.data;
 
 
-    const { userId: currentUserId, user: currentUser } = auth();
+    // const { userId: currentUserId, user: currentUser } = auth(); // Clerk disabled
+    const currentUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
+    const currentUser = { // Simulate current user object
+        username: 'Mock User',
+        fullName: 'Mock User FullName',
+        primaryEmailAddress: { emailAddress: process.env.NEXT_PUBLIC_MOCK_USER_EMAIL || 'mock@example.com' }
+    };
+
     const logContext = { currentUserId, targetUserId: validatedTargetUserId, weekKey: validatedWeekKey, operation: 'shareReviewApi', apiAction: 'shareReviewApi' };
 
     if (!currentUserId) {
-        logError('Unauthorized: Cannot share review. User not logged in.', undefined, { ...logContext, errorType: 'Unauthorized' });
+        logError('Unauthorized: Cannot share review. Mock user ID not set.', undefined, { ...logContext, errorType: 'Unauthorized' });
         throw new Error('Unauthorized: Cannot share review.');
     }
     if (currentUserId === validatedTargetUserId) {
@@ -137,9 +162,6 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
     } catch (error: any) {
         logError(`DB Error sharing review ${validatedWeekKey} with user ${validatedTargetUserId}`, error, logContext);
         throw new Error(`Failed to share review: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-        // Client closing is handled by connectToDatabase usually, but ensure if needed
-        // if (client) await client.close(); // This might interfere with global connection pooling if used
     }
 }
 
@@ -152,11 +174,12 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
     }
     const { weekKey: validatedWeekKey, targetUserId: validatedTargetUserId } = validationResult.data;
 
-    const { userId: currentUserId } = auth();
+    // const { userId: currentUserId } = auth(); // Clerk disabled
+    const currentUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
     const logContext = { currentUserId, targetUserId: validatedTargetUserId, weekKey: validatedWeekKey, operation: 'revokeShareApi', apiAction: 'revokeShareApi' };
 
     if (!currentUserId) {
-        logError('Unauthorized: Cannot revoke share. User not logged in.', undefined, { ...logContext, errorType: 'Unauthorized' });
+        logError('Unauthorized: Cannot revoke share. Mock user ID not set.', undefined, { ...logContext, errorType: 'Unauthorized' });
         throw new Error('Unauthorized: Cannot revoke share.');
     }
 
@@ -200,8 +223,6 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
     } catch (error: any) {
         logError(`DB Error revoking share for review ${validatedWeekKey} from user ${validatedTargetUserId}`, error, logContext);
         throw new Error(`Failed to revoke share: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-        // if (client) await client.close();
     }
 }
 
@@ -214,11 +235,12 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
     }
     const validatedWeekKey = validationResult.data.weekKey;
 
-    const { userId: currentUserId } = auth();
+    // const { userId: currentUserId } = auth(); // Clerk disabled
+    const currentUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
     const logContext = { currentUserId, weekKey: validatedWeekKey, operation: 'getSharedWithUsersApi', apiAction: 'getSharedWithUsersApi' };
 
     if (!currentUserId) {
-        logError('Unauthorized: Cannot get shared list. User not logged in.', undefined, { ...logContext, errorType: 'Unauthorized' });
+        logError('Unauthorized: Cannot get shared list. Mock user ID not set.', undefined, { ...logContext, errorType: 'Unauthorized' });
         throw new Error('Unauthorized: Cannot get shared list.');
     }
 
@@ -247,22 +269,18 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
             return [];
         }
         
-        const users = await clerkClient.users.getUserList({
-            userId: sharedUserIds,
-        });
-
-        const userInfos: UserShareInfo[] = users.map((user: { id: any; primaryEmailAddress: { emailAddress: any; }; fullName: any; firstName: any; }) => ({
-            userId: user.id,
-            email: user.primaryEmailAddress?.emailAddress || 'No email',
-            name: user.fullName || user.firstName || user.primaryEmailAddress?.emailAddress,
+        // Since Clerk is disabled, we can't fetch user details from Clerk.
+        // We'll mock this part or return minimal info based on IDs.
+        // For a better mock, you might have a predefined list of mock users.
+        const userInfos: UserShareInfo[] = await Promise.all(sharedUserIds.map(async (id) => {
+            const mockUserInfo = await mockSearchUserByEmail(`shared_user_${id.substring(0,5)}@example.com`); // Create a dummy email to search
+            return mockUserInfo || { userId: id, email: `user_${id.substring(0,5)}@example.com`, name: `User ${id.substring(0,5)}` };
         }));
 
-        logInfo(`Fetched details for ${userInfos.length} shared users for review ${validatedWeekKey}.`, logContext);
+        logInfo(`Fetched details for ${userInfos.length} shared users for review ${validatedWeekKey} (mocked).`, logContext);
         return userInfos;
     } catch (error: any) {
-        logError(`Clerk/DB Error fetching shared user list for review ${validatedWeekKey}`, error, logContext);
+        logError(`DB/Mock Error fetching shared user list for review ${validatedWeekKey}`, error, logContext);
         return [];
-    } finally {
-        // if (client) await client.close();
     }
 }

@@ -9,9 +9,7 @@
  import { startOfMonth, endOfMonth } from 'date-fns';
  import type { NotificationType } from '@/lib/types';
  import { logInfo, logWarn, logError } from '@/lib/logger';
- import { useAuth } from "@clerk/nextjs"; // Re-enable Clerk
-
-// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
+ // import { useAuth } from "@clerk/nextjs"; // Clerk disabled
 
 
  const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
@@ -22,7 +20,10 @@
      const budgetItems = useBudgetStore(state => state.budgetItems);
      const allTransactions = useTransactionsStore(state => state.transactions);
      const existingNotifications = useNotificationStore(state => state.notifications);
-     const { userId, isSignedIn } = useAuth(); // Use actual Clerk auth state
+     // const { userId, isSignedIn } = useAuth(); // Clerk disabled
+     const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
+     const isSignedIn = !!mockUserId; // Considered "signed in" if mock ID is present
+     const userId = mockUserId;
 
 
      const monthlyAnalysis = useMemo(() => {

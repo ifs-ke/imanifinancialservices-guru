@@ -1,13 +1,10 @@
 // src/lib/logger.ts
 'use client';
 
-import { useAuth } from '@clerk/nextjs';
-import { useCallback, useState }
-// Comment: Removed 'useEffect' as it's not used in this simplified logger
-from 'react';
+// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
+import { useCallback, useState } from 'react';
 
-// Types
-type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log'; // 'log' for generic console.log
+type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log';
 type LogContext = Record<string, unknown>;
 
 interface LoggerOptions {
@@ -16,17 +13,18 @@ interface LoggerOptions {
   debugLogsInProduction?: boolean;
 }
 
-// Default configuration
 const DEFAULT_OPTIONS: LoggerOptions = {
   enableServerLogging: process.env.NEXT_PUBLIC_LOG_TO_SERVER === 'true',
   maxErrorStackLength: 2000,
   debugLogsInProduction: process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS === 'true',
 };
 
-// Helper to get base context without hooks, for direct log functions
 const getBaseContextForDirectLog = (userIdForLog?: string | null): LogContext => {
+  // When Clerk is disabled, always use the mock user ID from env if available
+  const effectiveUserId = userIdForLog ?? process.env.NEXT_PUBLIC_MOCK_USER_ID ?? 'anonymous_or_server';
+  
   return {
-    userId: userIdForLog ?? 'anonymous_or_server',
+    userId: effectiveUserId,
     environment: process.env.NODE_ENV || 'unknown_env',
     clientTimestamp: new Date().toISOString(),
     source_client_component: typeof window !== 'undefined' ? window.location.pathname : 'server_or_unknown_path',
@@ -85,7 +83,7 @@ const sendLogToServer = async (level: LogLevel, message: string, context: LogCon
 };
 
 const logToConsole = (level: LogLevel, message: string, context: LogContext) => {
-    const consoleArgs: any[] = [`[Client - ${level.toUpperCase()}] ${message}`]; // Added "Client - " prefix for clarity
+    const consoleArgs: any[] = [`[Client - ${level.toUpperCase()}] ${message}`]; 
     
     const { environment, clientTimestamp, source_client_component, userAgent, ...filteredContext } = context;
     if (Object.keys(filteredContext).length > 0) {
@@ -106,9 +104,10 @@ const directLog = (
     message: string,
     context?: LogContext,
     error?: unknown,
-    userIdOverride?: string | null
+    userIdOverride?: string | null // Allow explicitly passing userId
 ) => {
-    const baseContext = getBaseContextForDirectLog(userIdOverride);
+    // Use userIdOverride if provided, otherwise let getBaseContextForDirectLog handle mock/anonymous
+    const baseContext = getBaseContextForDirectLog(userIdOverride); 
     const errorContext = prepareErrorContextForLog(error);
     const fullContext = { ...baseContext, ...errorContext, ...(context || {}) };
 
@@ -138,7 +137,12 @@ export const logDebug = (message: string, context?: LogContext, userId?: string 
 
 
 export const useLogger = (componentName?: string) => {
-  const { userId, sessionId, orgId } = useAuth();
+  // const { userId, sessionId, orgId } = useAuth(); // Clerk disabled
+  const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
+  const userId = mockUserId; // Use mock user ID
+  const sessionId = mockUserId ? 'mock-session-id' : null; // Mock session if user exists
+  const orgId = mockUserId ? 'mock-org-id' : null; // Mock org if user exists
+
   const [options] = useState<LoggerOptions>(DEFAULT_OPTIONS);
 
   const getBaseContextWithAuth = useCallback((): LogContext => {

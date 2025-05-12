@@ -8,17 +8,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
-// Import budget store and selectors/actions
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore'; // Import missing selectTotalGoals
-import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk
-import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns'; // Removed differenceInDays as it's not used directly here
+import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore';
+// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
+import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns';
 import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ShareReviewDialog from './ShareReviewDialog';
@@ -33,8 +32,6 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { logInfo, logWarn, logError } from '@/lib/logger';
-
-// Removed CLERK_DISABLED_PLACEHOLDER_USER_ID
 
 const formatDate = (date: Date | string) => {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -54,7 +51,11 @@ const formatCategoryBadge = (value: string | undefined) => {
 }
 
 export default function WeeklyReviewPage() {
-  const { userId, isSignedIn } = useAuth(); // Use Clerk's auth hook
+  // const { userId, isSignedIn } = useAuth(); // Clerk disabled
+  const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
+  const isSignedIn = !!mockUserId;
+  const userId = mockUserId;
+
   const { transactions: allTransactions } = useTransactionsStore();
   const setBudgetPeriod = useBudgetStore(state => state.setBudgetPeriod);
   const monthlyBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
@@ -149,13 +150,13 @@ export default function WeeklyReviewPage() {
 
   const confirmDeleteJournal = () => {
     if (activeTab === 'owned' && userId && isSignedIn) {
-      setJournalEntry(currentWeekKey, '', userId); // Pass authenticated userId
+      setJournalEntry(currentWeekKey, '', userId); 
       toast({ title: "Journal Cleared", description: `Journal entry for week ${currentWeekKey} has been cleared.` });
     }
     setIsDeleteJournalDialogOpen(false);
   };
 
-  const isReadOnly = activeTab === 'shared' || !isSignedIn; // Determine read-only status
+  const isReadOnly = activeTab === 'shared' || !isSignedIn; 
 
   const handleAddCommentClick = (tx: TransactionWithId) => {
     if (isReadOnly) {
@@ -169,14 +170,14 @@ export default function WeeklyReviewPage() {
 
   const handleSaveComment = () => {
     if (activeTab === 'owned' && commentingTransaction && userId && isSignedIn) {
-      setTransactionComment(currentWeekKey, commentingTransaction.id, commentText, userId); // Pass authenticated userId
+      setTransactionComment(currentWeekKey, commentingTransaction.id, commentText, userId); 
       toast({ title: "Comment Saved", description: `Comment for "${commentingTransaction.description}" saved.` });
       setIsCommentDialogOpen(false);
       setCommentingTransaction(null);
       setCommentText('');
     } else {
       toast({ title: "Read Only / Not Signed In", description: "You can only comment on your own weekly reviews and must be signed in.", variant: "default" });
-      setIsCommentDialogOpen(false); // Still close dialog if read-only
+      setIsCommentDialogOpen(false); 
     }
   };
 
@@ -192,7 +193,7 @@ export default function WeeklyReviewPage() {
 
   const confirmDeleteComment = () => {
     if (activeTab === 'owned' && commentToDelete && userId && isSignedIn) {
-      deleteTransactionComment(currentWeekKey, commentToDelete.transactionId, userId); // Pass authenticated userId
+      deleteTransactionComment(currentWeekKey, commentToDelete.transactionId, userId); 
       toast({ title: "Comment Deleted" });
     }
     setIsDeleteCommentDialogOpen(false);
@@ -212,18 +213,13 @@ export default function WeeklyReviewPage() {
       .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
 
     const netFlow = income - expenses;
-    // Budget values are monthly, so we use them as a reference for the week's context
-    // A more precise weekly budget variance would require weekly budget items.
-    const netBudgetedMonthlyContext = monthlyNetBudgeted; // Using monthly net budget for context
-    // Variance calculation against monthly budget context is not directly comparable but gives a directional idea
-    const varianceAgainstMonthly = netFlow - (netBudgetedMonthlyContext / 4); // Rough weekly portion
+    const netBudgetedMonthlyContext = monthlyNetBudgeted; 
+    const varianceAgainstMonthly = netFlow - (netBudgetedMonthlyContext / 4); 
 
     let varianceStatus: 'favorable' | 'unfavorable' | 'on-track' | 'no-budget' = 'no-budget';
     if (monthlyBudgetedIncome > 0 || monthlyBudgetedExpenses > 0 || monthlyBudgetedGoals > 0 || monthlyBudgetedDebt > 0) {
-      // Threshold logic can be complex for weekly vs monthly; simplified here
-      // This is a very rough estimation
-      const roughWeeklyBudget = netBudgetedMonthlyContext / 4.33; // Avg weeks in month
-      const threshold = Math.max(Math.abs(roughWeeklyBudget * 0.1), 1000); // 10% of rough weekly or KES 1000
+      const roughWeeklyBudget = netBudgetedMonthlyContext / 4.33; 
+      const threshold = Math.max(Math.abs(roughWeeklyBudget * 0.1), 1000); 
       if (Math.abs(netFlow - roughWeeklyBudget) <= threshold) varianceStatus = 'on-track';
       else if (netFlow > roughWeeklyBudget) varianceStatus = 'favorable';
       else varianceStatus = 'unfavorable';
@@ -233,7 +229,7 @@ export default function WeeklyReviewPage() {
       totalIncome: income,
       totalExpenses: expenses,
       netCashFlow: netFlow,
-      budgetVariance: varianceAgainstMonthly, // This is variance against a weekly portion of monthly budget
+      budgetVariance: varianceAgainstMonthly, 
       budgetVarianceStatus: varianceStatus,
       transactionCount: transactionsForWeek.length,
     };
@@ -247,7 +243,7 @@ export default function WeeklyReviewPage() {
   ]);
 
   const handleOpenShareDialog = () => {
-    if (!isSignedIn || !userId) { // Check for authenticated user
+    if (!isSignedIn || !userId) { 
         toast({ title: "Sign In Required", description: "Please sign in to share reviews.", variant: "destructive"});
         return;
     }
@@ -255,9 +251,8 @@ export default function WeeklyReviewPage() {
       toast({ title: "Action Denied", description: "You can only share reviews you own.", variant: "destructive" });
       return;
     }
-    // Ensure review shell exists if owner tries to share non-existent review
-    if (!ownedReviews[currentWeekKey]) {
-      setJournalEntry(currentWeekKey, '', userId); // Create shell using authenticated userId
+    if (!ownedReviews[currentWeekKey] && userId) { // Ensure userId is present
+      setJournalEntry(currentWeekKey, '', userId); 
       logInfo(`Created shell for week ${currentWeekKey} before sharing.`, { userId });
     }
     setIsShareDialogOpen(true);
@@ -308,7 +303,7 @@ export default function WeeklyReviewPage() {
                 <AlertTriangleIcon className="h-4 w-4" />
                 <AlertTitle>Not Signed In</AlertTitle>
                 <AlertDescription>
-                  Please sign in to create or edit your weekly reviews.
+                  Please sign in to create or edit your weekly reviews. (Using Mock User ID: {userId || "Not Set"})
                 </AlertDescription>
             </Alert>
           )}
@@ -489,7 +484,7 @@ export default function WeeklyReviewPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {isSignedIn && userId && ( // Only render ShareReviewDialog if user is signed in
+      {isSignedIn && userId && ( 
         <ShareReviewDialog
           isOpen={isShareDialogOpen}
           onClose={() => setIsShareDialogOpen(false)}

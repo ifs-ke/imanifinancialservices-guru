@@ -20,11 +20,9 @@ import { X, UserPlus, Trash2, Loader2, Search, CheckCircle, AlertTriangle } from
 import type { UserShareInfo } from '@/lib/types';
 import { getSharedWithUsersApi, shareReviewApi, revokeShareApi, searchUserByEmailApi } from '@/app/actions/shareActions';
 import { triggerCollaborationNotification } from '@/services/notificationService';
-import { useAuth } from '@clerk/nextjs'; // Re-enable Clerk useAuth hook
+// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
 import { logError, logInfo, logWarn } from '@/lib/logger';
 
-
-// Removed CLERK_DISABLED_PLACEHOLDER_USER constants
 
 interface ShareReviewDialogProps {
   isOpen: boolean;
@@ -34,7 +32,15 @@ interface ShareReviewDialogProps {
 
 const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, weekKey }) => {
   const { toast } = useToast();
-  const { user, isSignedIn } = useAuth(); // Get current user from Clerk
+  // const { user, isSignedIn } = useAuth(); // Clerk disabled
+  const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
+  const isSignedIn = !!mockUserId;
+  const user = isSignedIn ? { 
+    id: mockUserId, 
+    fullName: 'Mock User', // Or get from another env var if needed
+    primaryEmailAddress: { emailAddress: process.env.NEXT_PUBLIC_MOCK_USER_EMAIL || 'mock@example.com' } 
+  } : null;
+
 
   const [emailToShare, setEmailToShare] = useState('');
   const [searchResult, setSearchResult] = useState<UserShareInfo | null>(null);
@@ -46,7 +52,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
 
   const fetchSharedList = useCallback(async () => {
-    if (!isOpen || !weekKey || !isSignedIn) return; // Ensure user is signed in
+    if (!isOpen || !weekKey || !isSignedIn) return; 
     setIsLoadingList(true);
     try {
       const users = await getSharedWithUsersApi(weekKey);
@@ -60,7 +66,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   }, [isOpen, weekKey, toast, isSignedIn, user?.id]);
 
   useEffect(() => {
-    if (isOpen && isSignedIn) { // Fetch only if dialog is open and user is signed in
+    if (isOpen && isSignedIn) { 
         fetchSharedList();
     }
   }, [isOpen, isSignedIn, fetchSharedList]);
@@ -91,9 +97,10 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
     setSearchError(null);
     setSearchResult(null);
     try {
+      // searchUserByEmailApi will use mock logic when Clerk is disabled
       const userResult = await searchUserByEmailApi(emailToShare.trim());
       if (userResult) {
-        if (userResult.userId === user?.id) { // Check against authenticated user's ID
+        if (userResult.userId === user?.id) { 
           setSearchError('You cannot share a review with yourself.');
         } else {
           setSearchResult(userResult);
@@ -110,7 +117,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   };
 
   const handleShareClick = async () => {
-    if (!searchResult || !user || !isSignedIn) { // Ensure user is signed in
+    if (!searchResult || !user || !isSignedIn) { 
         toast({ title: "Action Failed", description: "Cannot share without a selected user or if not signed in.", variant: "destructive"});
         return;
     }
@@ -119,8 +126,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
       await shareReviewApi(weekKey, searchResult.userId);
       toast({ title: 'Success', description: `Review shared with ${searchResult.name || searchResult.email}.` });
 
-      const sharerName = user?.fullName || user?.primaryEmailAddresses?.[0]?.emailAddress || 'Someone';
-      // Pass current user's ID (sharerId) to the notification trigger
+      const sharerName = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Someone';
       triggerCollaborationNotification(sharerName, weekKey, searchResult.userId, user.id);
 
 
@@ -137,7 +143,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
   };
 
   const handleRevokeClick = async (targetUserId: string) => {
-    if (!isSignedIn || !user) { // Check user and isSignedIn
+    if (!isSignedIn || !user) { 
         toast({ title: "Not Authenticated", description: "Please sign in to manage sharing.", variant: "destructive"});
         return;
     }
@@ -179,7 +185,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
                   setSearchResult(null);
                   setSearchError(null);
                 }}
-                disabled={!isSignedIn} // Disable if not signed in
+                disabled={!isSignedIn} 
               />
               <Button onClick={handleSearchUser} disabled={isSearching || !emailToShare.trim() || !isSignedIn} className="flex-shrink-0">
                 {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}

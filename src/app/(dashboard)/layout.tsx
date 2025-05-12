@@ -2,7 +2,7 @@
  'use client'; 
 
  import React, { useEffect } from 'react';
- import { useAuth } from '@clerk/nextjs';
+ // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
  import { useBudgetNotifications } from '@/services/notificationService';
  import {
    Sidebar,
@@ -21,7 +21,10 @@
  }: {
    children: React.ReactNode;
  }) {
-   const { userId, isSignedIn, isLoaded: isClerkLoaded } = useAuth(); 
+   // Clerk disabled: Simulate auth state
+   const isClerkLoaded = true; // Assume loaded
+   const isSignedIn = !!process.env.NEXT_PUBLIC_MOCK_USER_ID; // Signed in if mock user ID is set
+   const userId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
 
    const syncManager = useSyncManager();
    const { 
@@ -29,35 +32,34 @@
      setIsMismatchDialogOpen, 
      forceFetchServer, 
      forceSaveLocal,
-     hashMismatch // Make sure to get hashMismatch from the hook
+     hashMismatch 
    } = syncManager;
  
    useBudgetNotifications();
 
 
    useEffect(() => {
-       // This effect ensures the dialog is opened if a hash mismatch is detected
-       // and the dialog isn't already considered open by the syncManager's state.
        if (hashMismatch && !isMismatchDialogOpen) {
            logDebug("DashboardLayout: Hash mismatch detected, ensuring dialog is open.", { userId });
            setIsMismatchDialogOpen(true);
        }
    }, [hashMismatch, isMismatchDialogOpen, setIsMismatchDialogOpen, userId]);
 
-   // If Clerk is not loaded yet, show a loading state for the entire dashboard area
-   if (!isClerkLoaded) {
-     return (
-       <div className="flex items-center justify-center min-h-screen bg-background">
-         <LoadingSpinner size={48} text="Authenticating..." />
-       </div>
-     );
-   }
+   // If using mock auth, we can consider it "loaded" immediately
+   // Original Clerk loading state check is commented out
+   // if (!isClerkLoaded) {
+   //   return (
+   //     <div className="flex items-center justify-center min-h-screen bg-background">
+   //       <LoadingSpinner size={48} text="Authenticating..." />
+   //     </div>
+   //   );
+   // }
 
    return (
      <div className="flex min-h-screen bg-background">
        <Sidebar />
        <SidebarInset>
-         {isClerkLoaded ? children : null} 
+         {children} 
        </SidebarInset>
        <FloatingChatButton />
        <Toaster />

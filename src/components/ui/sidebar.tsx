@@ -25,7 +25,7 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ClipboardList,
+  ClipboardList, // Changed from Logger
   RefreshCw,
   Menu,
   PieChart,
@@ -36,7 +36,7 @@ import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser } from "@clerk/nextjs"; 
+// import { UserButton, useUser } from "@clerk/nextjs"; // Clerk disabled
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area"; 
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
@@ -59,7 +59,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
+  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Changed icon from Logger to ClipboardList
 ];
 
 export type SidebarState = "collapsed" | "expanded";
@@ -168,7 +168,17 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     const [clientUnreadCount, setClientUnreadCount] = React.useState(0);
     const [hasMounted, setHasMounted] = React.useState(false);
 
-    const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser();
+    // Clerk disabled: Simulate user state
+    const isClerkLoaded = true; // Assume loaded
+    const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
+    const isSignedIn = !!mockUserId;
+    const user = isSignedIn ? { 
+      id: mockUserId, 
+      fullName: 'Mock User', 
+      primaryEmailAddress: { emailAddress: 'mock@example.com'} 
+    } : null;
+    // End Clerk disabled simulation
+
     const syncManager = useSyncManager();
     const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
 
@@ -185,16 +195,16 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     let iconColor = 'text-muted-foreground';
     let isClickable = true;
 
-    if (!isClerkLoaded) {
+    if (!isClerkLoaded) { // This condition might always be true now
       PersistenceIcon = RefreshCw;
-      persistenceStatusText = 'Auth Loading...';
-      persistenceTooltipText = 'Waiting for authentication status...';
+      persistenceStatusText = 'Auth Loading...'; // Or "App Loading..."
+      persistenceTooltipText = 'Waiting for application to initialize...';
       iconColor = 'text-muted-foreground animate-spin';
       isClickable = false;
-    } else if (!isSignedIn) {
+    } else if (!isSignedIn) { // Checks mock user state
       PersistenceIcon = CloudOff;
       persistenceStatusText = 'Offline';
-      persistenceTooltipText = 'Sign in to enable cloud sync.';
+      persistenceTooltipText = 'Mock user not configured. Cloud sync disabled.';
       iconColor = 'text-muted-foreground';
       isClickable = false;
     } else {
@@ -213,8 +223,8 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     }
 
     const handleSyncClick = () => {
-      if (!isClerkLoaded || !isSignedIn) {
-        logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
+      if (!isSignedIn) { // Check mock user state
+        logWarn("Sync click attempted but no mock user is configured.", { isSignedIn, isClerkLoaded, userId: user?.id});
         return;
       }
       if (isClickable) retrySync();
@@ -338,37 +348,36 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
               "flex items-center w-full",
               sidebarActualState === 'collapsed' ? "justify-center py-1" : "p-1"
           )}>
-            {!isClerkLoaded ? (
-              <Skeleton className={cn("rounded-full", sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8")} />
-            ) : isSignedIn && user ? (
-              <UserButton afterSignOutUrl="/" appearance={{
-                  elements: {
-                      userButtonAvatarBox: sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
-                      userButtonPopoverCard: "bg-popover border-border",
-                  }
-              }}/>
+            {/* Clerk disabled: Show mock user info or a generic placeholder */}
+            {isSignedIn && user ? (
+                <div className="flex items-center gap-2">
+                    <Avatar className={cn(sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8")}>
+                        <AvatarFallback>{user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}</AvatarFallback>
+                    </Avatar>
+                    {sidebarActualState === 'expanded' && (
+                        <span className="text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'Mock User'}>
+                            {user.fullName ?? 'Mock User'}
+                        </span>
+                    )}
+                </div>
             ) : (
-               <TooltipProvider delayDuration={100}>
+              <TooltipProvider delayDuration={100}>
                  <Tooltip>
                    <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" className={cn(sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} asChild>
-                         <Link href="/sign-in" aria-label="Sign In">
+                         {/* Link to a general info page or remove if no public pages are available */}
+                         <div aria-label="User information unavailable">
                             <Users size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
-                         </Link>
+                         </div>
                       </Button>
                    </TooltipTrigger>
                    {sidebarActualState === "collapsed" && (
                         <TooltipContent side="right" align="center">
-                          Sign In
+                          User Info
                         </TooltipContent>
                    )}
                  </Tooltip>
                </TooltipProvider>
-            )}
-            {sidebarActualState === 'expanded' && isClerkLoaded && isSignedIn && user && (
-              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
-                  {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
-              </span>
             )}
           </div>
         </div>

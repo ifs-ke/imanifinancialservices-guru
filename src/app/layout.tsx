@@ -5,7 +5,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
-import { ClerkProvider } from '@clerk/nextjs';
+// import { ClerkProvider } from '@clerk/nextjs'; // Clerk disabled
 
  // Initialize Inter font for sans-serif
  const inter = Inter({
@@ -33,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+    // <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}> // Clerk disabled
       <html lang="en" suppressHydrationWarning={true}>
         <body
             className={cn(
@@ -55,6 +55,6 @@ export default function RootLayout({
               </ThemeProvider>
           </body>
         </html>
-     </ClerkProvider>
+    // </ClerkProvider> // Clerk disabled
   );
 }
