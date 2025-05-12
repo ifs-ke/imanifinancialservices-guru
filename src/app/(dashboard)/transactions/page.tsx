@@ -3,13 +3,12 @@
 
 import React, { useState, type ChangeEvent, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle, CardContent } from '@/components/ui/card'; // Added CardContent
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, FileUp, FileDown, PackageSearch, CheckSquare, Square, ListX, XSquare } from 'lucide-react';
+import { PlusCircle, FileUp, FileDown, PackageSearch, Edit, Trash2, XSquare } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -35,14 +34,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useTransactionsStore } from '@/store/transactionsStore'; 
 import { useBudgetStore } from '@/store/budgetStore'; 
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem } from '@/lib/types';
-import type { TransactionFormData } from '@/lib/schemas';
+import type { TransactionFormData as AddTransactionFormData } from '@/lib/schemas'; // Renamed for clarity
 import Link from 'next/link';
 import { format, parse, isValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
 import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog'; 
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
+import { DataTable } from '@/components/ui/data-table'; // Import DataTable
+import { getColumns } from './columns'; // Import columns definition
+import { useReactTable, getCoreRowModel, Row } from '@tanstack/react-table';
 
 const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; 
 const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; 
@@ -56,14 +56,14 @@ const formatDateForInput = (date: Date | string): string => {
     return format(dateObj, 'yyyy-MM-dd');
 };
 
-const initialFormData = {
+const initialFormData: AddTransactionFormData = { // Use renamed type
     date: formatDateForInput(new Date()),
     description: '',
-    amount: '',
-    modeOfPayment: '' as ModeOfPayment | '',
-    frequency: '' as TransactionFrequency | '',
-    variability: '' as TransactionVariability | '',
-    categoryName: '' as string | '', 
+    amount: 0, // Changed from '' to 0 to match schema
+    modeOfPayment: 'Bank', // Default to 'Bank' as it's a valid enum
+    frequency: undefined, // Keep as undefined
+    variability: undefined, // Keep as undefined
+    categoryName: null, // Changed from '' to null to match schema
 };
 
 export default function TransactionsPage() {
@@ -71,11 +71,11 @@ export default function TransactionsPage() {
     transactions, 
     addTransaction, 
     deleteTransaction,
-    selectedTransactionIds,
-    toggleSelectTransaction,
-    toggleSelectAllTransactions,
-    clearSelection,
-    deleteSelectedTransactions
+    // selectedTransactionIds, // Managed by TanStack Table now
+    // toggleSelectTransaction,
+    // toggleSelectAllTransactions,
+    // clearSelection,
+    // deleteSelectedTransactions // Keep store action
   } = useTransactionsStore(); 
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
 
@@ -84,35 +84,64 @@ export default function TransactionsPage() {
   const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false); 
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
-  const [formData, setFormData] = useState(initialFormData);
+  const [addFormData, setAddFormData] = useState<AddTransactionFormData>(initialFormData); // Renamed state
   const { toast } = useToast();
 
+  // State for TanStack Table
+  const [rowSelection, setRowSelection] = React.useState({});
+  const [globalFilter, setGlobalFilter] = React.useState('');
+
+  const selectedTransactionIds = useMemo(() => {
+    return Object.keys(rowSelection).filter(key => rowSelection[key as keyof typeof rowSelection]);
+  }, [rowSelection]);
+
+  const handleEditClick = (transaction: TransactionWithId) => {
+    setEditingTransaction(transaction);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeleteClick = (transaction: TransactionWithId) => {
+    setTransactionToDelete(transaction);
+  };
+  
+  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), []);
+
+  const table = useReactTable({
+    data: transactions,
+    columns,
+    state: {
+      rowSelection,
+      globalFilter,
+    },
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getCoreRowModel(), // Adjust as needed, might need getFilteredRowModel()
+    getPaginationRowModel: getCoreRowModel(), // Adjust for pagination
+    getSortedRowModel: getCoreRowModel(), // Adjust for sorting
+  });
+
+
   const budgetItemsForSelectedMonth = useMemo(() => {
-    if (!formData.date) return [];
+    if (!addFormData.date) return [];
     try {
-        const transactionDate = parse(formData.date, 'yyyy-MM-dd', new Date());
+        const transactionDate = parse(addFormData.date, 'yyyy-MM-dd', new Date());
         if (!isValid(transactionDate)) return [];
         const periodKey = format(transactionDate, 'yyyy-MM');
         return allBudgetItems.filter(item => 
             item.period === periodKey && 
             item.category !== 'income' &&
-            item.description && item.description.trim() !== '' // Ensure description is not empty
+            item.description && item.description.trim() !== '' 
         ); 
     } catch(e) {
         return [];
     }
-  }, [formData.date, allBudgetItems]);
-
-  useEffect(() => {
-    return () => {
-        clearSelection();
-    }
-  }, [clearSelection, transactions.length]);
-
+  }, [addFormData.date, allBudgetItems]);
 
   useEffect(() => {
     if (!isAddDialogOpen) {
-        setFormData(initialFormData);
+        setAddFormData(initialFormData);
     }
   }, [isAddDialogOpen]);
 
@@ -124,15 +153,10 @@ export default function TransactionsPage() {
 
   const handleAddTransactionSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    const { date, description, amount, modeOfPayment, frequency, variability, categoryName } = formData;
+    const { date, description, amount, modeOfPayment, frequency, variability, categoryName } = addFormData;
 
-    if (!date || !description || !amount || !modeOfPayment) {
+    if (!date || !description || amount === undefined || amount === null || !modeOfPayment) { // Check amount explicitly
       toast({ title: 'Missing Information', description: 'Please fill out required fields (Date, Desc, Amount, Mode).', variant: 'destructive' });
-      return;
-    }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount)) {
-      toast({ title: 'Invalid Amount', description: 'Please enter a valid number.', variant: 'destructive' });
       return;
     }
     
@@ -141,24 +165,15 @@ export default function TransactionsPage() {
     addTransaction({
       date: parse(date, 'yyyy-MM-dd', new Date()), 
       description: description,
-      amount: parsedAmount,
+      amount: amount, // Amount is already a number due to schema
       modeOfPayment: modeOfPayment as ModeOfPayment,
-      frequency: frequency as TransactionFrequency || undefined,
-      variability: variability as TransactionVariability || undefined,
+      frequency: frequency || undefined,
+      variability: variability || undefined,
       categoryName: processedCategoryName, 
     });
 
     setIsAddDialogOpen(false);
     toast({ title: 'Transaction Added', description: 'Successfully added.' });
-  };
-
-  const handleEditClick = (transaction: TransactionWithId) => {
-    setEditingTransaction(transaction);
-    setIsEditDialogOpen(true);
-  };
-
-  const handleDeleteClick = (transaction: TransactionWithId) => {
-    setTransactionToDelete(transaction);
   };
 
   const confirmDeleteTransaction = () => {
@@ -168,34 +183,16 @@ export default function TransactionsPage() {
     toast({ title: 'Transaction Deleted', description: 'Successfully removed.' });
   };
 
-  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = event.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const handleAddInputChange = (event: ChangeEvent<HTMLInputElement>) => { // Renamed
+    const { name, value, type } = event.target;
+    setAddFormData(prev => ({ 
+        ...prev, 
+        [name]: type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value 
+    }));
   };
 
-  const handleSelectChange = (name: string, value: string) => {
-     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const formatDateDisplay = (date: Date | string | null | undefined) => {
-    if (!date) return 'Date N/A'; 
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    if (!(dateObj instanceof Date) || !isValid(dateObj)) {
-      return 'Invalid Date';
-    }
-    return format(dateObj, 'PP');
-  };
-
-  const formatCategoryDisplay = (freq?: TransactionFrequency | null, vari?: TransactionVariability | null) => {
-    if (!freq && !vari) return <Badge variant="outline" className="text-xs font-normal">N/A</Badge>;
-    let badges = [];
-    if (freq) {
-      badges.push(<Badge key="freq" variant={freq === 'recurring' ? 'secondary' : 'outline'} className="text-xs font-normal mr-1">{freq.charAt(0).toUpperCase() + freq.slice(1)}</Badge>);
-    }
-    if (vari) {
-      badges.push(<Badge key="vari" variant={vari === 'fixed' ? 'secondary' : 'outline'} className="text-xs font-normal">{vari.charAt(0).toUpperCase() + vari.slice(1)}</Badge>);
-    }
-    return <div className="flex items-center gap-1">{badges}</div>;
+  const handleAddSelectChange = (name: string, value: string) => { // Renamed
+     setAddFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleExportCsv = useCallback(() => {
@@ -236,36 +233,37 @@ export default function TransactionsPage() {
 
     toast({ title: "CSV Exported", description: "Successfully downloaded transaction data." });
   }, [transactions, toast]);
-
-  const allVisibleTransactionIds = useMemo(() => transactions.map(tx => tx.id), [transactions]);
-  const isAllSelected = useMemo(() => 
-    allVisibleTransactionIds.length > 0 && allVisibleTransactionIds.every(id => selectedTransactionIds.includes(id)),
-    [allVisibleTransactionIds, selectedTransactionIds]
-  );
-
-  const handleToggleSelectAll = () => {
-    toggleSelectAllTransactions(allVisibleTransactionIds, selectedTransactionIds);
+  
+  const getSelectedTransactionIdsFromTable = (): string[] => {
+    return table.getSelectedRowModel().rows.map(row => row.original.id);
   };
 
   const handleDeleteSelectedClick = () => {
-    if (selectedTransactionIds.length === 0) {
+    const idsToDelete = getSelectedTransactionIdsFromTable();
+    if (idsToDelete.length === 0) {
         toast({ title: "No Selection", description: "Please select transactions to delete.", variant: "default" });
         return;
     }
-    deleteSelectedTransactions();
-    toast({ title: "Transactions Deleted", description: `${selectedTransactionIds.length} transaction(s) deleted successfully.` });
+    idsToDelete.forEach(id => deleteTransaction(id)); // Call store action
+    table.resetRowSelection(); // Clear selection in table
+    toast({ title: "Transactions Deleted", description: `${idsToDelete.length} transaction(s) deleted successfully.` });
   };
 
   const handleBatchUpdateClick = () => {
-    if (selectedTransactionIds.length === 0) {
+    const idsToUpdate = getSelectedTransactionIdsFromTable();
+    if (idsToUpdate.length === 0) {
       toast({ title: "No Selection", description: "Please select transactions to update.", variant: "default" });
       return;
     }
     setIsBatchUpdateDialogOpen(true);
   };
+  
+  const clearTableSelection = () => {
+      table.resetRowSelection();
+  };
 
   return (
-    <div className="flex flex-col min-h-screen min-w-100 p-4 md:p-6 lg:p-8">
+    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
       <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center">
@@ -290,19 +288,19 @@ export default function TransactionsPage() {
               <form onSubmit={handleAddTransactionSubmit} className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-date" className="text-right col-span-1">Date</Label>
-                  <Input id="add-date" name="date" type="date" value={formData.date} onChange={handleInputChange} className="col-span-3" required />
+                  <Input id="add-date" name="date" type="date" value={addFormData.date} onChange={handleAddInputChange} className="col-span-3" required />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-description" className="text-right col-span-1">Description</Label>
-                  <Input id="add-description" name="description" value={formData.description} onChange={handleInputChange} className="col-span-3" placeholder="e.g., Coffee" required />
+                  <Input id="add-description" name="description" value={addFormData.description} onChange={handleAddInputChange} className="col-span-3" placeholder="e.g., Coffee" required />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-amount" className="text-right col-span-1">Amount (KES)</Label>
-                  <Input id="add-amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={handleInputChange} className="col-span-3" placeholder="e.g., -550 or 10000" required />
+                  <Input id="add-amount" name="amount" type="number" step="0.01" value={addFormData.amount.toString()} onChange={handleAddInputChange} className="col-span-3" placeholder="e.g., -550 or 10000" required />
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-modeOfPayment" className="text-right col-span-1">Payment Mode</Label>
-                  <Select name="modeOfPayment" value={formData.modeOfPayment} onValueChange={(value) => handleSelectChange('modeOfPayment', value)} required>
+                  <Select name="modeOfPayment" value={addFormData.modeOfPayment} onValueChange={(value) => handleAddSelectChange('modeOfPayment', value)} required>
                     <SelectTrigger id="add-modeOfPayment" className="col-span-3">
                       <SelectValue placeholder="Select mode" />
                     </SelectTrigger>
@@ -315,7 +313,7 @@ export default function TransactionsPage() {
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-categoryName" className="text-right col-span-1">Budget Category</Label>
-                  <Select name="categoryName" value={formData.categoryName || NONE_CATEGORY_VALUE} onValueChange={(value) => handleSelectChange('categoryName', value)}>
+                  <Select name="categoryName" value={addFormData.categoryName || NONE_CATEGORY_VALUE} onValueChange={(value) => handleAddSelectChange('categoryName', value)}>
                     <SelectTrigger id="add-categoryName" className="col-span-3">
                       <SelectValue placeholder="Optional: Link to budget item" />
                     </SelectTrigger>
@@ -323,7 +321,6 @@ export default function TransactionsPage() {
                       <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                       {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          // Ensure item.description is not an empty string before rendering
                           item.description && item.description.trim() !== '' && (
                             <SelectItem key={item.id} value={item.description}>
                               {item.description} ({item.category})
@@ -338,7 +335,7 @@ export default function TransactionsPage() {
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-frequency" className="text-right col-span-1">Frequency</Label>
-                   <Select name="frequency" value={formData.frequency} onValueChange={(value) => handleSelectChange('frequency', value)}>
+                   <Select name="frequency" value={addFormData.frequency || ''} onValueChange={(value) => handleAddSelectChange('frequency', value)}>
                     <SelectTrigger id="add-frequency" className="col-span-3">
                       <SelectValue placeholder="Optional: Select frequency" />
                     </SelectTrigger>
@@ -350,7 +347,7 @@ export default function TransactionsPage() {
                 </div>
                  <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-variability" className="text-right col-span-1">Variability</Label>
-                   <Select name="variability" value={formData.variability} onValueChange={(value) => handleSelectChange('variability', value)}>
+                   <Select name="variability" value={addFormData.variability || ''} onValueChange={(value) => handleAddSelectChange('variability', value)}>
                     <SelectTrigger id="add-variability" className="col-span-3">
                       <SelectValue placeholder="Optional: Select variability" />
                     </SelectTrigger>
@@ -380,9 +377,9 @@ export default function TransactionsPage() {
             </Button>
          </div>
       </header>
-       {selectedTransactionIds.length > 0 && (
+       {getSelectedTransactionIdsFromTable().length > 0 && (
         <div className="mb-4 p-3 border rounded-md bg-accent/10 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium">{selectedTransactionIds.length} transaction(s) selected.</p>
+            <p className="text-sm font-medium">{getSelectedTransactionIdsFromTable().length} transaction(s) selected.</p>
             <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={handleBatchUpdateClick}>
                     <Edit className="mr-1 h-3 w-3" /> Batch Update
@@ -397,7 +394,7 @@ export default function TransactionsPage() {
                         <AlertDialogHeader>
                             <AlertDialogTitle>Delete Selected Transactions?</AlertDialogTitle>
                             <AlertDialogDescription>
-                                Are you sure you want to delete {selectedTransactionIds.length} selected transaction(s)? This action cannot be undone.
+                                Are you sure you want to delete {getSelectedTransactionIdsFromTable().length} selected transaction(s)? This action cannot be undone.
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -406,7 +403,7 @@ export default function TransactionsPage() {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                  </AlertDialog>
-                <Button size="sm" variant="ghost" onClick={clearSelection} className="text-muted-foreground">
+                <Button size="sm" variant="ghost" onClick={clearTableSelection} className="text-muted-foreground">
                     <XSquare className="mr-1 h-3 w-3"/> Clear Selection
                 </Button>
             </div>
@@ -415,95 +412,18 @@ export default function TransactionsPage() {
 
       <main className="flex-1">
         <Card>
-          <CardHeader className="p-6">
-            <CardTitle className="text-lg">Transaction History</CardTitle>
-            <CardDescription>Your recent financial activities.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-16rem-4rem)] w-full"> 
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
-                  <TableRow>
-                    <TableHead className="w-[60px] pl-4">
-                       <Checkbox
-                        id="select-all-transactions"
-                        checked={isAllSelected}
-                        onCheckedChange={handleToggleSelectAll}
-                        aria-label="Select all transactions"
-                        disabled={transactions.length === 0}
-                       />
-                    </TableHead>
-                    <TableHead className="w-[100px] pr-3">Date</TableHead>
-                    <TableHead className="px-3">Description</TableHead>
-                    <TableHead className="w-[90px] px-3">Mode</TableHead>
-                    <TableHead className="w-[150px] px-3">Recurrence</TableHead>
-                    <TableHead className="w-[150px] px-3">Budget Category</TableHead>
-                    <TableHead className="text-right w-[140px] px-3">Amount (KES)</TableHead>
-                    <TableHead className="text-right w-[100px] pr-6 pl-3">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.length > 0 ? (
-                    transactions.map((tx) => (
-                      <TableRow key={tx.id} data-state={selectedTransactionIds.includes(tx.id) ? "selected" : undefined}>
-                        <TableCell className="pl-4">
-                           <Checkbox
-                            id={`select-tx-${tx.id}`}
-                            checked={selectedTransactionIds.includes(tx.id)}
-                            onCheckedChange={() => toggleSelectTransaction(tx.id)}
-                            aria-label={`Select transaction ${tx.description}`}
-                           />
-                        </TableCell>
-                        <TableCell className="font-medium pr-3">{formatDateDisplay(tx.date)}</TableCell>
-                        <TableCell className="max-w-[200px] sm:max-w-[250px] truncate px-3" title={tx.description}>{tx.description}</TableCell>
-                        <TableCell className="px-3">{tx.modeOfPayment}</TableCell>
-                        <TableCell className="px-3">{formatCategoryDisplay(tx.frequency, tx.variability)}</TableCell>
-                        <TableCell className="px-3 text-xs text-muted-foreground">{tx.categoryName || 'N/A'}</TableCell>
-                        <TableCell className={cn('text-right font-mono px-3', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
-                          {formatCurrency(tx.amount)}
-                        </TableCell>
-                        <TableCell className="text-right pr-6 pl-3">
-                           <Button variant="ghost" size="icon" className="mr-1 h-7 w-7" onClick={() => handleEditClick(tx)}>
-                             <Edit className="h-4 w-4" />
-                             <span className="sr-only">Edit</span>
-                           </Button>
-                           <AlertDialog open={transactionToDelete?.id === tx.id} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
-                             <AlertDialogTrigger asChild>
-                               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(tx)}>
-                                 <Trash2 className="h-4 w-4" />
-                                 <span className="sr-only">Delete</span>
-                               </Button>
-                             </AlertDialogTrigger>
-                             {transactionToDelete && transactionToDelete.id === tx.id && ( 
-                               <AlertDialogContent>
-                                   <AlertDialogHeader>
-                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                     <AlertDialogDescription>
-                                       This action cannot be undone. This will permanently delete the transaction: <br/>
-                                       <strong>{formatDateDisplay(transactionToDelete.date)} - {transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
-                                     </AlertDialogDescription>
-                                   </AlertDialogHeader>
-                                   <AlertDialogFooter>
-                                     <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
-                                     <AlertDialogAction onClick={confirmDeleteTransaction}>Delete</AlertDialogAction>
-                                   </AlertDialogFooter>
-                               </AlertDialogContent>
-                                )}
-                           </AlertDialog>
-                         </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground"> 
-                        No transactions yet. Import a file or add one manually.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </CardContent>
+            <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-lg">Transaction History</CardTitle>
+                <CardDescription>Your recent financial activities.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6">
+                <DataTable
+                    columns={columns}
+                    data={transactions}
+                    searchColumn="description"
+                    searchPlaceholder="Search descriptions..."
+                />
+            </CardContent>
         </Card>
       </main>
 
@@ -519,10 +439,29 @@ export default function TransactionsPage() {
          <BatchUpdateTransactionDialog
             isOpen={isBatchUpdateDialogOpen}
             onClose={() => setIsBatchUpdateDialogOpen(false)}
-            transactionIds={selectedTransactionIds}
+            transactionIds={getSelectedTransactionIdsFromTable()}
             allBudgetItems={allBudgetItems}
          />
        )}
+
+      {/* Delete confirmation dialog (managed by AlertDialog inside DataTable actions) */}
+      <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
+        {transactionToDelete && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the transaction: <br/>
+                <strong>{format(transactionToDelete.date, 'PP')} - {transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteTransaction}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
     </div>
   );
 }
