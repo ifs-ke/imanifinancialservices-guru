@@ -92,7 +92,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[450px]"> {/* Slightly wider for better form layout */}
+      <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
           <DialogTitle>Edit Transaction</DialogTitle>
           <DialogDescription>Update the details for this transaction.</DialogDescription>
@@ -169,7 +169,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
               render={({ field }) => (
                 <FormItem className="grid grid-cols-4 items-center gap-4">
                   <FormLabel className="text-right col-span-1">Frequency</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value || ''}> {/* Handle undefined value */}
                     <FormControl className="col-span-3">
                       <SelectTrigger>
                         <SelectValue placeholder="Optional: Select frequency" />
@@ -190,7 +190,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
               render={({ field }) => (
                 <FormItem className="grid grid-cols-4 items-center gap-4">
                   <FormLabel className="text-right col-span-1">Variability</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value || ''}> {/* Handle undefined value */}
                     <FormControl className="col-span-3">
                       <SelectTrigger>
                         <SelectValue placeholder="Optional: Select variability" />
@@ -205,7 +205,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                 </FormItem>
               )}
             />
-            <DialogFooter className="pt-4"> {/* Added padding top to footer */}
+            <DialogFooter className="pt-4">
               <DialogClose asChild>
                 <Button type="button" variant="outline" onClick={() => form.reset()}>Cancel</Button>
               </DialogClose>

@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogClose,
-  DialogFooter // Added DialogFooter import
+  DialogFooter
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -36,8 +36,10 @@ import { useTransactionsStore } from '@/store/transactionsStore';
 import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { cn, formatCurrency } from '@/lib/utils'; // Import formatCurrency
+import { cn, formatCurrency } from '@/lib/utils';
 import EditTransactionDialog from './EditTransactionDialog';
+import { Badge } from '@/components/ui/badge';
+
 
 const formatDateForInput = (date: Date | string): string => {
     const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -59,8 +61,8 @@ const initialFormData = {
     description: '',
     amount: '',
     modeOfPayment: '' as ModeOfPayment | '',
-    frequency: '' as TransactionFrequency | '',
-    variability: '' as TransactionVariability | '',
+    frequency: '' as TransactionFrequency | '', // Added
+    variability: '' as TransactionVariability | '', // Added
 };
 
 export default function TransactionsPage() {
@@ -100,12 +102,12 @@ export default function TransactionsPage() {
     }
 
     addTransaction({
-      date: new Date(date + 'T00:00:00'),
+      date: new Date(date + 'T00:00:00'), // Ensure time part is considered for correct date
       description: description,
       amount: parsedAmount,
       modeOfPayment: modeOfPayment as ModeOfPayment,
-      frequency: frequency || undefined,
-      variability: variability || undefined,
+      frequency: frequency || undefined, // Pass as undefined if empty
+      variability: variability || undefined, // Pass as undefined if empty
     });
 
     setIsAddDialogOpen(false);
@@ -143,10 +145,18 @@ export default function TransactionsPage() {
     return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  const formatCategory = (value: string | undefined) => {
-      if (!value) return <span className="text-muted-foreground italic">N/A</span>;
-      return value.charAt(0).toUpperCase() + value.slice(1);
-  }
+  const formatCategoryDisplay = (freq?: TransactionFrequency | null, vari?: TransactionVariability | null) => {
+    if (!freq && !vari) return <Badge variant="outline" className="text-xs font-normal">N/A</Badge>;
+    let badges = [];
+    if (freq) {
+      badges.push(<Badge key="freq" variant={freq === 'recurring' ? 'secondary' : 'outline'} className="text-xs font-normal mr-1">{freq.charAt(0).toUpperCase() + freq.slice(1)}</Badge>);
+    }
+    if (vari) {
+      badges.push(<Badge key="vari" variant={vari === 'fixed' ? 'secondary' : 'outline'} className="text-xs font-normal">{vari.charAt(0).toUpperCase() + vari.slice(1)}</Badge>);
+    }
+    return <div className="flex items-center gap-1">{badges}</div>;
+  };
+
 
   const handleExportCsv = useCallback(() => {
     if (transactions.length === 0) {
@@ -155,11 +165,12 @@ export default function TransactionsPage() {
     }
 
     const csvRows = [];
+    // Include Frequency and Variability in headers
     const headers = ['Date', 'Description', 'Amount (KES)', 'Mode of Payment', 'Frequency', 'Variability'];
     csvRows.push(headers.join(','));
 
     for (const tx of transactions) {
-      const sanitizedDescription = tx.description.replace(/"/g, "''");
+      const sanitizedDescription = tx.description.replace(/"/g, "''"); // Basic sanitization for CSV
        const dateObj = tx.date instanceof Date ? tx.date : new Date(tx.date);
 
       const values = [
@@ -167,8 +178,8 @@ export default function TransactionsPage() {
         `"${sanitizedDescription}"`,
         tx.amount,
         tx.modeOfPayment,
-        tx.frequency || '',
-        tx.variability || ''
+        tx.frequency || '', // Add frequency
+        tx.variability || '' // Add variability
       ].join(',');
       csvRows.push(values);
     }
@@ -178,7 +189,7 @@ export default function TransactionsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'transactions_export.csv';
+    link.download = 'transactions_export.csv'; // Filename for download
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -206,7 +217,7 @@ export default function TransactionsPage() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[450px]"> {/* Consistent width */}
+            <DialogContent className="sm:max-w-[450px]">
               <DialogHeader>
                 <DialogTitle>Add New Transaction</DialogTitle>
                 <DialogDescription>Manually enter details below.</DialogDescription>
@@ -237,7 +248,7 @@ export default function TransactionsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                 <div className="grid grid-cols-4 items-center gap-4">
+                <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="add-frequency" className="text-right col-span-1">Frequency</Label>
                    <Select name="frequency" value={formData.frequency} onValueChange={(value) => handleSelectChange('frequency', value)}>
                     <SelectTrigger id="add-frequency" className="col-span-3">
@@ -296,8 +307,7 @@ export default function TransactionsPage() {
                     <TableHead className="w-[100px] pl-6 pr-3">Date</TableHead>
                     <TableHead className="px-3">Description</TableHead>
                     <TableHead className="w-[90px] px-3">Mode</TableHead>
-                    <TableHead className="w-[90px] px-3">Frequency</TableHead>
-                    <TableHead className="w-[90px] px-3">Variability</TableHead>
+                    <TableHead className="w-[150px] px-3">Category</TableHead> {/* Added Category Header */}
                     <TableHead className="text-right w-[140px] px-3">Amount (KES)</TableHead>
                     <TableHead className="text-right w-[100px] pr-6 pl-3">Actions</TableHead>
                   </TableRow>
@@ -309,8 +319,7 @@ export default function TransactionsPage() {
                         <TableCell className="font-medium pl-6 pr-3">{formatDate(tx.date)}</TableCell>
                         <TableCell className="max-w-[250px] truncate px-3" title={tx.description}>{tx.description}</TableCell>
                         <TableCell className="px-3">{tx.modeOfPayment}</TableCell>
-                        <TableCell className="text-xs px-3">{formatCategory(tx.frequency)}</TableCell>
-                        <TableCell className="text-xs px-3">{formatCategory(tx.variability)}</TableCell>
+                        <TableCell className="px-3">{formatCategoryDisplay(tx.frequency, tx.variability)}</TableCell> {/* Added Category Cell */}
                         <TableCell className={cn('text-right font-mono px-3', tx.amount >= 0 ? 'text-accent' : 'text-destructive')}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
@@ -349,7 +358,7 @@ export default function TransactionsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground"> {/* Updated colSpan */}
                         No transactions yet. Import a file or add one manually.
                       </TableCell>
                     </TableRow>
@@ -372,4 +381,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-

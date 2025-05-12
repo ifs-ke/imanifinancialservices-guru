@@ -11,78 +11,71 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileCheck, RotateCcw, CheckCircle, AlertTriangle, XCircle, ArrowLeft, Loader2, ListChecks } from 'lucide-react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTransactionsStore } from '@/store/transactionsStore'; // Import Zustand store hook
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; // Import new types
-import Papa, { type ParseResult } from 'papaparse'; // CSV parsing library
-import Link from 'next/link'; // For back button
-import { format } from 'date-fns'; // For date formatting
-import { cn } from '@/lib/utils'; // For conditional classes
+import { useTransactionsStore } from '@/store/transactionsStore'; 
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; 
+import Papa, { type ParseResult } from 'papaparse'; 
+import Link from 'next/link'; 
+import { format } from 'date-fns'; 
+import { cn } from '@/lib/utils'; 
+import { Badge } from '@/components/ui/badge';
 
-// Possible CSV headers and their corresponding Transaction fields
-// Added frequency and variability
+
 const POSSIBLE_HEADERS: { [key: string]: keyof TransactionWithId | 'ignore' } = {
   date: 'date',
-  time: 'ignore', // Often combined with date or irrelevant
+  time: 'ignore', 
   description: 'description',
   details: 'description',
   memo: 'description',
   payee: 'description',
   amount: 'amount',
-  debit: 'amount', // Treat as negative
-  credit: 'amount', // Treat as positive
+  debit: 'amount', 
+  credit: 'amount', 
   'payment mode': 'modeOfPayment',
   'payment method': 'modeOfPayment',
-  mode: 'modeOfPayment', // Added shorter 'mode'
-  type: 'ignore', // Often transaction type, less useful than description/amount
-  category: 'ignore', // Let user categorize later if needed
+  mode: 'modeOfPayment', 
+  type: 'ignore', 
+  category: 'ignore', 
   balance: 'ignore',
-  'transaction id': 'ignore', // Bank's ID, not ours
-  frequency: 'frequency', // Added frequency
-  recurrence: 'frequency', // Added frequency alias
-  variability: 'variability', // Added variability
-  'fixed/variable': 'variability', // Added variability alias
+  'transaction id': 'ignore', 
+  frequency: 'frequency', 
+  recurrence: 'frequency', 
+  variability: 'variability', 
+  'fixed/variable': 'variability', 
 };
 
-// Expected Transaction fields for mapping - Added frequency and variability
 const TRANSACTION_FIELDS: (keyof TransactionWithId)[] = ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability'];
 
-// Define states for the import process
 type ImportStage = 'upload' | 'mapping' | 'preview' | 'reconciling' | 'complete' | 'error';
 
 interface ParsedRow extends Record<string, string> {
-  __originalIndex: number; // Keep track of original row for potential errors
+  __originalIndex: number; 
 }
 
-// Added optional frequency and variability
 interface MappedTransaction extends Omit<TransactionWithId, 'id' | 'date'> {
-    id?: string; // Might match existing during reconciliation
-    date: Date | null; // Date might fail parsing
-    frequency?: TransactionFrequency; // Added frequency
-    variability?: TransactionVariability; // Added variability
+    id?: string; 
+    date: Date | null; 
+    frequency?: TransactionFrequency; 
+    variability?: TransactionVariability; 
     __originalData: ParsedRow;
     __parseError?: string;
-    __duplicatePotential?: TransactionWithId; // Potential match found
-    __toBeImported: boolean; // Flag to control import
+    __duplicatePotential?: TransactionWithId; 
+    __toBeImported: boolean; 
 }
 
-// Helper function for formatting currency (can be moved to utils)
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
 };
 
-// Helper function to format categories nicely
-const formatCategory = (value: string | undefined) => {
-    if (!value) return <span className="text-muted-foreground italic">N/A</span>;
-    // Capitalize first letter
-    return value.charAt(0).toUpperCase() + value.slice(1);
+const formatCategoryBadge = (value: string | undefined) => {
+    if (!value) return <Badge variant="outline" className="text-xs font-normal">N/A</Badge>;
+    const variant: "secondary" | "outline" = value === 'recurring' || value === 'fixed' ? 'secondary' : 'outline';
+    return <Badge variant={variant} className="text-xs font-normal">{value.charAt(0).toUpperCase() + value.slice(1)}</Badge>;
 }
 
 export default function ImportTransactionsPage() {
-    // Use Zustand store hook for transaction state management
     const { transactions: existingTransactions, importTransactionsBatch } = useTransactionsStore();
     const { toast } = useToast();
 
-    // Local state remains the same
     const [stage, setStage] = useState<ImportStage>('upload');
     const [file, setFile] = useState<File | null>(null);
     const [fileName, setFileName] = useState<string>('');
@@ -94,9 +87,7 @@ export default function ImportTransactionsPage() {
     const [importError, setImportError] = useState<string | null>(null);
     const [importedCount, setImportedCount] = useState(0);
     const [skippedCount, setSkippedCount] = useState(0);
-    const [lastImportedIds, setLastImportedIds] = useState<string[]>([]); // For potential rollback
-
-    // --- Stage 1: Upload (remains the same) ---
+    const [lastImportedIds, setLastImportedIds] = useState<string[]>([]); 
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
@@ -104,15 +95,14 @@ export default function ImportTransactionsPage() {
           resetState();
           return;
         }
-        // Basic validation for CSV type (can be expanded)
         if (!selectedFile.name.toLowerCase().endsWith('.csv') && !selectedFile.type.includes('csv')) {
             toast({ title: "Invalid File Type", description: "Please select a CSV file.", variant: "destructive" });
-            resetState(); // Reset if invalid file type
+            resetState(); 
             return;
         }
         setFile(selectedFile);
         setFileName(selectedFile.name);
-        setStage('upload'); // Ensure stage is upload
+        setStage('upload'); 
         setImportError(null);
     };
 
@@ -125,7 +115,7 @@ export default function ImportTransactionsPage() {
             header: true,
             skipEmptyLines: true,
             complete: (results: ParseResult<Record<string, string>>) => {
-                setIsParsing(false); // Stop parsing indicator regardless of outcome
+                setIsParsing(false); 
                 if (results.errors.length > 0) {
                     console.error("CSV Parsing Errors:", results.errors);
                     setImportError(`Error parsing CSV: ${results.errors[0].message}. Check file format.`);
@@ -146,7 +136,7 @@ export default function ImportTransactionsPage() {
 
                 setParsedHeaders(headers);
                 setParsedData(dataWithIndex);
-                autoMapColumns(headers); // Attempt initial mapping
+                autoMapColumns(headers); 
                 setStage('mapping');
             },
             error: (error: Error) => {
@@ -158,23 +148,18 @@ export default function ImportTransactionsPage() {
         });
     };
 
-    // --- Stage 2: Mapping (remains the same) ---
-
     const autoMapColumns = (headers: string[]) => {
         const initialMapping: Record<string, keyof TransactionWithId | 'ignore'> = {};
         headers.forEach(header => {
             const lowerHeader = header.toLowerCase().trim();
             let mappedField: keyof TransactionWithId | 'ignore' = 'ignore';
-            // Try direct match first
             if (POSSIBLE_HEADERS[lowerHeader]) {
                 mappedField = POSSIBLE_HEADERS[lowerHeader];
             } else {
-                // Try partial matches
                 for (const possibleKey in POSSIBLE_HEADERS) {
-                     // Check if lowerHeader includes the possible key, AND ensure the mapped value is not 'ignore'
                      if (lowerHeader.includes(possibleKey) && POSSIBLE_HEADERS[possibleKey] !== 'ignore') {
                         mappedField = POSSIBLE_HEADERS[possibleKey];
-                        break; // Take the first partial match that isn't 'ignore'
+                        break; 
                      }
                  }
             }
@@ -193,7 +178,6 @@ export default function ImportTransactionsPage() {
 
     const validateMapping = (): boolean => {
         const mappedFields = Object.values(columnMapping);
-        // Check if Date, Description, and Amount are mapped
         const hasDate = mappedFields.includes('date');
         const hasDescription = mappedFields.includes('description');
         const hasAmount = mappedFields.includes('amount');
@@ -203,7 +187,6 @@ export default function ImportTransactionsPage() {
              toast({ title: "Mapping Incomplete", description: "Date, Description, and Amount fields are required.", variant: "destructive" });
              return false;
         }
-         // Check for duplicate mapping (excluding 'ignore')
         const assignedFields = mappedFields.filter(f => f !== 'ignore');
         if (new Set(assignedFields).size !== assignedFields.length) {
              setImportError("Each transaction field (Date, Description, Amount, etc.) can only be mapped once.");
@@ -219,15 +202,15 @@ export default function ImportTransactionsPage() {
         if (!validateMapping()) return;
 
         const mapped: MappedTransaction[] = parsedData.map((row) => {
-            const transaction: Partial<MappedTransaction> & { amount?: number } = { // Initialize amount explicitly
+            const transaction: Partial<MappedTransaction> & { amount?: number } = { 
                 __originalData: row,
-                __toBeImported: true, // Default to import
-                date: null, // Initialize date as null
-                description: '', // Initialize description
-                amount: undefined, // Initialize amount as undefined
-                modeOfPayment: 'Bank', // Default mode of payment
-                frequency: undefined, // Default frequency
-                variability: undefined, // Default variability
+                __toBeImported: true, 
+                date: null, 
+                description: '', 
+                amount: undefined, 
+                modeOfPayment: 'Bank', 
+                frequency: undefined, 
+                variability: undefined, 
             };
             let parseError = '';
 
@@ -235,33 +218,28 @@ export default function ImportTransactionsPage() {
                 const field = columnMapping[header];
                 const rawValue = row[header]?.trim();
 
-                if (field === 'ignore' || rawValue === undefined || rawValue === '') continue; // Skip ignored, undefined or empty values
+                if (field === 'ignore' || rawValue === undefined || rawValue === '') continue; 
 
 
                 try {
                     switch (field) {
                         case 'date':
-                             // Try common date formats, add more as needed
                             const dateFormats = [
                                 "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "yyyyMMdd",
                                 "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "MM/dd/yyyy HH:mm:ss"
                             ];
                             let parsedDate = null;
-                            // Attempt to parse common date structures first
                             parsedDate = new Date(rawValue);
                              if (isNaN(parsedDate.getTime())) {
-                                // Add more specific parsing logic if needed (using date-fns parse maybe)
                                 throw new Error(`Invalid date format: ${rawValue}`);
                              }
                             transaction.date = parsedDate;
                             break;
                         case 'description':
-                            transaction.description = (transaction.description ? transaction.description + " | " : "") + rawValue; // Append if multiple description columns mapped
+                            transaction.description = (transaction.description ? transaction.description + " | " : "") + rawValue; 
                             break;
                         case 'amount':
-                             // Improved cleaning: handle commas, currency symbols (KES, $ etc.), parenthesis for negatives
                              let cleanedValue = rawValue.replace(/,/g, '').replace(/[^-0-9.]/g, '');
-                             // Check for parenthesis indicating negative number
                              if (rawValue.startsWith('(') && rawValue.endsWith(')')) {
                                 cleanedValue = '-' + cleanedValue;
                              }
@@ -270,38 +248,32 @@ export default function ImportTransactionsPage() {
                              if (isNaN(parsedAmount)) {
                                 throw new Error(`Invalid amount format: ${rawValue}`);
                              }
-                            // Handle potential debit/credit column mapping overrides
                              const lowerHeader = header.toLowerCase();
                              if (lowerHeader.includes('debit') && parsedAmount > 0) {
                                 transaction.amount = -parsedAmount;
                              } else if (lowerHeader.includes('credit') && parsedAmount < 0) {
-                                transaction.amount = Math.abs(parsedAmount); // Ensure credit is positive
+                                transaction.amount = Math.abs(parsedAmount); 
                              } else {
-                                // Only assign if transaction.amount is still undefined, or if the current column IS the primary 'amount' column
                                 if (transaction.amount === undefined || POSSIBLE_HEADERS[lowerHeader] === 'amount') {
                                     transaction.amount = parsedAmount;
                                 }
                              }
                             break;
                         case 'modeOfPayment':
-                            // Basic standardization
                              const lowerMode = rawValue.toLowerCase();
                              if (lowerMode.includes('cash')) transaction.modeOfPayment = 'Cash';
                              else if (lowerMode.includes('bank') || lowerMode.includes('transfer') || lowerMode.includes('wire') || lowerMode.includes('eft')) transaction.modeOfPayment = 'Bank';
                              else if (lowerMode.includes('mpesa') || lowerMode.includes('mobile money') || lowerMode.includes('m-pesa')) transaction.modeOfPayment = 'Mpesa';
-                             // else keep the default 'Bank'
                             break;
                          case 'frequency':
                              const lowerFreq = rawValue.toLowerCase();
                              if (lowerFreq.includes('recur') || lowerFreq.includes('monthly') || lowerFreq.includes('annual')) transaction.frequency = 'recurring';
                              else if (lowerFreq.includes('one') || lowerFreq.includes('single')) transaction.frequency = 'one-time';
-                             // else remains undefined
                             break;
                          case 'variability':
                              const lowerVar = rawValue.toLowerCase();
                              if (lowerVar.includes('fix') || lowerVar.includes('constant')) transaction.variability = 'fixed';
                              else if (lowerVar.includes('var') || lowerVar.includes('fluctuat')) transaction.variability = 'variable';
-                              // else remains undefined
                             break;
                     }
                 } catch (e: any) {
@@ -309,25 +281,22 @@ export default function ImportTransactionsPage() {
                  }
             }
 
-             // Final checks and setting errors/defaults
             if (!transaction.date || isNaN(transaction.date.getTime())) parseError += "Missing or invalid date. ";
-            if (!transaction.description) transaction.description = "Imported Transaction"; // Default description if empty
+            if (!transaction.description) transaction.description = "Imported Transaction"; 
             if (transaction.amount === undefined || transaction.amount === null || isNaN(transaction.amount)) parseError += "Missing or invalid amount. ";
-            // modeOfPayment has a default, so no check needed
 
              if (parseError) {
                  transaction.__parseError = parseError.trim();
-                 transaction.__toBeImported = false; // Don't import rows with errors by default
+                 transaction.__toBeImported = false; 
              }
 
-            // Add the amount back to the main object structure expected by MappedTransaction
             const finalTransaction: MappedTransaction = {
                 ...transaction,
-                amount: transaction.amount ?? 0, // Default to 0 if amount is still undefined (should be caught by error check though)
-                date: transaction.date, // Keep date possibly null if invalid
-                modeOfPayment: transaction.modeOfPayment!, // Assert non-null due to default
-                frequency: transaction.frequency, // Keep potentially undefined
-                variability: transaction.variability, // Keep potentially undefined
+                amount: transaction.amount ?? 0, 
+                date: transaction.date, 
+                modeOfPayment: transaction.modeOfPayment!, 
+                frequency: transaction.frequency, 
+                variability: transaction.variability, 
             };
 
             return finalTransaction;
@@ -338,9 +307,6 @@ export default function ImportTransactionsPage() {
     };
 
 
-    // --- Stage 3: Preview & Reconciliation (remains the same) ---
-
-     // Simple check for potential duplicates (can be enhanced)
      const findPotentialDuplicate = useCallback((incoming: MappedTransaction): TransactionWithId | undefined => {
         if (!incoming.date || incoming.amount === undefined || !incoming.description) return undefined;
 
@@ -348,51 +314,41 @@ export default function ImportTransactionsPage() {
         const amount = incoming.amount;
         const description = incoming.description?.toLowerCase() || '';
 
-        // Check within a small date window (e.g., +/- 1 day) and for same amount
         const oneDay = 24 * 60 * 60 * 1000;
 
         return existingTransactions.find(existing => {
              const existingDate = existing.date instanceof Date ? existing.date : new Date(existing.date);
-             if (isNaN(existingDate.getTime())) return false; // Skip existing transactions with invalid dates
+             if (isNaN(existingDate.getTime())) return false; 
 
             const timeDiff = Math.abs(existingDate.getTime() - incomingTime);
             const amountMatch = existing.amount === amount;
-             // Simple description check (first 15 chars, case-insensitive)
              const descMatch = description && existing.description.toLowerCase().startsWith(description.substring(0, 15));
 
-             // Criteria: Same amount, within 1 day, similar description start
              return amountMatch && timeDiff <= oneDay && descMatch;
          });
      }, [existingTransactions]);
 
-     // Add potential duplicate info to mapped transactions when entering preview stage
      useEffect(() => {
-         if (stage === 'preview' && mappedTransactions.length > 0) { // Ensure we have transactions to process
+         if (stage === 'preview' && mappedTransactions.length > 0) { 
              setMappedTransactions(prev =>
                  prev.map(tx => {
                      const duplicate = tx.__parseError ? undefined : findPotentialDuplicate(tx);
                      return {
                          ...tx,
                          __duplicatePotential: duplicate,
-                         // Uncheck duplicates by default, keep unchecked if parse error
                          __toBeImported: tx.__parseError ? false : !duplicate && tx.__toBeImported,
                      };
                  })
              );
          }
-         // Intentionally exclude findPotentialDuplicate from dependencies to avoid re-running on every render
-         // We only want this effect to run when the stage changes to 'preview' or mappedTransactions data initially loads
         // eslint-disable-next-line react-hooks/exhaustive-deps
-     }, [stage]);
+     }, [stage, mappedTransactions.length]); // Added mappedTransactions.length to dependencies
 
      const toggleImportRow = (index: number) => {
         setMappedTransactions(prev => prev.map((tx, i) =>
             i === index ? { ...tx, __toBeImported: !tx.__toBeImported } : tx
         ));
      };
-
-
-    // --- Stage 4: Reconciling (Actual Import) ---
 
     const handleConfirmImport = () => {
         setStage('reconciling');
@@ -402,7 +358,7 @@ export default function ImportTransactionsPage() {
             .filter(tx => tx.__toBeImported && !tx.__parseError);
 
         const currentSkippedCount = mappedTransactions.length - transactionsToImport.length;
-        setSkippedCount(currentSkippedCount); // Set skipped count before import
+        setSkippedCount(currentSkippedCount); 
 
         if (transactionsToImport.length === 0) {
             setImportedCount(0);
@@ -411,50 +367,38 @@ export default function ImportTransactionsPage() {
             return;
         }
 
-        // Include frequency and variability in the data sent for import
         const newTransactions: Omit<TransactionWithId, 'id'>[] = transactionsToImport.map(tx => ({
-            date: tx.date!, // Assert non-null as errors/null dates are filtered
+            date: tx.date!, 
             description: tx.description!,
             amount: tx.amount!,
             modeOfPayment: tx.modeOfPayment!,
-            frequency: tx.frequency, // Pass frequency
-            variability: tx.variability, // Pass variability
+            frequency: tx.frequency, 
+            variability: tx.variability, 
         }));
 
 
         try {
-            // Use the Zustand store's batch import function
             const addedTransactionsWithIds = importTransactionsBatch(newTransactions);
 
             setImportedCount(addedTransactionsWithIds.length);
-            // skippedCount is already set above
-            setLastImportedIds(addedTransactionsWithIds.map(tx => tx.id)); // Store IDs for potential rollback
+            setLastImportedIds(addedTransactionsWithIds.map(tx => tx.id)); 
             setStage('complete');
-            toast({ title: "Import Successful", description: `${addedTransactionsWithIds.length} transactions imported. ${skippedCount} rows skipped.`, variant: "default" }); // Use calculated counts in toast
+            toast({ title: "Import Successful", description: `${addedTransactionsWithIds.length} transactions imported. ${skippedCount} rows skipped.`, variant: "default" }); 
 
         } catch (error: any) {
             console.error("Import Failed:", error);
             setImportError(`Failed to save transactions: ${error.message}`);
             setStage('error');
-            setLastImportedIds([]); // Clear rollback info on error
+            setLastImportedIds([]); 
              toast({ title: "Import Failed", description: "Could not save imported transactions.", variant: "destructive" });
         }
     };
 
-    // --- Stage 5: Complete & Rollback (remains the same, rollback not implemented) ---
-
     const handleRollback = () => {
         if (lastImportedIds.length === 0) return;
-
-        // TODO: Implement rollback logic using context if available
-        // Example: deleteTransactionsBatch(lastImportedIds);
-        // For now, just show a message and potentially revert state visually if needed
         console.warn("Rollback requested for IDs:", lastImportedIds, " - Not implemented in store yet.");
         toast({ title: "Rollback Not Implemented", description: "Functionality to undo the last import requires store support.", variant:"destructive" });
-
     };
-
-    // --- Reset (remains the same) ---
 
     const resetState = () => {
         setStage('upload');
@@ -469,7 +413,6 @@ export default function ImportTransactionsPage() {
         setImportedCount(0);
         setSkippedCount(0);
         setLastImportedIds([]);
-        // Reset file input visually
         const fileInput = document.getElementById('file-upload') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
     };
@@ -477,12 +420,9 @@ export default function ImportTransactionsPage() {
     const handleBack = () => {
         if (stage === 'mapping') setStage('upload');
         else if (stage === 'preview') setStage('mapping');
-         else if (stage === 'complete' || stage === 'error') resetState(); // Start over from complete/error
-        setImportError(null); // Clear errors when navigating back
+         else if (stage === 'complete' || stage === 'error') resetState(); 
+        setImportError(null); 
     };
-
-
-    // --- Render Logic (remains the same structure) ---
 
     const renderUploadStage = () => (
         <Card>
@@ -516,7 +456,6 @@ export default function ImportTransactionsPage() {
          <Card>
             <CardHeader>
                 <CardTitle>Map Columns (Step 2/4)</CardTitle>
-                 {/* Updated description to include frequency/variability */}
                  <CardDescription>Match columns from '{fileName}' to transaction fields. Date, Description, Amount are required. Others are optional.</CardDescription>
              </CardHeader>
              <CardContent className="space-y-4">
@@ -547,7 +486,6 @@ export default function ImportTransactionsPage() {
                                                     <SelectItem value="description">Description</SelectItem>
                                                     <SelectItem value="amount">Amount</SelectItem>
                                                     <SelectItem value="modeOfPayment">Mode of Payment</SelectItem>
-                                                     {/* Added options for frequency and variability */}
                                                      <SelectItem value="frequency">Frequency</SelectItem>
                                                      <SelectItem value="variability">Variability</SelectItem>
                                                  </SelectGroup>
@@ -555,7 +493,7 @@ export default function ImportTransactionsPage() {
                                         </Select>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-xs truncate max-w-[200px]" title={parsedData[0]?.[header]}>
-                                        {parsedData[0]?.[header] || <span className='italic'>empty</span>} {/* Show first row example */}
+                                        {parsedData[0]?.[header] || <span className='italic'>empty</span>} 
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -591,7 +529,6 @@ export default function ImportTransactionsPage() {
                                 <TableHead>Description</TableHead>
                                  <TableHead>Amount (KES)</TableHead>
                                  <TableHead>Mode</TableHead>
-                                 {/* Added headers for frequency and variability */}
                                  <TableHead>Frequency</TableHead>
                                  <TableHead>Variability</TableHead>
                                  <TableHead>Status</TableHead>
@@ -612,7 +549,7 @@ export default function ImportTransactionsPage() {
                                             type="checkbox"
                                             aria-label={`Select row ${index + 1} for import`}
                                             checked={tx.__toBeImported}
-                                            disabled={!!tx.__parseError} // Disable checkbox if there's a parse error
+                                            disabled={!!tx.__parseError} 
                                             onChange={() => toggleImportRow(index)}
                                             className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                          />
@@ -623,9 +560,8 @@ export default function ImportTransactionsPage() {
                                          {tx.amount !== undefined && tx.amount !== null && !isNaN(tx.amount) ? formatCurrency(tx.amount) : 'Invalid Amt'}
                                      </TableCell>
                                      <TableCell>{tx.modeOfPayment || <span className="text-muted-foreground italic">N/A</span>}</TableCell>
-                                      {/* Display parsed frequency and variability */}
-                                      <TableCell className="text-xs">{formatCategory(tx.frequency)}</TableCell>
-                                      <TableCell className="text-xs">{formatCategory(tx.variability)}</TableCell>
+                                      <TableCell className="text-xs">{formatCategoryBadge(tx.frequency)}</TableCell>
+                                      <TableCell className="text-xs">{formatCategoryBadge(tx.variability)}</TableCell>
                                       <TableCell className="text-xs">
                                          {tx.__parseError ? <span className="flex items-center gap-1 text-destructive"><XCircle size={14} /> Error</span> :
                                           tx.__duplicatePotential ? <span className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400"><AlertTriangle size={14} /> Duplicate?</span> :
@@ -635,7 +571,6 @@ export default function ImportTransactionsPage() {
                              ))}
                                {mappedTransactions.length === 0 && (
                                     <TableRow>
-                                         {/* Adjust colspan for new columns */}
                                          <TableCell colSpan={8} className="text-center text-muted-foreground h-24">
                                              No transactions parsed or preview available.
                                         </TableCell>
@@ -687,12 +622,6 @@ export default function ImportTransactionsPage() {
                     <Upload className="mr-2 h-4 w-4" /> Import Another File
                  </Button>
                  <div className="flex gap-2">
-                      {/* Conditionally render Rollback button */}
-                     {/* {lastImportedIds.length > 0 && (
-                         <Button variant="destructive" onClick={handleRollback} >
-                             <RotateCcw className="mr-2 h-4 w-4" /> Rollback Last Import
-                         </Button>
-                     )} */}
                      <Button asChild>
                          <Link href="/transactions">
                              View Transactions <ArrowLeft className="ml-2 h-4 w-4 rotate-180"/>
@@ -734,4 +663,3 @@ export default function ImportTransactionsPage() {
         </div>
     );
 }
-
