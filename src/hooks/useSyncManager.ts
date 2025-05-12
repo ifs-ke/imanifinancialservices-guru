@@ -42,6 +42,7 @@ export function useSyncManager() {
   const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth();
   const { toast } = useToast();
   
+  // Consolidated state management
   const [syncState, setSyncState] = useState<SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -50,6 +51,7 @@ export function useSyncManager() {
     isMismatchDialogOpen: false
   });
 
+  // Refs for operation flags and tracking
   const isFetchingRef = useRef(false);
   const isSavingRef = useRef(false);
   const isClearingRef = useRef(false);
@@ -59,6 +61,7 @@ export function useSyncManager() {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Store state getters
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
   const getStatementState = useStatementStore.getState;
@@ -66,10 +69,12 @@ export function useSyncManager() {
   const getWeeklyReviewState = useWeeklyReviewStore.getState;
   const getNotificationState = useNotificationStore.getState;
 
+  // Helper function to update sync state
   const updateSyncState = useCallback((partialState: Partial<SyncState>) => {
     setSyncState(prev => ({ ...prev, ...partialState }));
   }, []);
 
+  // Cleanup function for async operations
   const cleanupAsyncOperations = useCallback((reason: string) => {
     const currentUserIdForLog = internalPreviousUserId.current;
     logDebug(`SyncManager: Cleanup initiated. Reason: ${reason}`, { currentUserId: currentUserIdForLog }, userId);
@@ -85,6 +90,7 @@ export function useSyncManager() {
     }
   }, [userId]); 
 
+  // Clear local state
   const clearLocalState = useCallback(() => {
     if (isClearingRef.current) {
       logDebug("ClearLocalState: Already in progress, skipping.", { currentUserId: internalPreviousUserId.current }, userId);
@@ -138,6 +144,7 @@ export function useSyncManager() {
     getWeeklyReviewState, getNotificationState, updateSyncState, userId
   ]);
 
+  // Fetch data from server
   const fetchData = useCallback(async (isRetry = false, skipHashCheck = false) => {
     if (!isClerkLoaded) {
       logDebug('Fetch Aborted: Auth not loaded yet.', { currentUserId: userId }, userId);
@@ -246,8 +253,8 @@ export function useSyncManager() {
           toastTitle = 'Sync Interrupted';
           toastDescription = `Data loading was interrupted due to a session update. Local data preserved.`;
         } else if (abortReason.startsWith('User changed') || abortReason.startsWith('User signed out')) {
-          toastTitle = 'Session Changed';
-          toastDescription = `Data loading stopped due to user session change.`;
+           toastTitle = 'Session Changed';
+           toastDescription = `Data loading stopped due to user session change.`;
         } else if (abortReason.startsWith('Starting new')) { 
             logInfo(`Fetch Aborted: Superseded by new operation: ${abortReason}`, { currentUserId: userId }, userId);
             if (syncState.status === 'syncing') updateSyncState({ status: 'local' });
@@ -435,6 +442,7 @@ export function useSyncManager() {
     updateSyncState, syncState.status, cleanupAsyncOperations
   ]);
 
+  // Debounced save trigger
   const triggerDebouncedSave = useCallback(() => {
     if (!isSignedIn || !userId) { logWarn('Debounced Save: User not signed in. Save will not occur.', { currentUserId: userId }, userId); return; }
     if (syncState.hashMismatch) { 
@@ -448,10 +456,11 @@ export function useSyncManager() {
     saveTimeoutRef.current = setTimeout(() => { 
       logInfo('Debounced Save: Timeout reached. Initiating save.', { currentUserId: userId }, userId); 
       saveData(); 
-    }, 30000);
+    }, 30000); // 30 seconds
   }, [saveData, isSignedIn, userId, syncState.hashMismatch, cleanupAsyncOperations, updateSyncState, syncState.status]); 
 
 
+  // Handle store changes
   const handleStoreChange = useCallback(() => {
     if (isFetchingRef.current || isSavingRef.current || isClearingRef.current || syncState.hashMismatch) {
       logDebug('Store Change: Operation in progress or hash mismatch. Save deferred.', { 
@@ -480,7 +489,7 @@ export function useSyncManager() {
     if (!isClerkLoaded) {
       logDebug('Auth Effect: Auth state not ready. Waiting for load.', { currentUserId: userId }, userId);
       updateSyncState({ status: 'idle' });
-      return () => cleanupAsyncOperations('AuthEffectCleanup while not loaded');
+      return () => cleanupAsyncOperations('Auth effect unmount while not loaded');
     }
     
     const currentAuthUserId = userId;
@@ -525,8 +534,17 @@ export function useSyncManager() {
         isSaving: isSavingRef.current, currentStatus: syncState.status,
       }, currentAuthUserId);
     }
-
-    return () => cleanupAsyncOperations(`AuthEffectCleanup-${currentAuthUserId || 'noUser'}`);
+    
+    return () => {
+        const reason = `AuthEffectCleanup-${currentAuthUserId || 'noUser'}`;
+        // Only clean up if an operation was actually started by this effect or is in progress
+        if (isFetchingRef.current || isSavingRef.current) {
+            logDebug(`AuthEffect: Initiating cleanup due to: ${reason}`, { userId: currentAuthUserId });
+            cleanupAsyncOperations(reason);
+        } else {
+            logDebug(`AuthEffect: No active operation to clean up for: ${reason}`, { userId: currentAuthUserId });
+        }
+    };
   }, [userId, isSignedIn, isClerkLoaded, clearLocalState, fetchData, cleanupAsyncOperations, updateSyncState]); 
 
 
@@ -535,7 +553,7 @@ export function useSyncManager() {
       logDebug('Change Subscription: Conditions not met (auth not ready or initial fetch not done).', { 
         isClerkLoaded, isSignedIn, currentUserId: userId, initialFetchDone: initialFetchDoneRef.current 
       }, userId);
-      return cleanupAsyncOperations(`Change Subscription Unmount: Conditions not met for user ${userId}`);
+      return;
     }
     if (syncState.hashMismatch) {
       logWarn('Change Subscription: Blocked due to hash mismatch. Data is local but potentially conflicting.', { 
@@ -544,7 +562,7 @@ export function useSyncManager() {
       if (syncState.status !== 'error') {
         updateSyncState({ status: 'error' });
       }
-      return cleanupAsyncOperations(`Change Subscription Unmount: Hash mismatch for user ${userId}`); 
+      return;
     }
     logDebug('Change Subscription: Subscribing to store changes...', { currentUserId: userId }, userId);
     const storesToWatch = [useTransactionsStore, useDebtStore, useStatementStore, useBudgetStore, useWeeklyReviewStore];
@@ -579,15 +597,7 @@ export function useSyncManager() {
       }
       triggerDebouncedSave();
     } else {
-      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { 
-        initialFetchDone: initialFetchDoneRef.current, 
-        isFetching: isFetchingRef.current, 
-        isSaving: isSavingRef.current, 
-        isClearing: isClearingRef.current, 
-        hashMismatch: syncState.hashMismatch, 
-        currentUserId: userId, 
-        currentStatus: syncState.status 
-    }, userId);
+      logDebug('Getting Started Tracker: Dismissal change detected, but conditions prevent status update or already local.', { initialFetchDone: initialFetchDoneRef.current, isFetching: isFetchingRef.current, isSaving: isSavingRef.current, isClearing: isClearingRef.current, hashMismatch: syncState.hashMismatch, currentUserId: userId, currentStatus: syncState.status }, userId);
     }
   }, [syncState.gettingStartedDismissed, isClerkLoaded, isSignedIn, userId, syncState.hashMismatch, triggerDebouncedSave, syncState.status, updateSyncState]);
 
