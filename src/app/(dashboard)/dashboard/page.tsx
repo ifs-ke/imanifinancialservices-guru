@@ -4,53 +4,45 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, Cloud, CloudOff, Lightbulb, X, BookOpen } from 'lucide-react'; // Added BookOpen
+import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, PieChart, BarChart2, MinusCircle, LineChart as LineChartIcon, CalendarClock, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, Banknote, Landmark, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
-import { useBudgetStore, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore'; // Import selectTotalBudgetedDebt
+import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
-import { format, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
-import { cn, formatCurrency } from '@/lib/utils'; // Import cn and formatCurrency from utils
+import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, differenceInDays, parse, getDaysInMonth } from 'date-fns';
+import { cn, formatCurrency } from '@/lib/utils';
 import type { BudgetItemCategory } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { useSyncManager } from '@/hooks/useSyncManager'; // Import hook to manage getting started state
+import { useSyncManager } from '@/hooks/useSyncManager';
 
-// Calculation Functions
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
-const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0); // Use amount for other liabilities
-
-// Formatting Functions (formatCurrency moved to utils)
-const formatMonthYear = (date: Date) => format(date, 'MMM yyyy');
+const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 
 export default function DashboardPage() {
-  // Use Zustand store hooks directly
   const allTransactions = useTransactionsStore(state => state.transactions);
   const debts = useDebtStore(state => state.debts);
   const assetItems = useStatementStore(state => state.assetItems);
   const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
   const startDate = useStatementStore(state => state.startDate);
   const endDate = useStatementStore(state => state.endDate);
-  const monthlyBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
-  const monthlyRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
-  const monthlyOneTimeExpenses = useBudgetStore(selectTotalOneTimeExpenses);
-  const monthlyBudgetedGoals = useBudgetStore(selectTotalGoals);
-  const monthlyNetBudgeted = useBudgetStore(selectNetBudgeted);
-  const monthlyBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
-  const monthlyBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt); // Get budgeted debt payment
-  const budgetItems = useBudgetStore(state => state.budgetItems);
+  
+  const currentBudgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
+  const allBudgetItems = useBudgetStore(state => state.budgetItems);
+
+  const budgetItemsForCurrentPeriod = useMemo(() => {
+    return allBudgetItems.filter(item => item.period === currentBudgetPeriod);
+  }, [allBudgetItems, currentBudgetPeriod]);
+
   const { toast } = useToast();
-  // Use hook for getting started state AND setter
   const { gettingStartedDismissed, setGettingStartedDismissed } = useSyncManager();
 
-   // Filter transactions based on the global startDate and endDate from the store
    const filteredTransactions = useMemo(() => {
-       // Use defaults if dates are undefined
-       const start = startDate ? startDate.getTime() : 0; // Consider transactions from the beginning if no start date
-       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now(); // Use now if no end date
+       const start = startDate ? startDate.getTime() : 0; 
+       const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now(); 
        return allTransactions.filter(tx => {
            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
            if (isNaN(txDate.getTime())) return false;
@@ -59,15 +51,12 @@ export default function DashboardPage() {
        });
      }, [allTransactions, startDate, endDate]);
 
-  // Calculate financial metrics based on ALL transactions and other context data
   const financialData = useMemo(() => {
     const totalAssets = calculateTotal(assetItems);
     const totalDebt = calculateDebtTotal(debts);
     const totalOtherLiabilities = calculateOtherLiabilityTotal(otherLiabilityItems);
     const totalLiabilities = totalDebt + totalOtherLiabilities;
     const netWorth = totalAssets - totalLiabilities;
-
-    // Use ALL transactions for overall cash flow calculation
     const totalIncomeAllTime = calculateTotal(allTransactions.filter(tx => tx.amount > 0));
     const totalExpensesAllTime = Math.abs(calculateTotal(allTransactions.filter(tx => tx.amount < 0)));
     const netActualAllTime = totalIncomeAllTime - totalExpensesAllTime;
@@ -84,7 +73,6 @@ export default function DashboardPage() {
     };
   }, [allTransactions, debts, assetItems, otherLiabilityItems]);
 
-  // State for formatted currency values to avoid hydration issues
   const [formattedNetWorth, setFormattedNetWorth] = useState<string>('N/A');
   const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
   const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
@@ -95,9 +83,9 @@ export default function DashboardPage() {
   const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A');
 
-   // --- Debt Payoff Timeline Calculation ---
+  const monthlyBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt);
+
    useEffect(() => {
-    // Use the explicitly budgeted amount for debt payments
     const fundsForDebtPayment = monthlyBudgetedDebtPayment;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
@@ -105,15 +93,11 @@ export default function DashboardPage() {
         setDebtPayoffTimeline("Debt Free!");
         return;
     }
-
-    // Check if ANY funds are allocated for debt
     if (fundsForDebtPayment <= 0) {
         setDebtPayoffTimeline("Cannot estimate: No funds budgeted for debt.");
         return;
     }
-
     const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
-
     let interestWarning = false;
     debts.forEach(debt => {
         const monthlyInterest = debt.principal * (debt.interestRate / 100 / 12);
@@ -121,50 +105,38 @@ export default function DashboardPage() {
             interestWarning = true;
         }
     });
-
-    // Check if budgeted amount covers minimums
     if (fundsForDebtPayment < totalMinPayments) {
         setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Budgeted debt funds < min payments.");
         return;
     }
 
-    // Proceed with calculation using the budgeted amount
     let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
-    const MAX_MONTHS = 720; // 60 years limit
+    const MAX_MONTHS = 720; 
 
     while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
         months++;
         let availablePayment = fundsForDebtPayment;
-
-        // Apply interest first
         currentDebts.forEach(debt => { if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12); });
-
-        // Apply minimum payments first (within available funds)
         currentDebts.forEach(debt => {
-            if (debt.principal > 0 && availablePayment > 0.01) {
+             if (debt.principal > 0 && availablePayment > 0.01) {
                  const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
                  debt.principal -= payment;
                  availablePayment -= payment;
-            }
+             }
         });
-
-
-        // Apply remaining available funds using Avalanche method
         if (availablePayment > 0.01) {
-            // Sort by interest rate (highest first), then principal (highest first for tie-breaking)
-            currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; });
-
-            for (const debt of currentDebts) {
-                if (debt.principal > 0.01 && availablePayment > 0.01) {
+             currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; });
+             for (const debt of currentDebts) {
+                 if (debt.principal > 0.01 && availablePayment > 0.01) {
                     const payment = Math.min(availablePayment, debt.principal);
                     debt.principal -= payment;
                     availablePayment -= payment;
-                 }
-                 if(availablePayment <= 0.01) break; // Stop if no more funds
-             }
-        }
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); // Remove paid-off debts
+                  }
+                  if(availablePayment <= 0.01) break; 
+              }
+         }
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); 
     }
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
@@ -177,53 +149,49 @@ export default function DashboardPage() {
         if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
-   }, [debts, monthlyBudgetedDebtPayment]); // Use monthlyBudgetedDebtPayment as dependency
+   }, [debts, monthlyBudgetedDebtPayment]);
 
-
-   // Calculate Budget Variance
    const budgetVariance = useMemo(() => {
        const actualIncome = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
        const actualExpenses = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
-       // Use defaults if dates are undefined
-       const start = startDate || startOfMonth(new Date());
-       const end = endDate || endOfMonth(new Date());
-       const daysInPeriod = differenceInDays(end, start) + 1;
-       const daysInAvgMonth = 30.44; // Average days in a month
-       const budgetMultiplier = daysInPeriod / daysInAvgMonth;
+       
+       const start = startDate || dfnsStartOfMonth(new Date());
+       const end = endDate || dfnsEndOfMonth(new Date());
+       const daysInStatementPeriod = differenceInDays(end, start) + 1;
+       
+       const budgetMonthDate = parse(currentBudgetPeriod, 'yyyy-MM', new Date());
+       const daysInActualBudgetMonth = getDaysInMonth(budgetMonthDate);
+       const budgetMultiplier = daysInActualBudgetMonth > 0 ? daysInStatementPeriod / daysInActualBudgetMonth : 0;
 
-       // Calculate prorated budget based on selected period
-       const proratedBudgetedIncome = budgetItems
+       const proratedBudgetedIncome = budgetItemsForCurrentPeriod
            .filter(item => item.category === 'income')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedExpenses = budgetItems
+       const proratedBudgetedExpenses = budgetItemsForCurrentPeriod
            .filter(item => item.category === 'recurring-expense' || item.category === 'one-time-expense')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-       const proratedBudgetedGoals = budgetItems
+       const proratedBudgetedGoals = budgetItemsForCurrentPeriod
            .filter(item => item.category === 'goal')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
-        // Calculate prorated debt payments (optional, depends if you want variance on debt payments)
-       const proratedBudgetedDebt = budgetItems
+       const proratedBudgetedDebt = budgetItemsForCurrentPeriod
            .filter(item => item.category === 'debt')
            .reduce((sum, item) => sum + (item.amount * budgetMultiplier), 0);
 
-
        if ((proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && proratedBudgetedGoals === 0 && proratedBudgetedDebt === 0) || (actualIncome === 0 && actualExpenses === 0)) {
-           return { value: null, status: 'no-data' };
+           return { value: null, status: 'no-data' as const };
        }
 
-        // Include debt in net calculation for variance
         const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses - proratedBudgetedGoals - proratedBudgetedDebt;
-       const netActual = actualIncome - actualExpenses; // Actual expenses include all spending, including debt payments if tracked as transactions
-       const variance = netActual - netBudgetedProrated; // Positive variance means actual net income > budgeted net income (favorable)
-       const threshold = Math.max(Math.abs(netBudgetedProrated * 0.01), 50); // 1% or KES 50 threshold
+       const netActual = actualIncome - actualExpenses; 
+       const variance = netActual - netBudgetedProrated; 
+       const threshold = Math.max(Math.abs(netBudgetedProrated * 0.01), 50); 
        let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
 
        if (Math.abs(variance) <= threshold) status = 'on-track';
-       else if (variance > 0) status = 'under-budget'; // Favorable (spent less or earned more than budgeted net)
-       else status = 'over-budget'; // Unfavorable (spent more or earned less than budgeted net)
+       else if (variance > 0) status = 'under-budget'; 
+       else status = 'over-budget'; 
 
        return { value: variance, status };
-   }, [filteredTransactions, budgetItems, startDate, endDate]);
+   }, [filteredTransactions, budgetItemsForCurrentPeriod, startDate, endDate, currentBudgetPeriod]);
 
   useEffect(() => {
     setFormattedNetWorth(formatCurrency(financialData.netWorth));
@@ -242,7 +210,7 @@ export default function DashboardPage() {
   }, [financialData, budgetVariance]);
 
   const handleCloseGettingStarted = () => {
-      setGettingStartedDismissed(true); // Update local state via hook setter
+      setGettingStartedDismissed(true); 
       toast({
           title: "Getting Started Guide Dismissed",
           description: "You can always refer back to the documentation for help.",
@@ -250,11 +218,9 @@ export default function DashboardPage() {
   };
 
   const handleShowGettingStarted = () => {
-      setGettingStartedDismissed(false); // Set state to false to show the card again
+      setGettingStartedDismissed(false); 
   };
 
-
-  // --- Chart Data and Config ---
   const cashFlowChartData = useMemo(() => [
      { name: 'Income', value: financialData.totalIncome, fill: "hsl(var(--accent))" },
      { name: 'Expenses', value: financialData.totalExpenses, fill: "hsl(var(--destructive))" },
@@ -304,9 +270,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 bg-background">
-       {/* Header Section with Right-aligned Button */}
        <header className="mb-6 flex justify-between items-start">
-            {/* Left-aligned Title and Description */}
            <div>
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
                     Executive Summary
@@ -322,32 +286,30 @@ export default function DashboardPage() {
                     )}
                 </p>
             </div>
-            {/* Right-aligned "Show Getting Started" Button */}
             {gettingStartedDismissed && (
                 <Button
                     variant="outline"
                     size="sm"
                     onClick={handleShowGettingStarted}
-                    className="ml-auto" // Aligns button to the right
+                    className="ml-auto"
                 >
                     <BookOpen className="mr-2 h-4 w-4" /> Show Getting Started
                 </Button>
             )}
         </header>
 
-       {/* Getting Started Section */}
-        {!gettingStartedDismissed && ( // Show only if not dismissed
+        {!gettingStartedDismissed && (
             <Card className="mb-6 shadow-md">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <Lightbulb className="h-4 w-4 text-muted-foreground" /> Getting Started
+                        <Landmark className="h-4 w-4 text-muted-foreground" data-ai-hint="bank building" /> Getting Started
                     </CardTitle>
                     <Button variant="ghost" size="icon" onClick={handleCloseGettingStarted}>
-                        <X className="h-4 w-4" />
+                        <XCircle className="h-4 w-4" />
                         <span className="sr-only">Dismiss</span>
                     </Button>
                 </CardHeader>
-                <CardContent className="flex flex-col gap-4 pt-4"> {/* Added top padding */}
+                <CardContent className="flex flex-col gap-4 pt-4">
                     <p className="text-sm text-muted-foreground">
                         Welcome to IFC - Guru! Here's a quick guide:
                     </p>
@@ -388,10 +350,7 @@ export default function DashboardPage() {
             </Card>
         )}
 
-
-       {/* Metrics Grid */}
        <div className="grid gap-4 sm:gap-6 mb-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-         {/* Net Worth Card */}
          <Card className="shadow-sm">
            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
              <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
@@ -412,11 +371,10 @@ export default function DashboardPage() {
            </CardContent>
          </Card>
 
-        {/* Total Assets Card */}
          <Card className="shadow-sm">
            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
              <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
-             <Landmark className="h-4 w-4 text-muted-foreground" />
+             <Banknote className="h-4 w-4 text-muted-foreground" data-ai-hint="money cash" />
            </CardHeader>
            <CardContent>
              <div className="text-2xl font-bold">
@@ -433,7 +391,6 @@ export default function DashboardPage() {
            </CardContent>
          </Card>
 
-        {/* Total Liabilities Card */}
           <Card className="shadow-sm">
            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
              <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>
@@ -459,7 +416,6 @@ export default function DashboardPage() {
            </CardContent>
          </Card>
 
-        {/* Cash Flow Card */}
           <Card className="shadow-sm">
            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
              <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle>
@@ -473,14 +429,13 @@ export default function DashboardPage() {
                Income ({formattedTotalIncome}) - Expenses ({formattedTotalExpenses})
              </p>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
-                 <Link href="/income-expenses"> {/* Link to combined page */}
+                 <Link href="/income-expenses">
                      View Analysis <ArrowRight className="ml-1 h-3 w-3" />
                  </Link>
              </Button>
            </CardContent>
          </Card>
 
-        {/* Budget Variance Card */}
           <Card className="shadow-sm">
              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                  <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
@@ -516,17 +471,15 @@ export default function DashboardPage() {
           </Card>
        </div>
 
-       {/* Charts Grid */}
-       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-3"> {/* Adjusted grid */}
-         {/* Income/Expense Trend Chart */}
-         <Card className="md:col-span-2 shadow-sm"> {/* Span 2 cols */}
+       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-3"> 
+         <Card className="md:col-span-2 shadow-sm"> 
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                  <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
               </CardTitle>
               <CardDescription>Monthly income vs. expenses over time.</CardDescription>
             </CardHeader>
-            <CardContent className="pl-2 pr-6 pb-6"> {/* Adjusted padding */}
+            <CardContent className="pl-2 pr-6 pb-6"> 
                  {trendChartData.length > 1 ? (
                      <ChartContainer config={trendChartConfig} className="h-[250px] w-full">
                          <LineChart accessibilityLayer data={trendChartData} margin={{ left: 10, right: 10, top: 10, bottom: 0 }}>
@@ -546,17 +499,16 @@ export default function DashboardPage() {
              </CardContent>
           </Card>
 
-          {/* Cash Flow Summary Chart */}
-          <Card className="md:col-span-1 shadow-sm"> {/* Span 1 col */}
+          <Card className="md:col-span-1 shadow-sm"> 
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                    <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall)
               </CardTitle>
               <CardDescription>Total Income vs. Total Expenses</CardDescription>
             </CardHeader>
-            <CardContent className="flex items-center justify-center pt-4"> {/* Adjusted padding */}
+            <CardContent className="flex items-center justify-center pt-4"> 
                {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? (
-                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full max-w-[250px]"> {/* Constrained width */}
+                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full max-w-[250px]"> 
                     <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
                          <XAxis type="number" hide />
                           <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} tickMargin={10} tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} width={60} />
