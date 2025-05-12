@@ -26,12 +26,14 @@ export const TransactionFormDataSchema = z.object({
 });
 export type TransactionFormData = z.infer<typeof TransactionFormDataSchema>;
 
+const LEAVE_UNCHANGED_LITERAL = "__LEAVE_UNCHANGED__";
+
 // New Schema for Batch Update (all fields optional)
 export const BatchUpdateTransactionFormDataSchema = z.object({
-  modeOfPayment: ModeOfPaymentSchema.optional().or(z.literal("")), // Allow empty string to signify "leave unchanged"
-  frequency: TransactionFrequencySchema.optional().or(z.literal("")),
-  variability: TransactionVariabilitySchema.optional().or(z.literal("")),
-  categoryName: z.string().optional().nullable().or(z.literal("")), // Allow empty string, and null for clearing
+  modeOfPayment: z.union([ModeOfPaymentSchema, z.literal(LEAVE_UNCHANGED_LITERAL)]).optional(),
+  frequency: z.union([z.enum(['recurring', 'one-time']), z.literal(LEAVE_UNCHANGED_LITERAL)]).optional().nullable(),
+  variability: z.union([z.enum(['fixed', 'variable']), z.literal(LEAVE_UNCHANGED_LITERAL)]).optional().nullable(),
+  categoryName: z.string().optional().nullable().or(z.literal(LEAVE_UNCHANGED_LITERAL)),
 });
 export type BatchUpdateTransactionFormData = z.infer<typeof BatchUpdateTransactionFormDataSchema>;
 
