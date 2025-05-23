@@ -152,7 +152,6 @@ export default function DashboardPage() {
    }, [debts, monthlyBudgetedDebtPayment]); 
 
   const budgetVariance = useMemo(() => {
-    // Actuals for the statement period
     const actualIncomeForStatementPeriod = filteredTransactions
         .filter(tx => tx.amount > 0)
         .reduce((sum, tx) => sum + tx.amount, 0);
@@ -161,7 +160,6 @@ export default function DashboardPage() {
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
     
-    // Budget items for the *current budget month*
     const budgetItemsForCurrentBudgetMonth = allBudgetItems.filter(item => item.period === currentBudgetPeriod);
 
     const stmtStart = startDate && isDateValid(startDate) ? startDate : dfnsStartOfMonth(new Date());
@@ -171,7 +169,6 @@ export default function DashboardPage() {
     const budgetMonthDate = parse(currentBudgetPeriod, 'yyyy-MM', new Date());
     const daysInActualBudgetMonth = isDateValid(budgetMonthDate) ? getDaysInMonth(budgetMonthDate) : 0;
     
-    // Calculate budgetMultiplier: proportion of the budget month that overlaps with the statement period
     let budgetMultiplier = 0;
     if (daysInStatementPeriod > 0 && daysInActualBudgetMonth > 0) {
         const budgetMonthStart = dfnsStartOfMonth(budgetMonthDate);
@@ -186,9 +183,8 @@ export default function DashboardPage() {
         }
     }
 
-
     let proratedBudgetedIncome = 0;
-    let proratedBudgetedExpenses = 0; // Includes expenses, goals, debt allocations
+    let proratedBudgetedExpenses = 0; 
 
     budgetItemsForCurrentBudgetMonth.forEach(item => {
         const proratedAmount = item.amount * budgetMultiplier;
@@ -207,8 +203,6 @@ export default function DashboardPage() {
     const netActualForPeriod = actualIncomeForStatementPeriod - actualExpensesForStatementPeriod;
     const variance = netActualForPeriod - netBudgetedProrated;
     
-    // More refined threshold: 5% of budgeted net or 50 KES, whichever is larger.
-    // Use absolute of netBudgetedProrated as it can be negative.
     const threshold = Math.max(Math.abs(netBudgetedProrated * 0.05), 50); 
     let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
 
@@ -216,10 +210,10 @@ export default function DashboardPage() {
         status = 'no-data';
     } else if (Math.abs(variance) <= threshold) {
         status = 'on-track';
-    } else if (variance > 0) { // Actual net is better than budgeted net
-        status = 'under-budget'; // Favorable
-    } else { // Actual net is worse than budgeted net
-        status = 'over-budget'; // Unfavorable
+    } else if (variance > 0) { 
+        status = 'under-budget';
+    } else { 
+        status = 'over-budget'; 
     }
 
     return { value: variance, status };
@@ -302,7 +296,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 bg-background">
-       <header className="mb-6 px-4 md:px-6 lg:px-8 flex justify-between items-start">
+       <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
            <div>
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
                     Executive Summary
@@ -332,16 +326,16 @@ export default function DashboardPage() {
 
         {!gettingStartedDismissed && (
             <Card className="mb-6 mx-4 md:mx-6 lg:mx-8 shadow-md">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
                         <Landmark className="h-4 w-4 text-muted-foreground" data-ai-hint="bank building" /> Getting Started
                     </CardTitle>
-                    <Button variant="ghost" size="icon" onClick={handleCloseGettingStarted}>
+                    <Button variant="ghost" size="icon" onClick={handleCloseGettingStarted} className="h-7 w-7">
                         <XCircle className="h-4 w-4" />
                         <span className="sr-only">Dismiss</span>
                     </Button>
                 </CardHeader>
-                <CardContent className="flex flex-col gap-4 pt-4">
+                <CardContent className="flex flex-col gap-4 pt-4 p-4">
                     <p className="text-sm text-muted-foreground">
                         Welcome to IFC - Guru! Here's a quick guide:
                     </p>
@@ -384,11 +378,11 @@ export default function DashboardPage() {
 
        <div className="grid gap-4 sm:gap-6 mb-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 px-4 md:px-6 lg:px-8">
          <Card className="shadow-sm">
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
              <CardTitle className="text-sm font-medium">Net Worth</CardTitle>
              <Scale className="h-4 w-4 text-muted-foreground" />
            </CardHeader>
-           <CardContent>
+           <CardContent className="p-4">
              <div className="text-2xl font-bold">
                {formattedNetWorth}
              </div>
@@ -404,11 +398,11 @@ export default function DashboardPage() {
          </Card>
 
          <Card className="shadow-sm">
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
              <CardTitle className="text-sm font-medium">Total Assets</CardTitle>
              <Banknote className="h-4 w-4 text-muted-foreground" data-ai-hint="money cash" />
            </CardHeader>
-           <CardContent>
+           <CardContent className="p-4">
              <div className="text-2xl font-bold">
                {formattedTotalAssets}
              </div>
@@ -424,11 +418,11 @@ export default function DashboardPage() {
          </Card>
 
           <Card className="shadow-sm">
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
              <CardTitle className="text-sm font-medium">Total Liabilities</CardTitle>
              <Coins className="h-4 w-4 text-muted-foreground" />
            </CardHeader>
-           <CardContent>
+           <CardContent className="p-4">
              <div className="text-2xl font-bold">
                  {formattedTotalLiabilities}
              </div>
@@ -439,7 +433,7 @@ export default function DashboardPage() {
                  <Link href="/debt">
                      Manage Debts <ArrowRight className="ml-1 h-3 w-3" />
                  </Link>
-             </Button>
+              </Button>
               <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs ml-2">
                  <Link href="/statements">
                      Manage Other <ArrowRight className="ml-1 h-3 w-3" />
@@ -449,11 +443,11 @@ export default function DashboardPage() {
          </Card>
 
           <Card className="shadow-sm">
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
              <CardTitle className="text-sm font-medium">Cash Flow (Overall)</CardTitle>
              {financialData.cashFlow >= 0 ? <TrendingUp className="h-4 w-4 text-accent" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
            </CardHeader>
-           <CardContent>
+           <CardContent className="p-4">
              <div className={`text-2xl font-bold ${financialData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'}`}>
                {formattedCashFlow}
              </div>
@@ -469,14 +463,14 @@ export default function DashboardPage() {
          </Card>
 
           <Card className="shadow-sm">
-             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                  <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
                   {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
                   {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
                   {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />}
                   {budgetStatus === 'over-budget' && <AlertTriangleIcon className="h-4 w-4 text-destructive" />}
              </CardHeader>
-              <CardContent>
+              <CardContent className="p-4">
                   <div className={cn("text-2xl font-bold",
                       budgetStatus === 'no-data' && 'text-muted-foreground',
                       (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent',
@@ -505,7 +499,7 @@ export default function DashboardPage() {
 
        <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-3 px-4 md:px-6 lg:px-8"> 
          <Card className="md:col-span-2 shadow-sm"> 
-            <CardHeader>
+            <CardHeader className="p-4">
               <CardTitle className="text-base flex items-center gap-2">
                  <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
               </CardTitle>
@@ -532,13 +526,13 @@ export default function DashboardPage() {
           </Card>
 
           <Card className="md:col-span-1 shadow-sm"> 
-            <CardHeader>
+            <CardHeader className="p-4">
               <CardTitle className="text-base flex items-center gap-2">
                    <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall)
               </CardTitle>
               <CardDescription>Total Income vs. Total Expenses</CardDescription>
             </CardHeader>
-            <CardContent className="flex items-center justify-center pt-4"> 
+            <CardContent className="flex items-center justify-center pt-4 p-4"> 
                {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? (
                   <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full max-w-[250px]"> 
                     <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>

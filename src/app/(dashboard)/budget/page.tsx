@@ -292,12 +292,12 @@ export default function BudgetPage() {
              <Card key={key} className={cn("flex flex-col shadow-sm", key === 'debt' && 'lg:col-span-1 xl:col-span-1')}>
                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 border-b p-4">
                      <CardTitle className="text-base font-medium flex items-center gap-2"><Icon className="h-4 w-4 text-muted-foreground" />{name}</CardTitle>
-                     <Button variant="ghost" size="sm" onClick={() => handleAddClick(key)} className="h-7 px-2"><PlusCircle className="mr-1 h-3 w-3" />Add {key === 'debt' ? 'Allocation' : name}</Button>
+                     <Button variant="ghost" size="sm" onClick={() => handleAddClick(key)} className="h-7 px-2"><PlusCircle className="mr-1 h-3 w-3" />Add {key === 'debt' ? 'Allocation' : name.replace(/s$/, '')}</Button>
                  </CardHeader>
                   <CardContent className="p-0 flex-grow">
                       <ScrollArea className="h-[350px] w-full">
                          <Table>
-                            <TableHeader><TableRow><TableHead className="pl-4 pr-2">Description</TableHead><TableHead className="text-right px-2">Amount (KES)</TableHead><TableHead className="w-[60px] pr-4 pl-2"></TableHead></TableRow></TableHeader>
+                            <TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Description</TableHead><TableHead className="text-right px-2">Amount (KES)</TableHead><TableHead className="w-[60px] pr-4 pl-2"></TableHead></TableRow></TableHeader>
                             <TableBody>
                                 {groupedBudgetItems[key].length > 0 ? (
                                     groupedBudgetItems[key].map((item) => (

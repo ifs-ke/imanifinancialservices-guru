@@ -28,7 +28,7 @@ import {
   ClipboardList,
   RefreshCw,
   Menu,
-  PieChart as PieChartIcon, // Renamed to avoid conflict
+  PieChart as PieChartIcon,
   Users, 
 } from "lucide-react";
 import Link from "next/link";
@@ -84,38 +84,31 @@ export const useSidebar = () => {
 
 interface SidebarProviderProps {
   children: React.ReactNode;
-  // Variant is not used in the simplified version
-  // width and widthIcon are derived from state
-  // collapsible is handled by the button logic
 }
 
 export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithChildren<SidebarProviderProps>>(
   ({ children, ...props }, ref) => {
     const isMobileClient = useIsMobile();
-    const [sidebarState, setSidebarState] = React.useState<SidebarState>("collapsed"); // Default to collapsed
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>("collapsed"); 
     const [hasMounted, setHasMounted] = React.useState(false);
 
     React.useEffect(() => {
-      setHasMounted(true); // Mark as mounted once on the client
+      setHasMounted(true);
     }, []);
 
     React.useEffect(() => {
-      if (hasMounted) { // Only run this effect on the client after mount
+      if (hasMounted) {
         if (isMobileClient) {
-          setSidebarState("collapsed"); // Always collapsed on mobile initially
+          setSidebarState("collapsed");
         } else {
           const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
-          if (storedState) {
-            setSidebarState(storedState);
-          } else {
-            setSidebarState("collapsed"); // Default to collapsed for desktop if no stored state
-          }
+          setSidebarState(storedState || "collapsed");
         }
       }
     }, [isMobileClient, hasMounted]);
 
     React.useEffect(() => {
-      if (hasMounted && !isMobileClient) { // Only save to localStorage on desktop
+      if (hasMounted && !isMobileClient) {
         localStorage.setItem("sidebarState", sidebarState);
       }
     }, [sidebarState, isMobileClient, hasMounted]);
@@ -142,8 +135,8 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
           )}
           style={
             {
-              "--sidebar-width": "16rem", // Fixed width for expanded
-              "--sidebar-width-icon": "3.5rem", // Fixed width for collapsed
+              "--sidebar-width": "16rem",
+              "--sidebar-width-icon": "3.5rem",
             } as React.CSSProperties
           }
           ref={ref}
@@ -158,7 +151,7 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
 SidebarProvider.displayName = "SidebarProvider";
 
 
-const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
     const { state, toggleSidebar, isMobile } = useSidebar(); 
     const pathname = usePathname();
@@ -171,12 +164,10 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     const syncManager = useSyncManager();
     const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
 
-
     React.useEffect(() => {
       setHasMounted(true);
       setClientUnreadCount(unreadCount); 
     }, [unreadCount]);
-
 
     let PersistenceIcon: React.ElementType = CloudOff;
     let persistenceStatusText = 'Local';
@@ -226,7 +217,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
         ref={ref}
         className={cn(
           "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out border-r border-sidebar-border",
-          sidebarActualState === "expanded" ? "w-[var(--sidebar-width)]" : "w-[var(--sidebar-width-icon)]", // Use CSS variables
+          sidebarActualState === "expanded" ? "w-[var(--sidebar-width)]" : "w-[var(--sidebar-width-icon)]",
           className
         )}
         {...props}
@@ -247,11 +238,11 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
             </Button>
             <span
               className={cn(
-                "whitespace-nowrap text-base font-semibold transition-opacity duration-200", // text-base for slightly smaller title
+                "whitespace-nowrap text-base font-semibold transition-opacity duration-200",
                 sidebarActualState === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
               )}
             >
-              Imani Financial Consultancies - Guru
+              IFC - Guru
             </span>
           </div>
         </div>
@@ -265,7 +256,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                     <Button
                       variant={pathname === item.href ? "primary" : "ghost"}
                       className={cn(
-                        "w-full justify-start text-sm h-9 relative", // Added relative for positioning pulse
+                        "w-full justify-start text-sm h-9 relative",
                         sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
                         pathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
@@ -279,7 +270,6 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                         )}>
                           {item.label}
                         </span>
-                        {/* Notification Indicator Logic */}
                         {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
                           <>
                             {sidebarActualState === 'expanded' && (
@@ -288,9 +278,9 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                               </Badge>
                             )}
                             {sidebarActualState === 'collapsed' && (
-                              <span className="absolute top-1 right-1 h-2.5 w-2.5 transform -translate-y-1/2 translate-x-1/2 flex items-center justify-center">
+                              <span className="absolute top-0.5 right-0.5 flex h-2.5 w-2.5">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive"></span>
                               </span>
                             )}
                           </>
@@ -400,7 +390,7 @@ export const Sidebar = React.forwardRef<
 
   if (isMobile) {
     return (
-      <Sheet open={state === "expanded"} onOpenChange={(open) => { if(!open && state === "expanded") toggleSidebar()}}>
+      <Sheet open={state === "expanded" && isMobile} onOpenChange={(open) => { if(!open && state === "expanded") toggleSidebar()}}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="fixed top-3 left-3 z-50 md:hidden bg-background/80 backdrop-blur-sm h-10 w-10" onClick={toggleSidebar}>
             <Menu size={24} />
@@ -434,13 +424,13 @@ export const SidebarInset = React.forwardRef<
 >(({ className, ...props }, ref) => {
  const { state, isMobile } = useSidebar();
 
- if (isMobile) return <div ref={ref} className={cn("flex-1 pt-12 md:pt-0", className)} {...props} /> // Add padding top for mobile trigger
+ if (isMobile) return <div ref={ref} className={cn("flex-1 pt-12 md:pt-0", className)} {...props} />
 
  return (
    <div
      ref={ref}
      className={cn(
-       "flex-1 transition-[margin-left] duration-200 ease-in-out", // Applied ease-in-out as per other transitions
+       "flex-1 transition-[margin-left] duration-200 ease-in-out",
        state === "expanded" ? "md:ml-[var(--sidebar-width)]" : "md:ml-[var(--sidebar-width-icon)]",
        className
      )}

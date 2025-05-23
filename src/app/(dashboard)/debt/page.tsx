@@ -13,7 +13,7 @@ import { useDebtStore } from '@/store/debtStore';
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedDebt } from '@/store/budgetStore';
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
-import { format } from 'date-fns';
+// import { format } from 'date-fns'; // No longer used directly
 import DebtFormSheet from '@/components/debt/DebtFormSheet';
 import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet';
 import DebtAnalysisDialog from '@/components/debt/DebtAnalysisDialog';
@@ -127,7 +127,7 @@ export default function DebtPage() {
   const handleExportCsv = useCallback(() => {
       if (debts.length === 0) { toast({ title: "No data to export" }); return; }
       const csvRows = [['Description', 'Principal (KES)', 'Interest Rate (%)', 'Min Payment (KES)', 'Term']];
-      for (const debt of debts) { const sanitizedDesc = debt.description.replace(/"/g, "''"); csvRows.push([`"${sanitizedDesc}"`, debt.principal, debt.interestRate, debt.minPayment, debt.term].join(',')); }
+      for (const debt of debts) { const sanitizedDesc = debt.description.replace(/"/g, "''"); csvRows.push([`"${sanitizedDesc}"`, debt.principal.toString(), debt.interestRate.toString(), debt.minPayment.toString(), debt.term].join(',')); }
       const csvData = csvRows.join('\n'); const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'debts_export.csv'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); toast({ title: "CSV Exported" });
   }, [debts, toast]);
 
@@ -138,13 +138,13 @@ export default function DebtPage() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Coins className="h-6 w-6 text-primary"/> Manage Debts
           </h1>
-          <p className="text-muted-foreground">Track debts, view amortization, and get payoff strategies.</p>
+          <p className="text-muted-foreground text-sm">Track debts, view amortization, and get payoff strategies.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Debt</Button>
            <Button onClick={handleAnalyzeDebt} disabled={isAnalyzing || debts.length === 0}> {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit className="mr-2 h-4 w-4" />} {isAnalyzing ? 'Analyzing...' : 'Suggest Strategy'}</Button>
            <Button asChild variant="default"><Link href="/debt/import"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Link></Button>
-            <Button variant="secondary" onClick={handleExportCsv}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
+            <Button variant="secondary" onClick={handleExportCsv} disabled={debts.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
         </div>
       </header>
 
@@ -174,7 +174,7 @@ export default function DebtPage() {
           <CardContent className="p-0">
             <ScrollArea className="h-[500px] w-full">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                   <TableRow>
                     <TableHead className="pl-6 pr-3">Description</TableHead>
                     <TableHead className="text-center px-3">Term</TableHead>

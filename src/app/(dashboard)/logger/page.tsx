@@ -2,7 +2,7 @@
  'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -50,11 +50,13 @@ export default function LoggerPage() {
       try {
         const parsedLogs: CapturedLogEntry[] = JSON.parse(savedLogs).map((log: any) => ({
           ...log,
-          timestamp: new Date(log.timestamp),
+          timestamp: new Date(log.timestamp), // Ensure timestamp is a Date object
         }));
         setCapturedLogs(parsedLogs);
       } catch (error) {
         console.error("Failed to parse logs from localStorage:", error);
+        // Optionally clear corrupted logs
+        // localStorage.removeItem('capturedLogs'); 
       }
     }
     const originalConsole = {
@@ -207,27 +209,21 @@ export default function LoggerPage() {
 
   return (
     <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 space-y-6">
-      <header className="px-4 md:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <ClipboardList className="h-6 w-6 text-primary" /> Application Logger
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          View client-side console logs captured during this session. Server logs are in Vercel.
-        </p>
-      </header>
-
-      <Card className="mx-4 md:mx-6 lg:mx-8">
-        <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6">
-          <div>
-            <CardTitle className="text-lg">Session Log Entries</CardTitle>
-            <CardDescription>Live events and errors from your current browser session.</CardDescription>
-          </div>
-          <div className="flex gap-2 w-full sm:w-auto flex-wrap items-center">
+      <header className="px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <ClipboardList className="h-6 w-6 text-primary" /> Application Logger
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            View client-side console logs captured during this session. Server logs are in Vercel.
+          </p>
+        </div>
+        <div className="flex gap-2 w-full sm:w-auto flex-wrap items-center">
             <Input
               placeholder="Search logs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-xs h-9 flex-grow sm:flex-grow-0"
+              className="h-9 flex-grow sm:flex-grow-0 sm:max-w-xs"
             />
             <Select value={levelFilter} onValueChange={setLevelFilter}>
               <SelectTrigger className="w-full sm:w-[120px] h-9">
@@ -250,59 +246,72 @@ export default function LoggerPage() {
               <CopyCheck className="h-4 w-4 mr-2" /> Copy Visible
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[60vh] w-full">
-            <Table>
-              <TableHeader className="sticky top-0 bg-background z-10">
-                <TableRow>
-                  <TableHead className="w-[180px] pl-6 pr-3">Timestamp</TableHead>
-                  <TableHead className="w-[100px] px-3">Level</TableHead>
-                  <TableHead className="px-3">Message</TableHead>
-                  <TableHead className="w-[100px] text-center pr-6 pl-3">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLogs.length > 0 ? (
-                  filteredLogs.map((log) => (
-                    <TableRow 
-                        key={log.id} 
-                        className="text-xs hover:bg-muted/50 cursor-pointer" 
-                        onClick={() => handleViewLogDetails(log)}
-                        title="Click to view details"
-                    >
-                      <TableCell className="font-mono whitespace-nowrap pl-6 pr-3">
-                        {format(log.timestamp, 'PPpp')}
-                      </TableCell>
-                      <TableCell className="px-3">
-                        <Badge variant={getBadgeVariant(log.level)} className="capitalize flex items-center gap-1">
-                          {getIconForLevel(log.level)}
-                          <span>{log.level}</span>
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-pre-wrap break-words max-w-xl truncate px-3" title={log.message}>{log.message}</TableCell>
-                      <TableCell className="text-center pr-6 pl-3">
-                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleCopyLog(log);}} title="Copy this log" className="h-7 w-7">
-                            <Copy className="h-4 w-4" />
-                        </Button>
-                         <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleViewLogDetails(log);}} title="View details" className="h-7 w-7">
-                            <Eye className="h-4 w-4" />
-                        </Button>
+      </header>
+
+      <main className="flex-1 px-4 md:px-6 lg:px-8">
+        <Card>
+          <CardHeader className="p-4 border-b">
+            <CardTitle className="text-base">Session Log Entries</CardTitle>
+            <CardDescription className="text-xs">Live events and errors from your current browser session. Max 500 entries.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[calc(100vh-22rem)] w-full"> {/* Adjusted height */}
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+                  <TableRow>
+                    <TableHead className="w-[180px] pl-6 pr-3">Timestamp</TableHead>
+                    <TableHead className="w-[100px] px-3">Level</TableHead>
+                    <TableHead className="px-3">Message</TableHead>
+                    <TableHead className="w-[100px] text-center pr-6 pl-3">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredLogs.length > 0 ? (
+                    filteredLogs.map((log) => (
+                      <TableRow 
+                          key={log.id} 
+                          className="text-xs hover:bg-muted/50 cursor-pointer" 
+                          onClick={() => handleViewLogDetails(log)}
+                          title="Click to view details"
+                      >
+                        <TableCell className="font-mono whitespace-nowrap pl-6 pr-3">
+                          {format(log.timestamp, 'PPpp')}
+                        </TableCell>
+                        <TableCell className="px-3">
+                          <Badge variant={getBadgeVariant(log.level)} className="capitalize flex items-center gap-1 text-xs">
+                            {getIconForLevel(log.level)}
+                            <span>{log.level}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="whitespace-pre-wrap break-words max-w-xl truncate px-3" title={log.message}>{log.message}</TableCell>
+                        <TableCell className="text-center pr-6 pl-3">
+                          <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleCopyLog(log);}} title="Copy this log" className="h-7 w-7">
+                              <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleViewLogDetails(log);}} title="View details" className="h-7 w-7">
+                              <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        {searchTerm || levelFilter !== 'all' ? 'No logs found matching your criteria.' : 'No logs captured yet in this session.'}
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                      {searchTerm || levelFilter !== 'all' ? 'No logs found matching your criteria.' : 'No logs captured yet in this session.'}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+            {filteredLogs.length > 0 && (
+                <CardFooter className="p-4 border-t text-xs text-muted-foreground">
+                    Displaying {filteredLogs.length} of {capturedLogs.length} total captured logs.
+                </CardFooter>
+            )}
+        </Card>
+      </main>
 
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
         <DialogContent className="sm:max-w-2xl">
