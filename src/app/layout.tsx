@@ -6,7 +6,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
-import { ClerkProvider } from '@clerk/nextjs'; // Ensure this is imported
+import { ClerkProvider } from '@clerk/nextjs';
 
 // Initialize Inter font for sans-serif
 const inter = Inter({
