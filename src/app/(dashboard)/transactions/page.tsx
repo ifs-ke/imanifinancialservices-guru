@@ -4,7 +4,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  ColumnDef,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -17,14 +16,12 @@ import {
   type RowSelectionState,
 } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, Upload, Download, ListFilter, Layers, XCircle, FileUp, FileDown, Edit3 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, FileUp, FileDown, Edit3, XCircle, ReceiptText } from 'lucide-react'; // Added ReceiptText
 import Link from 'next/link';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger as ShadAlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, ShadAlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore } from '@/store/budgetStore';
 import type { TransactionWithId, BudgetItem } from '@/lib/types';
@@ -211,11 +208,11 @@ export default function TransactionsPage() {
             )}
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="w-full"> {/* Removed fixed height, let DataTable handle it */}
-              <div className="p-6"> {/* Added padding around DataTable */}
+            <ScrollArea className="w-full">
+              <div className="p-6">
                 <DataTable
                   columns={columns}
-                  data={transactions} // This will be used by the table instance for filtering
+                  data={transactions} 
                   table={table}
                   searchColumn="description"
                   searchPlaceholder="Search descriptions..."
@@ -237,14 +234,13 @@ export default function TransactionsPage() {
         isOpen={isBatchUpdateDialogOpen}
         onClose={() => {
             setIsBatchUpdateDialogOpen(false);
-            setRowSelection({}); // Clear selection after dialog closes
+            setRowSelection({}); 
         }}
         transactionIds={selectedTransactionIds}
         allBudgetItems={allBudgetItems}
-        onComplete={() => setRowSelection({})} // Clear selection on successful update
+        onComplete={() => setRowSelection({})} 
       />
 
-      {/* Single Delete Confirmation Dialog */}
       <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
         {transactionToDelete && (
             <AlertDialogContent>
@@ -263,7 +259,6 @@ export default function TransactionsPage() {
         )}
       </AlertDialog>
 
-      {/* Mass Delete Confirmation Dialog */}
       <AlertDialog open={isMassDeleteDialogOpen} onOpenChange={setIsMassDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -282,3 +277,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
