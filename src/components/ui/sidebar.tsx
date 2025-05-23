@@ -25,10 +25,10 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
-  ClipboardList, // Changed from Logger
+  ClipboardList,
   RefreshCw,
   Menu,
-  PieChart,
+  PieChart as PieChartIcon, // Renamed to avoid conflict
   Users, 
 } from "lucide-react";
 import Link from "next/link";
@@ -36,7 +36,7 @@ import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-// import { UserButton, useUser } from "@clerk/nextjs"; // Clerk disabled
+import { UserButton, useUser } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area"; 
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
@@ -56,10 +56,10 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
   { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
   { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
-  { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
+  { href: "/budget", label: "Budget", icon: <PieChartIcon size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> }, // Changed icon from Logger to ClipboardList
+  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
 ];
 
 export type SidebarState = "collapsed" | "expanded";
@@ -84,39 +84,38 @@ export const useSidebar = () => {
 
 interface SidebarProviderProps {
   children: React.ReactNode;
-  variant?: "sidebar" | "inset";
-  width?: string;
-  widthIcon?: string;
-  collapsible?: "icon" | "button";
+  // Variant is not used in the simplified version
+  // width and widthIcon are derived from state
+  // collapsible is handled by the button logic
 }
 
 export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithChildren<SidebarProviderProps>>(
-  ({ children, variant = "sidebar", width = "16rem", widthIcon = "3.5rem", collapsible = "button", ...props }, ref) => {
+  ({ children, ...props }, ref) => {
     const isMobileClient = useIsMobile();
-    const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded");
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>("collapsed"); // Default to collapsed
     const [hasMounted, setHasMounted] = React.useState(false);
 
     React.useEffect(() => {
-      setHasMounted(true);
+      setHasMounted(true); // Mark as mounted once on the client
     }, []);
 
     React.useEffect(() => {
-      if (hasMounted) {
+      if (hasMounted) { // Only run this effect on the client after mount
         if (isMobileClient) {
-          setSidebarState("collapsed");
+          setSidebarState("collapsed"); // Always collapsed on mobile initially
         } else {
           const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
           if (storedState) {
             setSidebarState(storedState);
           } else {
-            setSidebarState("expanded");
+            setSidebarState("collapsed"); // Default to collapsed for desktop if no stored state
           }
         }
       }
     }, [isMobileClient, hasMounted]);
 
     React.useEffect(() => {
-      if (hasMounted && !isMobileClient) {
+      if (hasMounted && !isMobileClient) { // Only save to localStorage on desktop
         localStorage.setItem("sidebarState", sidebarState);
       }
     }, [sidebarState, isMobileClient, hasMounted]);
@@ -126,7 +125,7 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
     const toggleSidebar = () => {
       setSidebarState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
     };
-
+    
     const contextValue = React.useMemo(() => ({
       isMobile: isMobileClient,
       state: sidebarState,
@@ -139,13 +138,12 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
       <SidebarContext.Provider value={contextValue}>
         <div
           className={cn(
-            "group/sidebar-wrapper flex min-h-svh w-full",
-            variant === "inset" && "has-[[data-variant=inset]]:bg-sidebar"
+            "group/sidebar-wrapper flex min-h-svh w-full"
           )}
           style={
             {
-              "--sidebar-width": width,
-              "--sidebar-width-icon": widthIcon,
+              "--sidebar-width": "16rem", // Fixed width for expanded
+              "--sidebar-width-icon": "3.5rem", // Fixed width for collapsed
             } as React.CSSProperties
           }
           ref={ref}
@@ -168,24 +166,15 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     const [clientUnreadCount, setClientUnreadCount] = React.useState(0);
     const [hasMounted, setHasMounted] = React.useState(false);
 
-    // Clerk disabled: Simulate user state
-    const isClerkLoaded = true; // Assume loaded
-    const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
-    const isSignedIn = !!mockUserId;
-    const user = isSignedIn ? { 
-      id: mockUserId, 
-      fullName: 'Mock User', 
-      primaryEmailAddress: { emailAddress: 'mock@example.com'} 
-    } : null;
-    // End Clerk disabled simulation
-
+    const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser(); 
+    
     const syncManager = useSyncManager();
     const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
 
 
     React.useEffect(() => {
       setHasMounted(true);
-      setClientUnreadCount(unreadCount); // Sync unread count after mount
+      setClientUnreadCount(unreadCount); 
     }, [unreadCount]);
 
 
@@ -195,16 +184,16 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     let iconColor = 'text-muted-foreground';
     let isClickable = true;
 
-    if (!isClerkLoaded) { // This condition might always be true now
+    if (!isClerkLoaded) { 
       PersistenceIcon = RefreshCw;
-      persistenceStatusText = 'Auth Loading...'; // Or "App Loading..."
-      persistenceTooltipText = 'Waiting for application to initialize...';
+      persistenceStatusText = 'Auth Loading...'; 
+      persistenceTooltipText = 'Waiting for authentication status...';
       iconColor = 'text-muted-foreground animate-spin';
       isClickable = false;
-    } else if (!isSignedIn) { // Checks mock user state
+    } else if (!isSignedIn) { 
       PersistenceIcon = CloudOff;
       persistenceStatusText = 'Offline';
-      persistenceTooltipText = 'Mock user not configured. Cloud sync disabled.';
+      persistenceTooltipText = 'Sign in to enable cloud sync.';
       iconColor = 'text-muted-foreground';
       isClickable = false;
     } else {
@@ -223,8 +212,8 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
     }
 
     const handleSyncClick = () => {
-      if (!isSignedIn) { // Check mock user state
-        logWarn("Sync click attempted but no mock user is configured.", { isSignedIn, isClerkLoaded, userId: user?.id});
+      if (!isClerkLoaded || !isSignedIn) { 
+        logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
         return;
       }
       if (isClickable) retrySync();
@@ -236,8 +225,8 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
       <div
         ref={ref}
         className={cn(
-          "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear border-r border-sidebar-border",
-          sidebarActualState === "expanded" ? "w-64" : "w-14",
+          "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out border-r border-sidebar-border",
+          sidebarActualState === "expanded" ? "w-[var(--sidebar-width)]" : "w-[var(--sidebar-width-icon)]", // Use CSS variables
           className
         )}
         {...props}
@@ -258,11 +247,11 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
             </Button>
             <span
               className={cn(
-                "whitespace-nowrap text-lg font-semibold transition-opacity duration-200",
+                "whitespace-nowrap text-base font-semibold transition-opacity duration-200", // text-base for slightly smaller title
                 sidebarActualState === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
               )}
             >
-              IFC - Guru
+              Imani Financial Consultancies - Guru
             </span>
           </div>
         </div>
@@ -276,7 +265,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                     <Button
                       variant={pathname === item.href ? "primary" : "ghost"}
                       className={cn(
-                        "w-full justify-start text-sm h-9",
+                        "w-full justify-start text-sm h-9 relative", // Added relative for positioning pulse
                         sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
                         pathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
@@ -290,10 +279,21 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
                         )}>
                           {item.label}
                         </span>
+                        {/* Notification Indicator Logic */}
                         {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
-                          <Badge variant="destructive" className={cn("ml-auto", sidebarActualState === 'collapsed' && 'absolute top-0 right-0 h-4 w-4 p-0 flex items-center justify-center text-[10px]')}>
-                            {sidebarActualState === 'expanded' ? clientUnreadCount : ''}
-                          </Badge>
+                          <>
+                            {sidebarActualState === 'expanded' && (
+                              <Badge variant="destructive" className="ml-auto">
+                                {clientUnreadCount}
+                              </Badge>
+                            )}
+                            {sidebarActualState === 'collapsed' && (
+                              <span className="absolute top-1 right-1 h-2.5 w-2.5 transform -translate-y-1/2 translate-x-1/2 flex items-center justify-center">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                              </span>
+                            )}
+                          </>
                         )}
                       </Link>
                     </Button>
@@ -348,36 +348,39 @@ const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTM
               "flex items-center w-full",
               sidebarActualState === 'collapsed' ? "justify-center py-1" : "p-1"
           )}>
-            {/* Clerk disabled: Show mock user info or a generic placeholder */}
-            {isSignedIn && user ? (
-                <div className="flex items-center gap-2">
-                    <Avatar className={cn(sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8")}>
-                        <AvatarFallback>{user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}</AvatarFallback>
-                    </Avatar>
-                    {sidebarActualState === 'expanded' && (
-                        <span className="text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'Mock User'}>
-                            {user.fullName ?? 'Mock User'}
-                        </span>
-                    )}
-                </div>
+            {isClerkLoaded ? (
+              isSignedIn && user ? (
+                <UserButton afterSignOutUrl="/" appearance={{
+                    elements: {
+                        userButtonAvatarBox: sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
+                        userButtonPopoverCard: "bg-popover border-border",
+                    }
+                }}/>
+              ) : (
+                 <TooltipProvider delayDuration={100}>
+                   <Tooltip>
+                     <TooltipTrigger asChild>
+                       <Button variant="ghost" size="icon" className={cn("h-8 w-8", sidebarActualState === 'collapsed' && "h-7 w-7")} asChild>
+                         <Link href="/sign-in" aria-label="Sign In">
+                           <Users size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
+                         </Link>
+                       </Button>
+                     </TooltipTrigger>
+                     {sidebarActualState === "collapsed" && (
+                       <TooltipContent side="right" align="center">
+                         Sign In
+                       </TooltipContent>
+                     )}
+                   </Tooltip>
+                 </TooltipProvider>
+              )
             ) : (
-              <TooltipProvider delayDuration={100}>
-                 <Tooltip>
-                   <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className={cn(sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} asChild>
-                         {/* Link to a general info page or remove if no public pages are available */}
-                         <div aria-label="User information unavailable">
-                            <Users size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
-                         </div>
-                      </Button>
-                   </TooltipTrigger>
-                   {sidebarActualState === "collapsed" && (
-                        <TooltipContent side="right" align="center">
-                          User Info
-                        </TooltipContent>
-                   )}
-                 </Tooltip>
-               </TooltipProvider>
+              <Skeleton className={cn("rounded-full", sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} />
+            )}
+            {sidebarActualState === 'expanded' && isClerkLoaded && isSignedIn && user && (
+              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
+                  {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
+              </span>
             )}
           </div>
         </div>
@@ -397,14 +400,14 @@ export const Sidebar = React.forwardRef<
 
   if (isMobile) {
     return (
-      <Sheet open={state === "expanded"} onOpenChange={(open) => { if(!open) toggleSidebar()}}>
+      <Sheet open={state === "expanded"} onOpenChange={(open) => { if(!open && state === "expanded") toggleSidebar()}}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="fixed top-3 left-3 z-50 md:hidden bg-background/80 backdrop-blur-sm h-10 w-10" onClick={toggleSidebar}>
             <Menu size={24} />
             <span className="sr-only">Open sidebar</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side={side} className="w-64 p-0 border-r-sidebar-border">
+        <SheetContent side={side} className="w-[var(--sidebar-width)] p-0 border-r-sidebar-border">
           <SidebarContent />
         </SheetContent>
       </Sheet>
@@ -425,46 +428,24 @@ export const Sidebar = React.forwardRef<
 Sidebar.displayName = "Sidebar";
 
 
-export const SidebarRail = React.forwardRef<
+export const SidebarInset = React.forwardRef<
  HTMLDivElement,
  React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => {
  const { state, isMobile } = useSidebar();
 
- if (isMobile) return null; 
+ if (isMobile) return <div ref={ref} className={cn("flex-1 pt-12 md:pt-0", className)} {...props} /> // Add padding top for mobile trigger
 
  return (
    <div
      ref={ref}
      className={cn(
-       "hidden md:block flex-shrink-0 transition-[width] duration-200 ease-linear",
-       state === "expanded" ? "w-64" : "w-14",
+       "flex-1 transition-[margin-left] duration-200 ease-in-out", // Applied ease-in-out as per other transitions
+       state === "expanded" ? "md:ml-[var(--sidebar-width)]" : "md:ml-[var(--sidebar-width-icon)]",
        className
      )}
      {...props}
    />
  );
-});
-SidebarRail.displayName = "SidebarRail";
-
-export const SidebarInset = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => {
-  const { state, isMobile } = useSidebar();
-  const marginLeftClass = isMobile ? 'ml-0' : (state === 'expanded' ? 'md:ml-64' : 'md:ml-14');
-
-
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        "flex-1 transition-[margin-left] duration-200 ease-linear",
-        marginLeftClass,
-        className
-      )}
-      {...props}
-    />
-  );
 });
 SidebarInset.displayName = "SidebarInset";
