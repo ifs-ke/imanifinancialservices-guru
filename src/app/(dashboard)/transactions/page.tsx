@@ -19,12 +19,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, FileUp, FileDown, Edit3, XCircle, ReceiptText } from 'lucide-react'; // Added ReceiptText
+import { PlusCircle, Edit, Trash2, FileUp, FileDown, Edit3, XCircle, ReceiptText } from 'lucide-react';
 import Link from 'next/link';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, ShadAlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTrigger as ShadAlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore } from '@/store/budgetStore';
-import type { TransactionWithId, BudgetItem } from '@/lib/types';
+import type { TransactionWithId } from '@/lib/types';
 import EditTransactionDialog from './EditTransactionDialog';
 import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog';
 import { DataTable } from '@/components/ui/data-table';
@@ -34,12 +34,21 @@ import Papa from 'papaparse';
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string): string => {
   if (date instanceof Date) {
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return new Date(0).toISOString().split('T')[0]; // Return epoch if invalid
+    }
     return date.toISOString().split('T')[0];
   }
   try {
-    return new Date(date).toISOString().split('T')[0];
+    const parsedDate = new Date(date);
+    // Check if parsedDate is valid
+    if (isNaN(parsedDate.getTime())) {
+      return new Date(0).toISOString().split('T')[0]; // Return epoch if invalid
+    }
+    return parsedDate.toISOString().split('T')[0];
   } catch {
-    return new Date().toISOString().split('T')[0]; // Fallback
+    return new Date().toISOString().split('T')[0]; // Fallback to current date on parsing error
   }
 };
 
@@ -88,6 +97,10 @@ export default function TransactionsPage() {
   };
 
   const selectedTransactionIds = useMemo(() => {
+    // Ensure rowSelection is an object before trying to get its keys
+    if (typeof rowSelection !== 'object' || rowSelection === null) {
+      return [];
+    }
     return Object.keys(rowSelection).filter(key => rowSelection[key]);
   }, [rowSelection]);
 
@@ -172,8 +185,8 @@ export default function TransactionsPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
-      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8"> {/* Root div has no horizontal padding */}
+      <header className="mb-6 px-2 md:px-3 lg:px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"> {/* Reduced horizontal padding */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <ReceiptText className="h-6 w-6 text-primary"/> Transactions
@@ -187,9 +200,9 @@ export default function TransactionsPage() {
         </div>
       </header>
       
-      <main className="flex-1 px-4 md:px-6 lg:px-8">
+      <main className="flex-1 px-2 md:px-3 lg:px-4"> {/* Reduced horizontal padding */}
         <Card className="shadow-sm">
-          <CardHeader className="p-6">
+          <CardHeader className="p-4 md:p-6"> {/* Adjusted card header padding */}
             <CardTitle>Transaction List</CardTitle>
             <CardDescription>View, edit, and manage your transactions.</CardDescription>
              {selectedTransactionIds.length > 0 && (
@@ -209,7 +222,7 @@ export default function TransactionsPage() {
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="w-full">
-              <div className="p-6">
+              <div className="py-4 md:py-6 px-2 md:px-3 lg:px-4"> {/* Reduced horizontal padding around DataTable */}
                 <DataTable
                   columns={columns}
                   data={transactions} 
@@ -223,12 +236,23 @@ export default function TransactionsPage() {
         </Card>
       </main>
 
-      <EditTransactionDialog
-        isOpen={isFormSheetOpen}
-        onClose={handleFormSheetClose}
-        transaction={editingTransaction}
-        allBudgetItems={allBudgetItems}
-      />
+      {editingTransaction && (
+        <EditTransactionDialog
+          isOpen={isFormSheetOpen}
+          onClose={handleFormSheetClose}
+          transaction={editingTransaction}
+          allBudgetItems={allBudgetItems}
+        />
+      )}
+      {!editingTransaction && isFormSheetOpen && (
+         <EditTransactionDialog
+          isOpen={isFormSheetOpen}
+          onClose={handleFormSheetClose}
+          transaction={null} // Pass null for adding new transaction
+          allBudgetItems={allBudgetItems}
+        />
+      )}
+
 
       <BatchUpdateTransactionDialog
         isOpen={isBatchUpdateDialogOpen}
@@ -277,4 +301,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-
