@@ -10,10 +10,8 @@ import type { TransactionWithId } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Coins, TrendingDown, TrendingUp, Tag, Scale } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { cn, formatCurrency } from '@/lib/utils'; // Updated import
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion components
-
-// Formatting Function (formatCurrency moved to utils)
+import { cn, formatCurrency } from '@/lib/utils'; 
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; 
 
 const formatDate = (date: Date | string) => {
      const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -21,7 +19,6 @@ const formatDate = (date: Date | string) => {
     return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-// Helper to format category badges
 const formatCategoryBadge = (value: string | undefined) => {
     if (!value) return null;
     const variant: "secondary" | "outline" = value === 'recurring' || value === 'fixed' ? 'secondary' : 'outline';
@@ -29,7 +26,6 @@ const formatCategoryBadge = (value: string | undefined) => {
     return <Badge variant={variant} className="text-xs font-normal">{text}</Badge>;
 }
 
-// Accordion Trigger Component with Sum - adapted for this page
 const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; description?: string; count: number }
@@ -59,11 +55,9 @@ AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 export default function IncomeExpensesPage() {
   const { transactions } = useTransactionsStore();
 
-  // Filter transactions
   const incomeTransactions = useMemo(() => transactions.filter(tx => tx.amount > 0), [transactions]);
   const expenseTransactions = useMemo(() => transactions.filter(tx => tx.amount < 0), [transactions]);
 
-  // Categorize function
   const categorizeTransactions = (txs: TransactionWithId[]) => {
     const categories = {
       recurringFixed: [] as TransactionWithId[],
@@ -93,7 +87,6 @@ export default function IncomeExpensesPage() {
   const categorizedIncome = useMemo(() => categorizeTransactions(incomeTransactions), [incomeTransactions]);
   const categorizedExpenses = useMemo(() => categorizeTransactions(expenseTransactions), [expenseTransactions]);
 
-  // Calculate totals
   const calculateTotal = (items: TransactionWithId[], absValue = false) =>
     items.reduce((sum, item) => sum + (absValue ? Math.abs(item.amount) : item.amount), 0);
 
@@ -117,19 +110,17 @@ export default function IncomeExpensesPage() {
 
   const netIncome = incomeTotals.grandTotal - expenseTotals.grandTotal;
 
-  // Render function for transaction rows
   const renderTransactionRow = (tx: TransactionWithId, isExpense = false) => (
     <TableRow key={tx.id}>
-      <TableCell className="font-medium w-[100px] pl-4 pr-2">{formatDate(tx.date)}</TableCell> {/* Added padding */}
-      <TableCell className="max-w-[200px] sm:max-w-[250px] truncate px-2" title={tx.description}>{tx.description}</TableCell> {/* Added padding */}
-      <TableCell className="w-[90px] px-2">{tx.modeOfPayment}</TableCell> {/* Added padding */}
-      <TableCell className="text-right font-mono w-[140px] pr-4 pl-2">{formatCurrency(isExpense ? Math.abs(tx.amount) : tx.amount)}</TableCell> {/* Added padding */}
+      <TableCell className="font-medium w-[100px] pl-4 pr-2">{formatDate(tx.date)}</TableCell>
+      <TableCell className="max-w-[200px] sm:max-w-[250px] truncate px-2" title={tx.description}>{tx.description}</TableCell>
+      <TableCell className="w-[90px] px-2">{tx.modeOfPayment}</TableCell>
+      <TableCell className="text-right font-mono w-[140px] pr-4 pl-2">{formatCurrency(isExpense ? Math.abs(tx.amount) : tx.amount)}</TableCell>
     </TableRow>
   );
 
-  // Render function for category sections using Accordion
   const renderCategorySection = (
-    value: string, // Unique value for AccordionItem
+    value: string, 
     title: string,
     description: string,
     transactions: TransactionWithId[],
@@ -144,10 +135,10 @@ export default function IncomeExpensesPage() {
                     <Table>
                         <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[100px] pl-4 pr-2">Date</TableHead> {/* Added padding */}
-                            <TableHead className="px-2">Description</TableHead> {/* Added padding */}
-                            <TableHead className="w-[90px] px-2">Mode</TableHead> {/* Added padding */}
-                            <TableHead className="text-right w-[140px] pr-4 pl-2">Amount (KES)</TableHead> {/* Added padding */}
+                            <TableHead className="w-[100px] pl-4 pr-2">Date</TableHead>
+                            <TableHead className="px-2">Description</TableHead>
+                            <TableHead className="w-[90px] px-2">Mode</TableHead>
+                            <TableHead className="text-right w-[140px] pr-4 pl-2">Amount (KES)</TableHead>
                         </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -163,42 +154,41 @@ export default function IncomeExpensesPage() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
-      <header className="mb-6">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+      <header className="mb-6 px-4 md:px-6 lg:px-8">
         <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <TrendingUp className="text-primary" /> Income & Expense Analysis
         </h1>
         <p className="text-muted-foreground">Breakdown based on recurrence and variability.</p>
       </header>
 
-      {/* Summary Section */}
-       <section className="mb-8 grid gap-4 md:grid-cols-3">
+       <section className="mb-8 px-4 md:px-6 lg:px-8 grid gap-4 md:grid-cols-3">
            <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                  <CardTitle className="text-sm font-medium">Total Income</CardTitle>
                  <TrendingUp className="h-4 w-4 text-accent" />
                </CardHeader>
-               <CardContent className="p-4"> {/* Adjusted padding */}
+               <CardContent className="p-4">
                  <div className="text-2xl font-bold text-accent">{formatCurrency(incomeTotals.grandTotal)}</div>
                  <p className="text-xs text-muted-foreground">Across all categories</p>
                </CardContent>
            </Card>
            <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                  <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
                  <TrendingDown className="h-4 w-4 text-destructive" />
                </CardHeader>
-               <CardContent className="p-4"> {/* Adjusted padding */}
+               <CardContent className="p-4">
                  <div className="text-2xl font-bold text-destructive">{formatCurrency(expenseTotals.grandTotal)}</div>
                  <p className="text-xs text-muted-foreground">Across all categories</p>
                </CardContent>
            </Card>
            <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4"> {/* Adjusted padding */}
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                  <CardTitle className="text-sm font-medium">Net Income</CardTitle>
                  <Scale className="h-4 w-4 text-muted-foreground" />
                </CardHeader>
-               <CardContent className="p-4"> {/* Adjusted padding */}
+               <CardContent className="p-4">
                   <div className={cn("text-2xl font-bold", netIncome >= 0 ? 'text-accent' : 'text-destructive')}>
                       {formatCurrency(netIncome)}
                   </div>
@@ -207,12 +197,10 @@ export default function IncomeExpensesPage() {
            </Card>
        </section>
 
-      <main className="flex-1 grid gap-8 lg:grid-cols-2">
-        {/* Income Details Section */}
+      <main className="flex-1 grid gap-8 lg:grid-cols-2 px-4 md:px-6 lg:px-8">
         <section className="space-y-2">
             <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingUp className="text-accent"/> Income Details</h2>
             <Accordion type="multiple" className="w-full space-y-2" defaultValue={[]}>
-                 {/* Render each income category using the updated component */}
                  {renderCategorySection("income-rf", "Recurring - Fixed", "Regular income, same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
                  {renderCategorySection("income-rv", "Recurring - Variable", "Regular income, amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
                  {renderCategorySection("income-otf", "One-Time - Fixed", "Non-recurring income, fixed amount (e.g., Bonus).", categorizedIncome.oneTimeFixed, incomeTotals.oneTimeFixed)}
@@ -221,11 +209,9 @@ export default function IncomeExpensesPage() {
             </Accordion>
         </section>
 
-        {/* Expense Details Section */}
          <section className="space-y-2">
              <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingDown className="text-destructive"/> Expense Details</h2>
              <Accordion type="multiple" className="w-full space-y-2" defaultValue={[]}>
-                  {/* Render each expense category using the updated component */}
                   {renderCategorySection("expense-rf", "Recurring - Fixed", "Regular expenses, same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
                   {renderCategorySection("expense-rv", "Recurring - Variable", "Regular expenses, amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
                   {renderCategorySection("expense-otf", "One-Time - Fixed", "Non-recurring expenses, fixed amount.", categorizedExpenses.oneTimeFixed, expenseTotals.oneTimeFixed, true)}

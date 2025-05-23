@@ -14,13 +14,12 @@ import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses,
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import DebtFormSheet from '@/components/debt/DebtFormSheet'; // Updated import path
+import DebtFormSheet from '@/components/debt/DebtFormSheet';
 import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet';
 import DebtAnalysisDialog from '@/components/debt/DebtAnalysisDialog';
 import { analyzeDebtStrategy, type DebtAnalysisInput, type DebtAnalysisOutput } from '@/ai/flows/debt-analysis-flow';
-import { formatCurrency, cn } from '@/lib/utils'; // Import cn
+import { formatCurrency, cn } from '@/lib/utils'; 
 
-// Formatting Function (formatCurrency moved to utils)
 const formatPercentage = (rate: number) => {
     return `${rate.toFixed(2)}%`;
 };
@@ -133,8 +132,8 @@ export default function DebtPage() {
   }, [debts, toast]);
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
-      <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Coins className="h-6 w-6 text-primary"/> Manage Debts
@@ -149,7 +148,7 @@ export default function DebtPage() {
         </div>
       </header>
 
-      <Card className="mb-6 shadow-md">
+      <Card className="mb-6 mx-4 md:mx-6 lg:mx-8 shadow-md">
         <CardHeader className="p-6">
           <CardTitle className="text-lg">Debt Overview</CardTitle>
         </CardHeader>
@@ -166,7 +165,7 @@ export default function DebtPage() {
         </CardContent>
       </Card>
 
-      <main className="flex-1">
+      <main className="flex-1 px-4 md:px-6 lg:px-8">
         <Card className="shadow-sm">
           <CardHeader className="p-6">
             <CardTitle className="text-lg">Debt List</CardTitle>
@@ -224,4 +223,3 @@ export default function DebtPage() {
     </div>
   );
 }
-

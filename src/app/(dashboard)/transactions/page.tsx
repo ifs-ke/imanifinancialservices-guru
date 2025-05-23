@@ -82,7 +82,6 @@ export default function TransactionsPage() {
     addTransaction, 
     deleteTransaction,
     deleteSelectedTransactions,
-    // batchUpdateTransactions is not used directly here, but in BatchUpdateTransactionDialog
   } = useTransactionsStore(); 
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
 
@@ -94,23 +93,22 @@ export default function TransactionsPage() {
   const [addFormData, setAddFormData] = useState<SharedTransactionFormData>(initialFormData); 
   const { toast } = useToast();
 
-  // TanStack Table state
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
 
-  const handleEditClick = (transaction: TransactionWithId) => {
+  const handleEditClick = useCallback((transaction: TransactionWithId) => {
     setEditingTransaction(transaction);
     setIsEditDialogOpen(true);
-  };
+  }, []);
 
-  const handleDeleteClick = (transaction: TransactionWithId) => {
+  const handleDeleteClick = useCallback((transaction: TransactionWithId) => {
     setTransactionToDelete(transaction);
-  };
+  }, []);
 
-  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), []);
+  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), [handleEditClick, handleDeleteClick]);
 
   const table = useReactTable({
     data: transactions,
@@ -277,8 +275,8 @@ export default function TransactionsPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
-      <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center">
              <PackageSearch className="h-6 w-6 mr-2 text-primary" /> Transactions
@@ -335,7 +333,7 @@ export default function TransactionsPage() {
                       <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                       {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                          item.description && item.description.trim() !== '' && ( // Ensure description is not empty
+                          item.description && item.description.trim() !== '' && ( 
                             <SelectItem key={item.id} value={item.description}>
                               {item.description} ({item.category === 'income' ? 'Income' : 'Expense/Goal/Debt'})
                             </SelectItem>
@@ -392,7 +390,7 @@ export default function TransactionsPage() {
          </div>
       </header>
        {getSelectedTransactionIdsFromTable().length > 0 && (
-        <div className="mb-4 p-3 border rounded-md bg-accent/10 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-4 mx-4 md:mx-6 lg:mx-8 p-3 border rounded-md bg-accent/10 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium">{getSelectedTransactionIdsFromTable().length} transaction(s) selected.</p>
             <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={handleBatchUpdateClick}>
@@ -424,13 +422,13 @@ export default function TransactionsPage() {
         </div>
        )}
 
-      <main className="flex-1">
+      <main className="flex-1 px-4 md:px-6 lg:px-8">
         <Card>
             <CardHeader className="p-4 md:p-6">
                 <CardTitle className="text-lg">Transaction History</CardTitle>
                 <CardDescription>Your recent financial activities.</CardDescription>
             </CardHeader>
-            <CardContent className="p-4 md:p-6">
+            <CardContent className="p-0 md:p-0">
                  <DataTable
                     columns={columns}
                     data={transactions}
@@ -480,4 +478,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-

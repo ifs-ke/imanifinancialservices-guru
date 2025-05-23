@@ -145,8 +145,8 @@ export default function LoggerPage() {
   const getBadgeVariant = (level: CapturedLogEntry['level']): 'default' | 'secondary' | 'destructive' | 'outline' => {
     switch (level.toLowerCase()) {
       case 'error': return 'destructive';
-      case 'warn': return 'secondary'; // Using 'secondary' for warning, which is often yellow-ish
-      case 'info': return 'default'; // 'default' is often blue/primary
+      case 'warn': return 'secondary'; 
+      case 'info': return 'default'; 
       case 'debug': return 'outline';
       case 'log': return 'outline';
       default: return 'outline';
@@ -206,8 +206,8 @@ export default function LoggerPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
-      <header>
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 space-y-6">
+      <header className="px-4 md:px-6 lg:px-8">
         <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <ClipboardList className="h-6 w-6 text-primary" /> Application Logger
         </h1>
@@ -216,7 +216,7 @@ export default function LoggerPage() {
         </p>
       </header>
 
-      <Card>
+      <Card className="mx-4 md:mx-6 lg:mx-8">
         <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6">
           <div>
             <CardTitle className="text-lg">Session Log Entries</CardTitle>
@@ -249,10 +249,6 @@ export default function LoggerPage() {
             <Button variant="outline" size="sm" onClick={handleCopyAllVisibleLogs} className="h-9" disabled={filteredLogs.length === 0}>
               <CopyCheck className="h-4 w-4 mr-2" /> Copy Visible
             </Button>
-             {/* Refresh button can be re-added if a manual fetch/refresh mechanism is implemented beyond live capture */}
-            {/* <Button variant="outline" size="sm" onClick={() => { /* Implement refresh logic if needed * / }} className="h-9">
-              <RotateCw className="h-4 w-4 mr-2" /> Refresh
-            </Button> */}
           </div>
         </CardHeader>
         <CardContent className="p-0">

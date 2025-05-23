@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, ChangeEvent, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as ShadTableFooter } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -35,19 +35,14 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Separator } from '@/components/ui/separator';
 
-
-// Calculation Function
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: DebtItem[]) => items.reduce((sum, item) => sum + item.principal, 0);
 
-
-// Helper to format Date for display
 const formatDateForStatements = (date: Date | undefined) => {
     if (!date || !isDateValid(date)) return <span>Pick a date</span>;
     return format(date, "LLL dd, y");
 };
 
-// Helper to format category badges
 const formatCategoryBadge = (value: string | undefined) => {
     if (!value) return null;
     const variant: "secondary" | "outline" = value === 'recurring' || value === 'fixed' ? 'secondary' : 'outline';
@@ -57,8 +52,6 @@ const formatCategoryBadge = (value: string | undefined) => {
 
 type ExtendedBudgetItemCategory = BudgetItemCategory | 'unplanned-expense' | 'unbudgeted-income';
 
-
-// Accordion Trigger Component with Sum
 const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<typeof AccordionTrigger> & { 
@@ -73,8 +66,8 @@ const AccordionTriggerWithSum = React.forwardRef<
     const hasBudget = budgetedSum !== undefined && budgetedSum !== null;
     const hasVariance = variance !== undefined && variance !== null;
     let varianceColor = 'text-muted-foreground';
-    if (hasVariance && variance > 0) varianceColor = 'text-accent'; // Favorable
-    if (hasVariance && variance < 0) varianceColor = 'text-destructive'; // Unfavorable
+    if (hasVariance && variance > 0) varianceColor = 'text-accent'; 
+    if (hasVariance && variance < 0) varianceColor = 'text-destructive'; 
 
   return (
       <AccordionTrigger ref={ref} {...props} className={cn('hover:no-underline py-3 px-4 data-[state=open]:border-b data-[state=closed]:border-b-0', className)}>
@@ -240,7 +233,7 @@ export default function StatementsPage() {
 
         budgetItemsForSelectedPeriod.forEach(item => {
             const descKey = item.description.toLowerCase().trim();
-            const categoryKey = item.category as BudgetItemCategory; // Original category from budget item
+            const categoryKey = item.category as BudgetItemCategory; 
             
             const actualGroupKey = `${categoryKey}-${descKey}`;
             
@@ -273,8 +266,8 @@ export default function StatementsPage() {
                  const targetCategoryArray = initialVarianceByCategory[data.category];
                  if (targetCategoryArray) { 
                      targetCategoryArray.push({
-                         description: `* ${data.originalDescription}`, // Prefix to indicate unbudgeted/unplanned
-                         budgeted: 0, // No budget for these by definition
+                         description: `* ${data.originalDescription}`, 
+                         budgeted: 0, 
                          actual: data.amount,
                      });
                  }
@@ -287,7 +280,7 @@ export default function StatementsPage() {
                 initialVarianceByCategory[catKey].sort((a, b) => {
                     const aUnbudgeted = a.description.startsWith('* ');
                     const bUnbudgeted = b.description.startsWith('* ');
-                    if (aUnbudgeted && !bUnbudgeted) return 1; // Unbudgeted items last
+                    if (aUnbudgeted && !bUnbudgeted) return 1; 
                     if (!aUnbudgeted && bUnbudgeted) return -1;
                     return a.description.localeCompare(b.description);
                 });
@@ -450,20 +443,20 @@ export default function StatementsPage() {
     };
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
-      <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div><h1 className="text-2xl font-bold tracking-tight text-foreground">Financial Statements</h1><p className="text-muted-foreground">Review your financial position and performance. Edit Assets and Other Liabilities only.</p></div>
          <div className="flex gap-2">{isEditing ? (<><Button variant="outline" onClick={handleCancelEdit}><XCircle className="mr-2 h-4 w-4" /> Cancel Edit</Button><Button onClick={handleSaveChanges}><Save className="mr-2 h-4 w-4" /> Save Changes</Button></>) : (<Button onClick={handleEditToggle}>Edit Assets/Liabilities</Button>)}</div>
       </header>
 
-      <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 border rounded-lg bg-card">
+      <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 mx-4 md:mx-6 lg:mx-8 border rounded-lg bg-card">
           <Label className="font-semibold">Select Date Range:</Label>
            <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal h-8",!startDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formatDateForStatements(startDate)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={startDate} onSelect={setStartDate} initialFocus/></PopoverContent></Popover>
            <span className="text-muted-foreground hidden sm:inline">-</span>
            <Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full sm:w-[180px] justify-start text-left font-normal h-8 mt-2 sm:mt-0",!endDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formatDateForStatements(endDate)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={endDate} onSelect={setEndDate} disabled={(date) => startDate ? date < startDate : false} initialFocus/></PopoverContent></Popover>
        </div>
 
-      <main className="flex-1 grid gap-6 lg:grid-cols-2">
+      <main className="flex-1 grid gap-6 lg:grid-cols-2 px-4 md:px-6 lg:px-8">
         <Card className="lg:col-span-1 shadow-md">
           <CardHeader className="p-6"><CardTitle className="flex items-center gap-2">{cashFlow >= 0 ? <TrendingUp className="text-accent" /> : <TrendingDown className="text-destructive" />}Cash Flow Statement</CardTitle><CardDescription className="flex items-center gap-1 text-xs pt-2"><Info size={14} className="text-muted-foreground"/> Derived from Transactions within the selected date range.</CardDescription></CardHeader>
            <CardContent className="p-6 pt-0">

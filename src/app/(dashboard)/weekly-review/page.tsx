@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalGoals, selectTotalBudgetedDebt, selectNetBudgeted } from '@/store/budgetStore';
-// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
+import { useAuth } from '@clerk/nextjs';
 import { startOfWeek, endOfWeek, format, subWeeks, addWeeks, getISOWeek } from 'date-fns';
 import { CalendarCheck, ChevronLeft, ChevronRight, Save, Search, Info, Loader2, MessageSquarePlus, MessageSquareText, Trash2, Edit, XCircle, BookOpen, TrendingUp, TrendingDown, Scale, CheckCircle, AlertTriangle as AlertTriangleIcon, Share2, Users } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger as ShadAlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ShareReviewDialog from './ShareReviewDialog';
@@ -51,10 +51,7 @@ const formatCategoryBadge = (value: string | undefined) => {
 }
 
 export default function WeeklyReviewPage() {
-  // const { userId, isSignedIn } = useAuth(); // Clerk disabled
-  const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
-  const isSignedIn = !!mockUserId;
-  const userId = mockUserId;
+  const { userId, isSignedIn } = useAuth();
 
   const { transactions: allTransactions } = useTransactionsStore();
   const setBudgetPeriod = useBudgetStore(state => state.setBudgetPeriod);
@@ -251,7 +248,7 @@ export default function WeeklyReviewPage() {
       toast({ title: "Action Denied", description: "You can only share reviews you own.", variant: "destructive" });
       return;
     }
-    if (!ownedReviews[currentWeekKey] && userId) { // Ensure userId is present
+    if (!ownedReviews[currentWeekKey] && userId) { 
       setJournalEntry(currentWeekKey, '', userId); 
       logInfo(`Created shell for week ${currentWeekKey} before sharing.`, { userId });
     }
@@ -259,8 +256,8 @@ export default function WeeklyReviewPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 space-y-6">
+      <header className="px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <CalendarCheck className="h-6 w-6 text-primary" /> Weekly Review
@@ -274,7 +271,7 @@ export default function WeeklyReviewPage() {
         </Button>
       </header>
 
-      <Card className="shadow-sm">
+      <Card className="shadow-sm mx-4 md:mx-6 lg:mx-8">
         <CardContent className="p-4 flex items-center justify-between">
           <Button variant="outline" size="icon" onClick={goToPreviousWeek} aria-label="Previous week">
             <ChevronLeft className="h-4 w-4" />
@@ -291,7 +288,7 @@ export default function WeeklyReviewPage() {
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "owned" | "shared")}>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "owned" | "shared")} className="px-4 md:px-6 lg:px-8">
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="owned">My Reviews</TabsTrigger>
           <TabsTrigger value="shared">Shared With Me ({Object.keys(sharedReviews).length})</TabsTrigger>
@@ -303,7 +300,7 @@ export default function WeeklyReviewPage() {
                 <AlertTriangleIcon className="h-4 w-4" />
                 <AlertTitle>Not Signed In</AlertTitle>
                 <AlertDescription>
-                  Please sign in to create or edit your weekly reviews. (Using Mock User ID: {userId || "Not Set"})
+                  Please sign in to create or edit your weekly reviews.
                 </AlertDescription>
             </Alert>
           )}
@@ -357,7 +354,7 @@ export default function WeeklyReviewPage() {
               <Card className="shadow-sm">
                 <CardHeader className="p-4 pb-2 flex flex-row justify-between items-center">
                   <div><CardTitle className="text-base flex items-center gap-1"><BookOpen size={16} /> Weekly Journal</CardTitle><CardDescription className="text-xs">Reflect on your financial progress.</CardDescription></div>
-                  {journalEntry && isSignedIn && (<AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0" onClick={handleDeleteJournal}><Trash2 size={16} /><span className="sr-only">Delete Journal Entry</span></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}
+                  {journalEntry && isSignedIn && (<AlertDialog open={isDeleteJournalDialogOpen} onOpenChange={setIsDeleteJournalDialogOpen}><ShadAlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive flex-shrink-0" onClick={handleDeleteJournal}><Trash2 size={16} /><span className="sr-only">Delete Journal Entry</span></Button></ShadAlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Journal Entry?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete the journal entry for week {currentWeekKey}? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteJournal}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
                   <Textarea placeholder="Write your journal entry here..." value={journalEntry} onChange={handleJournalChange} rows={8} className="w-full text-sm" disabled={isReadOnly} />

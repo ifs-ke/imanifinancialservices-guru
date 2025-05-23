@@ -71,8 +71,8 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 space-y-6">
+      <header className="px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Bell className="h-6 w-6 text-primary" /> Notifications
@@ -91,7 +91,7 @@ export default function NotificationsPage() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 px-4 md:px-6 lg:px-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between p-4 border-b">
             <div className="flex items-center space-x-3">
@@ -120,7 +120,7 @@ export default function NotificationsPage() {
                   <li
                     key={notification.id}
                     className={cn(
-                      "flex items-start gap-3 p-4 transition-colors hover:bg-muted/50", // Consistent padding
+                      "flex items-start gap-3 p-4 transition-colors hover:bg-muted/50", 
                       notification.read ? 'bg-card' : 'bg-primary/5 ',
                       selectedNotificationIds.includes(notification.id) && 'bg-accent/20'
                     )}

@@ -1,3 +1,4 @@
+// src/app/(dashboard)/budget/page.tsx
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -11,7 +12,7 @@ import { useBudgetStore, selectCurrentBudgetPeriod, selectBudgetItemsForCurrentP
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import BudgetItemFormSheet from './BudgetItemFormSheet'; // Updated import path
+import BudgetItemFormSheet from './BudgetItemFormSheet'; 
 import * as Papa from 'papaparse';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -20,7 +21,6 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, startOfMonth, addMonths, subMonths } from 'date-fns';
 
 
-// Category configuration
 const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.ElementType }[] = [
     { name: 'Income', key: 'income', icon: DollarSign },
     { name: 'Recurring Expenses', key: 'recurring-expense', icon: TrendingDown },
@@ -29,19 +29,17 @@ const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.Ele
     { name: 'Debt Allocation', key: 'debt', icon: Coins },
 ];
 
-// Helper function to format the displayed month/year
 const formatPeriodForDisplay = (period: string): string => {
     try {
         const [year, month] = period.split('-').map(Number);
         if (!year || !month) return "Invalid Period";
-        const date = new Date(year, month - 1); // Month is 0-indexed
+        const date = new Date(year, month - 1); 
         return format(date, 'MMMM yyyy');
     } catch {
         return "Invalid Period";
     }
 }
 
-// Helper function to format Date object to "YYYY-MM" period string
 const formatToPeriodKey = (date: Date): string => {
     return format(date, 'yyyy-MM');
 }
@@ -69,7 +67,7 @@ export default function BudgetPage() {
 
   useEffect(() => {
       setBudgetPeriod(formatToPeriodKey(selectedMonthDate));
-  }, []); // Run only once on mount
+  }, []); 
 
   const budgetItemsForPeriod = useMemo(() => {
       return allBudgetItems.filter(item => item.period === budgetPeriod);
@@ -220,8 +218,8 @@ export default function BudgetPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
-      <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <PieChartIcon className="h-6 w-6 text-primary" /> Budget Management
@@ -258,7 +256,7 @@ export default function BudgetPage() {
          </div>
       </header>
 
-      <Card className="mb-6 shadow-md">
+      <Card className="mb-6 mx-4 md:mx-6 lg:mx-8 shadow-md">
         <CardHeader className="p-6">
             <CardTitle>Budget Summary for {formatPeriodForDisplay(budgetPeriod)}</CardTitle>
             <CardDescription>Overview of your planned budget for the selected month.</CardDescription>
@@ -289,7 +287,7 @@ export default function BudgetPage() {
          </CardContent>
       </Card>
 
-      <main className="flex-1 grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+      <main className="flex-1 grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 px-4 md:px-6 lg:px-8">
          {budgetCategories.map(({ name, key, icon: Icon }) => (
              <Card key={key} className={cn("flex flex-col shadow-sm", key === 'debt' && 'lg:col-span-1 xl:col-span-1')}>
                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 border-b p-4">
@@ -345,8 +343,8 @@ export default function BudgetPage() {
          ))}
       </main>
 
-        <Separator className="my-8" />
-        <Card className="shadow-sm">
+        <Separator className="my-8 mx-4 md:mx-6 lg:mx-8" />
+        <Card className="shadow-sm mx-4 md:mx-6 lg:mx-8">
             <CardHeader className="p-6"><CardTitle className="text-lg flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Budget History</CardTitle><CardDescription>View snapshots of your saved budgets from previous months. (Feature coming soon)</CardDescription></CardHeader>
             <CardContent className="p-6"><div className="text-center text-muted-foreground py-10"><p>Budget history snapshots will be listed here once saved.</p></div></CardContent>
         </Card>
