@@ -1,4 +1,5 @@
 
+
 # IFC - Guru
 
 This is a Next.js personal finance management application built in Firebase Studio.
