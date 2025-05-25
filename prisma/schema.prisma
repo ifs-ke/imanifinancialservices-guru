@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Changed from "sqlite" to "postgresql" for NeonDB
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String    @id @default(cuid())
+  clerkId                 String    @unique // Clerk User ID
+  email                   String    @unique
+  name                    String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  transactions            Transaction[]
+  debts                   DebtItem[]
+  assetItems              AssetItem[]
+  otherLiabilityItems     OtherLiabilityItem[]
+  budgetItems             BudgetItem[]
+  ownedWeeklyReviews      WeeklyReview[]       @relation("OwnedReviews")
+  sharedWeeklyReviews     WeeklyReview[]       @relation("SharedWithUser")
+  notifications           NotificationItem[]
+  userProfile             UserProfile?
+  sharedReviewsWithOthers WeeklyReviewSharer[]
+}
+
+model UserProfile {
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statementStartDate      DateTime?
+  statementEndDate        DateTime?
+  gettingStartedDismissed Boolean   @default(false)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
+
+model Transaction {
+  id              String                @id @default(cuid())
+  userId          String
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime
+  description     String
+  amount          Decimal // Changed from Float for precision
+  modeOfPayment   String // e.g., Cash, Bank, Mpesa
+  frequency       String? // recurring, one-time
+  variability     String? // fixed, variable
+  categoryName    String? // Links to BudgetItem description
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  weeklyReviews   WeeklyReviewComment[]
+
+  @@index([userId, date])
+}
+
+model DebtItem {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description   String
+  principal     Decimal  // Changed from Float
+  interestRate  Float // Percentage, e.g., 12.5 for 12.5%
+  minPayment    Decimal  // Changed from Float
+  term          String // short, long
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model AssetItem {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal  // Changed from Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model OtherLiabilityItem {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal  // Changed from Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model BudgetItem {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal  // Changed from Float
+  category    String // income, recurring-expense, one-time-expense, goal, debt
+  period      String // YYYY-MM format
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, period, description, category]) // Ensure unique budget items per user per period for a given desc/cat
+  @@index([userId, period])
+}
+
+model WeeklyReview {
+  id                  String                @id @default(cuid())
+  weekKey             String // YYYY-WW format
+  ownerId             String
+  owner               User                  @relation("OwnedReviews", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerUsername       String?
+  journal             String?               @db.Text
+  transactionComments WeeklyReviewComment[]
+  sharedWith          WeeklyReviewSharer[] // Users this review is shared with
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@unique([ownerId, weekKey])
+  @@index([ownerId])
+}
+
+// Intermediate table for many-to-many relationship between WeeklyReview and User (for sharedWith)
+model WeeklyReviewSharer {
+  id             String       @id @default(cuid())
+  weeklyReviewId String
+  weeklyReview   WeeklyReview @relation(fields: [weeklyReviewId], references: [id], onDelete: Cascade)
+  sharedWithId   String
+  sharedWithUser User         @relation("SharedWithUser", fields: [sharedWithId], references: [id], onDelete: Cascade)
+  sharedAt       DateTime     @default(now())
+
+  @@unique([weeklyReviewId, sharedWithId])
+  @@index([sharedWithId])
+}
+
+model WeeklyReviewComment {
+  id             String       @id @default(cuid())
+  weeklyReviewId String
+  weeklyReview   WeeklyReview @relation(fields: [weeklyReviewId], references: [id], onDelete: Cascade)
+  transactionId  String
+  transaction    Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  comment        String       @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([weeklyReviewId, transactionId])
+  @@index([transactionId])
+}
+
+model NotificationItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // info, warning, error, success, budget, collaboration, update
+  title     String
+  message   String   @db.Text
+  timestamp DateTime @default(now())
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, read, timestamp])
+}
