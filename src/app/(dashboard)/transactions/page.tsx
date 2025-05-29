@@ -2,7 +2,7 @@
 // src/app/(dashboard)/transactions/page.tsx
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -16,43 +16,58 @@ import {
   type RowSelectionState,
 } from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, FileUp, FileDown, Edit3, XCircle, ReceiptText } from 'lucide-react';
-import Link from 'next/link';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger as ShadAlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added AlertDialogTitle
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore } from '@/store/budgetStore';
-import type { TransactionWithId } from '@/lib/types';
+import type { TransactionWithId, BudgetItem } from '@/lib/types';
 import EditTransactionDialog from './EditTransactionDialog';
 import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog';
 import { DataTable } from '@/components/ui/data-table';
 import { getColumns } from './columns';
 import Papa from 'papaparse';
+import { format, parse, isValid as isDateValid } from 'date-fns';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { ReceiptText, PlusCircle, FileUp, FileDown, Edit3, XCircle, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
+
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
 const formatDateForInput = (date: Date | string | undefined | null): string => {
   if (date instanceof Date) {
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-      return new Date(0).toISOString().split('T')[0]; // Return epoch if invalid
+    if (isDateValid(date)) {
+      return format(date, 'yyyy-MM-dd');
     }
-    return date.toISOString().split('T')[0];
+    return format(new Date(0), 'yyyy-MM-dd'); 
   }
   if (typeof date === 'string') {
     let parsedDate = new Date(date); 
-    if (Number.isNaN(parsedDate.getTime())) { // Check if string parsing resulted in invalid date
-        parsedDate = new Date(0); // Fallback to epoch
+    if (isDateValid(parsedDate)) {
+        return format(parsedDate, 'yyyy-MM-dd');
     }
-    return parsedDate.toISOString().split('T')[0];
+    // Attempt to parse if it's already in yyyy-MM-dd
+    parsedDate = parse(date, 'yyyy-MM-dd', new Date());
+    if (isDateValid(parsedDate)) {
+        return format(parsedDate, 'yyyy-MM-dd');
+    }
+    return format(new Date(0), 'yyyy-MM-dd');
   }
-  return new Date(0).toISOString().split('T')[0]; // Default fallback
+  return format(new Date(0), 'yyyy-MM-dd'); 
 };
 
 
 export default function TransactionsPage() {
-  const { transactions, deleteTransaction, deleteSelectedTransactions } = useTransactionsStore();
+  const { transactions, deleteTransaction, deleteSelectedTransactions, batchUpdateTransactions } = useTransactionsStore();
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
   const { toast } = useToast();
 
@@ -94,13 +109,34 @@ export default function TransactionsPage() {
     toast({ title: 'Transaction Deleted', description: 'Successfully removed transaction.' });
   };
 
+  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), [handleEditClick, handleDeleteClick]);
+
+  const table = useReactTable({
+    data: transactions,
+    columns,
+    state: {
+      sorting,
+      columnVisibility,
+      rowSelection,
+      columnFilters,
+    },
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   const selectedTransactionIds = useMemo(() => {
-    if (typeof rowSelection !== 'object' || rowSelection === null) {
+    if (typeof rowSelection !== 'object' || rowSelection === null || !table) {
       return [];
     }
-    // Map selected row indices to transaction IDs
     return table.getSelectedRowModel().rows.map(row => row.original.id);
-  }, [rowSelection, /*table*/]); // table dependency removed as it causes re-memoization issue
+  }, [rowSelection, table]);
 
   const handleBatchUpdateClick = () => {
     if (selectedTransactionIds.length === 0) {
@@ -127,28 +163,6 @@ export default function TransactionsPage() {
     setIsMassDeleteDialogOpen(false);
   };
 
-
-  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), [handleEditClick, handleDeleteClick]);
-
-  const table = useReactTable({
-    data: transactions,
-    columns,
-    state: {
-      sorting,
-      columnVisibility,
-      rowSelection,
-      columnFilters,
-    },
-    enableRowSelection: true,
-    onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
 
   const handleExportCsv = useCallback(() => {
     if (transactions.length === 0) {
@@ -182,22 +196,20 @@ export default function TransactionsPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
-       <header className="mb-6 px-2 md:px-3 lg:px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <ReceiptText className="h-6 w-6 text-primary"/> Transactions
-          </h1>
-          <p className="text-muted-foreground text-sm">Manage your financial transactions.</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Transaction</Button>
-          <Button asChild variant="default"><Link href="/transactions/import"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Link></Button>
-          <Button variant="secondary" onClick={handleExportCsv} disabled={transactions.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
-        </div>
-      </header>
+    <div className="flex flex-col min-h-screen py-4 md:py-6">
+       <PageHeader
+          title="Transactions"
+          description="Manage your financial transactions."
+          icon={<ReceiptText className="h-6 w-6" />}
+        >
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Transaction</Button>
+            <Button asChild variant="default"><Link href="/transactions/import"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Link></Button>
+            <Button variant="secondary" onClick={handleExportCsv} disabled={transactions.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
+          </div>
+        </PageHeader>
       
-      <main className="flex-1 px-2 md:px-3 lg:px-4">
+      <main className="flex-1 px-4 md:px-6 lg:px-8">
         <Card className="shadow-sm">
            <CardHeader className="p-4 md:p-6 border-b">
             <CardTitle>Transaction List</CardTitle>
@@ -220,8 +232,7 @@ export default function TransactionsPage() {
             )}
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="w-full">
-              <div className="py-4 md:py-6 px-2 md:px-3 lg:px-4">
+              <div className="py-4 md:py-6 px-4 md:px-6 lg:px-8">
                 <DataTable
                   columns={columns}
                   data={transactions} 
@@ -230,16 +241,15 @@ export default function TransactionsPage() {
                   searchPlaceholder="Search descriptions..."
                 />
               </div>
-            </ScrollArea>
           </CardContent>
         </Card>
       </main>
 
-      {(editingTransaction || isEditTransactionDialogOpen && !editingTransaction) && (
+      {(editingTransaction || (isEditTransactionDialogOpen && !editingTransaction)) && (
         <EditTransactionDialog
           isOpen={isEditTransactionDialogOpen}
           onClose={handleEditTransactionDialogClose}
-          transaction={editingTransaction} 
+          transaction={editingTransaction!} 
           allBudgetItems={allBudgetItems}
         />
       )}
@@ -263,7 +273,7 @@ export default function TransactionsPage() {
                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
                 This action cannot be undone. This will permanently delete the transaction: <br />
-                <strong>{transactionToDelete.description} ({transactionToDelete.amount})</strong>
+                <strong>{transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -292,4 +302,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-

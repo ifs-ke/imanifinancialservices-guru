@@ -11,26 +11,26 @@ generator client {
 // User and Authentication Models
 // ========================================
 model User {
-  id                        String                 @id @default(cuid())
-  clerkId                   String                 @unique
-  email                     String                 @unique
-  name                      String?
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
-  transactions              Transaction[]
-  debts                     DebtItem[]
-  assetItems                AssetItem[]
-  otherLiabilityItems       OtherLiabilityItem[]
-  budgetItems               BudgetItem[]
-  ownedWeeklyReviews        WeeklyReview[]         @relation("OwnedReviews")
+  id                         String               @id @default(cuid())
+  clerkId                    String               @unique
+  email                      String               @unique
+  name                       String?
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+  transactions               Transaction[]
+  debts                      DebtItem[]
+  assetItems                 AssetItem[]
+  otherLiabilityItems        OtherLiabilityItem[]
+  budgetItems                BudgetItem[]
+  ownedWeeklyReviews         WeeklyReview[]       @relation("OwnedReviews")
   // Represents reviews shared WITH this user.
   // The WeeklyReviewSharer table acts as the join table.
-  sharesReceived            WeeklyReviewSharer[]   @relation("RecipientOfShare")
+  sharesReceived             WeeklyReviewSharer[] @relation("RecipientOfShare")
   // Represents reviews this user has shared WITH OTHERS.
-  sharesInitiated           WeeklyReviewSharer[]   @relation("InitiatorOfShare")
-  notifications             NotificationItem[]     @relation("UserNotifications")
-  userProfile               UserProfile?
-  initiatedTransactionAudits TransactionAudit[]     @relation("AuditInitiator") // Audits initiated by this user
+  sharesInitiated            WeeklyReviewSharer[] @relation("InitiatorOfShare")
+  notifications              NotificationItem[]   @relation("UserNotifications")
+  userProfile                UserProfile?
+  initiatedTransactionAudits TransactionAudit[]   @relation("AuditInitiator") // Audits initiated by this user
 
   @@map("users")
 }
@@ -52,36 +52,37 @@ model UserProfile {
 // Core Financial Data Models
 // ========================================
 model Transaction {
-  id                String                  @id @default(cuid())
-  userId            String
-  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date              DateTime
-  description       String
-  amount            Decimal // Changed from Float for precision
-  modeOfPayment     String // e.g., Cash, Bank, Mpesa - Consider an Enum if predefined
-  frequency         String? // e.g., recurring, one-time
-  variability       String? // e.g., fixed, variable
-  categoryName      String? // Links to BudgetItem description
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
-  weeklyReviewComment WeeklyReviewComment? // A transaction can have one comment in the context of a weekly review
-  audits            TransactionAudit[]      @relation("TransactionAudits") // Relation to audit entries
+  id                    String               @id @default(cuid())
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date                  DateTime
+  description           String
+  amount                Decimal // Changed from Float for precision
+  modeOfPayment         String // e.g., Cash, Bank, Mpesa - Consider an Enum if predefined
+  frequency             String? // e.g., recurring, one-time
+  variability           String? // e.g., fixed, variable
+  categoryName          String? // Links to BudgetItem description
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  weeklyReviewComment   WeeklyReviewComment? @relation(fields: [weeklyReviewCommentId], references: [id]) // A transaction can have one comment in the context of a weekly review
+  audits                TransactionAudit[]   @relation("TransactionAudits") // Relation to audit entries
+  weeklyReviewCommentId String?
 
   @@index([userId, date])
   @@map("transactions")
 }
 
 model DebtItem {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  description   String
-  principal     Decimal  // Changed from Float
-  interestRate  Float // Percentage, so Float is okay
-  minPayment    Decimal  // Changed from Float
-  term          String // "short" or "long" - Consider an Enum
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description  String
+  principal    Decimal // Changed from Float
+  interestRate Float // Percentage, so Float is okay
+  minPayment   Decimal // Changed from Float
+  term         String // "short" or "long" - Consider an Enum
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([userId])
   @@map("debt_items")
@@ -92,7 +93,7 @@ model AssetItem {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   description String
-  amount      Decimal  // Changed from Float
+  amount      Decimal // Changed from Float
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -105,7 +106,7 @@ model OtherLiabilityItem {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   description String
-  amount      Decimal  // Changed from Float
+  amount      Decimal // Changed from Float
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -118,7 +119,7 @@ model BudgetItem {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   description String
-  amount      Decimal  // Changed from Float
+  amount      Decimal // Changed from Float
   category    String // e.g., income, recurring-expense, goal - Consider an Enum
   period      String // Format YYYY-MM
   createdAt   DateTime @default(now())
@@ -133,17 +134,17 @@ model BudgetItem {
 // Weekly Review and Collaboration Models
 // ========================================
 model WeeklyReview {
-  id                      String                 @id @default(cuid()) // Primary key for the review itself
-  weekKey                 String // Format YYYY-WW (e.g., 2023-42), unique per owner
-  ownerId                 String
-  owner                   User                   @relation("OwnedReviews", fields: [ownerId], references: [id], onDelete: Cascade)
-  ownerUsername           String? // Store for display if needed
-  journal                 String?                @db.Text // Allow longer text for journal
+  id               String                @id @default(cuid()) // Primary key for the review itself
+  weekKey          String // Format YYYY-WW (e.g., 2023-42), unique per owner
+  ownerId          String
+  owner            User                  @relation("OwnedReviews", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerUsername    String? // Store for display if needed
+  journal          String?               @db.Text // Allow longer text for journal
   // transactionCommentsJson String?             @map("transaction_comments") // Storing comments as JSON string - alternative to separate model
-  comments                WeeklyReviewComment[]  @relation("ReviewComments")
-  sharingInstances        WeeklyReviewSharer[]   @relation("SharedReview") // All instances where this review is shared
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
+  comments         WeeklyReviewComment[] @relation("ReviewComments")
+  sharingInstances WeeklyReviewSharer[]  @relation("SharedReview") // All instances where this review is shared
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@unique([ownerId, weekKey])
   @@index([ownerId])
@@ -151,15 +152,16 @@ model WeeklyReview {
 }
 
 model WeeklyReviewComment {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   weeklyReviewId String
-  weeklyReview   WeeklyReview @relation("ReviewComments", fields: [weeklyReviewId], references: [id], onDelete: Cascade)
-  transactionId  String       // ID of the transaction being commented on
+  weeklyReview   WeeklyReview  @relation("ReviewComments", fields: [weeklyReviewId], references: [id], onDelete: Cascade)
+  transactionId  String // ID of the transaction being commented on
   // Optional: If you want to ensure the transaction exists, add a non-enforced relation or do app-level checks
   // transaction    Transaction? @relation(fields: [transactionId], references: [id], onDelete:SetNull) // Example if you link to actual transaction
-  commentText    String       @db.Text
-  commentedAt    DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  commentText    String        @db.Text
+  commentedAt    DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  Transaction    Transaction[]
 
   @@unique([weeklyReviewId, transactionId]) // A transaction should have only one comment per weekly review
   @@map("weekly_review_comments")
@@ -186,21 +188,20 @@ model WeeklyReviewSharer {
 // Notification Model
 // ========================================
 model NotificationItem {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
-  type        String // e.g., budget_alert, collaboration, app_update - Consider an Enum
-  title       String
-  message     String   @db.Text
-  link        String?
-  read        Boolean  @default(false)
-  timestamp   DateTime @default(now()) // Renamed from createdAt for clarity in notification context
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  type      String // e.g., budget_alert, collaboration, app_update - Consider an Enum
+  title     String
+  message   String   @db.Text
+  link      String?
+  read      Boolean  @default(false)
+  timestamp DateTime @default(now()) // Renamed from createdAt for clarity in notification context
+  updatedAt DateTime @updatedAt
 
   @@index([userId, read, timestamp])
   @@map("notification_items")
 }
-
 
 // ========================================
 // Audit Log Model (Example)
@@ -209,7 +210,7 @@ model TransactionAudit {
   id            String      @id @default(cuid())
   transactionId String
   performedBy   String // User ID of who made the change
-  user          User        @relation("AuditInitiator", fields: [performedBy], references: [id], onDelete:Restrict)
+  user          User        @relation("AuditInitiator", fields: [performedBy], references: [id], onDelete: Restrict)
   action        String // e.g., CREATE, UPDATE, DELETE - Consider an Enum
   timestamp     DateTime    @default(now())
   oldData       Json?
