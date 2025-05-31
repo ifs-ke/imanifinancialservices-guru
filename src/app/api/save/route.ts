@@ -21,12 +21,12 @@ const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
     })
   : null;
 
-async function upsertUserProfile(userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean) {
-    const logContext = { userId, operation: 'upsertUserProfile', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting upsert for user profile data`, logContext, userId);
+async function upsertStatementSettings(userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean) {
+    const logContext = { userId, operation: 'upsertStatementSettings', apiRoute: '/api/save' };
+    logDebug(`Save API: Starting upsert for StatementSettings`, logContext, userId);
 
     if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) {
-        logDebug(`Save API: No user profile data fields provided. Skipping profile update.`, logContext, userId);
+        logDebug(`Save API: No StatementSettings fields provided. Skipping update.`, logContext, userId);
         return;
     }
 
@@ -41,9 +41,9 @@ async function upsertUserProfile(userId: string, startDate?: string, endDate?: s
             update: dataToUpdate,
             create: { userId, ...dataToUpdate },
         });
-        logInfo(`Save API: Successfully saved/updated user profile (StatementSettings)`, logContext, userId);
+        logInfo(`Save API: Successfully saved/updated StatementSettings`, logContext, userId);
     } else {
-        logDebug(`Save API: No valid user profile fields to update.`, logContext, userId);
+        logDebug(`Save API: No valid StatementSettings fields to update.`, logContext, userId);
     }
 }
 
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
         otherLiabilityItems = [],
         budgetItems = [],
         ownedReviews = {},
-        investmentItems = [], // Added
+        investmentItems = [],
         startDate,
         endDate,
         gettingStartedDismissed
@@ -133,8 +133,8 @@ export async function POST(request: Request) {
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } }); // Deletes owned reviews
-      await tx.investmentItem.deleteMany({where: {userId}}); // Added
+      await tx.weeklyReview.deleteMany({ where: { userId } });
+      await tx.investmentItem.deleteMany({where: {userId}});
 
       // Insert new data
       if (transactions.length > 0) {
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       if (debts.length > 0) {
         await tx.debt.createMany({ data: debts.map(d => ({ ...d, userId })) });
       }
-      if (investmentItems.length > 0) { // Added
+      if (investmentItems.length > 0) {
         await tx.investmentItem.createMany({
           data: investmentItems.map(i => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })),
         });
@@ -165,12 +165,13 @@ export async function POST(request: Request) {
             userId,
             weekKey,
             journal: reviewData.journal,
-            transactionComments: reviewData.transactionComments || undefined, // Prisma expects JsonNull for undefined optional Json
+            // Prisma handles JSON type directly for PostgreSQL
+            transactionComments: reviewData.transactionComments || undefined, 
           })),
         });
       }
-      // User Profile (StatementSettings)
-      await upsertUserProfile(userId, startDate, endDate, gettingStartedDismissed);
+      // StatementSettings (formerly UserProfile)
+      await upsertStatementSettings(userId, startDate, endDate, gettingStartedDismissed);
     });
 
     logInfo('Save API: Prisma transaction committed successfully.', logContextBase, userId);

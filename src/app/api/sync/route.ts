@@ -1,7 +1,7 @@
 
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server'; // Added clerkClient
 import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem, InvestmentItem } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
@@ -18,9 +18,9 @@ interface SyncedDataForClient {
   otherLiabilityItems: OtherLiabilityItem[];
   budgetItems: BudgetItem[];
   ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews: Record<string, WeeklyReviewData>; // For reviews shared WITH the current user
+  sharedReviews: Record<string, WeeklyReviewData>; 
   notifications: NotificationItem[];
-  investmentItems: InvestmentItem[]; // Added
+  investmentItems: InvestmentItem[];
   startDate?: string;
   endDate?: string;
   gettingStartedDismissed: boolean;
@@ -41,7 +41,6 @@ export async function GET() {
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in or email missing.' }, { status: 401 });
     return addCorsHeaders(response);
   }
-  // Ensure user exists in DB
   await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
 
   logInfo(`Sync API: Initiating sync for user ${userId}`, logContextBase, userId);
@@ -50,39 +49,36 @@ export async function GET() {
     const [
       transactions, debts, assetItems, otherLiabilityItems,
       budgetItems, ownedReviewsPrisma, sharedReviewsPrisma,
-      statementSettings, notifications, investmentItems // Added investmentItems
+      statementSettings, notifications, investmentItems
     ] = await prisma.$transaction([
       prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
       prisma.debt.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
       prisma.assetItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
       prisma.otherLiabilityItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
       prisma.budgetItem.findMany({ where: { userId }, orderBy: [{ period: 'desc' }, { description: 'asc' }] }),
-      prisma.weeklyReview.findMany({ where: { userId } }), // Owned by the user
-      prisma.sharedReview.findMany({ // Shared WITH the user
+      prisma.weeklyReview.findMany({ where: { userId } }),
+      prisma.sharedReview.findMany({
         where: { sharedWithId: userId },
-        include: { originalReview: true }, // Include the actual review content
+        include: { originalReview: true },
       }),
       prisma.statementSettings.findUnique({ where: { userId } }),
       prisma.notification.findMany({ where: { userId }, orderBy: { timestamp: 'desc' }, take: 50 }),
-      prisma.investmentItem.findMany({ where: { userId }, orderBy: { name: 'asc' } }), // Added
+      prisma.investmentItem.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
     ]);
 
     const ownedReviewsMap: Record<string, WeeklyReviewData> = {};
     ownedReviewsPrisma.forEach(review => {
       ownedReviewsMap[review.weekKey] = {
         ownerId: review.userId,
-        ownerUsername: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress, // Username of the owner (self)
+        ownerUsername: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress,
         journal: review.journal || "",
-        transactionComments: review.transactionComments as Record<string, string> || {},
+        // Prisma returns JSON as object with PostgreSQL
+        transactionComments: review.transactionComments as Record<string, string> || {}, 
         weekKey: review.weekKey,
-        // sharedWith can be populated if needed, but for owned reviews, it's mainly for display if they shared it
       };
     });
 
     const sharedReviewsMap: Record<string, WeeklyReviewData> = {};
-    // For reviews shared with the current user, we need owner's username.
-    // This might require an additional Clerk call if owner usernames are not stored,
-    // or we can default to ownerId if username is not readily available.
     const ownerIdsOfSharedReviews = Array.from(new Set(sharedReviewsPrisma.map(sr => sr.reviewOwnerId)));
     let ownerUserDetails: Record<string, { name?: string | null, email?: string | null }> = {};
 
@@ -100,13 +96,13 @@ export async function GET() {
           ownerId: originalReview.userId,
           ownerUsername: ownerUserDetails[originalReview.userId]?.name || ownerUserDetails[originalReview.userId]?.email || originalReview.userId,
           journal: originalReview.journal || "",
-          transactionComments: originalReview.transactionComments as Record<string, string> || {},
+          // Prisma returns JSON as object with PostgreSQL
+          transactionComments: originalReview.transactionComments as Record<string, string> || {}, 
           weekKey: originalReview.weekKey,
-          sharedWith: [userId] // Indicates this user is one of the recipients
+          sharedWith: [userId]
         };
       }
     });
-
 
     const fetchedData: SyncedDataForClient = {
       transactions: transactions.map(t => ({...t, date: t.date || new Date(0), categoryName: t.categoryName || null })),
@@ -114,7 +110,7 @@ export async function GET() {
       assetItems: assetItems.map(a => ({...a})),
       otherLiabilityItems: otherLiabilityItems.map(l => ({...l})),
       budgetItems: budgetItems.map(b => ({...b})),
-      investmentItems: investmentItems.map(i => ({...i, purchaseDate: i.purchaseDate || new Date(0)})), // Added
+      investmentItems: investmentItems.map(i => ({...i, purchaseDate: i.purchaseDate || new Date(0)})),
       ownedReviews: ownedReviewsMap,
       sharedReviews: sharedReviewsMap,
       notifications: notifications.map(n => ({...n, timestamp: n.timestamp || new Date(0)})),
@@ -123,7 +119,7 @@ export async function GET() {
       gettingStartedDismissed: statementSettings?.gettingStartedDismissed ?? false,
     };
 
-    const preparedData = prepareDataForHashing(fetchedData as any); // Cast for prepareDataForHashing
+    const preparedData = prepareDataForHashing(fetchedData as any);
     const dataString = stringify(preparedData);
     const dataHash = await hashData(dataString);
 

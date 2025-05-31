@@ -15,22 +15,16 @@ This is a Next.js personal finance management application built in Firebase Stud
 
     *   **Database URL (Required for Prisma):**
         ```env
-        # Example for local SQLite (Prisma will create this file)
-        DATABASE_URL="file:./dev.db"
+        # Example for PostgreSQL (e.g., NeonDB - Recommended for Production)
+        DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require&options=endpoint%3DYOUR_NEON_ENDPOINT_ID"
 
-        # Example for PostgreSQL (e.g., NeonDB or local instance)
-        # DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require"
+        # Example for local SQLite (If you prefer for initial local dev, change provider in schema.prisma too)
+        # DATABASE_URL="file:./dev.db"
         ```
     *   **Clerk Keys (Required for Authentication):**
         ```env
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY
         CLERK_SECRET_KEY=sk_test_YOUR_SECRET_KEY
-        ```
-    *   **Mock User ID (Optional, used if Clerk auth is bypassed for specific tests - not for normal operation):**
-        ```env
-        # NEXT_PUBLIC_MOCK_USER_ID=user_mock_123abc # Generally not needed with full auth
-        # NEXT_PUBLIC_MOCK_USER_EMAIL=mockuser@example.com
-        # NEXT_PUBLIC_MOCK_USER_NAME="Mock User"
         ```
     *   **Google Generative AI API Key (Optional for AI features):**
         ```env
@@ -46,11 +40,13 @@ This is a Next.js personal finance management application built in Firebase Stud
         ```
 
 3.  **Set Up Prisma:**
-    *   Ensure you have created `prisma/schema.prisma` (the Prototyper will provide content for this).
+    *   Ensure you have `prisma/schema.prisma` (The Prototyper should provide this).
+    *   Make sure your `DATABASE_URL` in `.env` is correctly set for your PostgreSQL instance (e.g., NeonDB).
     *   Run database migrations:
         ```bash
-        npx prisma migrate dev --name init
+        npx prisma migrate dev --name init_postgresql 
         ```
+        (Or a more descriptive name if you're migrating from an existing setup).
     *   Generate Prisma Client:
         ```bash
         npx prisma generate
@@ -77,7 +73,7 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Notifications:** In-app notifications for budget alerts, collaboration, and application info.
 - **Logger:** View client-side console logs.
 - **Authentication:** Clerk for user authentication and management.
-- **Data Persistence:** Server-side via Prisma (SQLite default, PostgreSQL recommended for production) and client-side caching/sync with Zustand.
+- **Data Persistence:** Server-side via Prisma (PostgreSQL recommended) and client-side caching/sync with Zustand.
 - **Dark/Light Mode:** Theme toggle.
 - **Responsive Design:** Adapts to different screen sizes.
 
@@ -87,7 +83,7 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Styling:** Tailwind CSS, Shadcn UI
 - **State Management:** Zustand (with persist middleware for Session Storage as a client-side cache)
 - **ORM:** Prisma
-- **Database:** SQLite (default for local dev), PostgreSQL (recommended for production)
+- **Database:** PostgreSQL (NeonDB recommended for production)
 - **Authentication:** Clerk
 - **AI:** Genkit
 - **Data Handling & Validation:** Zod, `fast-json-stable-stringify`
@@ -96,7 +92,7 @@ This is a Next.js personal finance management application built in Firebase Stud
 ## Data Handling & Security
 
 - **Data Storage:**
-    *   **Primary Storage:** Server-side database (PostgreSQL/SQLite) managed by Prisma.
+    *   **Primary Storage:** Server-side database (PostgreSQL) managed by Prisma.
     *   **Client-Side Cache:** Browser Session Storage via Zustand persist middleware, synchronized with the server.
 - **Authentication:** Managed by Clerk. All sensitive API routes are protected.
 - **Data Integrity:** Hashing mechanism used to verify data consistency between client and server during synchronization.
@@ -109,3 +105,4 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Data Controller/Processor:** Depending on your deployment, you are the data controller.
 - **User Rights:** Users can view and manage their data through the application. Deletion requests would need to be handled.
 - **Transparency:** A clear privacy policy is essential, detailing data storage, processing, and user rights.
+
