@@ -1,3 +1,4 @@
+
 // src/components/ui/sidebar.tsx
 "use client";
 
@@ -22,27 +23,26 @@ import {
   PanelLeft,
   BookOpen,
   Bell,
-  Cloud,
-  CloudOff,
+  HardDrive, // Changed from CloudOff/Cloud for local storage indication
   AlertTriangle,
   ClipboardList,
-  RefreshCw,
+  RefreshCw, // Could be repurposed for "refresh local data" or removed
   Menu,
   PieChart as PieChartIcon,
-  Users, 
+  Users,
+  Briefcase, // Added for Investments
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { UserButton, useUser, useAuth } from "@clerk/nextjs"; // Added useAuth
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { ScrollArea } from "./scroll-area"; 
+import { ScrollArea } from "./scroll-area";
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
-import { Skeleton } from "@/components/ui/skeleton"; 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
+import { Skeleton } from "@/components/ui/skeleton";
+// Avatar not directly used here if UserButton handles it.
 
 interface SidebarMenuItem {
   href: string;
@@ -55,6 +55,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/transactions", label: "Transactions", icon: <ReceiptText size={18} /> },
   { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
   { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
+  { href: "/investments", label: "Investments", icon: <Briefcase size={18} /> }, // Added
   { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
   { href: "/budget", label: "Budget", icon: <PieChartIcon size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
@@ -89,7 +90,7 @@ interface SidebarProviderProps {
 export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithChildren<SidebarProviderProps>>(
   ({ children, ...props }, ref) => {
     const isMobileClient = useIsMobile();
-    const [sidebarState, setSidebarState] = React.useState<SidebarState>("collapsed"); 
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>("collapsed");
     const [hasMounted, setHasMounted] = React.useState(false);
 
     React.useEffect(() => {
@@ -118,7 +119,7 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
     const toggleSidebar = () => {
       setSidebarState(prev => (prev === "collapsed" ? "expanded" : "collapsed"));
     };
-    
+
     const contextValue = React.useMemo(() => ({
       isMobile: isMobileClient,
       state: sidebarState,
@@ -153,61 +154,56 @@ SidebarProvider.displayName = "SidebarProvider";
 
 export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
-    const { state, toggleSidebar, isMobile } = useSidebar(); 
+    const { state, toggleSidebar, isMobile } = useSidebar();
     const pathname = usePathname();
     const unreadCount = useNotificationStore(state => state.unreadCount());
     const [clientUnreadCount, setClientUnreadCount] = React.useState(0);
     const [hasMounted, setHasMounted] = React.useState(false);
 
-    const { user, isSignedIn, isLoaded: isClerkLoaded } = useUser(); 
-    
+    const { user, isLoaded: isClerkLoaded } = useUser(); // Clerk's useUser hook
+    const { isSignedIn } = useAuth(); // Clerk's useAuth for isSignedIn status
+
     const syncManager = useSyncManager();
-    const { syncStatus, retrySync, hashMismatch, isMismatchDialogOpen } = syncManager;
+    const { syncStatus, retrySync } = syncManager; // Removed hashMismatch, isMismatchDialogOpen
 
     React.useEffect(() => {
       setHasMounted(true);
-      setClientUnreadCount(unreadCount); 
+      setClientUnreadCount(unreadCount);
     }, [unreadCount]);
 
-    let PersistenceIcon: React.ElementType = CloudOff;
-    let persistenceStatusText = 'Local';
-    let persistenceTooltipText = "Data saved locally. Click to sync.";
+    let PersistenceIcon: React.ElementType = HardDrive;
+    let persistenceStatusText = 'Local Storage';
+    let persistenceTooltipText = "Data is stored locally in your browser session.";
     let iconColor = 'text-muted-foreground';
-    let isClickable = true;
+    let isClickable = false; // Sync icon is non-functional for server sync
 
-    if (!isClerkLoaded) { 
-      PersistenceIcon = RefreshCw;
-      persistenceStatusText = 'Auth Loading...'; 
-      persistenceTooltipText = 'Waiting for authentication status...';
-      iconColor = 'text-muted-foreground animate-spin';
-      isClickable = false;
-    } else if (!isSignedIn) { 
-      PersistenceIcon = CloudOff;
-      persistenceStatusText = 'Offline';
-      persistenceTooltipText = 'Sign in to enable cloud sync.';
-      iconColor = 'text-muted-foreground';
-      isClickable = false;
-    } else {
-      switch (syncStatus) {
-        case 'syncing': PersistenceIcon = RefreshCw; persistenceStatusText = 'Syncing...'; persistenceTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary animate-spin'; isClickable = false; break;
-        case 'synced': PersistenceIcon = Cloud; persistenceStatusText = 'Synced'; persistenceTooltipText = 'Data synced with cloud.'; iconColor = 'text-accent'; isClickable = false; break;
-        case 'error':
-          PersistenceIcon = AlertTriangle;
-          persistenceStatusText = hashMismatch ? 'Conflict' : 'Sync Error';
-          persistenceTooltipText = hashMismatch ? 'Data mismatch detected. Click to resolve.' : 'Sync failed. Click to retry.';
-          iconColor = 'text-destructive';
-          isClickable = true;
-          break;
-        case 'local': default: PersistenceIcon = CloudOff; persistenceStatusText = 'Local'; persistenceTooltipText = "Data saved locally. Click to sync."; iconColor = 'text-muted-foreground'; isClickable = true; break;
-      }
+    // Update status text based on local sync manager status
+    if (syncStatus === 'loading_local') {
+        PersistenceIcon = RefreshCw;
+        persistenceStatusText = 'Loading...';
+        persistenceTooltipText = 'Loading local data...';
+        iconColor = 'text-primary animate-spin';
+    } else if (syncStatus === 'error_local') {
+        PersistenceIcon = AlertTriangle;
+        persistenceStatusText = 'Local Error';
+        persistenceTooltipText = 'Error loading local data. Click to retry load.';
+        iconColor = 'text-destructive';
+        isClickable = true; // Allow retry for local load error
+    } else if (syncStatus === 'local') {
+        PersistenceIcon = HardDrive;
+        persistenceStatusText = 'Local Storage';
+        persistenceTooltipText = "Data stored locally. Session only.";
+        iconColor = 'text-accent';
     }
 
+
     const handleSyncClick = () => {
-      if (!isClerkLoaded || !isSignedIn) { 
-        logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
-        return;
+      if (isClickable && syncStatus === 'error_local') {
+        logInfo("Sidebar: Retry local data load triggered.", { userId: user?.id });
+        retrySync(); // retrySync in local mode will re-attempt local hydration or notify
+      } else {
+        logDebug("Sidebar: Sync icon clicked but no server sync action in local-only mode.", { status: persistenceStatusText, userId: user?.id });
       }
-      if (isClickable) retrySync();
     };
 
     const sidebarActualState = isMobile ? "collapsed" : state;
@@ -314,13 +310,12 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                   className={cn(
                     "w-full justify-start text-sm h-9",
                     sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
-                    "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    isMismatchDialogOpen && "animate-pulse border-destructive ring-2 ring-destructive"
+                    "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                   aria-label={persistenceTooltipText}
-                  disabled={!isClickable}
+                  disabled={!isClickable && syncStatus !== 'error_local'} // Only clickable if there's a local error to retry
                 >
-                  {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor, isMismatchDialogOpen && "text-destructive") })}
+                  {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor) })}
                   <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
                     {persistenceStatusText}
                   </span>
@@ -386,7 +381,7 @@ export const Sidebar = React.forwardRef<
     side?: "left" | "right";
   }
 >(({ className, side = "left", ...props }, ref) => {
-  const { isMobile, toggleSidebar, state } = useSidebar(); 
+  const { isMobile, toggleSidebar, state } = useSidebar();
 
   if (isMobile) {
     return (
@@ -407,7 +402,7 @@ export const Sidebar = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "fixed inset-y-0 left-0 z-40 hidden md:flex", 
+        "fixed inset-y-0 left-0 z-40 hidden md:flex",
         className
       )}
     >

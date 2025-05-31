@@ -1,8 +1,8 @@
-// src/app/(dashboard)/layout.tsx - Refactored for Next.js 14 and performance
- 'use client'; 
+
+// src/app/(dashboard)/layout.tsx
+ 'use client';
 
  import React, { useEffect } from 'react';
- // import { useAuth } from '@clerk/nextjs'; // Clerk disabled
  import { useBudgetNotifications } from '@/services/notificationService';
  import {
    Sidebar,
@@ -10,10 +10,11 @@
  } from "@/components/ui/sidebar";
  import { useSyncManager } from '@/hooks/useSyncManager';
  import FloatingChatButton from '@/components/layout/FloatingChatButton';
- import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
- import { Toaster } from '@/components/ui/toaster'; 
+ // DataSyncMismatchDialog is no longer needed in local-only mode
+ import { Toaster } from '@/components/ui/toaster';
  import { logDebug } from '@/lib/logger';
- import { LoadingSpinner } from '@/components/ui/loading-spinner'; 
+ import { LoadingSpinner } from '@/components/ui/loading-spinner';
+ import { useAuth } from '@clerk/nextjs';
 
 
  export default function DashboardLayout({
@@ -21,55 +22,38 @@
  }: {
    children: React.ReactNode;
  }) {
-   // Clerk disabled: Simulate auth state
-   const isClerkLoaded = true; // Assume loaded
-   const isSignedIn = !!process.env.NEXT_PUBLIC_MOCK_USER_ID; // Signed in if mock user ID is set
-   const userId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
+   const { isLoaded: isClerkLoaded, isSignedIn, userId } = useAuth();
+   const syncManager = useSyncManager(); // Still used for local state management like 'gettingStartedDismissed'
 
-   const syncManager = useSyncManager();
-   const { 
-     isMismatchDialogOpen, 
-     setIsMismatchDialogOpen, 
-     forceFetchServer, 
-     forceSaveLocal,
-     hashMismatch 
-   } = syncManager;
- 
-   useBudgetNotifications();
-
+   useBudgetNotifications(); // Can still run for local budget alerts
 
    useEffect(() => {
-       if (hashMismatch && !isMismatchDialogOpen) {
-           logDebug("DashboardLayout: Hash mismatch detected, ensuring dialog is open.", { userId });
-           setIsMismatchDialogOpen(true);
+       // This effect might be simplified or removed if hashMismatch is fully gone
+       // For now, it's harmless as hashMismatch should always be false in local-only mode.
+       if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
+           logDebug("DashboardLayout: Hash mismatch detected (should not occur in local-only mode).", { userId });
+           // syncManager.setIsMismatchDialogOpen(true); // Dialog removed
        }
-   }, [hashMismatch, isMismatchDialogOpen, setIsMismatchDialogOpen, userId]);
+   }, [syncManager.hashMismatch, syncManager.isMismatchDialogOpen, userId]);
 
-   // If using mock auth, we can consider it "loaded" immediately
-   // Original Clerk loading state check is commented out
-   // if (!isClerkLoaded) {
-   //   return (
-   //     <div className="flex items-center justify-center min-h-screen bg-background">
-   //       <LoadingSpinner size={48} text="Authenticating..." />
-   //     </div>
-   //   );
-   // }
+   if (!isClerkLoaded || syncManager.syncStatus === 'idle' || syncManager.syncStatus === 'loading_local') {
+     return (
+       <div className="flex items-center justify-center min-h-screen bg-background">
+         <LoadingSpinner size={48} text={!isClerkLoaded ? "Authenticating..." : "Loading local data..."} />
+       </div>
+     );
+   }
 
    return (
      <div className="flex min-h-screen bg-background">
        <Sidebar />
        <SidebarInset>
-         {children} 
+         {children}
        </SidebarInset>
        <FloatingChatButton />
        <Toaster />
 
-        <DataSyncMismatchDialog
-           isOpen={isMismatchDialogOpen}
-           onClose={() => setIsMismatchDialogOpen(false)}
-           onForceSave={forceSaveLocal}
-           onForceFetch={forceFetchServer}
-        />
+       {/* DataSyncMismatchDialog removed as it's not applicable in local-only mode */}
      </div>
    );
  }

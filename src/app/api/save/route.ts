@@ -1,8 +1,10 @@
 
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-import { addCorsHeaders } from '@/lib/utils'; 
-import { logError, logWarn } from '@/lib/logger'; 
+import { addCorsHeaders } from '@/lib/utils';
+import { logWarn } from '@/lib/logger';
+// Clerk auth import can remain if other API routes still use it, but this route is now a stub.
+// import { auth } from '@clerk/nextjs/server';
 
 export async function OPTIONS() {
   const response = new NextResponse(null, { status: 200 });
@@ -11,15 +13,16 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  const { userId: clerkUserId } = { userId: process.env.NEXT_PUBLIC_MOCK_USER_ID }; // Using mock user ID
-  const logContextBase = { userId: clerkUserId || 'unknown-save-post', operation: 'POST /api/save', apiRoute: '/api/save' };
+  // const { userId } = auth(); // Clerk auth, if needed for logging or other purposes
+  const mockUserIdIfNoClerk = process.env.NEXT_PUBLIC_MOCK_USER_ID || 'local-user';
+  const logContextBase = { userId: mockUserIdIfNoClerk, operation: 'POST /api/save (DISABLED)', apiRoute: '/api/save' };
 
-  logWarn('Save API: MongoDB has been removed. Save operation is disabled.', logContextBase, clerkUserId);
-  
-  const response = NextResponse.json({ 
-    error: 'Database functionality has been removed. Cannot save data.',
-    message: 'Data persistence to MongoDB is disabled.' 
-  }, { status: 503 }); // Service Unavailable
-  
+  logWarn('Save API: Server-side save operation is disabled. Application is in local-only storage mode.', logContextBase);
+
+  const response = NextResponse.json({
+    message: 'Server-side saving is disabled. Data is stored locally in the browser.',
+    status: 'local_only_mode'
+  }, { status: 200 }); // Return 200 OK but indicate local storage
+
   return addCorsHeaders(response);
 }

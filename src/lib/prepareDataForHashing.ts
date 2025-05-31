@@ -1,32 +1,38 @@
-// src/lib/prepareDataForHashing.ts
-import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types';
-import stringify from 'fast-json-stable-stringify'; 
 
-interface SyncData {
-  transactions: TransactionWithId[];
-  debts: DebtItem[];
-  assetItems: StatementItem[];
-  otherLiabilityItems: OtherLiabilityItem[];
-  budgetItems: BudgetItem[]; 
-  ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews?: Record<string, WeeklyReviewData>; // Optional
-  notifications: NotificationItem[]; // Kept for completeness of SyncedData, but excluded from hash
-  startDate?: Date;
-  endDate?: Date;
+// src/lib/prepareDataForHashing.ts
+import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, InvestmentItem } from '@/lib/types';
+// stringify is still used by API sync route for empty data hash
+
+interface SyncDataInput {
+  transactions?: TransactionWithId[];
+  debts?: DebtItem[];
+  assetItems?: StatementItem[];
+  otherLiabilityItems?: OtherLiabilityItem[];
+  budgetItems?: BudgetItem[];
+  ownedReviews?: Record<string, WeeklyReviewData>;
+  investmentItems?: InvestmentItem[]; // Added
+  startDate?: Date | string; // Can be Date or ISO string
+  endDate?: Date | string;   // Can be Date or ISO string
   gettingStartedDismissed?: boolean;
 }
 
 /**
- * Prepares the data object for consistent hashing by:
- * - Sorting arrays consistently.
- * - Converting Dates to ISO strings.
- * - Ensuring consistent order of keys (handled by stringify).
- * - Handling potential null/undefined arrays/objects defensively.
- * - EXCLUDING notifications and sharedReviews from the final hashed object.
- * - Including the 'period' field for budget items.
- * - Including the 'categoryName' field for transactions.
+ * Prepares the data object for consistent stringification, typically before hashing.
+ * - Sorts arrays consistently.
+ * - Converts Dates to ISO strings.
+ * - Ensures consistent order of keys (handled by stringify).
+ * - Handles potential null/undefined arrays/objects defensively.
+ * - EXCLUDES notifications and sharedReviews from the final object.
+ * - Includes the 'period' field for budget items.
+ * - Includes the 'categoryName' field for transactions.
+ * - Includes investment items.
+ *
+ * NOTE: In local-only mode, the primary use of hashing for client-server integrity is gone.
+ * This function is kept primarily for the /api/sync route which still needs to produce
+ * a hash for an empty dataset to satisfy initial client expectations.
+ * It can be simplified or removed if no internal hashing of local state is ever needed.
  */
-export function prepareDataForHashing(data: SyncData): any {
+export function prepareDataForHashing(data: SyncDataInput): any {
 
     const transactions = Array.isArray(data.transactions) ? data.transactions : [];
     const debts = Array.isArray(data.debts) ? data.debts : [];
@@ -34,6 +40,16 @@ export function prepareDataForHashing(data: SyncData): any {
     const otherLiabilityItems = Array.isArray(data.otherLiabilityItems) ? data.otherLiabilityItems : [];
     const budgetItems = Array.isArray(data.budgetItems) ? data.budgetItems : [];
     const ownedReviews = typeof data.ownedReviews === 'object' && data.ownedReviews !== null ? data.ownedReviews : {};
+    const investmentItems = Array.isArray(data.investmentItems) ? data.investmentItems : []; // Added
+
+    const toISOStringOptional = (date?: Date | string): string | undefined => {
+      if (date instanceof Date && !isNaN(date.getTime())) return date.toISOString();
+      if (typeof date === 'string') {
+        const d = new Date(date);
+        if (!isNaN(d.getTime())) return d.toISOString();
+      }
+      return undefined;
+    };
 
     const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
         if (!Array.isArray(txs)) return [];
@@ -69,6 +85,19 @@ export function prepareDataForHashing(data: SyncData): any {
         });
     };
 
+    const sortInvestmentItems = (items: InvestmentItem[]): InvestmentItem[] => {
+        if (!Array.isArray(items)) return [];
+        return [...items].sort((a, b) => {
+            const nameDiff = (a.name || '').localeCompare(b.name || '');
+            if (nameDiff !== 0) return nameDiff;
+            const dateA = a.purchaseDate instanceof Date ? a.purchaseDate : new Date(a.purchaseDate || 0);
+            const dateB = b.purchaseDate instanceof Date ? b.purchaseDate : new Date(b.purchaseDate || 0);
+            const timeA = !isNaN(dateA.getTime()) ? dateA.getTime() : 0;
+            const timeB = !isNaN(dateB.getTime()) ? dateB.getTime() : 0;
+            return timeA - timeB;
+        });
+    };
+
     const formatReviewData = (reviews: Record<string, WeeklyReviewData>): Record<string, WeeklyReviewData> => {
         if (typeof reviews !== 'object' || reviews === null) return {};
         const sortedKeys = Object.keys(reviews).sort();
@@ -99,19 +128,38 @@ export function prepareDataForHashing(data: SyncData): any {
         return sortedReviews;
     };
 
+    const toFixedIfNumber = (value: number | undefined | null, digits: number): string | undefined | null => {
+        if (typeof value === 'number' && !isNaN(value)) {
+            return value.toFixed(digits);
+        }
+        return value === undefined ? undefined : null; // keep null as null
+    };
+
     return {
         transactions: sortTransactions(transactions).map(tx => ({
             ...tx,
-            date: (tx.date instanceof Date && !isNaN(tx.date.getTime()) ? tx.date : new Date(0)).toISOString(),
-            categoryName: tx.categoryName || null, // Ensure categoryName is part of the hashed data
+            date: toISOStringOptional(tx.date),
+            categoryName: tx.categoryName || null,
         })),
-        debts: sortDebts(debts),
-        assetItems: sortStatementItems(assetItems),
-        otherLiabilityItems: sortStatementItems(otherLiabilityItems),
-        budgetItems: sortBudgetItems(budgetItems),
+        debts: sortDebts(debts).map(d => ({
+            ...d,
+            principal: toFixedIfNumber(d.principal, 2),
+            interestRate: toFixedIfNumber(d.interestRate, 4), // Higher precision for rates
+            minPayment: toFixedIfNumber(d.minPayment, 2),
+        })),
+        assetItems: sortStatementItems(assetItems).map(a => ({ ...a, amount: toFixedIfNumber(a.amount, 2) })),
+        otherLiabilityItems: sortStatementItems(otherLiabilityItems).map(l => ({ ...l, amount: toFixedIfNumber(l.amount, 2) })),
+        budgetItems: sortBudgetItems(budgetItems).map(b => ({ ...b, amount: toFixedIfNumber(b.amount, 2) })),
         ownedReviews: formatReviewData(ownedReviews),
-        startDate: data.startDate instanceof Date && !isNaN(data.startDate.getTime()) ? data.startDate.toISOString() : undefined,
-        endDate: data.endDate instanceof Date && !isNaN(data.endDate.getTime()) ? data.endDate.toISOString() : undefined,
+        investmentItems: sortInvestmentItems(investmentItems).map(i => ({ // Added
+            ...i,
+            purchaseDate: toISOStringOptional(i.purchaseDate),
+            quantity: toFixedIfNumber(i.quantity, 8), // Example precision for quantity
+            purchasePrice: toFixedIfNumber(i.purchasePrice, 2),
+            currentValue: toFixedIfNumber(i.currentValue, 2),
+        })),
+        startDate: toISOStringOptional(data.startDate),
+        endDate: toISOStringOptional(data.endDate),
         gettingStartedDismissed: data.gettingStartedDismissed ?? false,
     };
 }

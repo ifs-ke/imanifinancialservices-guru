@@ -1,12 +1,13 @@
 
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-import { addCorsHeaders } from '@/lib/utils'; 
-import { logWarn } from '@/lib/logger'; 
-import { hashData } from '@/lib/storage-utils'; // Still need hashData for an empty payload
+import { addCorsHeaders } from '@/lib/utils';
+import { logWarn } from '@/lib/logger';
+import { hashData } from '@/lib/storage-utils';
 import stringify from 'fast-json-stable-stringify';
-import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types';
+import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem, InvestmentItem } from '@/lib/types';
 
+// Interface for the expected structure, even if empty
 interface EmptySyncedData {
   transactions: TransactionWithId[];
   debts: DebtItem[];
@@ -16,6 +17,7 @@ interface EmptySyncedData {
   ownedReviews: Record<string, WeeklyReviewData>;
   sharedReviews: Record<string, WeeklyReviewData>;
   notifications: NotificationItem[];
+  investmentItems: InvestmentItem[]; // Added
   startDate?: string;
   endDate?: string;
   gettingStartedDismissed: boolean;
@@ -28,10 +30,11 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const { userId: clerkUserId } = { userId: process.env.NEXT_PUBLIC_MOCK_USER_ID }; // Using mock user ID
-  const logContextBase = { userId: clerkUserId || 'unknown-sync-get', operation: 'GET /api/sync', apiRoute: '/api/sync' };
+  // const { userId } = auth(); // Clerk auth, if needed for logging
+  const mockUserIdIfNoClerk = process.env.NEXT_PUBLIC_MOCK_USER_ID || 'local-user';
+  const logContextBase = { userId: mockUserIdIfNoClerk, operation: 'GET /api/sync (DISABLED)', apiRoute: '/api/sync' };
 
-  logWarn('Sync API: MongoDB has been removed. Sync operation will return empty data.', logContextBase, clerkUserId);
+  logWarn('Sync API: Server-side sync is disabled. Returning empty data structure for local-only mode.', logContextBase);
 
   const emptyData: EmptySyncedData = {
     transactions: [],
@@ -42,26 +45,31 @@ export async function GET() {
     ownedReviews: {},
     sharedReviews: {},
     notifications: [],
+    investmentItems: [], // Added
     gettingStartedDismissed: false, // Default value
+    // startDate and endDate will be undefined, client will set defaults
   };
 
   try {
-    const dataString = stringify(emptyData);
+    // The client still expects a hash, so we provide one for the empty state
+    const dataString = stringify(emptyData); // Stringify the empty structure
     const dataHash = await hashData(dataString);
 
     const responsePayload = {
       ...emptyData,
       dataHash,
+      message: "Server-side sync is disabled. Using local browser storage.",
+      status: "local_only_mode"
     };
-    
-    const response = NextResponse.json(responsePayload);
+
+    const response = NextResponse.json(responsePayload, { status: 200 });
     return addCorsHeaders(response);
 
   } catch (error: any) {
-    logError('Sync API: Error generating hash for empty data.', error, logContextBase, clerkUserId);
-    const errorResponse = NextResponse.json({ 
-      error: 'Failed to process sync request due to internal error (hashing empty data).',
-      message: 'Database functionality is disabled.' 
+    logWarn('Sync API: Error generating hash for empty data during local-only mode response.', { ...logContextBase, error: error.message });
+    const errorResponse = NextResponse.json({
+      error: 'Failed to prepare local-only mode response.',
+      message: 'Server-side sync is disabled.'
     }, { status: 500 });
     return addCorsHeaders(errorResponse);
   }
