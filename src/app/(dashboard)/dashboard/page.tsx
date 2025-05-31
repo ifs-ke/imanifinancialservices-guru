@@ -17,6 +17,7 @@ import { cn, formatCurrency } from '@/lib/utils';
 import type { BudgetItem } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useSyncManager } from '@/hooks/useSyncManager';
+import { PageHeader } from '@/components/layout/PageHeader'; // Ensure this is imported
 
 const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
 const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
@@ -32,10 +33,6 @@ export default function DashboardPage() {
   
   const currentBudgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
-
-  const budgetItemsForCurrentPeriod = useMemo(() => {
-    return allBudgetItems.filter(item => item.period === currentBudgetPeriod);
-  }, [allBudgetItems, currentBudgetPeriod]);
 
   const { toast } = useToast();
   const { gettingStartedDismissed, setGettingStartedDismissed } = useSyncManager();
@@ -73,16 +70,7 @@ export default function DashboardPage() {
     };
   }, [allTransactions, debts, assetItems, otherLiabilityItems]);
 
-  const [formattedNetWorth, setFormattedNetWorth] = useState<string>('N/A');
-  const [formattedTotalAssets, setFormattedTotalAssets] = useState<string>('N/A');
-  const [formattedTotalLiabilities, setFormattedTotalLiabilities] = useState<string>('N/A');
-  const [formattedCashFlow, setFormattedCashFlow] = useState<string>('N/A');
-  const [formattedTotalIncome, setFormattedTotalIncome] = useState<string>('N/A');
-  const [formattedTotalExpenses, setFormattedTotalExpenses] = useState<string>('N/A');
-  const [formattedBudgetVariance, setFormattedBudgetVariance] = useState<string>('N/A');
-  const [budgetStatus, setBudgetStatus] = useState<'on-track' | 'over-budget' | 'under-budget' | 'no-data'>('no-data');
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A');
-
   const monthlyBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt);
 
    useEffect(() => {
@@ -219,22 +207,6 @@ export default function DashboardPage() {
     return { value: variance, status };
   }, [filteredTransactions, allBudgetItems, currentBudgetPeriod, startDate, endDate]);
 
-  useEffect(() => {
-    setFormattedNetWorth(formatCurrency(financialData.netWorth));
-    setFormattedTotalAssets(formatCurrency(financialData.totalAssets));
-    setFormattedTotalLiabilities(formatCurrency(financialData.totalLiabilities));
-    setFormattedCashFlow(formatCurrency(financialData.cashFlow));
-    setFormattedTotalIncome(formatCurrency(financialData.totalIncome));
-    setFormattedTotalExpenses(formatCurrency(financialData.totalExpenses));
-     if (budgetVariance.value !== null) {
-       setFormattedBudgetVariance(formatCurrency(budgetVariance.value));
-       setBudgetStatus(budgetVariance.status);
-     } else {
-       setFormattedBudgetVariance('N/A');
-       setBudgetStatus('no-data');
-     }
-  }, [financialData, budgetVariance]);
-
   const handleCloseGettingStarted = () => {
       setGettingStartedDismissed(true); 
       toast({
@@ -296,33 +268,31 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 bg-background">
-       <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-           <div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                    Executive Summary
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    High-level overview. Budget Variance uses range:
-                    {startDate || endDate ? (
-                        <span className='font-semibold ml-1'>
-                            {startDate && isDateValid(startDate) ? format(startDate, 'PP') : 'Start'} - {endDate && isDateValid(endDate) ? format(endDate, 'PP') : 'End'}
-                        </span>
-                    ) : (
-                        <span className='font-semibold ml-1'>All Time</span>
-                    )}
-                </p>
-            </div>
+       <PageHeader
+          title="Executive Summary"
+          description={
+            <>
+              High-level overview. Budget Variance uses range:
+              {startDate || endDate ? (
+                <span className='font-semibold ml-1'>
+                  {startDate && isDateValid(startDate) ? format(startDate, 'PP') : 'Start'} - {endDate && isDateValid(endDate) ? format(endDate, 'PP') : 'End'}
+                </span>
+              ) : (
+                <span className='font-semibold ml-1'>All Time</span>
+              )}
+            </>
+          }
+        >
             {gettingStartedDismissed && (
                 <Button
                     variant="outline"
                     size="sm"
                     onClick={handleShowGettingStarted}
-                    className="ml-auto"
                 >
                     <BookOpen className="mr-2 h-4 w-4" /> Show Getting Started
                 </Button>
             )}
-        </header>
+       </PageHeader>
 
         {!gettingStartedDismissed && (
             <Card className="mb-6 mx-4 md:mx-6 lg:mx-8 shadow-md">
@@ -384,10 +354,10 @@ export default function DashboardPage() {
            </CardHeader>
            <CardContent className="p-4">
              <div className="text-2xl font-bold">
-               {formattedNetWorth}
+               {formatCurrency(financialData.netWorth)}
              </div>
              <p className="text-xs text-muted-foreground break-words">
-                Assets ({formattedTotalAssets}) - Liabilities ({formattedTotalLiabilities})
+                Assets ({formatCurrency(financialData.totalAssets)}) - Liabilities ({formatCurrency(financialData.totalLiabilities)})
              </p>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                  <Link href="/statements">
@@ -404,7 +374,7 @@ export default function DashboardPage() {
            </CardHeader>
            <CardContent className="p-4">
              <div className="text-2xl font-bold">
-               {formattedTotalAssets}
+               {formatCurrency(financialData.totalAssets)}
              </div>
              <p className="text-xs text-muted-foreground break-words">
                 Combined value of assets
@@ -424,7 +394,7 @@ export default function DashboardPage() {
            </CardHeader>
            <CardContent className="p-4">
              <div className="text-2xl font-bold">
-                 {formattedTotalLiabilities}
+                 {formatCurrency(financialData.totalLiabilities)}
              </div>
               <p className="text-xs text-muted-foreground break-words">
                 Debts ({formatCurrency(financialData.totalDebt)}) + Other ({formatCurrency(financialData.totalOtherLiabilities)})
@@ -449,10 +419,10 @@ export default function DashboardPage() {
            </CardHeader>
            <CardContent className="p-4">
              <div className={`text-2xl font-bold ${financialData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'}`}>
-               {formattedCashFlow}
+               {formatCurrency(financialData.cashFlow)}
              </div>
              <p className="text-xs text-muted-foreground break-words">
-               Income ({formattedTotalIncome}) - Expenses ({formattedTotalExpenses})
+               Income ({formatCurrency(financialData.totalIncome)}) - Expenses ({formatCurrency(financialData.totalExpenses)})
              </p>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                  <Link href="/income-expenses">
@@ -465,28 +435,28 @@ export default function DashboardPage() {
           <Card className="shadow-sm">
              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                  <CardTitle className="text-sm font-medium">Budget Variance</CardTitle>
-                  {budgetStatus === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
-                  {budgetStatus === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
-                  {budgetStatus === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />}
-                  {budgetStatus === 'over-budget' && <AlertTriangleIcon className="h-4 w-4 text-destructive" />}
+                  {budgetVariance.status === 'no-data' && <MinusCircle className="h-4 w-4 text-muted-foreground" />}
+                  {budgetVariance.status === 'on-track' && <CheckCircle className="h-4 w-4 text-accent" />}
+                  {budgetVariance.status === 'under-budget' && <CheckCircle className="h-4 w-4 text-accent" />}
+                  {budgetVariance.status === 'over-budget' && <AlertTriangleIcon className="h-4 w-4 text-destructive" />}
              </CardHeader>
               <CardContent className="p-4">
                   <div className={cn("text-2xl font-bold",
-                      budgetStatus === 'no-data' && 'text-muted-foreground',
-                      (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent',
-                      budgetStatus === 'over-budget' && 'text-destructive'
+                      budgetVariance.status === 'no-data' && 'text-muted-foreground',
+                      (budgetVariance.status === 'on-track' || budgetVariance.status === 'under-budget') && 'text-accent',
+                      budgetVariance.status === 'over-budget' && 'text-destructive'
                   )}>
-                      {budgetStatus !== 'no-data' ? `${budgetVariance.value! >= 0 ? '+' : ''}${formattedBudgetVariance}` : 'N/A'}
+                      {budgetVariance.status !== 'no-data' && budgetVariance.value !== null ? `${budgetVariance.value >= 0 ? '+' : ''}${formatCurrency(budgetVariance.value)}` : 'N/A'}
                   </div>
                    <p className={cn("text-xs",
-                       budgetStatus === 'no-data' && 'text-muted-foreground',
-                       (budgetStatus === 'on-track' || budgetStatus === 'under-budget') && 'text-accent',
-                       budgetStatus === 'over-budget' && 'text-destructive'
+                       budgetVariance.status === 'no-data' && 'text-muted-foreground',
+                       (budgetVariance.status === 'on-track' || budgetVariance.status === 'under-budget') && 'text-accent',
+                       budgetVariance.status === 'over-budget' && 'text-destructive'
                    )}>
-                       {budgetStatus === 'no-data' && 'No Data for Period'}
-                       {budgetStatus === 'on-track' && 'On Track'}
-                       {budgetStatus === 'under-budget' && 'Favorable Variance'}
-                       {budgetStatus === 'over-budget' && 'Unfavorable Variance'}
+                       {budgetVariance.status === 'no-data' && 'No Data for Period'}
+                       {budgetVariance.status === 'on-track' && 'On Track'}
+                       {budgetVariance.status === 'under-budget' && 'Favorable Variance'}
+                       {budgetVariance.status === 'over-budget' && 'Unfavorable Variance'}
                    </p>
                   <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                       <Link href="/statements">
