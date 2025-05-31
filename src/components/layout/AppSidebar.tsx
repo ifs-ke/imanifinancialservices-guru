@@ -1,3 +1,4 @@
+
 // src/components/layout/AppSidebar.tsx
 "use client";
 
@@ -22,12 +23,12 @@ import {
   PanelLeft,
   BookOpen,
   Bell,
-  Cloud, // For 'synced'
-  CloudOff, // For 'idle' or explicit offline
-  UploadCloud, // For 'local_changes'
+  Cloud, 
+  CloudOff, 
+  UploadCloud, 
   AlertTriangle,
   ClipboardList,
-  RefreshCw, // For 'syncing'
+  RefreshCw, 
   Menu,
   PieChart,
   Users,
@@ -76,7 +77,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     const { isSignedIn } = useAuth();
 
     const syncManager = useSyncManager();
-    const { syncStatus, retrySync, isMismatchDialogOpen } = syncManager;
+    const { syncStatus, manualSync, isMismatchDialogOpen, isFetchDisabled } = syncManager; // Added isFetchDisabled
 
     React.useEffect(() => {
       setHasMounted(true);
@@ -102,17 +103,35 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
       syncTooltipText = 'Sign in to enable cloud sync.';
       iconColor = 'text-muted-foreground';
     } else {
-      isSyncButtonClickable = true; // Generally clickable if signed in
+      isSyncButtonClickable = true; 
       switch (syncStatus) {
         case 'syncing': SyncIcon = RefreshCw; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
         case 'local_changes': SyncIcon = UploadCloud; syncStatusText = 'Local Changes'; syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; iconColor = 'text-yellow-500'; break;
         case 'error': SyncIcon = AlertTriangle; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'hash_mismatch': SyncIcon = AlertTriangle; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. Click to resolve.'; iconColor = 'text-destructive'; break;
+        case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
+        case 'error_local': SyncIcon = AlertTriangle; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
+        case 'local':
+          if (isFetchDisabled) {
+            SyncIcon = Cloud;
+            syncStatusText = 'Local (Cloud Off)';
+            syncTooltipText = 'Cloud fetching disabled. Data is local. Click to save local changes.';
+            iconColor = 'text-primary'; // Use primary color to indicate active local state
+          } else {
+            SyncIcon = CloudOff; // Should ideally not rest here if fetch is enabled & signed in
+            syncStatusText = 'Not Synced';
+            syncTooltipText = 'Click to sync data with server.';
+            iconColor = 'text-muted-foreground';
+          }
+          break;
         case 'idle':
-        case 'loading_local': // Treat loading_local similar to idle for button, but manager handles actual load
-        case 'local': // In server mode, 'local' shouldn't be a resting state if signed in; implies need to sync
-        default: SyncIcon = CloudOff; syncStatusText = 'Not Synced'; syncTooltipText = 'Click to sync data with server.'; iconColor = 'text-muted-foreground'; break;
+        default:
+          SyncIcon = CloudOff;
+          syncStatusText = 'Not Synced';
+          syncTooltipText = 'Click to sync data with server.';
+          iconColor = 'text-muted-foreground';
+          break;
       }
     }
 
@@ -121,8 +140,8 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
         return;
       }
-      if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'hash_mismatch' || syncStatus === 'synced' || syncStatus === 'local_changes' || syncStatus === 'idle' || syncStatus === 'local') {
-        retrySync(); // retrySync in useSyncManager now handles logic based on current status
+      if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'hash_mismatch' || syncStatus === 'error_local') {
+        manualSync();
       }
     };
 
@@ -234,7 +253,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                     (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "animate-pulse border-destructive ring-2 ring-destructive"
                   )}
                   aria-label={syncTooltipText}
-                  disabled={!isSyncButtonClickable && syncStatus !== 'error' && syncStatus !== 'hash_mismatch'}
+                  disabled={!isSyncButtonClickable && syncStatus !== 'error' && syncStatus !== 'hash_mismatch' && syncStatus !== 'error_local'}
                 >
                   <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "text-destructive" )} />
                   <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
@@ -296,7 +315,6 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
 );
 SidebarContent.displayName = "SidebarContent";
 
-// Keep Sidebar and SidebarInset as they are, they use SidebarContent.
 export const Sidebar = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
@@ -356,3 +374,4 @@ export const SidebarInset = React.forwardRef<
  );
 });
 SidebarInset.displayName = "SidebarInset";
+

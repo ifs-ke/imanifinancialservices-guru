@@ -41,7 +41,7 @@ export type SyncStatus =
   | 'synced'
   | 'local_changes'
   | 'error'
-  | 'error_local' // Added for local hydration errors
+  | 'error_local'
   | 'hash_mismatch';
 
 interface SyncState {
@@ -130,17 +130,15 @@ export function useSyncManager() {
 
     if (IS_FETCH_DISABLED) {
         logInfo(`SyncManager: Fetching is disabled (isPreSaveCheck: ${isPreSaveCheck}). Skipping network request.`, { currentUserId });
-        if (!isPreSaveCheck) { // For general fetch attempts
-            if (syncStateRef.current.status === 'syncing' || syncStateRef.current.status === 'idle') {
+        if (!isPreSaveCheck) {
+            if (syncStateRef.current.status === 'syncing' || syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
                  updateSyncState({ status: 'local' });
             }
         }
-        // Crucially, mark initial load as "done" even if fetch is skipped
-        // to prevent components from getting stuck in a loading state.
         if (!initialLoadDoneRef.current) {
             initialLoadDoneRef.current = true;
         }
-        return true; // Indicate "success" to allow save to proceed if it's a pre-save check
+        return true;
     }
 
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
@@ -229,7 +227,7 @@ export function useSyncManager() {
             toast({ title: 'Sync Load Failed', description: error.message || 'Could not load data from server.', variant: 'destructive' });
         }
       }
-      initialLoadDoneRef.current = true; // Still mark as done even on error to prevent re-fetch loops
+      initialLoadDoneRef.current = true;
       return false;
     } finally {
       isFetchingRef.current = false;
@@ -340,7 +338,7 @@ export function useSyncManager() {
       } else {
         logInfo('SyncManager effect: Initial fetch for new user disabled. App will use local/empty data.', { currentUserId });
         updateSyncState({ status: 'local' });
-        initialLoadDoneRef.current = true; // Make sure this is set
+        initialLoadDoneRef.current = true;
       }
     } else if (!currentUserId && prevUserId) {
       logInfo(`SyncManager effect: User signed out. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId });
@@ -429,10 +427,10 @@ export function useSyncManager() {
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    const pageHideHandler = () => { // Separate handler for pagehide
+    const pageHideHandler = () => {
         if (hasLocalChangesRef.current && syncStateRef.current.status === 'local_changes' && isSignedIn && !IS_FETCH_DISABLED) {
             logInfo('SyncManager: Attempting to save data due to pagehide with local changes.', { userId });
-            saveData(); // Note: navigator.sendBeacon could be considered for reliability here if this save is critical
+            saveData();
         }
     };
     window.addEventListener('pagehide', pageHideHandler);
@@ -478,8 +476,8 @@ export function useSyncManager() {
     if (IS_FETCH_DISABLED) {
         logInfo('SyncManager: forceFetch called but fetching is disabled. No action taken.', {userId});
         toast({ title: 'Fetch Disabled', description: 'Cannot force fetch data from server as fetching is disabled.', variant: 'default' });
-        updateSyncState({ isMismatchDialogOpen: false }); // Still close dialog if it was open
-        return false; // Indicate failure or no-op
+        updateSyncState({ isMismatchDialogOpen: false });
+        return false;
     }
     clearAllLocalStoreData();
     const success = await fetchData();
@@ -509,5 +507,7 @@ export function useSyncManager() {
             logInfo("SyncManager: gettingStartedDismissed changed, but not saving to server as fetch is disabled.", { userId, dismissed });
         }
     },
+    isFetchDisabled: IS_FETCH_DISABLED, // Expose the flag
   };
 }
+
