@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/statements/BudgetVarianceReportSection.tsx
 'use client';
 
@@ -21,15 +22,20 @@ interface BudgetVarianceReportSectionProps {
 
 type ExtendedBudgetItemCategory = InternalBudgetItemCategory | 'unplanned-expense' | 'unbudgeted-income';
 
+const formatDateForStatements = (date: Date | undefined) => {
+    if (!date || !isDateValid(date)) return <span>Pick a date</span>;
+    return format(date, "LLL dd, y");
+};
+
 
 const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<typeof AccordionTrigger> & { 
-    label: string; 
-    sum: number; 
-    budgetedSum?: number | null; 
-    variance?: number | null; 
-    itemCount?: number, 
+  React.ComponentProps<typeof AccordionTrigger> & {
+    label: string;
+    sum: number;
+    budgetedSum?: number | null;
+    variance?: number | null;
+    itemCount?: number,
     icon?: React.ElementType,
     className?: string;
   }
@@ -42,7 +48,7 @@ const AccordionTriggerWithSum = React.forwardRef<
       else if (variance < 0) varianceColor = 'text-destructive'; // Unfavorable
       // If variance is 0 or very close, it might remain muted or be primary
     }
-    
+
   return (
       <AccordionTrigger ref={ref} {...props} className={cn('hover:no-underline py-3 px-4 data-[state=open]:border-b data-[state=closed]:border-b-0', className)}>
         <div className="flex justify-between items-center w-full">
@@ -100,11 +106,11 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 
         if (tx.categoryName) {
             matchedBudgetItem = budgetItemsForSelectedPeriod.find(
-                bi => bi.description === tx.categoryName && 
+                bi => bi.description === tx.categoryName &&
                       (isIncomeTx ? bi.category === 'income' : bi.category !== 'income')
             );
         }
-        
+
         let categoryKey: ExtendedBudgetItemCategory;
         let keyDescription: string;
 
@@ -115,7 +121,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
             categoryKey = matchedBudgetItem ? matchedBudgetItem.category : 'unplanned-expense';
             keyDescription = matchedBudgetItem ? matchedBudgetItem.description : tx.description;
         }
-        
+
         const groupKey = `${categoryKey}-${keyDescription.toLowerCase().trim()}`;
         const amount = Math.abs(tx.amount);
 
@@ -130,7 +136,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 
   const varianceDataByCategory = useMemo(() => {
     const varianceMap: Record<ExtendedBudgetItemCategory, { description: string; budgeted: number; actual: number | null; itemCount: number }[]> = {
-        income: [], 'recurring-expense': [], 'one-time-expense': [], goal: [], debt: [], 
+        income: [], 'recurring-expense': [], 'one-time-expense': [], goal: [], debt: [],
         'unplanned-expense': [], 'unbudgeted-income': []
     };
     const actualsTracked: Set<string> = new Set();
@@ -139,7 +145,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
     const stmtStart = startDate && isDateValid(startDate) ? startDate : dfnsStartOfMonth(new Date());
     const stmtEnd = endDate && isDateValid(endDate) ? endDate : dfnsEndOfMonth(new Date());
     const budgetMonthDate = parse(budgetPeriod, 'yyyy-MM', new Date());
-    
+
     if (!isDateValid(budgetMonthDate)) return varianceMap;
 
     const budgetMonthStart = dfnsStartOfMonth(budgetMonthDate);
@@ -168,7 +174,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
         } else if (!statementOverlapsBudgetMonth) {
              budgetAmountToCompare = 0;
         }
-        
+
         if (varianceMap[categoryKey]) {
             varianceMap[categoryKey].push({ description: item.description, budgeted: budgetAmountToCompare, actual: actualAmount, itemCount: actualItemCount });
             if (actualGroup) actualsTracked.add(actualGroupKey);
@@ -180,8 +186,8 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
              const targetCategoryArray = varianceMap[data.category];
              if (targetCategoryArray) {
                  targetCategoryArray.push({
-                     description: `* ${data.originalDescription}`, 
-                     budgeted: 0, 
+                     description: `* ${data.originalDescription}`,
+                     budgeted: 0,
                      actual: data.amount,
                      itemCount: data.count,
                  });
@@ -191,11 +197,11 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 
    Object.keys(varianceMap).forEach(key => {
        const catKey = key as ExtendedBudgetItemCategory;
-        if (varianceMap[catKey]) { 
+        if (varianceMap[catKey]) {
             varianceMap[catKey].sort((a, b) => {
                 const aUnbudgeted = a.description.startsWith('* ');
                 const bUnbudgeted = b.description.startsWith('* ');
-                if (aUnbudgeted && !bUnbudgeted) return 1; 
+                if (aUnbudgeted && !bUnbudgeted) return 1;
                 if (!aUnbudgeted && bUnbudgeted) return -1;
                 return a.description.localeCompare(b.description);
             });
@@ -217,7 +223,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 
     Object.entries(varianceDataByCategory).forEach(([categoryStringKey, items]) => {
         const catKey = categoryStringKey as ExtendedBudgetItemCategory;
-         if (totals[catKey]) { 
+         if (totals[catKey]) {
             items.forEach(item => {
                 totals[catKey].budgeted += (item.budgeted || 0);
                 totals[catKey].actual += (item.actual ?? 0);
@@ -235,7 +241,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
    const totalActualIncomeCalculated = totals.income.actual + totals['unbudgeted-income'].actual;
    const totalBudgetedSpending = totals['recurring-expense'].budgeted + totals['one-time-expense'].budgeted + totals.goal.budgeted + totals.debt.budgeted;
    const totalActualSpending = totals['recurring-expense'].actual + totals['one-time-expense'].actual + totals.goal.actual + totals.debt.actual + totals['unplanned-expense'].actual;
-   
+
    const netBudgeted = totalBudgetedIncome - totalBudgetedSpending;
    const netActual = totalActualIncomeCalculated - totalActualSpending;
    const overallVariance = netActual - netBudgeted;
@@ -249,18 +255,18 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
     const isUnbudgeted = description.startsWith('* ');
     const displayDescription = isUnbudgeted ? description.substring(2) : description;
     const isIncomeCategory = category === 'income' || category === 'unbudgeted-income';
-    
+
     let variance = isIncomeCategory ? actualValue - budgetedValue : budgetedValue - actualValue;
 
     let statusText = '-';
     let statusColor = 'text-muted-foreground';
-    const isFavorable = variance >= 0; 
+    const isFavorable = variance >= 0;
 
      if (actual === null && budgetedValue === 0 && !isUnbudgeted) statusText = '-';
      else if (isUnbudgeted) { statusText = `${isIncomeCategory ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`; statusColor = isIncomeCategory ? 'text-accent' : 'text-destructive'; }
      else if (actual === null) { statusText = `${isIncomeCategory ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncomeCategory ? 'Realized' : 'Spent'})`; statusColor = isIncomeCategory ? 'text-destructive' : 'text-accent'; }
      else {
-        const threshold = Math.max(Math.abs(budgetedValue * 0.05), 50); 
+        const threshold = Math.max(Math.abs(budgetedValue * 0.05), 50);
         if (Math.abs(variance) <= threshold && budgetedValue !== 0) { statusText = 'On Track'; statusColor = 'text-primary'; }
         else if (isFavorable && (budgetedValue !== 0 || actualValue !== 0)) { statusText = `+${formatCurrency(Math.abs(variance))} (Favorable)`; statusColor = 'text-accent'; }
         else if (!isFavorable && (budgetedValue !== 0 || actualValue !== 0)) { statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`; statusColor = 'text-destructive'; }
@@ -276,8 +282,8 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
     );
   };
 
-  const budgetPeriodDisplay = budgetPeriod && isDateValid(parse(budgetPeriod, 'yyyy-MM', new Date())) 
-    ? format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy') 
+  const budgetPeriodDisplay = budgetPeriod && isDateValid(parse(budgetPeriod, 'yyyy-MM', new Date()))
+    ? format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy')
     : 'Selected Period';
 
   return (
@@ -360,4 +366,9 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
                      {varianceTotalsByCategory.overallVariance >= 0 ? '+' : ''}{formatCurrency(varianceTotalsByCategory.overallVariance)}
                  </span>
              </div>
-          </
+          </CardFooter>
+    </Card>
+  );
+};
+
+export default BudgetVarianceReportSection;
