@@ -1,3 +1,4 @@
+
 // src/hooks/useSyncManager.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/nextjs';
@@ -15,6 +16,10 @@ import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
+// --- MODIFICATION: Flag to disable fetching ---
+const IS_FETCH_DISABLED = true;
+// --- END MODIFICATION ---
+
 interface SyncedData {
   transactions: TransactionWithId[];
   debts: DebtItem[];
@@ -31,14 +36,14 @@ interface SyncedData {
 }
 
 export type SyncStatus =
-  | 'idle' // Not yet synced or authenticated
-  | 'loading_local' // Initial load from session storage (for zustand persist)
-  | 'local' // Data is only in session storage, not synced to server
-  | 'syncing' // Actively communicating with the server (fetch or save)
-  | 'synced' // Data is in sync with the server
-  | 'local_changes' // Local data has changed since last sync, needs to be saved
-  | 'error' // A network or server error occurred during sync
-  | 'hash_mismatch'; // Data conflict detected
+  | 'idle'
+  | 'loading_local'
+  | 'local'
+  | 'syncing'
+  | 'synced'
+  | 'local_changes'
+  | 'error'
+  | 'hash_mismatch';
 
 interface SyncState {
   status: SyncStatus;
@@ -53,7 +58,7 @@ export function useSyncManager() {
   const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth();
   const { toast } = useToast();
 
-  const [syncState, setSyncState] = useState<SyncState>({
+  const [syncState, setSyncStateInternal] = useState<SyncState>({ // Renamed to avoid conflict with get()
     status: 'idle',
     lastFetchTime: null,
     lastSaveTime: null,
@@ -78,8 +83,15 @@ export function useSyncManager() {
   const getNotificationState = useNotificationStore.getState;
   const getInvestmentState = useInvestmentStore.getState;
 
+  // Use a ref to get the latest syncState inside callbacks without causing re-renders from including syncState in deps
+  const syncStateRef = useRef(syncState);
+  useEffect(() => {
+    syncStateRef.current = syncState;
+  }, [syncState]);
+
+
   const updateSyncState = useCallback((partialState: Partial<SyncState>) => {
-    setSyncState(prev => ({ ...prev, ...partialState }));
+    setSyncStateInternal(prev => ({ ...prev, ...partialState }));
   }, []);
 
   const clearAllLocalStoreData = useCallback(() => {
@@ -99,11 +111,11 @@ export function useSyncManager() {
         getNotificationState().clearAllNotifications();
         getInvestmentState().clearInvestmentItems();
         updateSyncState({
-            status: 'idle', // Reset to idle, will fetch if signed in
+            status: 'idle',
             lastFetchTime: null,
             lastSaveTime: null,
             lastServerHash: null,
-            gettingStartedDismissed: false,
+            gettingStartedDismissed: false, // Also reset this
         });
         hasLocalChangesRef.current = false;
         logInfo('SyncManager: All local store data cleared.', { userId: currentUserIdForLog });
@@ -116,10 +128,28 @@ export function useSyncManager() {
   }, [ getTransactionsState, getDebtState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState, getInvestmentState, updateSyncState, userId]);
 
   const fetchData = useCallback(async (isPreSaveCheck = false): Promise<boolean> => {
-    const currentUserId = userId;
+    const currentUserId = userId; // Capture current userId
+
+    if (IS_FETCH_DISABLED) {
+        logInfo(`SyncManager: Fetching is disabled (isPreSaveCheck: ${isPreSaveCheck}). Skipping network request.`, { currentUserId });
+        if (!isPreSaveCheck) {
+            // If it's a general fetch (not pre-save), revert status if it was 'syncing'
+            // and set to 'local' to indicate it's operating on local state.
+            if (syncStateRef.current.status === 'syncing') {
+                 updateSyncState({ status: 'local' });
+            } else if (syncStateRef.current.status === 'idle'){
+                 updateSyncState({ status: 'local' });
+            }
+        }
+        // For a pre-save check when fetch is disabled, we effectively skip server validation.
+        // Return true to allow saveData to proceed, but no server hash will be updated.
+        // The `lastServerHash` will remain stale.
+        return true;
+    }
+
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
       logWarn('fetchData aborted: User not signed in or Clerk not loaded.', { isClerkLoaded, isSignedIn, currentUserId });
-      if (!isPreSaveCheck) updateSyncState({ status: 'idle' });
+      if (!isPreSaveCheck && syncStateRef.current.status !== 'idle') updateSyncState({ status: 'idle' });
       return false;
     }
     if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) {
@@ -131,7 +161,7 @@ export function useSyncManager() {
     if (!isPreSaveCheck) updateSyncState({ status: 'syncing' });
     logInfo('SyncManager: Fetching data from server...', { currentUserId });
 
-    abortControllerRef.current?.abort(); // Abort previous fetch if any
+    abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
     const { signal } = abortControllerRef.current;
 
@@ -173,7 +203,7 @@ export function useSyncManager() {
       getBudgetState().setBudgetItems(dataToLoad.budgetItems || []);
       getWeeklyReviewState().setOwnedReviews(dataToLoad.ownedReviews || {});
       getWeeklyReviewState().setSharedReviews(dataToLoad.sharedReviews || {});
-      getNotificationState().setNotifications(dataToLoad.notifications || []); // Notifications are also synced
+      getNotificationState().setNotifications(dataToLoad.notifications || []);
       getStatementState().setStartDate(dataToLoad.startDate ? new Date(dataToLoad.startDate) : undefined);
       getStatementState().setEndDate(dataToLoad.endDate ? new Date(dataToLoad.endDate) : undefined);
       
@@ -189,7 +219,6 @@ export function useSyncManager() {
           logInfo('SyncManager: Data fetched and loaded successfully.', { currentUserId, serverHash });
           toast({ title: 'Data Synced', description: 'Latest data loaded from the server.' });
       } else {
-          // For pre-save, just update the hash for subsequent save operation
           updateSyncState({ lastServerHash: serverHash });
       }
       return true;
@@ -203,14 +232,14 @@ export function useSyncManager() {
             toast({ title: 'Sync Load Failed', description: error.message || 'Could not load data from server.', variant: 'destructive' });
         }
       }
-      isFetchingRef.current = false;
-      return false;
+      return false; // Ensure isFetchingRef.current is set to false in all paths if error occurs
     } finally {
-      if (signal === abortControllerRef.current?.signal) { // Only clear if this is the most recent controller
+      isFetchingRef.current = false; // Moved here
+      if (signal === abortControllerRef.current?.signal) {
         abortControllerRef.current = null;
       }
     }
-  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState ]);
+  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState]);
 
   const saveData = useCallback(async (force = false): Promise<boolean> => {
     const currentUserId = userId;
@@ -228,18 +257,19 @@ export function useSyncManager() {
     updateSyncState({ status: 'syncing' });
     logInfo('SyncManager: Saving data to server...', { currentUserId, force });
 
-    if (!force) {
+    if (!force && !IS_FETCH_DISABLED) { // Only do pre-save fetch if not forcing AND fetch is NOT disabled
       const preSaveFetchSuccess = await fetchData(true);
       if (!preSaveFetchSuccess) {
         logError('Save Aborted: Pre-save fetch failed or hash mismatch detected.', new Error("Pre-save check failed"), { currentUserId });
-        // fetchData(true) would have already set status to hash_mismatch or error, or shown a toast
-        // If it was hash_mismatch, dialog is open. If error, status is 'error'.
-        // No need to call updateSyncState({ status: 'error' }) here as fetchData handles it.
         isSavingRef.current = false;
-        if (syncState.status !== 'hash_mismatch') updateSyncState({status: 'error'}); // Ensure error state if not conflict
+        if (syncStateRef.current.status !== 'hash_mismatch') updateSyncState({status: 'error'});
         return false;
       }
+    } else if (!force && IS_FETCH_DISABLED) {
+        logInfo('SyncManager: Pre-save fetch skipped because fetching is disabled. Proceeding with save.', {currentUserId});
+        // lastServerHash will be stale, but that's the implication of disabling fetch.
     }
+
 
     const dataToSave: SyncedData = {
       transactions: getTransactionsState().transactions,
@@ -249,11 +279,11 @@ export function useSyncManager() {
       otherLiabilityItems: getStatementState().otherLiabilityItems,
       budgetItems: getBudgetState().budgetItems,
       ownedReviews: getWeeklyReviewState().ownedReviews,
-      sharedReviews: {}, // Shared reviews are not saved from client; managed server-side
-      notifications: [], // Notifications are not saved from client
+      sharedReviews: {}, 
+      notifications: [], 
       startDate: getStatementState().startDate?.toISOString(),
       endDate: getStatementState().endDate?.toISOString(),
-      gettingStartedDismissed: syncState.gettingStartedDismissed,
+      gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
     };
 
     const preparedData = prepareDataForHashing(dataToSave);
@@ -274,7 +304,7 @@ export function useSyncManager() {
       updateSyncState({
         status: 'synced',
         lastSaveTime: new Date(),
-        lastServerHash: dataHash, // Assume server hash matches if save is successful
+        lastServerHash: dataHash, 
         isMismatchDialogOpen: false,
       });
       hasLocalChangesRef.current = false;
@@ -289,7 +319,7 @@ export function useSyncManager() {
     } finally {
       isSavingRef.current = false;
     }
-  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, fetchData, getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, syncState.gettingStartedDismissed, syncState.status]);
+  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, fetchData, getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState]);
 
 
   useEffect(() => {
@@ -302,13 +332,19 @@ export function useSyncManager() {
     }
 
     if (currentUserId && currentUserId !== prevUserId) {
-      logInfo(`SyncManager effect: User signed in or switched. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing local data and fetching.`, { currentUserId });
-      clearAllLocalStoreData(); // Clear data from previous user
-      initialLoadDoneRef.current = false; // Force fetch for new user
+      logInfo(`SyncManager effect: User signed in or switched. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing local data and attempting fetch (if not disabled).`, { currentUserId });
+      clearAllLocalStoreData();
+      initialLoadDoneRef.current = false;
       previousUserIdRef.current = currentUserId;
       hasLocalChangesRef.current = false;
-      updateSyncState({status: 'idle'}); // set to idle before fetch
-      fetchData();
+      updateSyncState({status: 'idle'});
+      if (!IS_FETCH_DISABLED) {
+        fetchData();
+      } else {
+        logInfo('SyncManager effect: Initial fetch for new user disabled. App will use local/empty data.', { currentUserId });
+        updateSyncState({ status: 'local' }); // Indicate it's running on local state
+        initialLoadDoneRef.current = true; // Mark initial load as "done" even if fetch is skipped
+      }
     } else if (!currentUserId && prevUserId) {
       logInfo(`SyncManager effect: User signed out. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId });
       clearAllLocalStoreData();
@@ -316,27 +352,31 @@ export function useSyncManager() {
       initialLoadDoneRef.current = false;
       updateSyncState({ status: 'idle', lastFetchTime: null, lastSaveTime: null, lastServerHash: null, isMismatchDialogOpen: false });
       hasLocalChangesRef.current = false;
-    } else if (currentUserId && !initialLoadDoneRef.current && syncState.status === 'idle') {
+    } else if (currentUserId && !initialLoadDoneRef.current && syncStateRef.current.status === 'idle') {
       logInfo('SyncManager effect: Initial load for current user.', { currentUserId });
-      fetchData();
+      if (!IS_FETCH_DISABLED) {
+        fetchData();
+      } else {
+        logInfo('SyncManager effect: Initial fetch disabled. App will use local/empty data.', { currentUserId });
+        updateSyncState({ status: 'local' });
+      }
       initialLoadDoneRef.current = true;
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, fetchData, syncState.status, updateSyncState]);
+  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, fetchData, updateSyncState]);
 
 
   useEffect(() => {
-    if (initialLoadDoneRef.current && isSignedIn) {
+    if (initialLoadDoneRef.current && isSignedIn && userId) { // Ensure userId is present
       const stateToPersist = {
-        gettingStartedDismissed: syncState.gettingStartedDismissed,
-        // Add other simple, non-sensitive UI preferences here if needed
+        gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
       };
       localStorage.setItem(`ifcGuru_uiPrefs_${userId}`, JSON.stringify(stateToPersist));
       logDebug('SyncManager: Persisted UI preferences to localStorage.', { userId, preferences: stateToPersist });
     }
-  }, [syncState.gettingStartedDismissed, userId, isSignedIn]);
+  }, [syncStateRef.current.gettingStartedDismissed, userId, isSignedIn]);
 
   useEffect(() => {
-    if (initialLoadDoneRef.current && isSignedIn) {
+    if (isSignedIn && userId) { // Ensure userId is present
       const storedPrefs = localStorage.getItem(`ifcGuru_uiPrefs_${userId}`);
       if (storedPrefs) {
         try {
@@ -351,21 +391,20 @@ export function useSyncManager() {
   }, [userId, isSignedIn, updateSyncState]);
 
   const handleStoreChange = useCallback(() => {
-    if (syncState.status === 'syncing' || syncState.status === 'loading_local' || !initialLoadDoneRef.current || !isSignedIn) {
-      return; // Don't mark changes during sync, initial load, or if not signed in
+    if (syncStateRef.current.status === 'syncing' || syncStateRef.current.status === 'loading_local' || !initialLoadDoneRef.current || !isSignedIn) {
+      return;
     }
     hasLocalChangesRef.current = true;
-    if (syncState.status === 'synced' || syncState.status === 'local') {
+    if (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local' || syncStateRef.current.status === 'idle') {
       updateSyncState({ status: 'local_changes' });
     }
-    logDebug("SyncManager: Store change detected. Marked hasLocalChanges. Status potentially set to 'local_changes'.", { currentUserId: userId, currentStatus: syncState.status });
-  }, [syncState.status, updateSyncState, userId, isSignedIn]);
+    logDebug("SyncManager: Store change detected. Marked hasLocalChanges. Status potentially set to 'local_changes'.", { currentUserId: userId, currentStatus: syncStateRef.current.status });
+  }, [updateSyncState, userId, isSignedIn]);
 
   useEffect(() => {
     const storesToWatch = [
       useTransactionsStore, useDebtStore, useStatementStore,
       useBudgetStore, useWeeklyReviewStore, useInvestmentStore
-      // Not watching notification store for 'hasLocalChanges' as they are transient
     ];
     const unsubscribes = storesToWatch.map(store => store.subscribe(handleStoreChange));
     return () => unsubscribes.forEach(unsubscribe => unsubscribe());
@@ -374,29 +413,32 @@ export function useSyncManager() {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        logInfo('SyncManager: Page hidden.', { userId, hasLocalChanges: hasLocalChangesRef.current, status: syncState.status });
-        if (hasLocalChangesRef.current && syncState.status === 'local_changes' && isSignedIn) {
+        logInfo('SyncManager: Page hidden.', { userId, hasLocalChanges: hasLocalChangesRef.current, status: syncStateRef.current.status });
+        if (hasLocalChangesRef.current && syncStateRef.current.status === 'local_changes' && isSignedIn) {
           logInfo('SyncManager: Attempting to save data due to page hide with local changes.', { userId });
           saveData();
         }
       } else if (document.visibilityState === 'visible') {
-        logInfo('SyncManager: Page visible.', { userId, status: syncState.status, lastFetchTime: syncState.lastFetchTime });
-        // Optional: Auto-fetch if page becomes visible after a long time and data is stale
+        logInfo('SyncManager: Page visible.', { userId, status: syncStateRef.current.status, lastFetchTime: syncStateRef.current.lastFetchTime });
         const tenMinutes = 10 * 60 * 1000;
-        if (isSignedIn && syncState.status === 'synced' && syncState.lastFetchTime && (new Date().getTime() - syncState.lastFetchTime.getTime() > tenMinutes)) {
-          logInfo('SyncManager: Data might be stale, auto-fetching on page visibility.', { userId });
-          fetchData();
+        if (isSignedIn && (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local') && syncStateRef.current.lastFetchTime && (new Date().getTime() - syncStateRef.current.lastFetchTime.getTime() > tenMinutes)) {
+          if (!IS_FETCH_DISABLED) {
+            logInfo('SyncManager: Data might be stale, auto-fetching on page visibility.', { userId });
+            fetchData();
+          } else {
+            logInfo('SyncManager: Auto-fetch on visibility skipped as fetching is disabled.', { userId });
+          }
         }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', () => handleVisibilityChange()); // More robust for some browsers for "final" save
+    window.addEventListener('pagehide', () => handleVisibilityChange());
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', () => handleVisibilityChange());
     };
-  }, [userId, syncState.status, syncState.lastFetchTime, saveData, fetchData, isSignedIn]);
+  }, [userId, saveData, fetchData, isSignedIn]);
 
   const manualSync = useCallback(async () => {
     const currentUserId = userId;
@@ -404,22 +446,33 @@ export function useSyncManager() {
         toast({ title: 'Not Signed In', description: 'Please sign in to sync your data.', variant: 'destructive' });
         return;
     }
-    logInfo('SyncManager: Manual sync triggered.', { currentStatus: syncState.status, currentUserId });
+    logInfo('SyncManager: Manual sync triggered.', { currentStatus: syncStateRef.current.status, currentUserId });
 
-    if (syncState.status === 'hash_mismatch') {
+    if (IS_FETCH_DISABLED && !hasLocalChangesRef.current) {
+        logInfo('SyncManager: Manual sync triggered, but fetching is disabled and no local changes. No action taken.', { currentUserId });
+        toast({ title: 'Fetch Disabled', description: 'Fetching data from server is currently disabled. No local changes to save.', variant: 'default' });
+        return;
+    }
+
+    if (syncStateRef.current.status === 'hash_mismatch') {
         updateSyncState({ isMismatchDialogOpen: true });
         toast({ title: 'Data Conflict', description: 'Please resolve the data conflict before syncing.', duration: Infinity });
-    } else if (hasLocalChangesRef.current || syncState.status === 'local_changes') {
+    } else if (hasLocalChangesRef.current || syncStateRef.current.status === 'local_changes') {
         await saveData();
     } else {
-        await fetchData();
+        if (!IS_FETCH_DISABLED) {
+            await fetchData();
+        } else {
+            logInfo('SyncManager: Manual sync - fetch part skipped as fetching is disabled.', { currentUserId });
+             toast({ title: 'Fetch Disabled', description: 'Fetching data from server is currently disabled.', variant: 'default' });
+        }
     }
-  }, [userId, isClerkLoaded, isSignedIn, syncState.status, syncState.isMismatchDialogOpen, saveData, fetchData, toast, updateSyncState]);
+  }, [userId, isClerkLoaded, isSignedIn, saveData, fetchData, toast, updateSyncState]);
 
   const forceSave = useCallback(() => saveData(true), [saveData]);
   const forceFetch = useCallback(async () => {
-    clearAllLocalStoreData(); // Clear local first
-    const success = await fetchData(); // Then fetch server data
+    clearAllLocalStoreData(); 
+    const success = await fetchData(); 
     if (success) updateSyncState({ isMismatchDialogOpen: false });
     return success;
   }, [clearAllLocalStoreData, fetchData, updateSyncState]);
@@ -427,7 +480,7 @@ export function useSyncManager() {
 
   return {
     syncStatus: syncState.status,
-    retrySync: manualSync, // 'retrySync' is now the general manual sync trigger
+    retrySync: manualSync, 
     fetchData,
     saveData,
     forceSave,
@@ -435,17 +488,17 @@ export function useSyncManager() {
     hashMismatch: syncState.status === 'hash_mismatch',
     isMismatchDialogOpen: syncState.isMismatchDialogOpen,
     setIsMismatchDialogOpen: (isOpen: boolean) => updateSyncState({ isMismatchDialogOpen: isOpen }),
-    lastSyncTime: syncState.lastFetchTime || syncState.lastSaveTime, // More general "last successful server interaction"
+    lastSyncTime: syncState.lastFetchTime || syncState.lastSaveTime,
     gettingStartedDismissed: syncState.gettingStartedDismissed,
     setGettingStartedDismissed: (dismissed: boolean) => {
         updateSyncState({ gettingStartedDismissed: dismissed });
-        // Also trigger a save if user is signed in, to persist this preference server-side
-        if (isSignedIn) {
-            // Small hack: set hasLocalChanges to true to make saveData persist this change
-            // It's a small piece of data, often changed in isolation.
+        if (isSignedIn && !IS_FETCH_DISABLED) { // Only save this preference if signed in AND fetch is not disabled (implying server interaction is expected)
             hasLocalChangesRef.current = true;
             saveData();
+        } else if (isSignedIn && IS_FETCH_DISABLED) {
+            logInfo("SyncManager: gettingStartedDismissed changed, but not saving to server as fetch is disabled.", { userId, dismissed });
         }
     },
   };
 }
+
