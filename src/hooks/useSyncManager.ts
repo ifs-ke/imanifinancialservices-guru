@@ -1,4 +1,3 @@
-
 // src/hooks/useSyncManager.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/nextjs';
@@ -51,6 +50,7 @@ export function useSyncManager() {
 
   const initialLoadDoneRef = useRef(false);
   const previousUserIdRef = useRef<string | null | undefined>(null);
+  const hasLocalChangesRef = useRef(false); // To track if local changes occurred since last "save" (now mostly page hide)
 
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
@@ -58,7 +58,7 @@ export function useSyncManager() {
   const getBudgetState = useBudgetStore.getState;
   const getWeeklyReviewState = useWeeklyReviewStore.getState;
   const getNotificationState = useNotificationStore.getState;
-  const getInvestmentState = useInvestmentStore.getState; // Added
+  const getInvestmentState = useInvestmentStore.getState(); // Corrected: call getState
 
   const updateSyncState = useCallback((partialState: Partial<SyncState>) => {
     setSyncState(prev => ({ ...prev, ...partialState }));
@@ -74,32 +74,14 @@ export function useSyncManager() {
       getBudgetState().clearBudgetItems();
       getWeeklyReviewState().clearReviews();
       getNotificationState().clearAllNotifications();
-      getInvestmentState().clearInvestmentItems(); // Added
-
-      // Also clear their sessionStorage entries explicitly if namespacing was used
-      // (though persist middleware with `partialize` might make this less critical)
-      const storeNames = ['transactions', 'debts', 'statementItems', 'budgetItems', 'weeklyReviews', 'notifications', 'investmentItems'];
-      storeNames.forEach(name => {
-        try {
-          if (typeof sessionStorage !== 'undefined') {
-            // If user-specific keys were used for persistence, those would be cleared here.
-            // For now, assuming generic keys as per individual store setups.
-            // Example: sessionStorage.removeItem(`ifcGuru-${name}`);
-            // Or, if namespacing by user ID was done IN THE STORE'S PERSIST KEY:
-            // sessionStorage.removeItem(`ifcGuru-${currentUserIdForLog}-${name}`);
-            // Since the current setup uses fixed keys like 'ifcGuru_transactions',
-            // calling the store's clearX methods should be sufficient.
-          }
-        } catch (e) {
-          logWarn(`Failed to explicitly remove ${name} from sessionStorage during clearAll`, { error: e, userId: currentUserIdForLog });
-        }
-      });
+      getInvestmentState.clearInvestmentItems(); // Corrected: useInvestmentStore.getState() already called
 
       updateSyncState({
         status: 'local',
         lastLoadTime: new Date(),
         gettingStartedDismissed: false, // Reset this too
       });
+      hasLocalChangesRef.current = false;
       logInfo('SyncManager (Local Mode): All local store data cleared.', { userId: currentUserIdForLog });
     } catch (error: any) {
       logError('Error during clearAllLocalStoreData', error, { userId: currentUserIdForLog });
@@ -123,29 +105,20 @@ export function useSyncManager() {
     }
 
     if (currentUserId && currentUserId !== prevUserId) {
-      // User signed IN or SWITCHED
       logInfo(`SyncManager (Local Mode): User signed in or switched. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}.`, { userId: currentUserId });
-      // Data is namespaced by Zustand persist keys (e.g., 'ifcGuru_transactions').
-      // If user-specific keys were used, we'd call clearAllLocalStoreData here.
-      // For now, stores rehydrate based on their fixed keys.
-      // We can mark that an initial load for this user is pending.
       initialLoadDoneRef.current = false;
       previousUserIdRef.current = currentUserId;
+      hasLocalChangesRef.current = false;
     } else if (!currentUserId && prevUserId) {
-      // User signed OUT
       logInfo(`SyncManager (Local Mode): User signed out. Was: ${prevUserId}.`, { userId: prevUserId });
-      // Optionally clear data if it should not persist across sign-outs for the *same* browser session.
-      // clearAllLocalStoreData(); // Uncomment if data should be wiped on sign-out.
       previousUserIdRef.current = null;
-      initialLoadDoneRef.current = false; // Reset for next sign-in
-      updateSyncState({ status: 'idle', lastLoadTime: null }); // Or 'local' if data persists
+      initialLoadDoneRef.current = false;
+      updateSyncState({ status: 'idle', lastLoadTime: null });
+      hasLocalChangesRef.current = false;
     }
 
-    // Check hydration status of stores
     if (!initialLoadDoneRef.current) {
       updateSyncState({ status: 'loading_local' });
-      // Zustand persist middleware handles rehydration automatically.
-      // We just need to wait for it. A small timeout can simulate this check.
       const hydrationCheckTimeout = setTimeout(() => {
         const allStoresHydrated =
           getTransactionsState().isHydrated &&
@@ -154,109 +127,117 @@ export function useSyncManager() {
           getBudgetState().isHydrated &&
           getWeeklyReviewState().isHydrated &&
           getNotificationState().isHydrated &&
-          getInvestmentState().isHydrated; // Added
+          getInvestmentState.isHydrated; // Corrected
 
         if (allStoresHydrated) {
           updateSyncState({ status: 'local', lastLoadTime: new Date() });
           logInfo('SyncManager (Local Mode): All stores hydrated from Session Storage.', { userId: currentUserId });
           initialLoadDoneRef.current = true;
+          hasLocalChangesRef.current = false; // Assume no local changes right after hydration
         } else {
           updateSyncState({ status: 'error_local' });
           logError('SyncManager (Local Mode): Not all stores rehydrated correctly.', new Error("Store rehydration failed"), { userId: currentUserId });
           toast({ title: 'Local Load Error', description: 'Could not load all local data.', variant: 'destructive' });
         }
-      }, 100); // Adjust timeout as needed, or use Zustand's `hasHydrated` if available from persist v4+
+      }, 100);
 
       return () => clearTimeout(hydrationCheckTimeout);
     }
   }, [
     userId, isSignedIn, isClerkLoaded,
-    clearAllLocalStoreData, // Keep if used
+    clearAllLocalStoreData,
     getTransactionsState, getDebtState, getStatementState, getBudgetState,
-    getWeeklyReviewState, getNotificationState, getInvestmentState, // Added
+    getWeeklyReviewState, getNotificationState, getInvestmentState,
     updateSyncState, toast
   ]);
 
   // Effect for 'gettingStartedDismissed' - still relevant locally
   useEffect(() => {
     if (initialLoadDoneRef.current) {
-      // Persist this change locally. Zustand persist middleware should handle this
-      // automatically if 'gettingStartedDismissed' becomes part of a persisted store.
-      // For now, it's just a local react state within this hook.
-      // If it needs to persist across page reloads (but not sessions), it would need its own
-      // localStorage/sessionStorage item or be part of a Zustand store.
       logDebug('SyncManager (Local Mode): gettingStartedDismissed changed.', { dismissed: syncState.gettingStartedDismissed, userId });
     }
   }, [syncState.gettingStartedDismissed, userId]);
 
+  const saveData = useCallback(async () => {
+    logInfo('SyncManager (Local Mode): saveData called (no-op for server).', { userId });
+    // In local-only mode, actual saving is handled by Zustand persist middleware on state change.
+    // This function can be used to mark local changes as "saved" conceptually.
+    hasLocalChangesRef.current = false;
+    updateSyncState({ status: 'local' }); // Reflect that local state is current
+    toast({ title: "Data Synced (Locally)", description: "Your changes are saved in this browser session." });
+    return true;
+  }, [userId, updateSyncState, toast]);
 
-  // Save on page hide - Zustand's persist middleware typically handles this,
-  // but this is an explicit trigger if needed for some reason.
+  // Listener for store changes
+  const handleStoreChange = useCallback(() => {
+    if (syncState.status === 'loading_local' || !initialLoadDoneRef.current) {
+      return; // Don't mark changes during initial load
+    }
+    hasLocalChangesRef.current = true;
+    if (syncState.status !== 'local') { // Only update if not already 'local' to avoid extra renders
+        updateSyncState({ status: 'local' });
+    }
+    logDebug("SyncManager (Local Mode): Store change detected. Marked hasLocalChanges.", { currentUserId: userId });
+  }, [syncState.status, updateSyncState, userId]);
+
+  // Subscribe to store changes
+  useEffect(() => {
+    const storesToWatch = [
+      useTransactionsStore, useDebtStore, useStatementStore,
+      useBudgetStore, useWeeklyReviewStore, useNotificationStore, useInvestmentStore
+    ];
+    const unsubscribes = storesToWatch.map(store => store.subscribe(handleStoreChange));
+    return () => unsubscribes.forEach(unsubscribe => unsubscribe());
+  }, [handleStoreChange]);
+
+  // Effect for "Save on Page Hide"
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        logInfo('SyncManager (Local Mode): Page hidden. Zustand persist should handle saving any pending state to Session Storage.', { userId });
-        // No explicit 'saveData()' call as Zustand persist middleware handles this.
+        logInfo('SyncManager (Local Mode): Page hidden.', { userId, hasLocalChanges: hasLocalChangesRef.current });
+        if (hasLocalChangesRef.current && syncState.status === 'local') {
+          logInfo('SyncManager (Local Mode): Attempting to conceptual "save" (mark as synced) due to page hide.', { userId });
+          // In local-only, Zustand persist already handles writing to sessionStorage on change.
+          // We just conceptually mark that these changes are now the "current" local state.
+          hasLocalChangesRef.current = false;
+          // No actual saveData call to server needed.
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handleVisibilityChange); // More robust for some browsers
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleVisibilityChange);
     };
-  }, [userId]);
-
+  }, [userId, syncState.status, saveData]); // Keep saveData if it has other local side effects
 
   const retrySync = useCallback(() => {
-    logInfo('SyncManager (Local Mode): "Retry Sync" clicked. In local-only mode, this re-checks hydration or informs user.', { currentStatus: syncState.status, userId });
+    logInfo('SyncManager (Local Mode): "Retry Sync" clicked.', { currentStatus: syncState.status, userId });
     if (syncState.status === 'error_local') {
-      toast({ title: 'Local Data Error', description: 'There was an issue loading local data. Try refreshing the page.', variant: 'destructive'});
+      toast({ title: 'Retrying Local Load', description: 'Attempting to reload local data.', variant: 'default'});
+      initialLoadDoneRef.current = false; // Force re-check of hydration
+      updateSyncState({ status: 'idle' }); // Triggers main useEffect
+    } else if (hasLocalChangesRef.current) {
+        // This case should ideally not be common if page hide "saves" (marks as synced)
+        // But if user clicks while local changes are pending and page is visible:
+        logInfo('SyncManager (Local Mode): Conceptual save triggered by retrySync for pending local changes.', { userId });
+        saveData(); // Conceptually marks local changes as "synced"
     } else {
       toast({ title: 'Local Mode Active', description: 'All data is stored locally in this browser session.', variant: 'default'});
     }
-    // Re-trigger hydration check logic if needed, though Zustand should manage this.
-    initialLoadDoneRef.current = false; // This will make the main useEffect re-evaluate hydration
-    updateSyncState({ status: 'idle' }); // Triggers re-evaluation in main useEffect
-  }, [syncState.status, toast, userId, updateSyncState]);
-
-  // Dummy saveData and fetchData for hooks that might still call them.
-  const saveData = useCallback(async (isForceSave = false) => {
-    logInfo('SyncManager (Local Mode): saveData called (no-op for server).', { isForceSave, userId });
-    // In local-only mode, saving is handled by Zustand persist middleware on state change.
-    return true; // Indicate success as there's no server operation.
-  }, [userId]);
-
-  const fetchData = useCallback(async (isRetry = false, skipHashCheck = false) => {
-    logInfo('SyncManager (Local Mode): fetchData called (no-op for server).', { isRetry, skipHashCheck, userId });
-    // In local-only mode, data is loaded from Session Storage by Zustand.
-    // This function can ensure the 'local' status is set after hydration.
-    updateSyncState({ status: 'local', lastLoadTime: new Date() });
-    initialLoadDoneRef.current = true;
-    return true;
-  }, [userId, updateSyncState]);
-
-  // These are no longer used for server sync but kept to avoid breaking component props.
-  const forceSaveLocal = useCallback(async () => {
-    toast({ title: 'Local Mode', description: 'Data is already saved locally.', variant: 'default' });
-    return true;
-  }, [toast]);
-
-  const forceFetchServer = useCallback(async () => {
-    toast({ title: 'Local Mode', description: 'Cannot fetch from server; data is local.', variant: 'default' });
-    return false;
-  }, [toast]);
-
+  }, [syncState.status, toast, userId, updateSyncState, saveData]);
 
   return {
     syncStatus: syncState.status,
-    retrySync, // Keep for UI, behavior changed
+    retrySync,
     gettingStartedDismissed: syncState.gettingStartedDismissed,
     setGettingStartedDismissed: (dismissed: boolean) => updateSyncState({ gettingStartedDismissed: dismissed }),
-    // The following are no longer relevant in local-only mode but kept for API compatibility if components expect them
-    hashMismatch: false,
-    forceSaveLocal,
-    forceFetchServer,
+    // The following are no longer relevant for server sync but kept if UI expects them (though they should be conditional)
+    hashMismatch: false, // No server hash to mismatch with
     isMismatchDialogOpen: false,
     setIsMismatchDialogOpen: () => {}, // No-op
-    lastSyncTime: syncState.lastLoadTime, // Renamed to reflect local load
+    lastSyncTime: syncState.lastLoadTime, // Reflects local load time
   };
 }
