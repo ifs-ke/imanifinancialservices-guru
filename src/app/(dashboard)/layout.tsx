@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/layout.tsx
  'use client';
 
@@ -10,12 +9,12 @@
  } from "@/components/ui/sidebar";
  import { useSyncManager } from '@/hooks/useSyncManager';
  import FloatingChatButton from '@/components/layout/FloatingChatButton';
- import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Re-added for server sync
+ import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
  import { Toaster } from '@/components/ui/toaster';
- import { logDebug, logInfo } from '@/lib/logger';
+ import { logDebug, logInfo, logError } from '@/lib/logger';
  import { LoadingSpinner } from '@/components/ui/loading-spinner';
  import { useAuth } from '@clerk/nextjs';
- import { AppMenubar } from '@/components/layout/AppMenubar'; // New import
+ // import { AppMenubar } from '@/components/layout/AppMenubar'; // Removed AppMenubar
 
 
  export default function DashboardLayout({
@@ -29,23 +28,23 @@
    useBudgetNotifications();
 
    useEffect(() => {
-       if (!isClerkLoaded || !isSignedIn) return; // Only proceed if Clerk is loaded and user is signed in
+       if (!isClerkLoaded || !isSignedIn || !syncManager) return;
 
        if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
            logInfo("DashboardLayout: Hash mismatch detected. Opening dialog.", { userId });
            syncManager.setIsMismatchDialogOpen(true);
        }
-   }, [syncManager.hashMismatch, syncManager.isMismatchDialogOpen, syncManager.setIsMismatchDialogOpen, isClerkLoaded, isSignedIn, userId]);
+   }, [syncManager?.hashMismatch, syncManager?.isMismatchDialogOpen, syncManager?.setIsMismatchDialogOpen, isClerkLoaded, isSignedIn, userId, syncManager]);
 
 
-   // Updated loading condition for server sync
-   if (!isClerkLoaded || (syncManager.syncStatus === 'idle' && isSignedIn) || (syncManager.syncStatus === 'syncing' && isSignedIn) || (syncManager.syncStatus === 'loading_local' && isSignedIn)) {
+   if (!isClerkLoaded || !syncManager || (syncManager.syncStatus === 'idle' && isSignedIn) || (syncManager.syncStatus === 'syncing' && isSignedIn && !syncManager.lastSyncTime) || (syncManager.syncStatus === 'loading_local')) {
      return (
        <div className="flex items-center justify-center min-h-screen bg-background">
          <LoadingSpinner size={48} text={
              !isClerkLoaded ? "Authenticating..." :
-             syncManager.syncStatus === 'syncing' ? "Syncing data..." :
-             "Loading data..."
+             syncManager?.syncStatus === 'syncing' ? "Syncing data..." :
+             syncManager?.syncStatus === 'loading_local' ? "Loading local data..." :
+             "Initializing..."
          } />
        </div>
      );
@@ -54,16 +53,16 @@
    return (
      <div className="flex min-h-screen w-full bg-background">
        <Sidebar />
-       <SidebarInset className="flex flex-col bg-background"> {/* Added flex flex-col */}
-         <AppMenubar /> {/* Added AppMenubar */}
-         <main className="flex-1 overflow-y-auto"> {/* Added main wrapper for children with scroll */}
+       <SidebarInset className="flex flex-col bg-background">
+         {/* <AppMenubar /> */} {/* Removed AppMenubar */}
+         <main className="flex-1 overflow-y-auto">
            {children}
          </main>
        </SidebarInset>
        <FloatingChatButton />
        <Toaster />
 
-       {isSignedIn && syncManager.hashMismatch && ( // Only show dialog if signed in and mismatch occurs
+        {isSignedIn && syncManager.hashMismatch && syncManager.isMismatchDialogOpen && (
           <DataSyncMismatchDialog
             isOpen={syncManager.isMismatchDialogOpen}
             onClose={() => syncManager.setIsMismatchDialogOpen(false)}
