@@ -22,13 +22,12 @@ export const TransactionFormDataSchema = z.object({
   modeOfPayment: ModeOfPaymentSchema,
   frequency: TransactionFrequencySchema,
   variability: TransactionVariabilitySchema,
-  categoryName: z.string().optional().nullable(), 
+  categoryName: z.string().optional().nullable(),
 });
 export type TransactionFormData = z.infer<typeof TransactionFormDataSchema>;
 
 const LEAVE_UNCHANGED_LITERAL = "__LEAVE_UNCHANGED__";
 
-// New Schema for Batch Update (all fields optional)
 export const BatchUpdateTransactionFormDataSchema = z.object({
   modeOfPayment: z.union([ModeOfPaymentSchema, z.literal(LEAVE_UNCHANGED_LITERAL)]).optional(),
   frequency: z.union([z.enum(['recurring', 'one-time']), z.literal(LEAVE_UNCHANGED_LITERAL)]).optional().nullable(),
@@ -77,6 +76,30 @@ export const DebtItemFormDataSchema = z.object({
 });
 export type DebtItemFormData = z.infer<typeof DebtItemFormDataSchema>;
 
+// --- Investment Schemas ---
+export const InvestmentFormDataSchema = z.object({
+  name: z.string().min(1, "Investment name is required").max(100, "Name too long"),
+  type: z.string().min(1, "Investment type is required").max(50, "Type too long"),
+  purchaseDate: z.string().refine((date) => !isNaN(new Date(date).getTime()), {
+    message: "Invalid purchase date",
+  }),
+  quantity: z.number({
+    required_error: "Quantity is required",
+    invalid_type_error: "Quantity must be a number",
+  }).positive({ message: "Quantity must be positive" }),
+  purchasePrice: z.number({
+    required_error: "Purchase price is required",
+    invalid_type_error: "Purchase price must be a number",
+  }).positive({ message: "Purchase price must be positive" }),
+  currentValue: z.number({
+    required_error: "Current value is required",
+    invalid_type_error: "Current value must be a number",
+  }).min(0, { message: "Current value cannot be negative" }),
+  currency: z.string().min(3, "Currency code required (e.g., KES)").max(3, "Currency code too long").default("KES"),
+  notes: z.string().max(500, "Notes too long").optional().nullable(),
+});
+export type InvestmentFormData = z.infer<typeof InvestmentFormDataSchema>;
+
 
 // --- API Payload Schemas ---
 export const ClientLogPayloadSchema = z.object({
@@ -98,7 +121,7 @@ const TransactionItemSchema = BaseItemSchema.extend({
   modeOfPayment: ModeOfPaymentSchema,
   frequency: TransactionFrequencySchema.nullable(),
   variability: TransactionVariabilitySchema.nullable(),
-  categoryName: z.string().optional().nullable(), 
+  categoryName: z.string().optional().nullable(),
 });
 
 const DebtItemAPISchema = z.object({
@@ -118,6 +141,18 @@ const BudgetItemAPISchema = z.object({
   period: z.string(),
 });
 
+const InvestmentItemAPISchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  purchaseDate: z.string(), // ISO string
+  quantity: z.number(),
+  purchasePrice: z.number(),
+  currentValue: z.number(),
+  currency: z.string(),
+  notes: z.string().optional().nullable(),
+});
+
 const WeeklyReviewDataAPISchema = z.object({
   ownerId: z.string(),
   ownerUsername: z.string().optional(),
@@ -134,6 +169,7 @@ export const SaveDataPayloadSchema = z.object({
   otherLiabilityItems: z.array(BaseItemSchema).optional().default([]),
   budgetItems: z.array(BudgetItemAPISchema).optional().default([]),
   ownedReviews: z.record(WeeklyReviewDataAPISchema).optional().default({}),
+  investmentItems: z.array(InvestmentItemAPISchema).optional().default([]), // Added
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   gettingStartedDismissed: z.boolean().optional(),

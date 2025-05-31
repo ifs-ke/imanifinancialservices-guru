@@ -1,17 +1,14 @@
 // src/lib/types.ts
 
-// These types are largely derived from Zod schemas in schemas.ts.
-// Importing them directly or using z.infer is preferred for consistency.
-// For clarity during development, some key types are reiterated here.
-
-import type { 
+import type {
     ModeOfPayment as ModeOfPaymentZod,
     TransactionFrequency as TransactionFrequencyZod,
     TransactionVariability as TransactionVariabilityZod,
     DebtTerm as DebtTermZod,
-    BudgetItemCategory as BudgetItemCategoryZodInternal, // Renamed to avoid conflict
+    BudgetItemCategory as BudgetItemCategoryZodInternal,
     ClientLogPayload as ClientLogPayloadZod,
-    SaveDataPayload as SaveDataPayloadZod
+    SaveDataPayload as SaveDataPayloadZod,
+    InvestmentFormData as InvestmentFormDataZod, // Added
 } from './schemas';
 
 
@@ -22,13 +19,13 @@ export type TransactionVariability = TransactionVariabilityZod;
 
 export interface TransactionWithId {
   id: string;
-  date: Date; // Stored as Date object in Zustand
+  date: Date;
   description: string;
   amount: number;
   modeOfPayment: ModeOfPayment;
-  frequency?: TransactionFrequency | null; 
-  variability?: TransactionVariability | null; 
-  categoryName?: string | null; 
+  frequency?: TransactionFrequency | null;
+  variability?: TransactionVariability | null;
+  categoryName?: string | null;
 }
 
 
@@ -57,7 +54,6 @@ export interface OtherLiabilityItem {
     amount: number;
 }
 
-// Extend BudgetItemCategory to include special categories for variance reporting
 export type BudgetItemCategory = BudgetItemCategoryZodInternal | 'unplanned-expense' | 'unbudgeted-income';
 
 
@@ -65,9 +61,22 @@ export interface BudgetItem {
     id: string;
     description: string;
     amount: number;
-    category: BudgetItemCategoryZodInternal; // Budget items should only use the original categories
-    period: string; 
+    category: BudgetItemCategoryZodInternal;
+    period: string;
 }
+
+export interface InvestmentItem {
+    id: string;
+    name: string;
+    type: string;
+    purchaseDate: Date;
+    quantity: number;
+    purchasePrice: number;
+    currentValue: number;
+    currency: string;
+    notes?: string | null;
+}
+export type InvestmentFormData = InvestmentFormDataZod;
 
 
 export interface WeeklyReviewData {
@@ -76,8 +85,7 @@ export interface WeeklyReviewData {
   journal: string;
   transactionComments?: Record<string, string>;
   sharedWith?: string[];
-  // Added to store weekKey within the object itself if needed, though often it's the Record key
-  weekKey?: string; 
+  weekKey?: string;
 }
 
 
@@ -96,13 +104,11 @@ export interface NotificationItem {
     type: NotificationType;
     title: string;
     message: string;
-    timestamp: Date; 
+    timestamp: Date;
     read: boolean;
     link?: string;
 }
 
-// Client Log Payload type (matches Zod schema)
 export type ClientLogPayloadType = ClientLogPayloadZod;
 
-// Save Data Payload type (matches Zod schema, dates are strings)
 export type SaveDataPayloadType = SaveDataPayloadZod;
