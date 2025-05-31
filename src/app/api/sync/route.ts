@@ -1,21 +1,24 @@
 
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-import { addCorsHeaders } from '@/lib/utils';
-import { logWarn } from '@/lib/logger';
-import { hashData } from '@/lib/storage-utils';
-import stringify from 'fast-json-stable-stringify';
+import { auth } from '@clerk/nextjs/server';
+import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem, InvestmentItem } from '@/lib/types';
+import { hashData } from '@/lib/storage-utils';
+import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
+import stringify from 'fast-json-stable-stringify';
+import { addCorsHeaders } from '@/lib/utils';
+import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
+import { ensureUserInDb } from '@/app/actions/shareActions'; // For ensuring user exists
 
-// Interface for the expected structure, even if empty
-interface EmptySyncedData {
+interface SyncedDataForClient {
   transactions: TransactionWithId[];
   debts: DebtItem[];
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
   budgetItems: BudgetItem[];
   ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews: Record<string, WeeklyReviewData>;
+  sharedReviews: Record<string, WeeklyReviewData>; // For reviews shared WITH the current user
   notifications: NotificationItem[];
   investmentItems: InvestmentItem[]; // Added
   startDate?: string;
@@ -30,47 +33,108 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  // const { userId } = auth(); // Clerk auth, if needed for logging
-  const mockUserIdIfNoClerk = process.env.NEXT_PUBLIC_MOCK_USER_ID || 'local-user';
-  const logContextBase = { userId: mockUserIdIfNoClerk, operation: 'GET /api/sync (DISABLED)', apiRoute: '/api/sync' };
+  const { userId, user: clerkUser } = auth();
+  const logContextBase = { userId: userId || 'unknown-sync-get', operation: 'GET /api/sync', apiRoute: '/api/sync' };
 
-  logWarn('Sync API: Server-side sync is disabled. Returning empty data structure for local-only mode.', logContextBase);
+  if (!userId || !clerkUser || !clerkUser.primaryEmailAddressId) {
+    logWarn("Sync API: Unauthorized access attempt (GET).", logContextBase);
+    const response = NextResponse.json({ error: 'Unauthorized: User not logged in or email missing.' }, { status: 401 });
+    return addCorsHeaders(response);
+  }
+  // Ensure user exists in DB
+  await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
 
-  const emptyData: EmptySyncedData = {
-    transactions: [],
-    debts: [],
-    assetItems: [],
-    otherLiabilityItems: [],
-    budgetItems: [],
-    ownedReviews: {},
-    sharedReviews: {},
-    notifications: [],
-    investmentItems: [], // Added
-    gettingStartedDismissed: false, // Default value
-    // startDate and endDate will be undefined, client will set defaults
-  };
+  logInfo(`Sync API: Initiating sync for user ${userId}`, logContextBase, userId);
 
   try {
-    // The client still expects a hash, so we provide one for the empty state
-    const dataString = stringify(emptyData); // Stringify the empty structure
-    const dataHash = await hashData(dataString);
+    const [
+      transactions, debts, assetItems, otherLiabilityItems,
+      budgetItems, ownedReviewsPrisma, sharedReviewsPrisma,
+      statementSettings, notifications, investmentItems // Added investmentItems
+    ] = await prisma.$transaction([
+      prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
+      prisma.debt.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+      prisma.assetItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+      prisma.otherLiabilityItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+      prisma.budgetItem.findMany({ where: { userId }, orderBy: [{ period: 'desc' }, { description: 'asc' }] }),
+      prisma.weeklyReview.findMany({ where: { userId } }), // Owned by the user
+      prisma.sharedReview.findMany({ // Shared WITH the user
+        where: { sharedWithId: userId },
+        include: { originalReview: true }, // Include the actual review content
+      }),
+      prisma.statementSettings.findUnique({ where: { userId } }),
+      prisma.notification.findMany({ where: { userId }, orderBy: { timestamp: 'desc' }, take: 50 }),
+      prisma.investmentItem.findMany({ where: { userId }, orderBy: { name: 'asc' } }), // Added
+    ]);
 
-    const responsePayload = {
-      ...emptyData,
-      dataHash,
-      message: "Server-side sync is disabled. Using local browser storage.",
-      status: "local_only_mode"
+    const ownedReviewsMap: Record<string, WeeklyReviewData> = {};
+    ownedReviewsPrisma.forEach(review => {
+      ownedReviewsMap[review.weekKey] = {
+        ownerId: review.userId,
+        ownerUsername: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress, // Username of the owner (self)
+        journal: review.journal || "",
+        transactionComments: review.transactionComments as Record<string, string> || {},
+        weekKey: review.weekKey,
+        // sharedWith can be populated if needed, but for owned reviews, it's mainly for display if they shared it
+      };
+    });
+
+    const sharedReviewsMap: Record<string, WeeklyReviewData> = {};
+    // For reviews shared with the current user, we need owner's username.
+    // This might require an additional Clerk call if owner usernames are not stored,
+    // or we can default to ownerId if username is not readily available.
+    const ownerIdsOfSharedReviews = Array.from(new Set(sharedReviewsPrisma.map(sr => sr.reviewOwnerId)));
+    let ownerUserDetails: Record<string, { name?: string | null, email?: string | null }> = {};
+
+    if (ownerIdsOfSharedReviews.length > 0) {
+        const clerkOwnerUsers = await clerkClient.users.getUserList({ userId: ownerIdsOfSharedReviews });
+        clerkOwnerUsers.data.forEach(u => {
+            ownerUserDetails[u.id] = { name: u.fullName || u.firstName, email: u.primaryEmailAddress?.emailAddress };
+        });
+    }
+
+    sharedReviewsPrisma.forEach(share => {
+      const originalReview = share.originalReview;
+      if (originalReview) {
+        sharedReviewsMap[originalReview.weekKey] = {
+          ownerId: originalReview.userId,
+          ownerUsername: ownerUserDetails[originalReview.userId]?.name || ownerUserDetails[originalReview.userId]?.email || originalReview.userId,
+          journal: originalReview.journal || "",
+          transactionComments: originalReview.transactionComments as Record<string, string> || {},
+          weekKey: originalReview.weekKey,
+          sharedWith: [userId] // Indicates this user is one of the recipients
+        };
+      }
+    });
+
+
+    const fetchedData: SyncedDataForClient = {
+      transactions: transactions.map(t => ({...t, date: t.date || new Date(0), categoryName: t.categoryName || null })),
+      debts: debts.map(d => ({...d})),
+      assetItems: assetItems.map(a => ({...a})),
+      otherLiabilityItems: otherLiabilityItems.map(l => ({...l})),
+      budgetItems: budgetItems.map(b => ({...b})),
+      investmentItems: investmentItems.map(i => ({...i, purchaseDate: i.purchaseDate || new Date(0)})), // Added
+      ownedReviews: ownedReviewsMap,
+      sharedReviews: sharedReviewsMap,
+      notifications: notifications.map(n => ({...n, timestamp: n.timestamp || new Date(0)})),
+      startDate: statementSettings?.statementStartDate?.toISOString(),
+      endDate: statementSettings?.statementEndDate?.toISOString(),
+      gettingStartedDismissed: statementSettings?.gettingStartedDismissed ?? false,
     };
 
-    const response = NextResponse.json(responsePayload, { status: 200 });
+    const preparedData = prepareDataForHashing(fetchedData as any); // Cast for prepareDataForHashing
+    const dataString = stringify(preparedData);
+    const dataHash = await hashData(dataString);
+
+    logInfo(`Sync API: Generated server hash for user ${userId}: ${dataHash}`, logContextBase, userId);
+    const response = NextResponse.json({ ...preparedData, dataHash });
     return addCorsHeaders(response);
 
   } catch (error: any) {
-    logWarn('Sync API: Error generating hash for empty data during local-only mode response.', { ...logContextBase, error: error.message });
-    const errorResponse = NextResponse.json({
-      error: 'Failed to prepare local-only mode response.',
-      message: 'Server-side sync is disabled.'
-    }, { status: 500 });
-    return addCorsHeaders(errorResponse);
+    logError(`Sync API: Unrecoverable error during GET sync for user ${userId}.`, error, logContextBase, userId);
+    const errorMessage = error.message || 'Failed to fetch data from database';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    return addCorsHeaders(response);
   }
 }

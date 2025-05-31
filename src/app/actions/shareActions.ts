@@ -11,8 +11,7 @@ import {
 } from '@/lib/schemas';
 import { logWarn, logError, logInfo } from '@/lib/logger';
 import { auth, clerkClient } from '@clerk/nextjs/server';
-
-const LOCAL_ONLY_ERROR_MESSAGE = 'Sharing features are disabled in local-only mode as there is no central database for users or shared data.';
+import prisma from '@/lib/prisma';
 
 export async function searchUserByEmailApi(email: string): Promise<UserShareInfo | null> {
     const { userId: currentUserId } = auth();
@@ -28,9 +27,6 @@ export async function searchUserByEmailApi(email: string): Promise<UserShareInfo
         throw new Error(`Invalid input: ${errors.fieldErrors.email?.[0] || 'Invalid email'}`);
     }
 
-    // In a real scenario, we would search Clerk users if the feature was not DB dependent.
-    // Since DB is removed, true sharing is not possible.
-    // For demonstration, if we were to use Clerk directly for user listing (requires appropriate permissions/plan):
     try {
         const users = await clerkClient.users.getUserList({ emailAddress: [email.trim().toLowerCase()] });
         if (users && users.data.length > 0) {
@@ -50,9 +46,7 @@ export async function searchUserByEmailApi(email: string): Promise<UserShareInfo
         return null;
     } catch (error: any) {
         logError('Error searching Clerk users by email', error, { emailToSearch: email, currentUserId, apiAction: 'searchUserByEmailApi' });
-        // For local-only, still indicate feature limitation
-        // throw new Error(LOCAL_ONLY_ERROR_MESSAGE);
-        throw new Error(`Failed to search for user: ${error.message}. Sharing features might be limited.`);
+        throw new Error(`Failed to search for user: ${error.message}.`);
     }
 }
 
@@ -68,9 +62,49 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
         logWarn('Invalid input for shareReviewApi', { errors, apiAction: 'shareReviewApi', receivedWeekKey: weekKey, receivedTargetUserId: targetUserId, currentUserId });
         throw new Error(`Invalid input: ${Object.values(errors.fieldErrors).flat().join(', ')}`);
     }
-    logWarn(`shareReviewApi: Attempt to share review ${weekKey} with ${targetUserId}. ${LOCAL_ONLY_ERROR_MESSAGE}`, { currentUserId, targetUserId, weekKey, apiAction: 'shareReviewApi' });
-    throw new Error(LOCAL_ONLY_ERROR_MESSAGE);
-    // Original Prisma logic removed
+
+    if (currentUserId === targetUserId) {
+        logWarn('shareReviewApi: User attempted to share a review with themselves.', { weekKey, targetUserId, currentUserId });
+        throw new Error('You cannot share a review with yourself.');
+    }
+
+    try {
+        // Ensure the weekly review exists for the owner (currentUserId) and weekKey
+        let review = await prisma.weeklyReview.findUnique({
+            where: { userId_weekKey: { userId: currentUserId, weekKey } },
+        });
+
+        if (!review) {
+            // If the review doesn't exist, create a shell for it before sharing
+            logInfo(`shareReviewApi: WeeklyReview for ${currentUserId} week ${weekKey} not found. Creating shell.`, { currentUserId, weekKey, targetUserId });
+            review = await prisma.weeklyReview.create({
+                data: {
+                    userId: currentUserId,
+                    weekKey: weekKey,
+                    journal: "", // Default empty journal
+                },
+            });
+        }
+
+        // Create the share record
+        await prisma.sharedReview.create({
+            data: {
+                weekKey: weekKey,
+                reviewOwnerId: currentUserId,
+                sharedWithId: targetUserId,
+            },
+        });
+        logInfo(`shareReviewApi: Review ${weekKey} owned by ${currentUserId} shared with ${targetUserId}.`, { currentUserId, targetUserId, weekKey });
+    } catch (error: any) {
+        if (error.code === 'P2002') { // Unique constraint violation
+            logWarn(`shareReviewApi: Review ${weekKey} by ${currentUserId} already shared with ${targetUserId}.`, { currentUserId, targetUserId, weekKey });
+            // Optionally, don't throw an error, just log it as it's already shared.
+            // throw new Error('This review is already shared with the selected user.');
+            return; // Consider it a success if already shared
+        }
+        logError('Error sharing review in DB', error, { weekKey, reviewOwnerId: currentUserId, sharedWithId: targetUserId });
+        throw new Error(`Failed to share review: ${error.message}`);
+    }
 }
 
 export async function revokeShareApi(weekKey: string, targetUserId: string): Promise<void> {
@@ -85,18 +119,27 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
         logWarn('Invalid input for revokeShareApi', { errors, apiAction: 'revokeShareApi', receivedWeekKey: weekKey, receivedTargetUserId: targetUserId, currentUserId });
         throw new Error(`Invalid input: ${Object.values(errors.fieldErrors).flat().join(', ')}`);
     }
-    logWarn(`revokeShareApi: Attempt to revoke share for review ${weekKey} from ${targetUserId}. ${LOCAL_ONLY_ERROR_MESSAGE}`, { currentUserId, targetUserId, weekKey, apiAction: 'revokeShareApi' });
-    throw new Error(LOCAL_ONLY_ERROR_MESSAGE);
-    // Original Prisma logic removed
+
+    try {
+        await prisma.sharedReview.deleteMany({
+            where: {
+                weekKey: weekKey,
+                reviewOwnerId: currentUserId,
+                sharedWithId: targetUserId,
+            },
+        });
+        logInfo(`revokeShareApi: Share for review ${weekKey} owned by ${currentUserId} revoked from ${targetUserId}.`, { currentUserId, targetUserId, weekKey });
+    } catch (error: any) {
+        logError('Error revoking share in DB', error, { weekKey, reviewOwnerId: currentUserId, sharedWithId: targetUserId });
+        throw new Error(`Failed to revoke share: ${error.message}`);
+    }
 }
 
 export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareInfo[]> {
     const { userId: currentUserId } = auth();
     if (!currentUserId) {
         logWarn('getSharedWithUsersApi: Unauthenticated attempt.', { apiAction: 'getSharedWithUsersApi' });
-        // Allow fetching shared list even if unauthenticated for the component to render an empty state,
-        // but actual data would only be available if user was authenticated and review actually shared.
-        // throw new Error('User not authenticated.');
+        throw new Error('User not authenticated.');
     }
     const validationResult = GetSharedWithUsersInputSchema.safeParse({ weekKey });
     if (!validationResult.success) {
@@ -104,7 +147,57 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
         logWarn('Invalid input for getSharedWithUsersApi', { errors, apiAction: 'getSharedWithUsersApi', receivedWeekKey: weekKey, currentUserId });
         throw new Error(`Invalid input: ${errors.fieldErrors.weekKey?.[0] || 'Invalid weekKey'}`);
     }
-    logWarn(`getSharedWithUsersApi: Attempt to fetch shared users for review ${weekKey}. ${LOCAL_ONLY_ERROR_MESSAGE}`, { currentUserId, weekKey, apiAction: 'getSharedWithUsersApi' });
-    return []; // No database to fetch from in local-only mode
-    // Original Prisma logic removed
+
+    try {
+        const shares = await prisma.sharedReview.findMany({
+            where: {
+                weekKey: weekKey,
+                reviewOwnerId: currentUserId,
+            },
+            select: {
+                sharedWithId: true,
+            },
+        });
+
+        if (shares.length === 0) {
+            return [];
+        }
+
+        const sharedWithUserIds = shares.map(share => share.sharedWithId);
+        const clerkUsers = await clerkClient.users.getUserList({ userId: sharedWithUserIds });
+
+        const userShareInfoList: UserShareInfo[] = clerkUsers.data.map(clerkUser => ({
+            userId: clerkUser.id,
+            email: clerkUser.primaryEmailAddress?.emailAddress || 'No email',
+            name: clerkUser.fullName || clerkUser.firstName || clerkUser.username || 'Clerk User',
+        }));
+        logInfo(`getSharedWithUsersApi: Fetched ${userShareInfoList.length} users shared with for review ${weekKey} by ${currentUserId}.`, { currentUserId, weekKey });
+        return userShareInfoList;
+    } catch (error: any) {
+        logError('Error fetching shared users list', error, { weekKey, reviewOwnerId: currentUserId });
+        throw new Error(`Failed to fetch shared users: ${error.message}`);
+    }
+}
+
+// Helper to ensure user exists in your DB, creating if not.
+// Call this after Clerk authentication.
+export async function ensureUserInDb(userId: string, email: string, name?: string | null) {
+    try {
+        let user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+            logInfo(`User ${userId} not found in DB. Creating...`, { userId, email, name });
+            user = await prisma.user.create({
+                data: {
+                    id: userId,
+                    email: email,
+                    name: name,
+                },
+            });
+        }
+        return user;
+    } catch (error: any) {
+        logError('Error ensuring user in DB', error, { userId, email, name });
+        // Depending on policy, you might want to throw or handle this gracefully
+        throw new Error('Failed to ensure user record in database.');
+    }
 }
