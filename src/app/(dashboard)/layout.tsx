@@ -10,11 +10,12 @@
  } from "@/components/ui/sidebar";
  import { useSyncManager } from '@/hooks/useSyncManager';
  import FloatingChatButton from '@/components/layout/FloatingChatButton';
- // DataSyncMismatchDialog is no longer needed in local-only mode
+ import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Re-added for server sync
  import { Toaster } from '@/components/ui/toaster';
- import { logDebug } from '@/lib/logger';
+ import { logDebug, logInfo } from '@/lib/logger';
  import { LoadingSpinner } from '@/components/ui/loading-spinner';
  import { useAuth } from '@clerk/nextjs';
+ import { AppMenubar } from '@/components/layout/AppMenubar'; // New import
 
 
  export default function DashboardLayout({
@@ -23,23 +24,29 @@
    children: React.ReactNode;
  }) {
    const { isLoaded: isClerkLoaded, isSignedIn, userId } = useAuth();
-   const syncManager = useSyncManager(); // Still used for local state management like 'gettingStartedDismissed'
+   const syncManager = useSyncManager();
 
-   useBudgetNotifications(); // Can still run for local budget alerts
+   useBudgetNotifications();
 
    useEffect(() => {
-       // This effect might be simplified or removed if hashMismatch is fully gone
-       // For now, it's harmless as hashMismatch should always be false in local-only mode.
-       if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
-           logDebug("DashboardLayout: Hash mismatch detected (should not occur in local-only mode).", { userId });
-           // syncManager.setIsMismatchDialogOpen(true); // Dialog removed
-       }
-   }, [syncManager.hashMismatch, syncManager.isMismatchDialogOpen, userId]);
+       if (!isClerkLoaded || !isSignedIn) return; // Only proceed if Clerk is loaded and user is signed in
 
-   if (!isClerkLoaded || syncManager.syncStatus === 'idle' || syncManager.syncStatus === 'loading_local') {
+       if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
+           logInfo("DashboardLayout: Hash mismatch detected. Opening dialog.", { userId });
+           syncManager.setIsMismatchDialogOpen(true);
+       }
+   }, [syncManager.hashMismatch, syncManager.isMismatchDialogOpen, syncManager.setIsMismatchDialogOpen, isClerkLoaded, isSignedIn, userId]);
+
+
+   // Updated loading condition for server sync
+   if (!isClerkLoaded || (syncManager.syncStatus === 'idle' && isSignedIn) || (syncManager.syncStatus === 'syncing' && isSignedIn) || (syncManager.syncStatus === 'loading_local' && isSignedIn)) {
      return (
        <div className="flex items-center justify-center min-h-screen bg-background">
-         <LoadingSpinner size={48} text={!isClerkLoaded ? "Authenticating..." : "Loading local data..."} />
+         <LoadingSpinner size={48} text={
+             !isClerkLoaded ? "Authenticating..." :
+             syncManager.syncStatus === 'syncing' ? "Syncing data..." :
+             "Loading data..."
+         } />
        </div>
      );
    }
@@ -47,13 +54,31 @@
    return (
      <div className="flex min-h-screen w-full bg-background">
        <Sidebar />
-       <SidebarInset>
-         {children}
+       <SidebarInset className="flex flex-col bg-background"> {/* Added flex flex-col */}
+         <AppMenubar /> {/* Added AppMenubar */}
+         <main className="flex-1 overflow-y-auto"> {/* Added main wrapper for children with scroll */}
+           {children}
+         </main>
        </SidebarInset>
        <FloatingChatButton />
        <Toaster />
 
-       {/* DataSyncMismatchDialog removed as it's not applicable in local-only mode */}
+       {isSignedIn && syncManager.hashMismatch && ( // Only show dialog if signed in and mismatch occurs
+          <DataSyncMismatchDialog
+            isOpen={syncManager.isMismatchDialogOpen}
+            onClose={() => syncManager.setIsMismatchDialogOpen(false)}
+            onForceSave={async () => {
+              const success = await syncManager.forceSave();
+              if (success) syncManager.setIsMismatchDialogOpen(false);
+              return success;
+            }}
+            onForceFetch={async () => {
+              const success = await syncManager.forceFetch();
+              if (success) syncManager.setIsMismatchDialogOpen(false);
+              return success;
+            }}
+          />
+        )}
      </div>
    );
  }
