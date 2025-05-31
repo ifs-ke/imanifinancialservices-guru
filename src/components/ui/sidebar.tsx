@@ -90,7 +90,7 @@ interface SidebarProviderProps {
 export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithChildren<SidebarProviderProps>>(
   ({ children, ...props }, ref) => {
     const isMobileClient = useIsMobile();
-    const [sidebarState, setSidebarState] = React.useState<SidebarState>("collapsed");
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded"); // Default to expanded initially
     const [hasMounted, setHasMounted] = React.useState(false);
 
     React.useEffect(() => {
@@ -103,7 +103,7 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
           setSidebarState("collapsed");
         } else {
           const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
-          setSidebarState(storedState || "collapsed");
+          setSidebarState(storedState || "expanded"); // Fallback to expanded if no stored state for desktop
         }
       }
     }, [isMobileClient, hasMounted]);
@@ -434,3 +434,4 @@ export const SidebarInset = React.forwardRef<
  );
 });
 SidebarInset.displayName = "SidebarInset";
+
