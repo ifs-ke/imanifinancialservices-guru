@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/statements/page.tsx
 'use client';
 
@@ -82,7 +83,7 @@ export default function StatementsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:p-8">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
       <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
@@ -106,7 +107,7 @@ export default function StatementsPage() {
          </div>
       </header>
 
-       <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 mx-4 md:mx-6 lg:mx-8 border rounded-lg bg-card shadow-sm">
+       <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 mx-4 md:mx-6 lg:px-8 border rounded-lg bg-card shadow-sm">
           <Label className="font-semibold shrink-0">Statement Period:</Label>
            <Popover>
                 <PopoverTrigger asChild>
@@ -156,7 +157,7 @@ export default function StatementsPage() {
            </Popover>
        </div>
 
-      <main className="flex-1 grid gap-6 lg:grid-cols-2 px-4 md:px-6 lg:mx-8">
+      <main className="flex-1 grid gap-6 lg:grid-cols-2 px-4 md:px-6 lg:px-8">
         <CashFlowStatementSection 
             startDate={startDate}
             endDate={endDate}

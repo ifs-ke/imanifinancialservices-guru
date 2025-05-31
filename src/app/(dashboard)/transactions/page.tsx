@@ -25,8 +25,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore } from '@/store/budgetStore';
 import type { TransactionWithId, BudgetItem } from '@/lib/types';
@@ -82,7 +82,7 @@ export default function TransactionsPage() {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
-
+  
   const handleAddClick = () => {
     setEditingTransaction(null); 
     setIsEditTransactionDialogOpen(true);
@@ -196,7 +196,7 @@ export default function TransactionsPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
        <PageHeader
           title="Transactions"
           description="Manage your financial transactions."
@@ -231,16 +231,14 @@ export default function TransactionsPage() {
                 </div>
             )}
           </CardHeader>
-          <CardContent className="p-0">
-              <div className="py-4 md:py-6 px-4 md:px-6 lg:px-8">
-                <DataTable
-                  columns={columns}
-                  data={transactions} 
-                  table={table}
-                  searchColumn="description"
-                  searchPlaceholder="Search descriptions..."
-                />
-              </div>
+          <CardContent className="p-4 md:p-6">
+            <DataTable
+              columns={columns}
+              data={transactions} 
+              table={table}
+              searchColumn="description"
+              searchPlaceholder="Search descriptions..."
+            />
           </CardContent>
         </Card>
       </main>

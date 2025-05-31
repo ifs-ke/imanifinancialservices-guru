@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/investments/page.tsx
 'use client';
 
@@ -136,7 +137,7 @@ export default function InvestmentsPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6">
+    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
        <PageHeader
           title="Investments"
           description="Track and manage your investment portfolio."
@@ -186,16 +187,14 @@ export default function InvestmentsPage() {
                 </div>
             )}
           </CardHeader>
-          <CardContent className="p-0">
-              <div className="py-4 md:py-6 px-4 md:px-6 lg:px-8">
-                <DataTable
-                  columns={columns}
-                  data={investmentItems}
-                  table={table}
-                  searchColumn="name"
-                  searchPlaceholder="Search by name or type..."
-                />
-              </div>
+          <CardContent className="p-4 md:p-6">
+            <DataTable
+              columns={columns}
+              data={investmentItems}
+              table={table}
+              searchColumn="name"
+              searchPlaceholder="Search by name or type..."
+            />
           </CardContent>
            {investmentItems.length > 0 && (
                <CardFooter className="p-4 border-t text-xs text-muted-foreground">
