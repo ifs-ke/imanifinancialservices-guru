@@ -1,16 +1,8 @@
+// This file is no longer used for MongoDB connection.
+// Prisma is now used for database interactions.
+// See lib/prisma.ts for Prisma client setup.
 
-// src/lib/mongodb.ts
-// MongoDB and Prisma have been removed from this project.
-// This file is kept to prevent import errors in existing files that might still reference it,
-// but its functionality is disabled.
-
-/**
- * @deprecated Database functionality has been removed. This function will throw an error.
- */
-const connectToDatabase = async (): Promise<any> => {
-  const errorMessage = 'Database functionality (MongoDB/Prisma) has been removed. Application now uses local storage only.';
-  console.error(errorMessage);
-  throw new Error(errorMessage);
-};
-
-export default connectToDatabase;
+// You can delete this file if it's no longer referenced anywhere.
+// For now, leaving it as a marker.
+const message = "This project now uses Prisma for database access, not MongoDB directly via this file.";
+export default message;

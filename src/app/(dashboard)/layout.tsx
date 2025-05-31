@@ -45,7 +45,7 @@
    }
 
    return (
-     <div className="flex min-h-screen bg-background">
+     <div className="flex min-h-screen w-full bg-background">
        <Sidebar />
        <SidebarInset>
          {children}
