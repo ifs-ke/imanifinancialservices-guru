@@ -208,7 +208,7 @@ export default function LoggerPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 space-y-6">
+    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8 space-y-6">
       <header className="px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">

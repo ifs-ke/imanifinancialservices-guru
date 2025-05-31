@@ -137,7 +137,7 @@ export default function InvestmentsPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
        <PageHeader
           title="Investments"
           description="Track and manage your investment portfolio."

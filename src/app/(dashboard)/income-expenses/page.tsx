@@ -154,7 +154,7 @@ export default function IncomeExpensesPage() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
       <header className="mb-6 px-4 md:px-6 lg:px-8">
         <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <TrendingUp className="text-primary" /> Income & Expense Analysis

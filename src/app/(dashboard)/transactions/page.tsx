@@ -196,7 +196,7 @@ export default function TransactionsPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8">
+    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
        <PageHeader
           title="Transactions"
           description="Manage your financial transactions."

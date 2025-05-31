@@ -267,7 +267,7 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen py-4 md:py-6 lg:py-8 bg-background">
+    <div className="flex flex-col min-h-screen w-full py-4 md:py-6 lg:py-8 bg-background">
        <PageHeader
           title="Executive Summary"
           description={

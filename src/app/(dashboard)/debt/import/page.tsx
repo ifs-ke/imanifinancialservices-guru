@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/debt/import/page.tsx
 'use client';
 
@@ -539,7 +540,7 @@ export default function ImportDebtsPage() {
      );
 
     return (
-        <div className="flex flex-col min-h-screen p-4 md:p-6 lg:p-8">
+        <div className="flex flex-col min-h-screen w-full p-4 md:p-6 lg:p-8">
             {stage === 'upload' && renderUploadStage()}
             {stage === 'mapping' && renderMappingStage()}
             {stage === 'preview' && renderPreviewStage()}
