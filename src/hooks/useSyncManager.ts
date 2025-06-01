@@ -16,7 +16,7 @@ import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
-const IS_FETCH_DISABLED = false; // Set to false to enable server sync
+const IS_FETCH_DISABLED = true; // Set to false to enable server sync
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -134,9 +134,7 @@ export function useSyncManager() {
             if (syncStateRef.current.status === 'syncing' || syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
                  updateSyncState({ status: 'local' });
             }
-        }
-        if (!initialLoadDoneRef.current) {
-            initialLoadDoneRef.current = true;
+             initialLoadDoneRef.current = true; // Mark initial load as done even if fetch is skipped
         }
         return isPreSaveCheck ? (syncStateRef.current.lastServerHash || "fetch_disabled_no_hash") : false;
     }
@@ -167,8 +165,8 @@ export function useSyncManager() {
         return false;
       }
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status}` }));
-        throw new Error(errorData.error || `Failed to fetch data: ${response.status}`);
+        const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status} ${response.statusText}`.trim() }));
+        throw new Error(errorData.error || `Failed to fetch data: ${response.status} ${response.statusText}`.trim());
       }
       const serverData = await response.json();
       const { dataHash: serverHash, ...dataToLoad } = serverData;
@@ -185,7 +183,7 @@ export function useSyncManager() {
             updateSyncState({ status: 'hash_mismatch', lastServerHash: serverHash, isMismatchDialogOpen: true });
             toast({ title: 'Data Sync Mismatch', description: 'Server data appears to have changed. Please resolve the conflict.', variant: 'destructive', duration: Infinity });
             isFetchingRef.current = false;
-            return false; // Return false to indicate failure for general fetches
+            return false;
         }
 
         getTransactionsState().setTransactions(dataToLoad.transactions || []);
@@ -209,25 +207,30 @@ export function useSyncManager() {
         });
         hasLocalChangesRef.current = false;
         logInfo('SyncManager: Data fetched and loaded successfully.', { currentUserId, serverHash });
-        if (!isPreSaveCheck) { // Only toast for general fetches, not pre-save checks
+        if (!isPreSaveCheck) {
           toast({ title: 'Data Synced', description: 'Latest data loaded from the server.' });
         }
       }
-      // For pre-save checks, we just need the server hash. For general fetches, this indicates success.
       if (!isPreSaveCheck) initialLoadDoneRef.current = true;
-      return serverHash; // Return the server hash
+      return serverHash;
     } catch (error: any) {
       if (error.name === 'AbortError') {
         logInfo('Fetch aborted.', { currentUserId });
       } else {
-        logError('Error fetching data:', error, { currentUserId });
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown fetch error");
+        logError('Error fetching data:', errorToLog, { currentUserId, originalErrorDetails: String(error) });
         if (!isPreSaveCheck) {
             updateSyncState({ status: 'error' });
-            toast({ title: 'Sync Load Failed', description: error.message || 'Could not load data from server.', variant: 'destructive' });
+            toast({
+                title: 'Sync Load Failed',
+                description: errorMessage || 'Could not load data from server. Check console for details.',
+                variant: 'destructive'
+            });
         }
       }
-      if (!isPreSaveCheck) initialLoadDoneRef.current = true; // Mark initial load done even on error for general fetches
-      return false; // Indicate failure for both pre-save and general fetches
+      if (!isPreSaveCheck) initialLoadDoneRef.current = true;
+      return false;
     } finally {
       isFetchingRef.current = false;
       if (signal === abortControllerRef.current?.signal) {
@@ -254,9 +257,9 @@ export function useSyncManager() {
 
     if (!force && !IS_FETCH_DISABLED) {
       const knownServerHashBeforePreSaveFetch = syncStateRef.current.lastServerHash;
-      const serverHashFromPreSaveFetch = await fetchData(true); // true indicates it's a pre-save check
+      const serverHashFromPreSaveFetch = await fetchData(true);
 
-      if (serverHashFromPreSaveFetch === false) { // fetchData returns false on error
+      if (serverHashFromPreSaveFetch === false) {
         logError('Save Aborted: Pre-save fetch check failed (network error or internal fetch error).', new Error("Pre-save fetch error"), { currentUserId });
         isSavingRef.current = false;
         if (syncStateRef.current.status !== 'hash_mismatch') updateSyncState({status: 'error'});
@@ -264,9 +267,9 @@ export function useSyncManager() {
         return false;
       }
       
-      if (knownServerHashBeforePreSaveFetch && 
-          typeof serverHashFromPreSaveFetch === 'string' && // ensure it's a hash string
-          serverHashFromPreSaveFetch !== "fetch_disabled_no_hash" && // ensure it's not the placeholder
+      if (knownServerHashBeforePreSaveFetch &&
+          typeof serverHashFromPreSaveFetch === 'string' &&
+          serverHashFromPreSaveFetch !== "fetch_disabled_no_hash" &&
           serverHashFromPreSaveFetch !== knownServerHashBeforePreSaveFetch) {
         logWarn('Save Aborted: Server data changed during pre-save check. Hash mismatch.', { currentUserId, knownOldHash: knownServerHashBeforePreSaveFetch, newServerHash: serverHashFromPreSaveFetch });
         updateSyncState({ status: 'hash_mismatch', lastServerHash: serverHashFromPreSaveFetch, isMismatchDialogOpen: true });
@@ -309,8 +312,8 @@ export function useSyncManager() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Server error during save.' }));
-        throw new Error(errorData.error || 'Failed to save data to server.');
+        const errorData = await response.json().catch(() => ({ error: `Server error during save: ${response.status} ${response.statusText}`.trim() }));
+        throw new Error(errorData.error || `Failed to save data to server: ${response.status} ${response.statusText}`.trim());
       }
 
       updateSyncState({
@@ -324,9 +327,11 @@ export function useSyncManager() {
       toast({ title: 'Data Saved', description: 'Your changes have been saved to the server.' });
       return true;
     } catch (error: any) {
-      logError('Error saving data:', error, { currentUserId });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown save error");
+      logError('Error saving data:', errorToLog, { currentUserId, originalErrorDetails: String(error) });
       updateSyncState({ status: 'error' });
-      toast({ title: 'Save Failed', description: error.message || 'Could not save data to server.', variant: 'destructive' });
+      toast({ title: 'Save Failed', description: errorMessage || 'Could not save data to server.', variant: 'destructive' });
       return false;
     } finally {
       isSavingRef.current = false;
@@ -367,7 +372,6 @@ export function useSyncManager() {
     } else if (currentUserId && !initialLoadDoneRef.current && (syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local')) {
       logInfo('SyncManager effect: Initial load for current user.', { currentUserId, currentStatus: syncStateRef.current.status });
       if (!IS_FETCH_DISABLED) {
-        // updateSyncState({status: 'syncing'}); // No, fetchData sets this if not pre-save
         fetchData();
       } else {
         logInfo('SyncManager effect: Initial fetch disabled. App will use local/empty data.', { currentUserId });
@@ -504,7 +508,7 @@ export function useSyncManager() {
     }
     clearAllLocalStoreData();
     const fetchResult = await fetchData(); 
-    if (fetchResult !== false) { // Success if a hash string is returned
+    if (fetchResult !== false) {
         updateSyncState({ isMismatchDialogOpen: false });
         return true;
     }
@@ -514,6 +518,7 @@ export function useSyncManager() {
 
   return {
     syncStatus: syncState.status,
+    isFetchDisabled: IS_FETCH_DISABLED,
     retrySync: manualSync, 
     manualSync,
     fetchData,
@@ -534,16 +539,5 @@ export function useSyncManager() {
             logInfo("SyncManager: gettingStartedDismissed changed, but not saving to server as fetch is disabled.", { userId, dismissed });
         }
     },
-    isFetchDisabled: IS_FETCH_DISABLED,
   };
 }
-
-// Helper to safely parse dates that might be undefined or already Date objects
-// This helper seems unused in the current context of useSyncManager and could be removed if not needed elsewhere.
-// const safeParseDate = (dateInput?: string | Date): Date | undefined => {
-//   if (!dateInput) return undefined;
-//   if (dateInput instanceof Date) return dateInput;
-//   const parsed = new Date(dateInput);
-//   return isNaN(parsed.getTime()) ? undefined : parsed;
-// };
-
