@@ -104,8 +104,12 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
         if (isMobileClient) {
           setSidebarState("collapsed");
         } else {
-          const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
-          setSidebarState(storedState || "expanded");
+          const storedValue = localStorage.getItem("sidebarState");
+          if (storedValue === "collapsed" || storedValue === "expanded") {
+            setSidebarState(storedValue);
+          } else {
+            setSidebarState("expanded"); // Default to expanded if localStorage is invalid or not set
+          }
         }
       }
     }, [isMobileClient, hasMounted]);
@@ -202,10 +206,10 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'error_local': SyncIcon = AlertTriangle; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'local':
-            SyncIcon = Cloud; // Show cloud icon for local data
-            syncStatusText = 'Local Data';
-            syncTooltipText = 'Data loaded locally. Click to sync with server.';
-            iconColor = 'text-primary'; // Use primary color for local state
+             SyncIcon = Cloud;
+             syncStatusText = 'Local Data';
+             syncTooltipText = 'Data loaded locally. Click to sync with server.';
+             iconColor = 'text-primary';
             break;
         case 'idle':
         default:
