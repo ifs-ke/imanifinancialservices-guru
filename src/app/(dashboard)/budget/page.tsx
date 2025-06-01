@@ -3,10 +3,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button'; // Assuming Button is used
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Save, Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown, History, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown, History, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useBudgetStore, selectCurrentBudgetPeriod, selectBudgetItemsForCurrentPeriod, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore';
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
@@ -16,7 +16,7 @@ import BudgetItemFormSheet from './BudgetItemFormSheet';
 import * as Papa from 'papaparse';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Assuming Popover, PopoverContent, PopoverTrigger are used
 import { Calendar } from "@/components/ui/calendar";
 import { format, startOfMonth, addMonths, subMonths } from 'date-fns';
 
@@ -66,7 +66,7 @@ export default function BudgetPage() {
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(new Date());
 
   useEffect(() => {
-      setBudgetPeriod(formatToPeriodKey(selectedMonthDate));
+      setBudgetPeriod(formatToPeriodKey(selectedMonthDate)); // Moved inside useEffect as per linting
   }, []); 
 
   const budgetItemsForPeriod = useMemo(() => {
@@ -148,12 +148,12 @@ export default function BudgetPage() {
            return;
          }
 
-        const importedItems = results.data as any[];
+        const importedItems = results.data as Record<string, string>[];
         let importedCount = 0;
         let errorCount = 0;
         const itemsToAdd: Omit<BudgetItem, 'id' | 'period'>[] = [];
-
-        importedItems.forEach((item: any, index: number) => {
+ 
+        importedItems.forEach((item, index) => {
             const category = item.category?.toLowerCase() as BudgetItemCategory;
             const description = item.description;
             const amountStr = item.amount?.replace(/,/g, '');

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import connectToDatabase from '@/lib/mongodb';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem } from '@/lib/types';
-import { hashData } from '@/lib/storage-utils';
+import { hashData, verifyHash } from '@/lib/storage-utils';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; 
 import stringify from 'fast-json-stable-stringify'; 
 import { addCorsHeaders } from '@/lib/utils'; 
@@ -24,9 +24,9 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
         if (item.date && !(item.date instanceof Date)) {
             try {
                 const parsedDate = new Date(item.date);
-                 if (isNaN(parsedDate.getTime())) throw new Error("Invalid date string from DB");
-                 item.date = parsedDate;
-            } catch (e) {
+                if (isNaN(parsedDate.getTime())) throw new Error("Invalid date string from DB");
+                item.date = parsedDate;
+            } catch (error) {
                  logWarn(`Sync API: Invalid date format in ${collectionName}, item ID ${item.id || 'N/A'}. Defaulting date.`,{...logContext, itemDateValue: item.date, itemId: item.id}, userId);
                  item.date = new Date(0); 
             }
@@ -34,11 +34,11 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
         if (item.timestamp && !(item.timestamp instanceof Date)) {
              try {
                  const parsedTimestamp = new Date(item.timestamp);
-                  if (isNaN(parsedTimestamp.getTime())) throw new Error("Invalid timestamp string from DB");
-                  item.timestamp = parsedTimestamp;
-             } catch (e) {
+                if (isNaN(parsedTimestamp.getTime())) throw new Error("Invalid timestamp string from DB");
+                item.timestamp = parsedTimestamp;
+            } catch (error) {
                  logWarn(`Sync API: Invalid timestamp format in ${collectionName}, item ID ${item.id || 'N/A'}. Defaulting timestamp.`, {...logContext, itemTimestampValue: item.timestamp, itemId: item.id}, userId);
-                 item.timestamp = new Date(0); 
+                item.timestamp = new Date(0);
              }
         }
          if (collectionName === 'budgetItems' && !item.period) {
@@ -48,7 +48,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
         return item as T;
     });
   } catch (error: any) {
-    logError(`Sync API: DB Error fetching ${collectionName}`, error, logContext, userId);
+    logError(`Sync API: DB Error fetching ${collectionName}`, error instanceof Error ? error : new Error(String(error)), logContext, userId);
     return [];
   }
 }
@@ -56,7 +56,7 @@ async function getCollectionData<T>(db: any, collectionName: string, userId: str
 async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<string, WeeklyReviewData>> {
     const logContext = { userId, operation: 'getOwnedWeeklyReviews', apiRoute: '/api/sync' };
     logDebug(`Sync API: Fetching owned weekly reviews for user ${userId}`, logContext, userId);
-    let reviewsMap: Record<string, WeeklyReviewData> = {};
+    const reviewsMap: Record<string, WeeklyReviewData> = {};
     try {
       const collection = db.collection('weeklyReviews');
       await collection.createIndex({ userId: 1, weekKey: 1 }); 
@@ -73,7 +73,7 @@ async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<st
        logDebug(`Sync API: Fetched ${Object.keys(reviewsMap).length} owned weekly reviews`, logContext, userId);
        return reviewsMap;
     } catch (error: any) {
-       logError(`Sync API: DB Error fetching owned weeklyReviews`, error, logContext, userId);
+       logError(`Sync API: DB Error fetching owned weeklyReviews`, error instanceof Error ? error : new Error(String(error)), logContext, userId);
        return {};
     }
 }
@@ -81,7 +81,7 @@ async function getOwnedWeeklyReviews(db: any, userId: string): Promise<Record<st
 async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<string, WeeklyReviewData>> {
     const logContext = { userId, operation: 'getSharedWeeklyReviews', apiRoute: '/api/sync' };
     logDebug(`Sync API: Fetching shared weekly reviews for user ${userId}`, logContext, userId);
-    let reviewsMap: Record<string, WeeklyReviewData> = {};
+    const reviewsMap: Record<string, WeeklyReviewData> = {};
     try {
       const collection = db.collection('weeklyReviews');
        await collection.createIndex({ sharedWith: 1 }); 
@@ -101,7 +101,7 @@ async function getSharedWeeklyReviews(db: any, userId: string): Promise<Record<s
         logDebug(`Sync API: Fetched ${Object.keys(reviewsMap).length} shared weekly reviews`, logContext, userId);
        return reviewsMap;
     } catch (error: any) {
-       logError(`Sync API: DB Error fetching shared weeklyReviews`, error, logContext, userId);
+       logError(`Sync API: DB Error fetching shared weeklyReviews`, error instanceof Error ? error : new Error(String(error)), logContext, userId);
        return {};
     }
 }
@@ -131,7 +131,7 @@ async function getUserProfileData(db: any, userId: string): Promise<{ startDate?
         return { startDate, endDate, gettingStartedDismissed };
     } catch (error: any) {
         logError(`Sync API: DB Error fetching user profile data from collection '${collectionName}'`, error, logContext, userId);
-        throw new Error(`Failed to fetch user profile data. DB Error: ${error instanceof Error ? error.message : String(error)}`);
+        throw error; 
     }
 }
 
@@ -221,7 +221,7 @@ export async function GET() {
      return addCorsHeaders(response);
   } catch (error: any) {
     logError(`Sync API: Unrecoverable error during GET sync for user ${userId}.`, error, { ...logContextBase, cause: error.cause }, userId); 
-    const errorMessage = error.message || 'Failed to fetch data from database';
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data from database';
      const response = NextResponse.json({ error: errorMessage }, { status: 500 });
      return addCorsHeaders(response);
   }

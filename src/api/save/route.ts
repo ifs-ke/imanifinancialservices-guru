@@ -1,10 +1,7 @@
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import connectToDatabase from '@/lib/mongodb';
-import { Collection, ClientSession } from 'mongodb'; 
-import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData } from '@/lib/types';
-import { hashData, verifyHash } from '@/lib/storage-utils'; 
+import type { WeeklyReviewData, SaveDataPayload, Transaction, Debt, AssetItem, OtherLiabilityItem, BudgetItem, UserProfileUpdate } from '@/lib/types';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; 
 import stringify from 'fast-json-stable-stringify'; 
 import { Ratelimit } from '@upstash/ratelimit';
@@ -12,6 +9,7 @@ import { kv } from '@vercel/kv';
 import { addCorsHeaders } from '@/lib/utils'; 
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger'; 
 import { SaveDataPayloadSchema } from '@/lib/schemas';
+import { hashData, verifyHash } from '@/lib/storage-utils';
 
 
 const ratelimit = new Ratelimit({
@@ -19,7 +17,7 @@ const ratelimit = new Ratelimit({
   limiter: Ratelimit.slidingWindow(10, '10 s'), 
 });
 
-async function replaceCollectionData(db: any, collectionName: string, userId: string, data: any[], session: ClientSession) { 
+async function replaceCollectionData<T>(db: Collection<T>, collectionName: string, userId: string, data: T[], session: ClientSession) {
     const logContext = { userId, collectionName, operation: 'replaceCollectionData', apiRoute: '/api/save' };
     logDebug(`Save API: Starting replace for ${collectionName}`, logContext, userId);
     try {
@@ -53,7 +51,7 @@ async function replaceCollectionData(db: any, collectionName: string, userId: st
         logInfo(`Save API: Successfully processed ${collectionName}`, logContext, userId);
     } catch (error: any) {
         logError(`Save API: DB Error replacing ${collectionName}`, error, logContext, userId);
-        throw new Error(`Failed to save ${collectionName}: ${error.message}`);
+ throw new Error(`Failed to save ${collectionName}: ${(error as Error).message}`);
     }
 }
 
@@ -93,14 +91,14 @@ async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Rec
              logInfo(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews`, logContext, userId);
          } else {
              logDebug(`Save API: No valid owned reviews to save.`, logContext, userId);
-         }
+ }
     } catch (error: any) {
         logError(`Save API: DB Error saving owned weeklyReviews`, error, logContext, userId);
         throw new Error(`Failed to save owned weekly reviews: ${error.message}`);
     }
 }
 
-async function saveUserProfileData(db: any, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean, session?: ClientSession) { 
+async function saveUserProfileData(db: Collection<UserProfileUpdate>, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean, session?: ClientSession) {
     const logContext = { userId, operation: 'saveUserProfileData', apiRoute: '/api/save' };
     logDebug(`Save API: Starting save for user profile data`, logContext, userId);
 
@@ -178,7 +176,7 @@ export async function POST(request: Request) {
   logDebug('Save API: Rate limit check passed.', logContextWithRateLimit, userId);
 
   let rawPayload: any;
-  try {
+  try { 
     rawPayload = await request.json();
   } catch (error: any) {
     logError('Save API: Invalid request body - JSON parsing failed.', error, logContextWithRateLimit, userId);
@@ -194,7 +192,7 @@ export async function POST(request: Request) {
   }
   
   const payload = validationResult.data;
-  const { dataHash, ...receivedData } = payload;
+  const { dataHash, ...receivedData }: SaveDataPayload = payload;
   const preparedDataForVerification = prepareDataForHashing(receivedData as any); 
   const dataString = stringify(preparedDataForVerification);
   const calculatedServerHash = await hashData(dataString);
@@ -223,16 +221,16 @@ export async function POST(request: Request) {
           assetItems = [],
           otherLiabilityItems = [],
           budgetItems = [], 
-          ownedReviews = {},
-          startDate, 
-          endDate,   
+          ownedReviews = {}, 
+          startDate,
+          endDate,
           gettingStartedDismissed
         } = preparedDataForVerification; 
 
         await Promise.all([
-            replaceCollectionData(db, 'transactions', userId, transactions, session),
-            replaceCollectionData(db, 'debts', userId, debts, session),
-            replaceCollectionData(db, 'assetItems', userId, assetItems, session),
+            replaceCollectionData(db.collection<Transaction>('transactions'), 'transactions', userId, transactions, session),
+            replaceCollectionData(db.collection<Debt>('debts'), 'debts', userId, debts, session),
+            replaceCollectionData(db.collection<AssetItem>('assetItems'), 'assetItems', userId, assetItems, session),
             replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems, session),
             replaceCollectionData(db, 'budgetItems', userId, budgetItems, session), 
             saveOwnedWeeklyReviews(db, userId, ownedReviews, session),
@@ -243,7 +241,7 @@ export async function POST(request: Request) {
      const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
      return addCorsHeaders(response);
   } catch (error: any) {
-    logError('Save API: MongoDB transaction failed or aborted.', error, logContextWithRateLimit, userId);
+    logError('Save API: MongoDB transaction failed or aborted.', error as Error, logContextWithRateLimit, userId);
     const errorMessage = error instanceof Error ? `Failed to save data: ${error.message}` : 'An unknown error occurred during save.';
      const response = NextResponse.json({ error: errorMessage }, { status: 500 });
      return addCorsHeaders(response);

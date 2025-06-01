@@ -1,9 +1,10 @@
+
 // src/store/notificationStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { NotificationItem, NotificationType } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils';
-import { logDebug, logInfo } from '@/lib/logger'; // Import logger
+import { logDebug, logInfo } from '@/lib/logger'; 
 
 const MAX_NOTIFICATIONS = 50; 
 
@@ -74,11 +75,12 @@ export interface NotificationState {
   clearSelection: () => void; 
 }
 
-const initialState = {
+const initialState: Omit<NotificationState, 'addNotification' | 'markAsRead' | 'markAllAsRead' | 'deleteNotification' | 'clearAllNotifications' | 'setNotifications' | 'unreadCount' | 'toggleSelectNotification' | 'toggleSelectAllNotifications' | 'markSelectedAsRead' | 'deleteSelectedNotifications' | 'clearSelection'> = {
   notifications: [], 
   selectedNotificationIds: [],
   isHydrated: false,
 };
+
 
 export const useNotificationStore = create<NotificationState>()(
   persist(
@@ -195,3 +197,4 @@ export const useNotificationStore = create<NotificationState>()(
     }
   )
 );
+

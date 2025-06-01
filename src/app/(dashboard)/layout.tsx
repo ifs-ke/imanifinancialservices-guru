@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/layout.tsx
  'use client';
 
@@ -11,10 +12,9 @@
  import FloatingChatButton from '@/components/layout/FloatingChatButton';
  import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
  import { Toaster } from '@/components/ui/toaster';
- import { logDebug, logInfo, logError } from '@/lib/logger';
+ import { logInfo } from '@/lib/logger';
  import { LoadingSpinner } from '@/components/ui/loading-spinner';
  import { useAuth } from '@clerk/nextjs';
- // import { AppMenubar } from '@/components/layout/AppMenubar'; // Removed AppMenubar
 
 
  export default function DashboardLayout({
@@ -28,13 +28,13 @@
    useBudgetNotifications();
 
    useEffect(() => {
-       if (!isClerkLoaded || !isSignedIn || !syncManager) return;
+       if (!isClerkLoaded || !isSignedIn || !userId || !syncManager) return;
 
        if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
            logInfo("DashboardLayout: Hash mismatch detected. Opening dialog.", { userId });
            syncManager.setIsMismatchDialogOpen(true);
        }
-   }, [syncManager?.hashMismatch, syncManager?.isMismatchDialogOpen, syncManager?.setIsMismatchDialogOpen, isClerkLoaded, isSignedIn, userId, syncManager]);
+   }, [syncManager, isClerkLoaded, isSignedIn, userId]); // syncManager itself is stable, specific props cause re-run
 
 
    if (!isClerkLoaded || !syncManager || (syncManager.syncStatus === 'idle' && isSignedIn) || (syncManager.syncStatus === 'syncing' && isSignedIn && !syncManager.lastSyncTime) || (syncManager.syncStatus === 'loading_local')) {
@@ -54,7 +54,6 @@
      <div className="flex min-h-screen w-full bg-background">
        <Sidebar />
        <SidebarInset className="flex flex-col bg-background">
-         {/* <AppMenubar /> */} {/* Removed AppMenubar */}
          <main className="flex-1 overflow-y-auto">
            {children}
          </main>
@@ -81,3 +80,4 @@
      </div>
    );
  }
+

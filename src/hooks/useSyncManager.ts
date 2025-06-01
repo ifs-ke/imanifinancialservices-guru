@@ -119,11 +119,11 @@ export function useSyncManager() {
         logInfo('SyncManager: All local store data cleared.', { userId: currentUserIdForLog });
     } catch (error: any) {
         logError('Error during clearAllLocalStoreData', error, { userId: currentUserIdForLog });
-        updateSyncState({ status: 'error_local' });
+        updateSyncState({ status: 'error_local' }); // Ensure this status is set on error
     } finally {
         isClearingRef.current = false;
     }
-  }, [ getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState, updateSyncState, userId]);
+  }, [getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState, updateSyncState, userId]);
 
   const fetchData = useCallback(async (isPreSaveCheck = false): Promise<string | false> => {
     const currentUserId = userId;
@@ -134,7 +134,7 @@ export function useSyncManager() {
             if (syncStateRef.current.status === 'syncing' || syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
                  updateSyncState({ status: 'local' });
             }
-             initialLoadDoneRef.current = true; // Mark initial load as done even if fetch is skipped
+             initialLoadDoneRef.current = true;
         }
         return isPreSaveCheck ? (syncStateRef.current.lastServerHash || "fetch_disabled_no_hash") : false;
     }
@@ -142,6 +142,7 @@ export function useSyncManager() {
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
       logWarn('fetchData aborted: User not signed in or Clerk not loaded.', { isClerkLoaded, isSignedIn, currentUserId });
       if (!isPreSaveCheck && syncStateRef.current.status !== 'idle') updateSyncState({ status: 'idle' });
+      initialLoadDoneRef.current = true; // Still mark as done to unblock UI if this was an initial attempt
       return false;
     }
     if (isSavingRef.current || isFetchingRef.current || isClearingRef.current) {
@@ -162,6 +163,7 @@ export function useSyncManager() {
       if (signal.aborted) {
         logInfo('Fetch aborted by new request or unmount.', { currentUserId });
         isFetchingRef.current = false;
+        initialLoadDoneRef.current = true;
         return false;
       }
       if (!response.ok) {
@@ -183,6 +185,7 @@ export function useSyncManager() {
             updateSyncState({ status: 'hash_mismatch', lastServerHash: serverHash, isMismatchDialogOpen: true });
             toast({ title: 'Data Sync Mismatch', description: 'Server data appears to have changed. Please resolve the conflict.', variant: 'destructive', duration: Infinity });
             isFetchingRef.current = false;
+            initialLoadDoneRef.current = true;
             return false;
         }
 
@@ -211,9 +214,10 @@ export function useSyncManager() {
           toast({ title: 'Data Synced', description: 'Latest data loaded from the server.' });
         }
       }
-      if (!isPreSaveCheck) initialLoadDoneRef.current = true;
+      initialLoadDoneRef.current = true;
       return serverHash;
     } catch (error: any) {
+      initialLoadDoneRef.current = true; // Ensure this is set even on error
       if (error.name === 'AbortError') {
         logInfo('Fetch aborted.', { currentUserId });
       } else {
@@ -229,7 +233,6 @@ export function useSyncManager() {
             });
         }
       }
-      if (!isPreSaveCheck) initialLoadDoneRef.current = true;
       return false;
     } finally {
       isFetchingRef.current = false;
@@ -390,7 +393,7 @@ export function useSyncManager() {
       localStorage.setItem(`ifcGuru_uiPrefs_${userId}`, JSON.stringify(stateToPersist));
       logDebug('SyncManager: Persisted UI preferences to localStorage.', { userId, preferences: stateToPersist });
     }
-  }, [syncStateRef.current.gettingStartedDismissed, userId, isSignedIn]);
+  }, [syncState.gettingStartedDismissed, userId, isSignedIn]); // Changed from syncStateRef.current
 
   useEffect(() => {
     if (isSignedIn && userId) {
@@ -541,3 +544,4 @@ export function useSyncManager() {
     },
   };
 }
+

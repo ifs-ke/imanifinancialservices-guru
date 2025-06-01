@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/weekly-review/page.tsx
 'use client';
 
@@ -31,7 +32,7 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { logInfo, logWarn, logError } from '@/lib/logger';
+import { logInfo, logWarn } from '@/lib/logger'; // logError removed as it's unused
 
 const formatDate = (date: Date | string) => {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -348,7 +349,7 @@ export default function WeeklyReviewPage() {
                   <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><TrendingUp size={14} /> Income:</span><span className="font-mono font-semibold text-accent">{formatCurrency(weeklyMetrics.totalIncome)}</span></div>
                   <div className="flex justify-between items-center"><span className="text-muted-foreground flex items-center gap-1"><TrendingDown size={14} /> Expenses:</span><span className="font-mono font-semibold text-destructive">{formatCurrency(weeklyMetrics.totalExpenses)}</span></div>
                   <div className="flex justify-between items-center border-t pt-2 mt-2"><span className="text-muted-foreground flex items-center gap-1"><Scale size={14} /> Net Flow:</span><span className={cn("font-mono font-bold", weeklyMetrics.netCashFlow >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(weeklyMetrics.netCashFlow)}</span></div>
-                  <div className="flex justify-between items-center text-xs pt-1"><span className="text-muted-foreground">Budget Context ({format(currentWeekStart, 'MMM yyyy')}):</span><span className={cn("font-mono font-semibold", weeklyMetrics.budgetVarianceStatus === 'favorable' && 'text-accent', weeklyMetrics.budgetVarianceStatus === 'unfavorable' && 'text-destructive', weeklyMetrics.budgetVarianceStatus === 'on-track' && 'text-primary', weeklyMetrics.budgetVarianceStatus === 'no-budget' && 'text-muted-foreground italic')}>{weeklyMetrics.budgetVarianceStatus === 'no-budget' ? 'No Budget Data' : `${weeklyMetrics.budgetVariance >= 0 ? '+' : ''}${formatCurrency(weeklyMetrics.budgetVariance)} (${weeklyMetrics.budgetVarianceStatus.replace('-', ' ')})`}</span></div>
+                  <div className="flex justify-between items-center text-xs pt-1"><span className="text-muted-foreground">Budget Context ({currentWeekStart ? format(currentWeekStart, 'MMM yyyy') : 'N/A'}):</span><span className={cn("font-mono font-semibold", weeklyMetrics.budgetVarianceStatus === 'favorable' && 'text-accent', weeklyMetrics.budgetVarianceStatus === 'unfavorable' && 'text-destructive', weeklyMetrics.budgetVarianceStatus === 'on-track' && 'text-primary', weeklyMetrics.budgetVarianceStatus === 'no-budget' && 'text-muted-foreground italic')}>{weeklyMetrics.budgetVarianceStatus === 'no-budget' ? 'No Budget Data' : `${weeklyMetrics.budgetVariance >= 0 ? '+' : ''}${formatCurrency(weeklyMetrics.budgetVariance)} (${weeklyMetrics.budgetVarianceStatus.replace('-', ' ')})`}</span></div>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
@@ -443,7 +444,7 @@ export default function WeeklyReviewPage() {
           <DialogHeader>
             <DialogTitle>Comment on Transaction</DialogTitle>
             <DialogDescription>
-              {commentingTransaction?.description} ({formatCurrency(commentingTransaction?.amount || 0)}) on {formatDate(commentingTransaction?.date || new Date())}
+              {commentingTransaction?.description} ({formatCurrency(commentingTransaction?.amount || 0)}) on {commentingTransaction?.date ? formatDate(commentingTransaction.date) : 'N/A'}
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -491,3 +492,4 @@ export default function WeeklyReviewPage() {
     </div>
   );
 }
+

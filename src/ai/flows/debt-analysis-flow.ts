@@ -10,7 +10,7 @@
 
 import { ai } from '@/ai/ai-instance';
 import { z } from 'genkit';
-import type { DebtItem } from '@/lib/types'; // Import DebtItem type for structure reference
+ // Import DebtItem type for structure reference
 
 // Define Zod schema for individual debt items within the input
 const DebtItemSchema = z.object({

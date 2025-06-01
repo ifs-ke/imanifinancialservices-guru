@@ -43,7 +43,7 @@ const POSSIBLE_HEADERS: { [key: string]: keyof TransactionWithId | 'ignore' } = 
   'fixed/variable': 'variability', 
 };
 
-const TRANSACTION_FIELDS: (keyof TransactionWithId)[] = ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability'];
+// const TRANSACTION_FIELDS: (keyof TransactionWithId)[] = ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability']; // Unused
 
 type ImportStage = 'upload' | 'mapping' | 'preview' | 'reconciling' | 'complete' | 'error';
 
@@ -117,7 +117,7 @@ export default function ImportTransactionsPage() {
             complete: (results: ParseResult<Record<string, string>>) => {
                 setIsParsing(false); 
                 if (results.errors.length > 0) {
-                    console.error("CSV Parsing Errors:", results.errors);
+                    // console.error("CSV Parsing Errors:", results.errors); // Replaced by logger if needed
                     setImportError(`Error parsing CSV: ${results.errors[0].message}. Check file format.`);
                     setStage('error');
                     return;
@@ -140,7 +140,7 @@ export default function ImportTransactionsPage() {
                 setStage('mapping');
             },
             error: (error: Error) => {
-                console.error("CSV Parsing Failed:", error);
+                // console.error("CSV Parsing Failed:", error); // Replaced by logger if needed
                 setImportError(`Failed to parse file: ${error.message}`);
                 setStage('error');
                 setIsParsing(false);
@@ -224,10 +224,10 @@ export default function ImportTransactionsPage() {
                 try {
                     switch (field) {
                         case 'date':
-                            const dateFormats = [
-                                "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "yyyyMMdd",
-                                "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "MM/dd/yyyy HH:mm:ss"
-                            ];
+                            // const dateFormats = [ // Unused variable
+                            //     "yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "yyyyMMdd",
+                            //     "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "MM/dd/yyyy HH:mm:ss"
+                            // ];
                             let parsedDate = null;
                             parsedDate = new Date(rawValue);
                              if (isNaN(parsedDate.getTime())) {
@@ -341,8 +341,7 @@ export default function ImportTransactionsPage() {
                  })
              );
          }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-     }, [stage, mappedTransactions.length]); // Added mappedTransactions.length to dependencies
+     }, [stage, mappedTransactions.length, findPotentialDuplicate]); 
 
      const toggleImportRow = (index: number) => {
         setMappedTransactions(prev => prev.map((tx, i) =>
@@ -386,7 +385,7 @@ export default function ImportTransactionsPage() {
             toast({ title: "Import Successful", description: `${addedTransactionsWithIds.length} transactions imported. ${skippedCount} rows skipped.`, variant: "default" }); 
 
         } catch (error: any) {
-            console.error("Import Failed:", error);
+            // console.error("Import Failed:", error); // Replaced by logger if needed
             setImportError(`Failed to save transactions: ${error.message}`);
             setStage('error');
             setLastImportedIds([]); 
@@ -394,11 +393,11 @@ export default function ImportTransactionsPage() {
         }
     };
 
-    const handleRollback = () => {
-        if (lastImportedIds.length === 0) return;
-        console.warn("Rollback requested for IDs:", lastImportedIds, " - Not implemented in store yet.");
-        toast({ title: "Rollback Not Implemented", description: "Functionality to undo the last import requires store support.", variant:"destructive" });
-    };
+    // const handleRollback = () => { // Unused function
+    //     if (lastImportedIds.length === 0) return;
+    //     // console.warn("Rollback requested for IDs:", lastImportedIds, " - Not implemented in store yet.");
+    //     toast({ title: "Rollback Not Implemented", description: "Functionality to undo the last import requires store support.", variant:"destructive" });
+    // };
 
     const resetState = () => {
         setStage('upload');
@@ -542,7 +541,7 @@ export default function ImportTransactionsPage() {
                                         tx.__parseError && "bg-destructive/10 text-destructive",
                                         tx.__duplicatePotential && !tx.__parseError && "bg-yellow-100 dark:bg-yellow-900/30"
                                     )}
-                                    title={tx.__parseError ? tx.__parseError : tx.__duplicatePotential ? `Potential duplicate of: ${format(tx.__duplicatePotential.date, 'PP')} - ${tx.__duplicatePotential.description} (${formatCurrency(tx.__duplicatePotential.amount)})` : undefined}
+                                    title={tx.__parseError ? tx.__parseError : tx.__duplicatePotential ? `Potential duplicate of: ${tx.__duplicatePotential.date ? format(tx.__duplicatePotential.date, 'PP') : 'Invalid Date'} - ${tx.__duplicatePotential.description} (${formatCurrency(tx.__duplicatePotential.amount)})` : undefined}
                                     >
                                     <TableCell className="text-center">
                                         <Input
@@ -663,4 +662,5 @@ export default function ImportTransactionsPage() {
         </div>
     );
 }
+
 

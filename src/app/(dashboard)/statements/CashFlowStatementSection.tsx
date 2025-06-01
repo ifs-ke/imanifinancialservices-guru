@@ -144,4 +144,4 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
   );
 };
 
-export default
+export default CashFlowStatementSection;

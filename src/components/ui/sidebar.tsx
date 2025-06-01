@@ -23,26 +23,28 @@ import {
   PanelLeft,
   BookOpen,
   Bell,
-  HardDrive, // Changed from CloudOff/Cloud for local storage indication
+  Cloud,
+  CloudOff,
+  UploadCloud,
   AlertTriangle,
   ClipboardList,
-  RefreshCw, // Could be repurposed for "refresh local data" or removed
+  RefreshCw, 
   Menu,
   PieChart as PieChartIcon,
   Users,
-  Briefcase, // Added for Investments
+  Briefcase, 
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser, useAuth } from "@clerk/nextjs"; // Added useAuth
+import { UserButton, useUser, useAuth } from "@clerk/nextjs"; 
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
 import { Skeleton } from "@/components/ui/skeleton";
-// Avatar not directly used here if UserButton handles it.
+
 
 interface SidebarMenuItem {
   href: string;
@@ -55,7 +57,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/transactions", label: "Transactions", icon: <ReceiptText size={18} /> },
   { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
   { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
-  { href: "/investments", label: "Investments", icon: <Briefcase size={18} /> }, // Added
+  { href: "/investments", label: "Investments", icon: <Briefcase size={18} /> }, 
   { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
   { href: "/budget", label: "Budget", icon: <PieChartIcon size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
@@ -90,7 +92,7 @@ interface SidebarProviderProps {
 export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithChildren<SidebarProviderProps>>(
   ({ children, ...props }, ref) => {
     const isMobileClient = useIsMobile();
-    const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded"); // Default to expanded initially
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded"); 
     const [hasMounted, setHasMounted] = React.useState(false);
 
     React.useEffect(() => {
@@ -103,7 +105,7 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
           setSidebarState("collapsed");
         } else {
           const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
-          setSidebarState(storedState || "expanded"); // Fallback to expanded if no stored state for desktop
+          setSidebarState(storedState || "expanded"); 
         }
       }
     }, [isMobileClient, hasMounted]);
@@ -160,51 +162,77 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     const [clientUnreadCount, setClientUnreadCount] = React.useState(0);
     const [hasMounted, setHasMounted] = React.useState(false);
 
-    const { user, isLoaded: isClerkLoaded } = useUser(); // Clerk's useUser hook
-    const { isSignedIn } = useAuth(); // Clerk's useAuth for isSignedIn status
+    const { user, isLoaded: isClerkLoaded } = useUser();
+    const { isSignedIn } = useAuth();
 
     const syncManager = useSyncManager();
-    const { syncStatus, retrySync } = syncManager; // Removed hashMismatch, isMismatchDialogOpen
+    const { syncStatus, manualSync, isMismatchDialogOpen, isFetchDisabled } = syncManager;
 
     React.useEffect(() => {
       setHasMounted(true);
       setClientUnreadCount(unreadCount);
     }, [unreadCount]);
 
-    let PersistenceIcon: React.ElementType = HardDrive;
-    let persistenceStatusText = 'Local Storage';
-    let persistenceTooltipText = "Data is stored locally in your browser session.";
+    let SyncIcon: React.ElementType = CloudOff;
+    let syncStatusText = 'Offline';
+    let syncTooltipText = 'Sign in to enable cloud sync.';
     let iconColor = 'text-muted-foreground';
-    let isClickable = false; // Sync icon is non-functional for server sync
+    let isSyncButtonClickable = false;
+    let animateIcon = false;
 
-    // Update status text based on local sync manager status
-    if (syncStatus === 'loading_local') {
-        PersistenceIcon = RefreshCw;
-        persistenceStatusText = 'Loading...';
-        persistenceTooltipText = 'Loading local data...';
-        iconColor = 'text-primary animate-spin';
-    } else if (syncStatus === 'error_local') {
-        PersistenceIcon = AlertTriangle;
-        persistenceStatusText = 'Local Error';
-        persistenceTooltipText = 'Error loading local data. Click to retry load.';
-        iconColor = 'text-destructive';
-        isClickable = true; // Allow retry for local load error
-    } else if (syncStatus === 'local') {
-        PersistenceIcon = HardDrive;
-        persistenceStatusText = 'Local Storage';
-        persistenceTooltipText = "Data stored locally. Session only.";
-        iconColor = 'text-accent';
+    if (!isClerkLoaded) {
+      SyncIcon = RefreshCw;
+      syncStatusText = 'Auth Loading...';
+      syncTooltipText = 'Waiting for authentication status...';
+      iconColor = 'text-muted-foreground';
+      animateIcon = true;
+    } else if (!isSignedIn) {
+      SyncIcon = CloudOff;
+      syncStatusText = 'Offline';
+      syncTooltipText = 'Sign in to enable cloud sync.';
+      iconColor = 'text-muted-foreground';
+    } else {
+      isSyncButtonClickable = true; 
+      switch (syncStatus) {
+        case 'syncing': SyncIcon = RefreshCw; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
+        case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
+        case 'local_changes': SyncIcon = UploadCloud; syncStatusText = 'Local Changes'; syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; iconColor = 'text-yellow-500'; break;
+        case 'error': SyncIcon = AlertTriangle; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
+        case 'hash_mismatch': SyncIcon = AlertTriangle; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. Click to resolve.'; iconColor = 'text-destructive'; break;
+        case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
+        case 'error_local': SyncIcon = AlertTriangle; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
+        case 'local':
+          if (isFetchDisabled) {
+            SyncIcon = Cloud; // Show Cloud icon as data is present "locally" when fetch is off
+            syncStatusText = 'Local (Cloud Off)';
+            syncTooltipText = 'Cloud fetching disabled. Data is local. Click to save local changes.';
+            iconColor = 'text-primary'; 
+          } else {
+            SyncIcon = CloudOff; 
+            syncStatusText = 'Not Synced';
+            syncTooltipText = 'Click to sync data with server.';
+            iconColor = 'text-muted-foreground';
+          }
+          break;
+        case 'idle':
+        default:
+          SyncIcon = CloudOff;
+          syncStatusText = 'Not Synced';
+          syncTooltipText = 'Click to sync data with server.';
+          iconColor = 'text-muted-foreground';
+          break;
+      }
     }
 
-
-    const handleSyncClick = () => {
-      if (isClickable && syncStatus === 'error_local') {
-        logInfo("Sidebar: Retry local data load triggered.", { userId: user?.id });
-        retrySync(); // retrySync in local mode will re-attempt local hydration or notify
-      } else {
-        logDebug("Sidebar: Sync icon clicked but no server sync action in local-only mode.", { status: persistenceStatusText, userId: user?.id });
+    const handleSyncClick = React.useCallback(() => {
+      if (!isClerkLoaded || !isSignedIn) {
+        logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
+        return;
       }
-    };
+      if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'hash_mismatch' || syncStatus === 'error_local') {
+        manualSync();
+      }
+    }, [isClerkLoaded, isSignedIn, user?.id, isSyncButtonClickable, syncStatus, manualSync]);
 
     const sidebarActualState = isMobile ? "collapsed" : state;
 
@@ -310,20 +338,21 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                   className={cn(
                     "w-full justify-start text-sm h-9",
                     sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
-                    "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "animate-pulse border-destructive ring-2 ring-destructive"
                   )}
-                  aria-label={persistenceTooltipText}
-                  disabled={!isClickable && syncStatus !== 'error_local'} // Only clickable if there's a local error to retry
+                  aria-label={syncTooltipText}
+                  disabled={!isSyncButtonClickable && syncStatus !== 'error' && syncStatus !== 'hash_mismatch' && syncStatus !== 'error_local'}
                 >
-                  {React.cloneElement(<PersistenceIcon />, { size: 18, className: cn("flex-shrink-0", iconColor) })}
+                  <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "text-destructive" )} />
                   <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
-                    {persistenceStatusText}
+                    {syncStatusText}
                   </span>
                 </Button>
               </TooltipTrigger>
               {sidebarActualState === "collapsed" && (
                 <TooltipContent side="right" align="center">
-                  {persistenceTooltipText}
+                  {syncTooltipText}
                 </TooltipContent>
               )}
             </Tooltip>
@@ -434,4 +463,5 @@ export const SidebarInset = React.forwardRef<
  );
 });
 SidebarInset.displayName = "SidebarInset";
+
 

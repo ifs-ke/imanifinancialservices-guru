@@ -224,4 +224,8 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
                 <span className={`font-mono ${netWorth >= 0 ? 'text-primary' : 'text-destructive'}`}>{formatCurrency(netWorth)}</span>
             </div>
         </CardFooter>
-    </
+    </Card>
+  )
+};
+
+export default NetWorthStatementSection;

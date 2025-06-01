@@ -3,12 +3,6 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { ClientLogPayloadSchema } from '@/lib/schemas'; // Import Zod schema
 
-interface ClientLogPayload {
-  level: 'log' | 'info' | 'warn' | 'error' | 'debug';
-  message: string;
-  context?: Record<string, any>;
-}
-
 export async function POST(request: Request) {
   let effectiveUserId: string;
   let logContextBase: Record<string, any> = {};
@@ -19,7 +13,7 @@ export async function POST(request: Request) {
     let rawPayload;
     try {
         rawPayload = await request.clone().json(); // Clone to read body for userId and then full parse
-    } catch (jsonError: any) {
+    } catch (jsonError: unknown) { // Use unknown for caught errors
         console.error('CRITICAL: Failed to parse client log payload as JSON in /api/client-log', { 
             endpoint: '/api/client-log', 
             errorMessage: jsonError.message,
@@ -77,7 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, message: 'Log received by server' }, { status: 200 });
 
   } catch (error: any) {
-    const criticalErrorContext = {
+    const criticalErrorContext: Record<string, any> = { // Specify type for criticalErrorContext
         ...(Object.keys(logContextBase).length > 0 ? logContextBase : { userId: 'unknown', source: 'client-log-api-critical-error', apiRoute: '/api/client-log' }),
         endpoint: '/api/client-log',
         errorMessage: error.message,
