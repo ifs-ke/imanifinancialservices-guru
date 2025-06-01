@@ -10,7 +10,7 @@
  import { startOfMonth, endOfMonth, format as formatDateFns } from 'date-fns'; // Renamed format to avoid conflict
  import type { NotificationType } from '@/lib/types';
  import { logInfo, logWarn, logError } from '@/lib/logger';
- import { useAuth } from "@clerk/nextjs"; 
+ import { useAuth } from "@clerk/nextjs";
 
 
  const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
@@ -22,7 +22,7 @@
      const budgetPeriod = useBudgetStore(state => state.budgetPeriod); // Get current budget period
      const allTransactions = useTransactionsStore(state => state.transactions);
      const existingNotifications = useNotificationStore(state => state.notifications);
-     const { userId, isSignedIn } = useAuth(); 
+     const { userId, isSignedIn } = useAuth();
 
 
      const monthlyAnalysis = useMemo(() => {
@@ -66,71 +66,71 @@
      }, [allTransactions, budgetItems, budgetPeriod]); // Added budgetPeriod dependency
 
      useEffect(() => {
-         if (!isSignedIn || !userId) return; 
+         if (!isSignedIn || !userId) return;
 
          const { actualSpendingByCategory, budgetByCategory } = monthlyAnalysis;
-         const generatedNotificationKeys = new Set<string>(); 
+         const generatedNotificationKeys = new Set<string>();
 
          for (const budgetItemDescription in budgetByCategory) {
              const budgetedAmount = budgetByCategory[budgetItemDescription].amount;
              // Try to find actual spending using the budget item description as the key
-             const actualAmount = actualSpendingByCategory[budItemDescription] || 0;
-              
-             if (budgetedAmount <= 0) continue; 
+             const actualAmount = actualSpendingByCategory[budgetItemDescription] || 0;
+
+             if (budgetedAmount <= 0) continue;
 
              const spendingRatio = actualAmount / budgetedAmount;
              const logContext = { userId, budgetCategory: budgetItemDescription, budgetedAmount, actualAmount, spendingRatio };
 
-             
+
              if (spendingRatio >= OVERBUDGET_THRESHOLD_PERCENT) {
                  const notifKey = `overbudget-${budgetPeriod}-${budgetItemDescription}`; // Include period in key
                  const notifTitle = 'Over Budget Alert';
-                  
+
                   const existingUnread = existingNotifications.find(n =>
-                       n.message.includes(`"${budgetItemDescription}"`) && 
+                       n.message.includes(`"${budgetItemDescription}"`) &&
                        n.title === notifTitle &&
-                       n.type === 'budget' && 
+                       n.type === 'budget' &&
                        !n.read
                   );
 
                  if (!existingUnread && !generatedNotificationKeys.has(notifKey)) {
                      addNotification({
-                         type: 'budget', 
+                         type: 'budget',
                          title: notifTitle,
                          message: `You've spent ${formatCurrency(actualAmount)} out of ${formatCurrency(budgetedAmount)} budgeted for "${budgetItemDescription}" in ${formatDateFns(startOfMonth(new Date(budgetPeriod.split('-')[0], parseInt(budgetPeriod.split('-')[1])-1)), 'MMMM yyyy')}.`,
-                         link: '/budget', 
+                         link: '/budget',
                      });
                       logError(`Over budget for "${budgetItemDescription}"`, undefined, logContext, userId);
                       generatedNotificationKeys.add(notifKey);
                  }
              }
-             
+
              else if (spendingRatio >= BUDGET_WARNING_THRESHOLD_PERCENT) {
                  const notifKey = `warning-${budgetPeriod}-${budgetItemDescription}`; // Include period in key
                  const notifTitle = 'Budget Warning';
-                 
+
                  const existingUnread = existingNotifications.find(n =>
-                     n.message.includes(`"${budgetItemDescription}"`) && 
+                     n.message.includes(`"${budgetItemDescription}"`) &&
                      n.title === notifTitle &&
-                     n.type === 'warning' && 
+                     n.type === 'warning' &&
                      !n.read
                  );
 
                  if (!existingUnread && !generatedNotificationKeys.has(notifKey)) {
                      addNotification({
-                         type: 'warning', 
+                         type: 'warning',
                          title: notifTitle,
                          message: `Approaching budget limit for "${budgetItemDescription}". Spent ${formatCurrency(actualAmount)} of ${formatCurrency(budgetedAmount)} in ${formatDateFns(startOfMonth(new Date(budgetPeriod.split('-')[0], parseInt(budgetPeriod.split('-')[1])-1)), 'MMMM yyyy')}.`,
-                         link: '/budget', 
+                         link: '/budget',
                      });
                       logWarn(`Budget warning for "${budgetItemDescription}"`, logContext, userId);
                       generatedNotificationKeys.add(notifKey);
                  }
              }
          }
-     }, [monthlyAnalysis, addNotification, userId, isSignedIn, existingNotifications, budgetPeriod]); 
+     }, [monthlyAnalysis, addNotification, userId, isSignedIn, existingNotifications, budgetPeriod]);
 
-     return null; 
+     return null;
  }
 
  export function triggerCollaborationNotification(sharerName: string, weekKey: string, recipientUserId: string, sharerId?: string | null) {
@@ -140,14 +140,14 @@
          type: 'collaboration',
          title: 'Review Shared With You',
          message: `${sharerName || 'A user'} shared their weekly review (${weekKey}) with you.`,
-         link: '/weekly-review?tab=shared', 
+         link: '/weekly-review?tab=shared',
      });
-      
+
       logInfo(`Weekly review ${weekKey} shared by ${sharerName} with user ${recipientUserId}`, {
           sharerName,
           weekKey,
-          recipientUserId, 
-          type: 'collaboration_received' 
+          recipientUserId,
+          type: 'collaboration_received'
       }, currentUserIdForLog);
  }
 
@@ -155,7 +155,7 @@
      const addNotification = useNotificationStore.getState().addNotification;
      const currentUserIdForLog = triggeredByUserId || 'system';
      const newNotif = addNotification({
-         type: 'update', 
+         type: 'update',
          title: title,
          message: message,
          link: link,
