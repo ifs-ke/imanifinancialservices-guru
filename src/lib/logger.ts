@@ -1,3 +1,4 @@
+
 // src/lib/logger.ts
 'use client';
 
@@ -21,8 +22,11 @@ const DEFAULT_OPTIONS: LoggerOptions = {
 
 const getBaseContextForDirectLog = (userIdForLog?: string | null): LogContext => {
   // When Clerk is disabled, always use the mock user ID from env if available
-  const effectiveUserId = userIdForLog ?? process.env.NEXT_PUBLIC_MOCK_USER_ID ?? 'anonymous_or_server';
-  
+  // const effectiveUserId = userIdForLog ?? process.env.NEXT_PUBLIC_MOCK_USER_ID ?? 'anonymous_or_server';
+  // With Clerk integrated, userIdForLog will come from auth context or be null
+  const effectiveUserId = userIdForLog ?? 'anonymous_or_server';
+
+
   return {
     userId: effectiveUserId,
     environment: process.env.NODE_ENV || 'unknown_env',
@@ -46,10 +50,10 @@ const prepareErrorContextForLog = (error?: unknown, maxStackLength: number = DEF
     if (typeof error === 'object' && error !== null) {
       const errorContext: LogContext = {};
       for (const [key, value] of Object.entries(error)) {
-        if (typeof value === 'function') continue; 
-        
+        if (typeof value === 'function') continue;
+
         try {
-          errorContext[`error_${key}`] = typeof value === 'object' 
+          errorContext[`error_${key}`] = typeof value === 'object'
             ? JSON.stringify(value).substring(0, 500)
             : value;
         } catch {
@@ -73,18 +77,22 @@ const sendLogToServer = async (level: LogLevel, message: string, context: LogCon
         body: JSON.stringify({ level, message, context }),
       });
     } catch (error) {
-      console.warn('Failed to send log to server API:', { 
-        originalLevel: level, 
-        originalMessage: message, 
+      console.warn('Failed to send log to server API:', {
+        originalLevel: level,
+        originalMessage: message,
         originalContext: context,
         sendError: error
       });
     }
 };
 
-const logToConsole = (level: LogLevel, message: string, context: LogContext) => {
-    const consoleArgs: any[] = [`[Client - ${level.toUpperCase()}] ${message}`]; 
-    
+const logToConsole = (level: LogLevel, message: string, context: LogContext, errorForMessage?: Error) => {
+    let finalMessage = `[Client - ${level.toUpperCase()}] ${message}`;
+    if (errorForMessage && errorForMessage.message) {
+        finalMessage += `: ${errorForMessage.message}`;
+    }
+    const consoleArgs: any[] = [finalMessage];
+
     const { environment, clientTimestamp, source_client_component, userAgent, ...filteredContext } = context;
     if (Object.keys(filteredContext).length > 0) {
       consoleArgs.push(filteredContext);
@@ -104,14 +112,13 @@ const directLog = (
     message: string,
     context?: LogContext,
     error?: unknown,
-    userIdOverride?: string | null // Allow explicitly passing userId
+    userIdOverride?: string | null
 ) => {
-    // Use userIdOverride if provided, otherwise let getBaseContextForDirectLog handle mock/anonymous
-    const baseContext = getBaseContextForDirectLog(userIdOverride); 
+    const baseContext = getBaseContextForDirectLog(userIdOverride);
     const errorContext = prepareErrorContextForLog(error);
     const fullContext = { ...baseContext, ...errorContext, ...(context || {}) };
 
-    logToConsole(level, message, fullContext);
+    logToConsole(level, message, fullContext, error instanceof Error ? error : undefined);
     if (DEFAULT_OPTIONS.enableServerLogging) {
         sendLogToServer(level, message, fullContext);
     }
@@ -137,11 +144,10 @@ export const logDebug = (message: string, context?: LogContext, userId?: string 
 
 
 export const useLogger = (componentName?: string) => {
-  // const { userId, sessionId, orgId } = useAuth(); // Clerk disabled
-  const mockUserId = process.env.NEXT_PUBLIC_MOCK_USER_ID;
-  const userId = mockUserId; // Use mock user ID
-  const sessionId = mockUserId ? 'mock-session-id' : null; // Mock session if user exists
-  const orgId = mockUserId ? 'mock-org-id' : null; // Mock org if user exists
+  const { userId: clerkUserId, sessionId: clerkSessionId, orgId: clerkOrgId } = auth(); // Use Clerk's auth()
+  const userId = clerkUserId;
+  const sessionId = clerkSessionId;
+  const orgId = clerkOrgId;
 
   const [options] = useState<LoggerOptions>(DEFAULT_OPTIONS);
 
@@ -168,7 +174,7 @@ export const useLogger = (componentName?: string) => {
     const errorContext = prepareErrorContextForLog(error, options.maxErrorStackLength);
     const fullContext = { ...baseContext, ...errorContext, ...(context || {}) };
 
-    logToConsole(level, message, fullContext);
+    logToConsole(level, message, fullContext, error instanceof Error ? error : undefined);
     if (options.enableServerLogging) {
       await sendLogToServer(level, message, fullContext);
     }
@@ -186,3 +192,6 @@ export const useLogger = (componentName?: string) => {
     },
   };
 };
+
+// Re-add auth import for useLogger
+import { useAuth } from '@clerk/nextjs';
