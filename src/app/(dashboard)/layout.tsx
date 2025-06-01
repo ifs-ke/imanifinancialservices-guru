@@ -39,7 +39,7 @@
 
    if (!isClerkLoaded || !syncManager || (syncManager.syncStatus === 'idle' && isSignedIn) || (syncManager.syncStatus === 'syncing' && isSignedIn && !syncManager.lastSyncTime) || (syncManager.syncStatus === 'loading_local')) {
      return (
-       <div className="flex items-center justify-center min-h-screen bg-background">
+       <div className="flex items-center justify-center min-h-screen w-full bg-background">
          <LoadingSpinner size={48} text={
              !isClerkLoaded ? "Authenticating..." :
              syncManager?.syncStatus === 'syncing' ? "Syncing data..." :

@@ -202,16 +202,15 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'error_local': SyncIcon = AlertTriangle; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'local':
-          if (isFetchDisabled) {
-            SyncIcon = Cloud; // Show Cloud icon as data is present "locally" when fetch is off
+          SyncIcon = CloudOff; // Default to CloudOff if just 'local' and fetch is enabled
+          syncStatusText = 'Local Data';
+          syncTooltipText = 'Local data active. Click to sync with server.';
+          iconColor = 'text-muted-foreground'; // Use muted to indicate not actively synced
+          if (isFetchDisabled) { // This case was handled in previous turn, if IS_FETCH_DISABLED is true again
+            SyncIcon = Cloud; 
             syncStatusText = 'Local (Cloud Off)';
             syncTooltipText = 'Cloud fetching disabled. Data is local. Click to save local changes.';
-            iconColor = 'text-primary'; 
-          } else {
-            SyncIcon = CloudOff; 
-            syncStatusText = 'Not Synced';
-            syncTooltipText = 'Click to sync data with server.';
-            iconColor = 'text-muted-foreground';
+            iconColor = 'text-primary';
           }
           break;
         case 'idle':
@@ -249,7 +248,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         <div data-sidebar="header" className="flex-shrink-0 border-b border-sidebar-border p-2.5 h-14 flex items-center">
           <div className={cn(
               "flex items-center gap-2 overflow-hidden w-full",
-              sidebarActualState === 'collapsed' && "justify-center"
+              sidebarActualState === 'collapsed' ? "justify-center" : "justify-start"
           )}>
             <Button
               variant="ghost"
@@ -463,5 +462,3 @@ export const SidebarInset = React.forwardRef<
  );
 });
 SidebarInset.displayName = "SidebarInset";
-
-
