@@ -28,18 +28,18 @@ import {
   UploadCloud,
   AlertTriangle,
   ClipboardList,
-  RefreshCw, 
+  RefreshCw,
   Menu,
   PieChart as PieChartIcon,
   Users,
-  Briefcase, 
+  Briefcase,
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser, useAuth } from "@clerk/nextjs"; 
+import { UserButton, useUser, useAuth } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
@@ -57,7 +57,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/transactions", label: "Transactions", icon: <ReceiptText size={18} /> },
   { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
   { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
-  { href: "/investments", label: "Investments", icon: <Briefcase size={18} /> }, 
+  { href: "/investments", label: "Investments", icon: <Briefcase size={18} /> },
   { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
   { href: "/budget", label: "Budget", icon: <PieChartIcon size={18} /> },
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
@@ -92,7 +92,7 @@ interface SidebarProviderProps {
 export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithChildren<SidebarProviderProps>>(
   ({ children, ...props }, ref) => {
     const isMobileClient = useIsMobile();
-    const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded"); 
+    const [sidebarState, setSidebarState] = React.useState<SidebarState>("expanded");
     const [hasMounted, setHasMounted] = React.useState(false);
 
     React.useEffect(() => {
@@ -105,7 +105,7 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
           setSidebarState("collapsed");
         } else {
           const storedState = localStorage.getItem("sidebarState") as SidebarState | null;
-          setSidebarState(storedState || "expanded"); 
+          setSidebarState(storedState || "expanded");
         }
       }
     }, [isMobileClient, hasMounted]);
@@ -192,7 +192,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
       syncTooltipText = 'Sign in to enable cloud sync.';
       iconColor = 'text-muted-foreground';
     } else {
-      isSyncButtonClickable = true; 
+      isSyncButtonClickable = true;
       switch (syncStatus) {
         case 'syncing': SyncIcon = RefreshCw; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
@@ -202,17 +202,11 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'error_local': SyncIcon = AlertTriangle; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'local':
-          SyncIcon = CloudOff; // Default to CloudOff if just 'local' and fetch is enabled
-          syncStatusText = 'Local Data';
-          syncTooltipText = 'Local data active. Click to sync with server.';
-          iconColor = 'text-muted-foreground'; // Use muted to indicate not actively synced
-          if (isFetchDisabled) { // This case was handled in previous turn, if IS_FETCH_DISABLED is true again
-            SyncIcon = Cloud; 
-            syncStatusText = 'Local (Cloud Off)';
-            syncTooltipText = 'Cloud fetching disabled. Data is local. Click to save local changes.';
-            iconColor = 'text-primary';
-          }
-          break;
+            SyncIcon = Cloud; // Show cloud icon for local data
+            syncStatusText = 'Local Data';
+            syncTooltipText = 'Data loaded locally. Click to sync with server.';
+            iconColor = 'text-primary'; // Use primary color for local state
+            break;
         case 'idle':
         default:
           SyncIcon = CloudOff;
@@ -462,3 +456,4 @@ export const SidebarInset = React.forwardRef<
  );
 });
 SidebarInset.displayName = "SidebarInset";
+
