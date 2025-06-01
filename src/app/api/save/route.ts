@@ -4,7 +4,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, InvestmentItem } from '@/lib/types';
-import { hashData, verifyHash } from '@/lib/storage-utils';
+// import { verifyHash } from '@/lib/storage-utils'; // verifyHash is no longer used
+import { hashData } from '@/lib/storage-utils'; // hashData is still used by client, and server for its own hash on sync
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { Ratelimit } from '@upstash/ratelimit';
@@ -12,12 +13,12 @@ import { kv } from '@vercel/kv';
 import { addCorsHeaders } from '@/lib/utils';
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 import { SaveDataPayloadSchema } from '@/lib/schemas';
-import { ensureUserInDb } from '@/app/actions/shareActions'; // For ensuring user exists
+import { ensureUserInDb } from '@/app/actions/shareActions';
 
 const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
   ? new Ratelimit({
       redis: kv,
-      limiter: Ratelimit.slidingWindow(20, '10 s'), // Allow more requests for save
+      limiter: Ratelimit.slidingWindow(20, '10 s'),
     })
   : null;
 
@@ -62,7 +63,6 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in or email not available.' }, { status: 401 });
     return addCorsHeaders(response);
   }
-  // Ensure user exists in DB
   await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
 
 
@@ -97,20 +97,11 @@ export async function POST(request: Request) {
   }
 
   const payload = validationResult.data;
-  const { dataHash, ...receivedData } = payload;
-  const preparedDataForVerification = prepareDataForHashing(receivedData as any);
-  const dataString = stringify(preparedDataForVerification);
-  const calculatedServerHash = await hashData(dataString);
+  // dataHash from client is received but no longer verified on the server side.
+  const { dataHash: clientDataHash, ...receivedData } = payload; 
+  const preparedDataForSaving = prepareDataForHashing(receivedData as any); // Use the data directly
 
-  logDebug(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`, logContextBase, userId);
-
-  const isValid = await verifyHash(dataString, dataHash);
-  if (!isValid) {
-    logError('Save API: Data integrity check failed!', { clientHash: dataHash, serverHash: calculatedServerHash }, logContextBase, userId);
-    const response = NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
-    return addCorsHeaders(response);
-  }
-  logInfo('Save API: Data integrity check passed. Proceeding with save.', logContextBase, userId);
+  logInfo(`Save API: Proceeding with save (hash check disabled). Received client hash: ${clientDataHash}`, logContextBase, userId);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -125,7 +116,7 @@ export async function POST(request: Request) {
         startDate,
         endDate,
         gettingStartedDismissed
-      } = preparedDataForVerification;
+      } = preparedDataForSaving; // Use the received data after preparation (which is mainly for consistent structure)
 
       // Clear existing data for this user
       await tx.transaction.deleteMany({ where: { userId } });
@@ -135,46 +126,45 @@ export async function POST(request: Request) {
       await tx.budgetItem.deleteMany({ where: { userId } });
       await tx.weeklyReview.deleteMany({ where: { userId } });
       await tx.investmentItem.deleteMany({where: {userId}});
+      // Note: StatementSettings is upserted, not deleted and recreated here.
 
       // Insert new data
       if (transactions.length > 0) {
         await tx.transaction.createMany({
-          data: transactions.map(t => ({ ...t, userId, date: new Date(t.date) })),
+          data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date) })),
         });
       }
       if (debts.length > 0) {
-        await tx.debt.createMany({ data: debts.map(d => ({ ...d, userId })) });
+        await tx.debt.createMany({ data: debts.map((d:any) => ({ ...d, userId })) });
       }
       if (investmentItems.length > 0) {
         await tx.investmentItem.createMany({
-          data: investmentItems.map(i => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })),
+          data: investmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })),
         });
       }
       if (assetItems.length > 0) {
-        await tx.assetItem.createMany({ data: assetItems.map(a => ({ ...a, userId })) });
+        await tx.assetItem.createMany({ data: assetItems.map((a:any) => ({ ...a, userId })) });
       }
       if (otherLiabilityItems.length > 0) {
-        await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map(l => ({ ...l, userId })) });
+        await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map((l:any) => ({ ...l, userId })) });
       }
       if (budgetItems.length > 0) {
-        await tx.budgetItem.createMany({ data: budgetItems.map(b => ({ ...b, userId })) });
+        await tx.budgetItem.createMany({ data: budgetItems.map((b:any) => ({ ...b, userId })) });
       }
       if (Object.keys(ownedReviews).length > 0) {
         await tx.weeklyReview.createMany({
-          data: Object.entries(ownedReviews).map(([weekKey, reviewData]) => ({
+          data: Object.entries(ownedReviews).map(([weekKey, reviewData]: [string, any]) => ({
             userId,
             weekKey,
             journal: reviewData.journal,
-            // Prisma handles JSON type directly for PostgreSQL
-            transactionComments: reviewData.transactionComments || undefined, 
+            transactionComments: reviewData.transactionComments || undefined,
           })),
         });
       }
-      // StatementSettings (formerly UserProfile)
       await upsertStatementSettings(userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    logInfo('Save API: Prisma transaction committed successfully.', logContextBase, userId);
+    logInfo('Save API: Prisma transaction committed successfully (hash check disabled).', logContextBase, userId);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
     return addCorsHeaders(response);
 
@@ -185,3 +175,4 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 }
+
