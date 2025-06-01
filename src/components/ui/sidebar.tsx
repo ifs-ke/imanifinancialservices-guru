@@ -244,9 +244,9 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         {...props}
       >
         <div data-sidebar="header" className="flex-shrink-0 border-b border-sidebar-border p-2.5 h-14 flex items-center">
-          <div className={cn(
+        <div className={cn(
               "flex items-center gap-2 overflow-hidden w-full",
-              sidebarActualState === 'collapsed' ? "justify-center" : "justify-start"
+              sidebarActualState === 'collapsed'|| sidebarActualState === "expanded" && "justify-center"
           )}>
             <Button
               variant="ghost"
