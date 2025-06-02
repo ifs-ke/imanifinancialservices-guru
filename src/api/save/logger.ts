@@ -24,23 +24,19 @@ const DEFAULT_OPTIONS: LoggerOptions = {
 // Client-side logger implementation
 class ClientLogger {
   private options: LoggerOptions;
+  private authData: {
+    userId: string | null;
+    sessionId: string | null;
+    orgId: string | null;
+  };
 
   constructor(options: Partial<LoggerOptions> = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
-  }
-
-  // This method is not used directly but serves as a pattern for using auth data
-  // in React components. The actual auth data is accessed within the React Hook
-  // `useLogger` and passed down to the logger instance's methods when needed.
-  // private async initializeAuthData() {
-  //   if (typeof window === 'undefined') return;
-
-  //   try {
-  //     const { userId, sessionId, orgId } = useAuth();
-
-  //   } catch (error) {
-  //     console.warn('Failed to initialize auth data for logger:', error);
-  //   }
+    this.authData = {
+      userId: null,
+      sessionId: null,
+      orgId: null
+    };
   }
 
   private getBaseContext(userIdOverride?: string | null): LogContext {
@@ -48,9 +44,6 @@ class ClientLogger {
     
     return {
       userId: effectiveUserId,
-      // sessionId: this.authData.sessionId, // SessionId not needed for basic logging
-      // orgId: this.authData.orgId, // OrgId not needed for basic logging
-      // environment: process.env.NODE_ENV || 'development', // Environment is standard log context
       clientTimestamp: new Date().toISOString(),
       source: typeof window !== 'undefined' ? window.location.pathname : 'server',
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
@@ -74,8 +67,8 @@ class ClientLogger {
         if (typeof value === 'function') continue;
         
         try {
- errorContext[`error_${key}`] = typeof value === 'object'
- ? JSON.stringify(value).substring(0, 500)
+          errorContext[`error_${key}`] = typeof value === 'object'
+            ? JSON.stringify(value).substring(0, 500)
             : value;
         } catch {
           errorContext[`error_${key}`] = '[Unserializable Data]';
@@ -123,7 +116,7 @@ class ClientLogger {
     error?: unknown,
     userIdOverride?: string | null
   ) {
-    const baseContext = this.getBaseContext(userIdOverride); // Auth data will be added in useLogger hook
+    const baseContext = this.getBaseContext(userIdOverride);
     const errorContext = this.prepareErrorContext(error);
     const fullContext = { ...baseContext, ...errorContext, ...(context || {}) };
 
@@ -143,23 +136,25 @@ const logger = new ClientLogger();
 // React hook for component-specific logging
 export const useLogger = () => {
   const { userId, sessionId, orgId } = useAuth();
-  const { user } = useUser(); // Get user details if needed for richer context
+  const { user } = useUser();
 
-  const authContext = {
-    userId: userId ?? null,
-    sessionId: sessionId ?? null,
-    orgId: orgId ?? null,
-    // Add other user details if necessary, e.g., user?.fullName, user?.emailAddresses[0]?.emailAddress
-  };
+  // Update the logger's auth data when it changes
+  useEffect(() => {
+    logger.authData = {
+      userId: userId ?? null,
+      sessionId: sessionId ?? null,
+      orgId: orgId ?? null
+    };
+  }, [userId, sessionId, orgId]);
 
   const [componentLogger] = useState(() => ({
-    info: (message: string, context?: LogContext) => logger.log('info', message, { ...authContext, ...context }),
-    warn: (message: string, context?: LogContext) => logger.log('warn', message, { ...authContext, ...context }),
-    error: (message: string, error?: unknown, context?: LogContext) => logger.log('error', message, { ...authContext, ...context }, error),
+    info: (message: string, context?: LogContext) => 
+      logger.log('info', message, context),
+    warn: (message: string, context?: LogContext) => 
+      logger.log('warn', message, context),
+    error: (message: string, error?: unknown, context?: LogContext) => 
+      logger.log('error', message, context, error),
     debug: (message: string, context?: LogContext) => {
-      // Only log debug messages in development or if specifically enabled
-      // Adding authContext to debug logs as well
-
       if (logger.options.debugLogsInProduction || process.env.NODE_ENV === 'development') {
         logger.log('debug', message, context);
       }
@@ -171,19 +166,19 @@ export const useLogger = () => {
 
 // Direct export functions for non-component usage
 export const logInfo = (message: string, context?: LogContext, userId?: string | null) => {
-  logger.log('info', message, context, undefined, userId); // userIdOverride takes precedence
+  logger.log('info', message, context, undefined, userId);
 };
 
 export const logWarn = (message: string, context?: LogContext, userId?: string | null) => {
-  logger.log('warn', message, context, undefined, userId); // userIdOverride takes precedence
+  logger.log('warn', message, context, undefined, userId);
 };
 
 export const logError = (message: string, error?: unknown, context?: LogContext, userId?: string | null) => {
-  logger.log('error', message, context, error, userId); // userIdOverride takes precedence
+  logger.log('error', message, context, error, userId);
 };
 
 export const logDebug = (message: string, context?: LogContext, userId?: string | null) => {
-  if (logger.options.debugLogsInProduction || process.env.NODE_ENV === 'development') { // Check debug setting
+  if (logger.options.debugLogsInProduction || process.env.NODE_ENV === 'development') {
     logger.log('debug', message, context, undefined, userId);
   }
 };

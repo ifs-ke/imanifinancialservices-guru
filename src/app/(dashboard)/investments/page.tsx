@@ -4,7 +4,6 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import {
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -33,12 +32,14 @@ import InvestmentFormSheet from './InvestmentFormSheet';
 import { DataTable } from '@/components/ui/data-table';
 import { getInvestmentColumns } from './columns';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Briefcase, PlusCircle, Trash2, Edit3, XCircle } from 'lucide-react';
+import { Briefcase, PlusCircle, Trash2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import InvestmentForecastingTool from './InvestmentForecastingTool'; // Import the new component
+import { Separator } from '@/components/ui/separator';
 
 export default function InvestmentsPage() {
-  const { investmentItems, deleteInvestmentItem, deleteSelectedInvestmentItems, batchUpdateInvestmentItems } = useInvestmentStore(); // Assuming deleteSelected and batchUpdate exist
+  const { investmentItems, deleteInvestmentItem } = useInvestmentStore();
   const totalInvestmentsValue = useInvestmentStore(selectTotalInvestmentsValue);
   const { toast } = useToast();
 
@@ -46,10 +47,7 @@ export default function InvestmentsPage() {
   const [editingItem, setEditingItem] = useState<InvestmentItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<InvestmentItem | null>(null);
   const [isMassDeleteDialogOpen, setIsMassDeleteDialogOpen] = useState(false);
-  // Add isBatchUpdateDialogOpen if implementing batch updates
-  // const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false);
 
-  // Table state
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -117,42 +115,32 @@ export default function InvestmentsPage() {
 
   const confirmMassDelete = () => {
     if (selectedInvestmentIds.length > 0) {
-      // Assuming deleteSelectedInvestmentItems exists in the store
-      // deleteSelectedInvestmentItems(selectedInvestmentIds);
-      selectedInvestmentIds.forEach(id => deleteInvestmentItem(id)); // Fallback if no batch delete
+      selectedInvestmentIds.forEach(id => deleteInvestmentItem(id));
       toast({ title: 'Batch Delete Successful', description: `${selectedInvestmentIds.length} investment(s) deleted.` });
       setRowSelection({});
     }
     setIsMassDeleteDialogOpen(false);
   };
 
-  // const handleBatchUpdateClick = () => {
-  //   if (selectedInvestmentIds.length === 0) {
-  //     toast({ title: 'No Selection', description: 'Please select investments to update.', variant: 'default' });
-  //     return;
-  //   }
-  //   // setIsBatchUpdateDialogOpen(true); // TODO: Implement BatchUpdateInvestmentDialog
-  //   toast({ title: 'Batch Update TODO', description: 'Batch update dialog not yet implemented.' });
-  // };
-
-
   return (
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
        <PageHeader
           title="Investments"
-          description="Track and manage your investment portfolio."
+          description="Track your current portfolio and plan for future growth."
           icon={<Briefcase className="h-6 w-6" />}
         >
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Investment</Button>
-            {/* Add Export/Import buttons if needed later */}
           </div>
         </PageHeader>
 
-      <main className="flex-1 px-4 md:px-6 lg:px-8 space-y-6">
+      <main className="flex-1 px-4 md:px-6 lg:px-8 space-y-8"> {/* Increased space-y */}
+        
+        {/* Current Portfolio Section */}
         <Card className="shadow-md">
           <CardHeader className="p-6">
-            <CardTitle>Portfolio Overview</CardTitle>
+            <CardTitle>Current Portfolio Overview</CardTitle>
+             <CardDescription>Summary of your current investment holdings.</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm p-6">
             <div className="flex flex-col p-3 rounded-md border bg-primary/10">
@@ -168,15 +156,12 @@ export default function InvestmentsPage() {
 
         <Card className="shadow-sm">
            <CardHeader className="p-4 md:p-6 border-b">
-            <CardTitle>Investment List</CardTitle>
-            <CardDescription>Your current investment holdings.</CardDescription>
+            <CardTitle>My Investment Holdings</CardTitle>
+            <CardDescription>Detailed list of your current investments.</CardDescription>
              {selectedInvestmentIds.length > 0 && (
                 <div className="mt-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center border-t pt-4">
                     <span className="text-sm text-muted-foreground mb-2 sm:mb-0">{selectedInvestmentIds.length} selected</span>
                     <div className="flex flex-wrap gap-2">
-                        {/* <Button size="sm" variant="outline" onClick={handleBatchUpdateClick}>
-                            <Edit3 className="mr-2 h-4 w-4" /> Batch Update
-                        </Button> */}
                         <Button size="sm" variant="destructive" onClick={handleMassDeleteClick}>
                             <Trash2 className="mr-2 h-4 w-4" /> Delete Selected
                         </Button>
@@ -202,6 +187,12 @@ export default function InvestmentsPage() {
                </CardFooter>
            )}
         </Card>
+
+        <Separator className="my-8" /> {/* Added separator */}
+
+        {/* Investment Planning & Forecasting Section */}
+        <InvestmentForecastingTool />
+
       </main>
 
       {(editingItem || (isFormSheetOpen && !editingItem)) && (

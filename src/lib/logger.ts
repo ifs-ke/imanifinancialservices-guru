@@ -2,7 +2,7 @@
 // src/lib/logger.ts
 'use client';
 
-// import { useAuth } from '@clerk/nextjs'; // Clerk disabled
+//import { useAuth } from '@clerk/nextjs'; // Clerk disabled
 import { useCallback, useState } from 'react';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log';
@@ -195,3 +195,4 @@ export const useLogger = (componentName?: string) => {
 
 // Re-add auth import for useLogger
 import { useAuth } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs/server';
