@@ -35,7 +35,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Briefcase, PlusCircle, Trash2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import InvestmentForecastingTool from './InvestmentForecastingTool'; // Import the new component
+import InvestmentForecastingTool from './InvestmentForecastingTool';
 import { Separator } from '@/components/ui/separator';
 
 export default function InvestmentsPage() {
@@ -99,6 +99,7 @@ export default function InvestmentsPage() {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    autoResetPageIndex: false, // Add this line
   });
 
   const selectedInvestmentIds = useMemo(() => {
@@ -134,9 +135,8 @@ export default function InvestmentsPage() {
           </div>
         </PageHeader>
 
-      <main className="flex-1 px-4 md:px-6 lg:px-8 space-y-8"> {/* Increased space-y */}
+      <main className="flex-1 px-4 md:px-6 lg:px-8 space-y-8">
         
-        {/* Current Portfolio Section */}
         <Card className="shadow-md">
           <CardHeader className="p-6">
             <CardTitle>Current Portfolio Overview</CardTitle>
@@ -188,9 +188,8 @@ export default function InvestmentsPage() {
            )}
         </Card>
 
-        <Separator className="my-8" /> {/* Added separator */}
+        <Separator className="my-8" />
 
-        {/* Investment Planning & Forecasting Section */}
         <InvestmentForecastingTool />
 
       </main>
