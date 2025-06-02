@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/investments/InvestmentForecastingTool.tsx
 'use client';
 
