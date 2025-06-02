@@ -14,6 +14,8 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 import { SaveDataPayloadSchema } from '@/lib/schemas';
 import { ensureUserInDb } from '@/app/actions/shareActions';
 
+const HASH_CHECK_ENABLED_ON_SERVER = true; // Enable hash check on server
+
 const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
   ? new Ratelimit({
       redis: kv,
@@ -91,14 +93,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Ensure primaryEmailAddress is non-null before using it
     await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
   } catch (dbError: any) {
     logError('Save API: Failed to ensure user in DB.', dbError, logContextBase, userId);
     const response = NextResponse.json({ error: 'Database operation failed while verifying user.' }, { status: 500 });
     return addCorsHeaders(response);
   }
-
 
   if (ratelimit) {
     const { success, limit, remaining, reset } = await ratelimit.limit(userId);
@@ -112,7 +112,6 @@ export async function POST(request: Request) {
   } else {
     logWarn('Save API: Rate limiting is not configured (KV_REST_API_URL or KV_REST_API_TOKEN missing).', logContextBase, userId);
   }
-
 
   let rawPayload: any;
   try {
@@ -132,9 +131,26 @@ export async function POST(request: Request) {
 
   const payload = validationResult.data;
   const { dataHash: clientDataHash, ...receivedData } = payload;
+  
+  // Prepare the received data using the same logic client uses before hashing
   const preparedDataForSaving = prepareDataForHashing(receivedData as any);
+  const serverCalculatedReceivedDataHash = await hashData(stringify(preparedDataForSaving));
 
-  logInfo(`Save API: Proceeding with save (server-side hash check disabled). Received client hash: ${clientDataHash}`, logContextBase, userId);
+  if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedReceivedDataHash !== clientDataHash) {
+    logError('Save API: Data integrity check failed! Client hash does not match server-calculated hash of received data.', 
+        new Error('Client vs Server hash mismatch for received data'), {
+      clientHash: clientDataHash,
+      serverCalculatedHash: serverCalculatedReceivedDataHash,
+    }, userId);
+    const response = NextResponse.json({ error: 'Data integrity check failed. Your data may be out of sync or corrupted. Please try syncing again.' }, { status: 400 });
+    return addCorsHeaders(response);
+  }
+  logInfo('Save API: Server-side data integrity check of client hash passed (or was skipped).', {
+      clientHash: clientDataHash,
+      serverCalculatedHash: serverCalculatedReceivedDataHash,
+      hashCheckEnabled: HASH_CHECK_ENABLED_ON_SERVER
+  }, userId);
+
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -149,7 +165,7 @@ export async function POST(request: Request) {
         startDate,
         endDate,
         gettingStartedDismissed
-      } = preparedDataForSaving;
+      } = preparedDataForSaving; // Use the already prepared data for DB operations
 
       await tx.transaction.deleteMany({ where: { userId } });
       await tx.debt.deleteMany({ where: { userId } });
@@ -205,3 +221,4 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 }
+    

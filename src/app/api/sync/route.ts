@@ -51,42 +51,48 @@ export async function GET() {
     return addCorsHeaders(response);
   }
 
-
   logInfo(`Sync API: Initiating sync for user ${userId}`, logContextBase, userId);
 
   try {
     logDebug("Sync API: Starting Prisma transaction to fetch data.", logContextBase, userId);
-    const [
-      transactions, debts, assetItems, otherLiabilityItems,
-      budgetItems, ownedReviewsPrisma, sharedReviewsPrisma,
-      statementSettings, notifications, investmentItems
-    ] = await prisma.$transaction([
-      prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
-      prisma.debt.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
-      prisma.assetItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
-      prisma.otherLiabilityItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
-      prisma.budgetItem.findMany({ where: { userId }, orderBy: [{ period: 'desc' }, { description: 'asc' }] }),
-      prisma.weeklyReview.findMany({ where: { userId } }),
-      prisma.sharedReview.findMany({
-        where: { sharedWithId: userId },
-        include: { originalReview: true },
-      }),
-      prisma.statementSettings.findUnique({ where: { userId } }),
-      prisma.notification.findMany({ where: { userId }, orderBy: { timestamp: 'desc' }, take: 50 }),
-      prisma.investmentItem.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
-    ]);
-    logDebug("Sync API: Prisma transaction completed.", { ...logContextBase,
-      txCount: transactions.length,
-      debtCount: debts.length,
-      assetCount: assetItems.length,
-      otherLiabilityCount: otherLiabilityItems.length,
-      budgetCount: budgetItems.length,
-      ownedReviewsCount: ownedReviewsPrisma.length,
-      sharedReviewsCount: sharedReviewsPrisma.length,
-      investmentCount: investmentItems.length,
-      statementSettingsFound: !!statementSettings,
-      notificationsCount: notifications.length,
-    }, userId);
+    let transactions, debts, assetItems, otherLiabilityItems, budgetItems, ownedReviewsPrisma, sharedReviewsPrisma, statementSettings, notifications, investmentItems;
+
+    try {
+        [
+        transactions, debts, assetItems, otherLiabilityItems,
+        budgetItems, ownedReviewsPrisma, sharedReviewsPrisma,
+        statementSettings, notifications, investmentItems
+        ] = await prisma.$transaction([
+        prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
+        prisma.debt.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+        prisma.assetItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+        prisma.otherLiabilityItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+        prisma.budgetItem.findMany({ where: { userId }, orderBy: [{ period: 'desc' }, { description: 'asc' }] }),
+        prisma.weeklyReview.findMany({ where: { userId } }),
+        prisma.sharedReview.findMany({
+            where: { sharedWithId: userId },
+            include: { originalReview: true },
+        }),
+        prisma.statementSettings.findUnique({ where: { userId } }),
+        prisma.notification.findMany({ where: { userId }, orderBy: { timestamp: 'desc' }, take: 50 }),
+        prisma.investmentItem.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
+        ]);
+        logDebug("Sync API: Prisma transaction completed.", { ...logContextBase,
+        txCount: transactions.length,
+        debtCount: debts.length,
+        assetCount: assetItems.length,
+        otherLiabilityCount: otherLiabilityItems.length,
+        budgetCount: budgetItems.length,
+        ownedReviewsCount: ownedReviewsPrisma.length,
+        sharedReviewsCount: sharedReviewsPrisma.length,
+        investmentCount: investmentItems.length,
+        statementSettingsFound: !!statementSettings,
+        notificationsCount: notifications.length,
+        }, userId);
+    } catch (prismaError: any) {
+        logError('Sync API: Prisma transaction failed.', prismaError, logContextBase, userId);
+        throw new Error('Database query failed during sync.'); // Re-throw to be caught by outer try-catch
+    }
 
 
     const ownedReviewsMap: Record<string, WeeklyReviewData> = {};
@@ -107,11 +113,16 @@ export async function GET() {
 
     if (ownerIdsOfSharedReviews.length > 0) {
         logDebug(`Sync API: Fetching Clerk user details for ${ownerIdsOfSharedReviews.length} shared review owners.`, logContextBase, userId);
-        const clerkOwnerUsers = await clerkClient.users.getUserList({ userId: ownerIdsOfSharedReviews });
-        clerkOwnerUsers.data.forEach(u => {
-            ownerUserDetails[u.id] = { name: u.fullName || u.firstName, email: u.primaryEmailAddress?.emailAddress };
-        });
-        logDebug("Sync API: Clerk user details for shared review owners fetched.", {...logContextBase, count: clerkOwnerUsers.data.length}, userId);
+        try {
+            const clerkOwnerUsers = await clerkClient.users.getUserList({ userId: ownerIdsOfSharedReviews });
+            clerkOwnerUsers.data.forEach(u => {
+                ownerUserDetails[u.id] = { name: u.fullName || u.firstName, email: u.primaryEmailAddress?.emailAddress };
+            });
+            logDebug("Sync API: Clerk user details for shared review owners fetched.", {...logContextBase, count: clerkOwnerUsers.data.length}, userId);
+        } catch (clerkError: any) {
+            logError('Sync API: Failed to fetch Clerk user details for shared review owners.', clerkError, logContextBase, userId);
+            // Continue without owner usernames for shared reviews if this fails
+        }
     }
 
     sharedReviewsPrisma.forEach(share => {
@@ -144,13 +155,9 @@ export async function GET() {
       gettingStartedDismissed: statementSettings?.gettingStartedDismissed ?? false,
     };
     logDebug("Sync API: fetchedData object assembled.", logContextBase, userId);
-    // logDebug("Sync API: fetchedData structure (partial for brevity):", { ...logContextBase, transactionsCount: fetchedData.transactions.length, debtsCount: fetchedData.debts.length, budgetItemsCount: fetchedData.budgetItems.length }, userId);
-
 
     const preparedData = prepareDataForHashing(fetchedData as any);
     logDebug("Sync API: Data prepared for hashing.", logContextBase, userId);
-    // logDebug("Sync API: preparedData structure (partial for brevity):", { ...logContextBase, transactionsCount: preparedData.transactions.length, debtsCount: preparedData.debts.length, budgetItemsCount: preparedData.budgetItems.length }, userId);
-
 
     const dataString = stringify(preparedData);
     logDebug("Sync API: Data stringified for hashing.", {...logContextBase, stringLength: dataString.length}, userId);
@@ -168,4 +175,4 @@ export async function GET() {
     return addCorsHeaders(response);
   }
 }
-
+    

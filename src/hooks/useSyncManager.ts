@@ -17,7 +17,7 @@ import stringify from 'fast-json-stable-stringify';
 import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
 const IS_FETCH_DISABLED = false;
-const HASH_CHECK_ENABLED = false; // Hash checking remains disabled
+const HASH_CHECK_ENABLED = true; // Fully enable hash checks
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -130,7 +130,7 @@ export function useSyncManager() {
 
 
   const fetchData = useCallback(async (isPreCheck = false): Promise<string | false> => {
-    const currentUserId = userId; // Capture userId at the beginning of the function scope
+    const currentUserId = userId; 
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
       if (!isPreCheck && syncStateRef.current.status !== 'idle') updateSyncState({ status: 'idle' });
       initialLoadDoneRef.current = true;
@@ -180,6 +180,28 @@ export function useSyncManager() {
         return serverHash;
       }
 
+      if (HASH_CHECK_ENABLED) {
+        const localHashOfLoadedData = await hashData(stringify(prepareDataForHashing(dataToLoad as any)));
+        if (localHashOfLoadedData !== serverHash) {
+          logError('CRITICAL: Fetched data hash mismatch! Server hash does not match local hash of data just received.', 
+            new Error('Fetched data hash mismatch'), 
+            { userIdFromFetchScope: currentUserId, serverHash, localHashOfLoadedData }, 
+            currentUserId
+          );
+          updateSyncState({ status: 'hash_mismatch', lastServerHash: serverHash, isMismatchDialogOpen: true });
+          toast({
+            title: 'Data Inconsistency Detected',
+            description: 'Data received from server does not match its own integrity check. Please resolve the conflict or contact support.',
+            variant: 'destructive',
+            duration: Infinity, // Keep toast until user resolves
+          });
+          isFetchingRef.current = false;
+          return false; // Stop processing this fetched data
+        }
+        logInfo('SyncManager: Fetched data hash verified successfully against server hash.', { userId: currentUserId, serverHash }, currentUserId);
+      }
+
+
       getTransactionsState().setTransactions(dataToLoad.transactions || []);
       getDebtState().setDebts(dataToLoad.debts || []);
       getInvestmentState().setInvestmentItems(dataToLoad.investmentItems || []);
@@ -201,7 +223,7 @@ export function useSyncManager() {
       });
       hasLocalChangesRef.current = false;
       logInfo('SyncManager: Data fetched and loaded successfully.', { userId: currentUserId, serverHash }, currentUserId);
-      if (syncStateRef.current.status !== 'syncing') {
+      if (syncStateRef.current.status !== 'syncing') { // Avoid double toast if fetch was part of a manual sync that already toasted
         toast({ title: 'Data Synced', description: 'Latest data loaded from the server.' });
       }
       initialLoadDoneRef.current = true;
@@ -210,7 +232,7 @@ export function useSyncManager() {
       initialLoadDoneRef.current = true;
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown fetch error");
-      const stableCurrentUserId = currentUserId; // Use the captured userId
+      const stableCurrentUserId = currentUserId; 
 
       if (error.name === 'AbortError') {
         logInfo(`Fetch aborted: ${error.message}`, { userId: stableCurrentUserId }, stableCurrentUserId);
@@ -236,7 +258,7 @@ export function useSyncManager() {
 
 
   const saveData = useCallback(async (force = false): Promise<boolean> => {
-    const currentUserId = userId; // Capture userId at the beginning
+    const currentUserId = userId; 
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
       if (syncStateRef.current.status !== 'idle') updateSyncState({ status: 'idle' });
       return false;
@@ -258,8 +280,8 @@ export function useSyncManager() {
       otherLiabilityItems: getStatementState().otherLiabilityItems,
       budgetItems: getBudgetState().budgetItems,
       ownedReviews: getWeeklyReviewState().ownedReviews,
-      sharedReviews: {},
-      notifications: [],
+      sharedReviews: {}, // Shared reviews are fetched, not saved by client
+      notifications: [], // Notifications are generally server-driven or transient
       startDate: getStatementState().startDate?.toISOString(),
       endDate: getStatementState().endDate?.toISOString(),
       gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
@@ -277,13 +299,24 @@ export function useSyncManager() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: `Server error during save: ${response.status} ${response.statusText}`.trim() }));
+        // Specific handling for 400 Bad Request (likely hash mismatch from server)
+        if (response.status === 400 && HASH_CHECK_ENABLED) {
+           logError('Save rejected by server due to data integrity check (hash mismatch).', 
+             new Error(errorData.error || 'Server-side hash validation failed'), 
+             { userIdFromSaveScope: currentUserId, clientHash: clientDataHash, errorDetails: errorData.error }, 
+             currentUserId
+           );
+           updateSyncState({ status: 'hash_mismatch', isMismatchDialogOpen: true, lastServerHash: syncStateRef.current.lastServerHash }); // Keep last known good server hash
+           toast({ title: 'Save Failed: Data Conflict', description: errorData.error || 'Your local data is out of sync with the server. Please resolve the conflict.', variant: 'destructive', duration: Infinity });
+           return false;
+        }
         throw new Error(errorData.error || `Failed to save data to server: ${response.status} ${response.statusText}`.trim());
       }
 
       updateSyncState({
         status: 'synced',
         lastSaveTime: new Date(),
-        lastServerHash: clientDataHash,
+        lastServerHash: clientDataHash, // After successful save, clientDataHash becomes the new lastServerHash
         isMismatchDialogOpen: false,
       });
       hasLocalChangesRef.current = false;
@@ -293,9 +326,9 @@ export function useSyncManager() {
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown save error");
-      const stableCurrentUserId = currentUserId; // Use the captured userId
+      const stableCurrentUserId = currentUserId; 
       logError('Error saving data:', errorToLog, { userIdFromSaveScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
-      updateSyncState({ status: 'error' });
+      updateSyncState({ status: 'error' }); // Generic error status
       toast({ title: 'Save Failed', description: `${errorMessage || 'Could not save data to server.'}`, variant: 'destructive' });
       return false;
     } finally {
@@ -326,19 +359,25 @@ export function useSyncManager() {
         try {
           const prefs = JSON.parse(storedPrefsString);
           loadedGettingStartedDismissed = prefs.gettingStartedDismissed || false;
-          loadedLastServerHash = prefs.lastServerHash || null;
-          logDebug('SyncManager: Loaded UI preferences & lastServerHash from localStorage.', { userId: currentUserId, preferences: prefs }, currentUserId);
+          if(HASH_CHECK_ENABLED) { // Only load lastServerHash if hash checks are enabled
+            loadedLastServerHash = prefs.lastServerHash || null;
+          }
+          logDebug('SyncManager: Loaded UI preferences & lastServerHash from localStorage.', { userId: currentUserId, preferences: prefs, hashCheckEnabled: HASH_CHECK_ENABLED }, currentUserId);
         } catch (e: any) {
           logError('Error parsing UI preferences from localStorage', e, { userId: currentUserId }, currentUserId);
         }
       }
       updateSyncState({
-        status: 'local',
+        status: 'local', // Start with local status, data will be fetched by manualSync or auto-sync
         lastServerHash: loadedLastServerHash,
         gettingStartedDismissed: loadedGettingStartedDismissed,
       });
-      initialLoadDoneRef.current = true;
-      logInfo('SyncManager: User context established. App ready with local data. Manual sync required.', { userId: currentUserId }, currentUserId);
+      initialLoadDoneRef.current = true; // Mark initial load done after setting up context
+      logInfo('SyncManager: User context established. App ready with local data. Manual sync required or auto-sync will trigger.', { userId: currentUserId }, currentUserId);
+      // Trigger initial fetch for the new user
+      if (!IS_FETCH_DISABLED) {
+          manualSync(); // Or a more nuanced auto-fetch logic
+      }
 
     } else if (!currentUserId && prevUserId) {
       logInfo(`SyncManager effect (user change): User signed out. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
@@ -353,7 +392,7 @@ export function useSyncManager() {
           const prefs = JSON.parse(storedPrefsString);
           updateSyncState({
             gettingStartedDismissed: prefs.gettingStartedDismissed || false,
-            lastServerHash: prefs.lastServerHash || null,
+            lastServerHash: HASH_CHECK_ENABLED ? (prefs.lastServerHash || null) : null,
           });
         } catch (e: any) { /* already logged */ }
       }
@@ -361,17 +400,21 @@ export function useSyncManager() {
          updateSyncState({ status: 'local'});
       }
       initialLoadDoneRef.current = true;
+      // Initial fetch if not disabled
+      if (!IS_FETCH_DISABLED) {
+          manualSync();
+      }
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState]);
+  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState, manualSync]); // Added manualSync to dependency array for initial fetch
 
   useEffect(() => {
     if (initialLoadDoneRef.current && isSignedIn && userId) {
       const stateToPersist = {
         gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
-        lastServerHash: syncStateRef.current.lastServerHash,
+        lastServerHash: HASH_CHECK_ENABLED ? syncStateRef.current.lastServerHash : undefined, // Only persist if enabled
       };
       localStorage.setItem(`ifcGuru_uiPrefs_${userId}`, JSON.stringify(stateToPersist));
-      logDebug('SyncManager: Persisted UI preferences & lastServerHash to localStorage.', { userId, preferences: stateToPersist }, userId);
+      logDebug('SyncManager: Persisted UI preferences & lastServerHash to localStorage.', { userId, preferences: stateToPersist, hashCheckEnabled: HASH_CHECK_ENABLED }, userId);
     }
   }, [syncState.gettingStartedDismissed, syncState.lastServerHash, userId, isSignedIn]);
 
@@ -407,7 +450,7 @@ export function useSyncManager() {
 
 
   const manualSync = useCallback(async () => {
-    const currentUserId = userId; // Capture userId at the beginning
+    const currentUserId = userId; 
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
       toast({ title: 'Not Signed In', description: 'Please sign in to sync your data.', variant: 'destructive' });
       return;
@@ -417,35 +460,42 @@ export function useSyncManager() {
 
     if (IS_FETCH_DISABLED) {
       logInfo('Manual Sync: Fetch is disabled. Attempting to save local changes if any.', { userId: currentUserId }, currentUserId);
-      await saveData(); // saveData already captures its own currentUserId
-      updateSyncState({ status: 'local' });
+      if (hasLocalChangesRef.current) await saveData(); 
+      updateSyncState({ status: 'local' }); // Revert to local after save attempt if fetch is off
       toast({ title: 'Local Save Attempted', description: 'Cloud fetching is disabled. Data saved locally if changed.' });
       return;
     }
 
+    // If hash check is enabled and there's a known mismatch dialog, don't proceed with auto-save/fetch
+    if (HASH_CHECK_ENABLED && syncStateRef.current.isMismatchDialogOpen) {
+        logWarn("Manual sync attempted while hash mismatch dialog is open. User needs to resolve first.", {userId: currentUserId}, currentUserId);
+        updateSyncState({ status: 'hash_mismatch' }); // Ensure status reflects this
+        toast({title: "Conflict Exists", description: "Please resolve the data conflict first.", variant: "destructive"});
+        return;
+    }
+
     if (hasLocalChangesRef.current || syncStateRef.current.status === 'local_changes') {
       logInfo('Manual Sync: Local changes detected. Attempting to save.', { userId: currentUserId }, currentUserId);
-      const saveSuccess = await saveData(); // saveData captures its own currentUserId
+      const saveSuccess = await saveData(); 
       if (saveSuccess) {
         logInfo('Manual Sync: Save successful. Now fetching latest from server.', { userId: currentUserId }, currentUserId);
-        await fetchData(); // fetchData captures its own currentUserId
+        await fetchData(); 
       } else {
         logWarn('Manual Sync: saveData failed. Full fetch after save skipped.', { userId: currentUserId }, currentUserId);
-        // Potentially update status to 'error' or 'local_changes' if save failed critically
-        if(syncStateRef.current.status === 'syncing') { // If still syncing, but save failed, move to error or local_changes
+        if(syncStateRef.current.status === 'syncing') { 
             updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'error' });
         }
       }
     } else {
       logInfo('Manual Sync: No local changes detected. Fetching server state.', { userId: currentUserId }, currentUserId);
-      await fetchData(); // fetchData captures its own currentUserId
+      await fetchData(); 
     }
   }, [userId, isClerkLoaded, isSignedIn, saveData, fetchData, toast, updateSyncState]);
 
   const forceSave = useCallback(async () => {
     const currentUserId = userId;
-    logInfo("Force Save initiated (bypasses pre-save checks)", { userId: currentUserId }, currentUserId);
-    return saveData(true); // saveData captures its own currentUserId
+    logInfo("Force Save initiated", { userId: currentUserId }, currentUserId);
+    return saveData(true); 
   }, [saveData, userId]);
 
   const forceFetch = useCallback(async () => {
@@ -453,15 +503,16 @@ export function useSyncManager() {
     logInfo("Force Fetch initiated", { userId: currentUserId }, currentUserId);
     if (IS_FETCH_DISABLED) {
         toast({ title: 'Cloud Sync Disabled', description: 'Cannot fetch from server. Fetching is currently off.', variant: 'destructive' });
-        updateSyncState({ isMismatchDialogOpen: false });
+        updateSyncState({ isMismatchDialogOpen: false, status: 'local' });
         return false;
     }
-    clearAllLocalStoreData(); // clearAllLocalStoreData captures its own userId context
-    const fetchResult = await fetchData(); // fetchData captures its own currentUserId
-    if (fetchResult !== false) {
-      updateSyncState({ isMismatchDialogOpen: false });
+    clearAllLocalStoreData(); 
+    const fetchResult = await fetchData(); 
+    if (fetchResult !== false) { // fetchResult is serverHash or false
+      updateSyncState({ isMismatchDialogOpen: false, status: 'synced', lastServerHash: fetchResult || null });
       return true;
     }
+    updateSyncState({ isMismatchDialogOpen: false, status: 'error' }); // If fetch failed
     return false;
   }, [clearAllLocalStoreData, fetchData, updateSyncState, toast, userId]);
 
@@ -491,3 +542,5 @@ export function useSyncManager() {
     },
   };
 }
+
+    
