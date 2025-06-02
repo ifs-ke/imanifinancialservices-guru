@@ -38,8 +38,8 @@ async function upsertStatementSettings(tx: any, userId: string, startDate?: stri
         } else {
             const parsed = new Date(startDate);
             if (isNaN(parsed.getTime())) {
-                logWarn('Invalid startDate string received in upsertStatementSettings. Setting to null.', { ...logContext, startDate });
-                dataToUpdate.statementStartDate = null; // Or throw error, depending on strictness
+                logWarn('Invalid startDate string received in upsertStatementSettings. Setting to null.', { ...logContext, startDateValue: startDate }, userId);
+                dataToUpdate.statementStartDate = null;
             } else {
                 dataToUpdate.statementStartDate = parsed;
             }
@@ -51,8 +51,8 @@ async function upsertStatementSettings(tx: any, userId: string, startDate?: stri
         } else {
             const parsed = new Date(endDate);
             if (isNaN(parsed.getTime())) {
-                logWarn('Invalid endDate string received in upsertStatementSettings. Setting to null.', { ...logContext, endDate });
-                dataToUpdate.statementEndDate = null; // Or throw error
+                logWarn('Invalid endDate string received in upsertStatementSettings. Setting to null.', { ...logContext, endDateValue: endDate }, userId);
+                dataToUpdate.statementEndDate = null;
             } else {
                 dataToUpdate.statementEndDate = parsed;
             }
@@ -84,16 +84,17 @@ export async function POST(request: Request) {
   const { userId, user: clerkUser } = auth();
   const logContextBase = { userId: userId || 'unknown-save-post', operation: 'POST /api/save', apiRoute: '/api/save' };
 
-  if (!userId || !clerkUser || !clerkUser.primaryEmailAddressId) {
-    logWarn('Save API: Unauthorized save attempt: User not logged in or email missing.', logContextBase);
-    const response = NextResponse.json({ error: 'Unauthorized: User not logged in or email not available.' }, { status: 401 });
+  if (!userId || !clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
+    logWarn('Save API: Unauthorized save attempt: User not logged in or primary email missing.', logContextBase, userId);
+    const response = NextResponse.json({ error: 'Unauthorized: User not logged in or primary email not available.' }, { status: 401 });
     return addCorsHeaders(response);
   }
-  
+
   try {
+    // Ensure primaryEmailAddress is non-null before using it
     await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
   } catch (dbError: any) {
-    logError('Save API: Failed to ensure user in DB.', dbError, logContextBase);
+    logError('Save API: Failed to ensure user in DB.', dbError, logContextBase, userId);
     const response = NextResponse.json({ error: 'Database operation failed while verifying user.' }, { status: 500 });
     return addCorsHeaders(response);
   }
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
     }
     logDebug('Save API: Rate limit check passed.', logContextWithRateLimit, userId);
   } else {
-    logWarn('Save API: Rate limiting is not configured (KV_REST_API_URL or KV_REST_API_TOKEN missing).', logContextBase);
+    logWarn('Save API: Rate limiting is not configured (KV_REST_API_URL or KV_REST_API_TOKEN missing).', logContextBase, userId);
   }
 
 
@@ -124,15 +125,13 @@ export async function POST(request: Request) {
 
   const validationResult = SaveDataPayloadSchema.safeParse(rawPayload);
   if (!validationResult.success) {
-    logWarn('Save API: Invalid payload structure or data types.', { ...logContextBase, errors: validationResult.error.flatten() }, userId);
+    logWarn('Save API: Invalid payload structure or data types.', { ...logContextBase, errors: validationResult.error.flatten(), receivedPayload: rawPayload }, userId);
     const response = NextResponse.json({ error: 'Invalid payload structure or data types.', details: validationResult.error.flatten() }, { status: 400 });
     return addCorsHeaders(response);
   }
 
   const payload = validationResult.data;
   const { dataHash: clientDataHash, ...receivedData } = payload;
-  // Server-side hash verification against clientDataHash is disabled.
-  // We use prepareDataForHashing to ensure consistent structure for saving.
   const preparedDataForSaving = prepareDataForHashing(receivedData as any);
 
   logInfo(`Save API: Proceeding with save (server-side hash check disabled). Received client hash: ${clientDataHash}`, logContextBase, userId);
@@ -152,17 +151,14 @@ export async function POST(request: Request) {
         gettingStartedDismissed
       } = preparedDataForSaving;
 
-      // Clear existing data for this user
       await tx.transaction.deleteMany({ where: { userId } });
       await tx.debt.deleteMany({ where: { userId } });
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } }); // Assuming weekly reviews are owned by the user
+      await tx.weeklyReview.deleteMany({ where: { userId } });
       await tx.investmentItem.deleteMany({where: {userId}});
-      // StatementSettings is upserted, not fully deleted.
 
-      // Insert new data
       if (transactions.length > 0) {
         await tx.transaction.createMany({
           data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })),
@@ -191,12 +187,10 @@ export async function POST(request: Request) {
             userId,
             weekKey,
             journal: reviewData.journal,
-            transactionComments: reviewData.transactionComments || undefined, // Prisma handles JSON
-            // sharedWith will be managed by SharedReview table, not directly on WeeklyReview
+            transactionComments: reviewData.transactionComments || undefined,
           })),
         });
       }
-      // Upsert StatementSettings (handles creation if not exists, or update if exists)
       await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
@@ -211,4 +205,3 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 }
-

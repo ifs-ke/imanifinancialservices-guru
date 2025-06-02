@@ -18,7 +18,7 @@ interface SyncedDataForClient {
   otherLiabilityItems: OtherLiabilityItem[];
   budgetItems: BudgetItem[];
   ownedReviews: Record<string, WeeklyReviewData>;
-  sharedReviews: Record<string, WeeklyReviewData>; 
+  sharedReviews: Record<string, WeeklyReviewData>;
   notifications: NotificationItem[];
   investmentItems: InvestmentItem[];
   startDate?: string;
@@ -36,11 +36,12 @@ export async function GET() {
   const { userId, user: clerkUser } = auth();
   const logContextBase = { userId: userId || 'unknown-sync-get', operation: 'GET /api/sync', apiRoute: '/api/sync' };
 
-  if (!userId || !clerkUser || !clerkUser.primaryEmailAddressId) {
-    logWarn("Sync API: Unauthorized access attempt (GET).", logContextBase);
-    const response = NextResponse.json({ error: 'Unauthorized: User not logged in or email missing.' }, { status: 401 });
+  if (!userId || !clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
+    logWarn("Sync API: Unauthorized access attempt (GET). User, or primary email missing.", logContextBase, userId);
+    const response = NextResponse.json({ error: 'Unauthorized: User not logged in or primary email missing.' }, { status: 401 });
     return addCorsHeaders(response);
   }
+  // Ensure primaryEmailAddress is non-null before using it
   await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
 
   logInfo(`Sync API: Initiating sync for user ${userId}`, logContextBase, userId);
@@ -72,14 +73,13 @@ export async function GET() {
         ownerId: review.userId,
         ownerUsername: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress,
         journal: review.journal || "",
-        // Prisma returns JSON as object with PostgreSQL
-        transactionComments: review.transactionComments as Record<string, string> || {}, 
+        transactionComments: typeof review.transactionComments === 'object' && review.transactionComments !== null ? review.transactionComments as Record<string, string> : {},
         weekKey: review.weekKey,
       };
     });
 
     const sharedReviewsMap: Record<string, WeeklyReviewData> = {};
-    const ownerIdsOfSharedReviews = Array.from(new Set(sharedReviewsPrisma.map(sr => sr.reviewOwnerId)));
+    const ownerIdsOfSharedReviews = Array.from(new Set(sharedReviewsPrisma.map(sr => sr.originalReview.userId)));
     let ownerUserDetails: Record<string, { name?: string | null, email?: string | null }> = {};
 
     if (ownerIdsOfSharedReviews.length > 0) {
@@ -96,10 +96,9 @@ export async function GET() {
           ownerId: originalReview.userId,
           ownerUsername: ownerUserDetails[originalReview.userId]?.name || ownerUserDetails[originalReview.userId]?.email || originalReview.userId,
           journal: originalReview.journal || "",
-          // Prisma returns JSON as object with PostgreSQL
-          transactionComments: originalReview.transactionComments as Record<string, string> || {}, 
+          transactionComments: typeof originalReview.transactionComments === 'object' && originalReview.transactionComments !== null ? originalReview.transactionComments as Record<string, string> : {},
           weekKey: originalReview.weekKey,
-          sharedWith: [userId]
+          sharedWith: [userId] // Current user is the one it's shared with
         };
       }
     });
