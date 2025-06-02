@@ -1,16 +1,11 @@
-// src/app/(auth)/sign-in/[[...sign-in]]/page.tsx
 
-// import { SignIn } from '@clerk/nextjs'; // Clerk disabled
-import { redirect } from 'next/navigation';
+// src/app/(auth)/sign-in/[[...sign-in]]/page.tsx
+import { SignIn } from '@clerk/nextjs';
 
 export default function SignInPage() {
-  // When Clerk is disabled, redirect to dashboard or a landing page
-  redirect('/dashboard'); 
-  
-  // return ( // Clerk disabled
-  //   <div className="flex items-center justify-center min-h-screen">
-  //     {/* <SignIn /> */}
-  //     <p>Sign-in is currently disabled. Redirecting...</p>
-  //   </div>
-  // );
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <SignIn path="/sign-in" routing="path" signUpUrl="/sign-up" />
+    </div>
+  );
 }
