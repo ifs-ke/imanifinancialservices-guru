@@ -4,8 +4,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, InvestmentItem } from '@/lib/types';
-// import { verifyHash } from '@/lib/storage-utils'; // verifyHash is no longer used
-import { hashData } from '@/lib/storage-utils'; // hashData is still used by client, and server for its own hash on sync
+import { hashData } from '@/lib/storage-utils';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { Ratelimit } from '@upstash/ratelimit';
@@ -22,7 +21,7 @@ const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
     })
   : null;
 
-async function upsertStatementSettings(userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean) {
+async function upsertStatementSettings(tx: any, userId: string, startDate?: string | null, endDate?: string | null, gettingStartedDismissed?: boolean) {
     const logContext = { userId, operation: 'upsertStatementSettings', apiRoute: '/api/save' };
     logDebug(`Save API: Starting upsert for StatementSettings`, logContext, userId);
 
@@ -32,12 +31,39 @@ async function upsertStatementSettings(userId: string, startDate?: string, endDa
     }
 
     const dataToUpdate: { statementStartDate?: Date | null, statementEndDate?: Date | null, gettingStartedDismissed?: boolean } = {};
-    if (startDate !== undefined) dataToUpdate.statementStartDate = startDate ? new Date(startDate) : null;
-    if (endDate !== undefined) dataToUpdate.statementEndDate = endDate ? new Date(endDate) : null;
-    if (gettingStartedDismissed !== undefined) dataToUpdate.gettingStartedDismissed = gettingStartedDismissed;
+
+    if (startDate !== undefined) {
+        if (startDate === null) {
+            dataToUpdate.statementStartDate = null;
+        } else {
+            const parsed = new Date(startDate);
+            if (isNaN(parsed.getTime())) {
+                logWarn('Invalid startDate string received in upsertStatementSettings. Setting to null.', { ...logContext, startDate });
+                dataToUpdate.statementStartDate = null; // Or throw error, depending on strictness
+            } else {
+                dataToUpdate.statementStartDate = parsed;
+            }
+        }
+    }
+    if (endDate !== undefined) {
+        if (endDate === null) {
+            dataToUpdate.statementEndDate = null;
+        } else {
+            const parsed = new Date(endDate);
+            if (isNaN(parsed.getTime())) {
+                logWarn('Invalid endDate string received in upsertStatementSettings. Setting to null.', { ...logContext, endDate });
+                dataToUpdate.statementEndDate = null; // Or throw error
+            } else {
+                dataToUpdate.statementEndDate = parsed;
+            }
+        }
+    }
+    if (gettingStartedDismissed !== undefined) {
+        dataToUpdate.gettingStartedDismissed = gettingStartedDismissed;
+    }
 
     if (Object.keys(dataToUpdate).length > 0) {
-        await prisma.statementSettings.upsert({
+        await tx.statementSettings.upsert({
             where: { userId },
             update: dataToUpdate,
             create: { userId, ...dataToUpdate },
@@ -63,7 +89,14 @@ export async function POST(request: Request) {
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in or email not available.' }, { status: 401 });
     return addCorsHeaders(response);
   }
-  await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
+  
+  try {
+    await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
+  } catch (dbError: any) {
+    logError('Save API: Failed to ensure user in DB.', dbError, logContextBase);
+    const response = NextResponse.json({ error: 'Database operation failed while verifying user.' }, { status: 500 });
+    return addCorsHeaders(response);
+  }
 
 
   if (ratelimit) {
@@ -97,11 +130,12 @@ export async function POST(request: Request) {
   }
 
   const payload = validationResult.data;
-  // dataHash from client is received but no longer verified on the server side.
-  const { dataHash: clientDataHash, ...receivedData } = payload; 
-  const preparedDataForSaving = prepareDataForHashing(receivedData as any); // Use the data directly
+  const { dataHash: clientDataHash, ...receivedData } = payload;
+  // Server-side hash verification against clientDataHash is disabled.
+  // We use prepareDataForHashing to ensure consistent structure for saving.
+  const preparedDataForSaving = prepareDataForHashing(receivedData as any);
 
-  logInfo(`Save API: Proceeding with save (hash check disabled). Received client hash: ${clientDataHash}`, logContextBase, userId);
+  logInfo(`Save API: Proceeding with save (server-side hash check disabled). Received client hash: ${clientDataHash}`, logContextBase, userId);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -116,7 +150,7 @@ export async function POST(request: Request) {
         startDate,
         endDate,
         gettingStartedDismissed
-      } = preparedDataForSaving; // Use the received data after preparation (which is mainly for consistent structure)
+      } = preparedDataForSaving;
 
       // Clear existing data for this user
       await tx.transaction.deleteMany({ where: { userId } });
@@ -124,32 +158,32 @@ export async function POST(request: Request) {
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } });
+      await tx.weeklyReview.deleteMany({ where: { userId } }); // Assuming weekly reviews are owned by the user
       await tx.investmentItem.deleteMany({where: {userId}});
-      // Note: StatementSettings is upserted, not deleted and recreated here.
+      // StatementSettings is upserted, not fully deleted.
 
       // Insert new data
       if (transactions.length > 0) {
         await tx.transaction.createMany({
-          data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date) })),
+          data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })),
         });
       }
       if (debts.length > 0) {
-        await tx.debt.createMany({ data: debts.map((d:any) => ({ ...d, userId })) });
+        await tx.debt.createMany({ data: debts.map((d:any) => ({ ...d, userId, principal: Number(d.principal), interestRate: Number(d.interestRate), minPayment: Number(d.minPayment) })) });
       }
       if (investmentItems.length > 0) {
         await tx.investmentItem.createMany({
-          data: investmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })),
+          data: investmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate), quantity: Number(i.quantity), purchasePrice: Number(i.purchasePrice), currentValue: Number(i.currentValue) })),
         });
       }
       if (assetItems.length > 0) {
-        await tx.assetItem.createMany({ data: assetItems.map((a:any) => ({ ...a, userId })) });
+        await tx.assetItem.createMany({ data: assetItems.map((a:any) => ({ ...a, userId, amount: Number(a.amount) })) });
       }
       if (otherLiabilityItems.length > 0) {
-        await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map((l:any) => ({ ...l, userId })) });
+        await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map((l:any) => ({ ...l, userId, amount: Number(l.amount) })) });
       }
       if (budgetItems.length > 0) {
-        await tx.budgetItem.createMany({ data: budgetItems.map((b:any) => ({ ...b, userId })) });
+        await tx.budgetItem.createMany({ data: budgetItems.map((b:any) => ({ ...b, userId, amount: Number(b.amount) })) });
       }
       if (Object.keys(ownedReviews).length > 0) {
         await tx.weeklyReview.createMany({
@@ -157,14 +191,16 @@ export async function POST(request: Request) {
             userId,
             weekKey,
             journal: reviewData.journal,
-            transactionComments: reviewData.transactionComments || undefined,
+            transactionComments: reviewData.transactionComments || undefined, // Prisma handles JSON
+            // sharedWith will be managed by SharedReview table, not directly on WeeklyReview
           })),
         });
       }
-      await upsertStatementSettings(userId, startDate, endDate, gettingStartedDismissed);
+      // Upsert StatementSettings (handles creation if not exists, or update if exists)
+      await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    logInfo('Save API: Prisma transaction committed successfully (hash check disabled).', logContextBase, userId);
+    logInfo('Save API: Prisma transaction committed successfully.', logContextBase, userId);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
     return addCorsHeaders(response);
 
