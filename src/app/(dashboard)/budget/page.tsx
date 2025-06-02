@@ -17,6 +17,7 @@ import BudgetItemFormSheet from './BudgetItemFormSheet';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+// Ensure all date-fns functions used are imported, including parse
 import { format, startOfMonth, addMonths, subMonths, parse, isValid as isDateValid } from 'date-fns';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger as ShadAccordionTrigger } from "@/components/ui/accordion";
@@ -48,37 +49,50 @@ const formatToPeriodKey = (date: Date): string => {
 }
 
 const AccordionTriggerWithActions = React.forwardRef<
-  HTMLButtonElement, // Ref for the underlying button element of ShadAccordionTrigger
-  React.ComponentPropsWithoutRef<typeof ShadAccordionTrigger> & {
+  HTMLDivElement, 
+  React.HTMLAttributes<HTMLDivElement> & { 
     title: string;
     description: string;
     icon: React.ElementType;
-    // totalAmount: number; // Removed totalAmount from props
     onAddClick: () => void;
     itemCount: number;
+    // Explicitly list props that might be passed to ShadAccordionTrigger from AccordionItem
+    'data-state'?: 'open' | 'closed';
+    'id'?: string;
+    'aria-controls'?: string;
+    'aria-expanded'?: boolean;
+    'aria-disabled'?: boolean;
+    'disabled'?: boolean;
   }
->(({ title, description, icon: Icon, /* totalAmount, */ onAddClick, itemCount, children, className, ...props }, ref) => {
+>(({ title, description, icon: Icon, onAddClick, itemCount, className, ...props }, ref) => { // Removed children as it's not used directly by outer div
   return (
-    // This div acts as the header for the accordion item
-    <div className={cn(
-        "flex items-center justify-between w-full hover:bg-muted/50 data-[state=open]:bg-muted/60",
-        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all",
-        props['data-state'] === 'open' ? 'rounded-b-none' : '',
+    <div
+      ref={ref}
+      className={cn(
+        "flex items-center justify-between w-full hover:bg-muted/50", // Removed data-[state] dependent background here, applied by Shadcn trigger
+        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all", // data-state needs to be on the element Radix controls
+        props['data-state'] === 'open' ? 'rounded-b-none' : '', // Apply rounding based on explicit prop
         className
       )}
+      data-state={props['data-state']} // Pass data-state for styling based on Radix state
     >
       <ShadAccordionTrigger
-        ref={ref}
-        {...props}
+        // Pass only valid props for ShadAccordionTrigger
+        id={props.id}
+        aria-controls={props['aria-controls']}
+        aria-expanded={props['aria-expanded']}
+        aria-disabled={props['aria-disabled']}
+        disabled={props.disabled}
+        data-state={props['data-state']}
         className={cn(
           "flex-grow p-4 hover:no-underline flex items-center gap-3 text-left",
+          // Apply background based on data-state here if needed, or let Shadcn handle it
+           props['data-state'] === 'open' ? 'bg-muted/60' : ''
         )}
-        // Prevent the trigger from firing if the add button was clicked
         onClick={(e) => {
           if ((e.target as HTMLElement).closest('[data-add-button]')) {
-            e.preventDefault(); // Prevent accordion toggle
+            e.preventDefault(); 
           }
-          // Allow default AccordionTrigger onClick to proceed if not the add button
         }}
       >
         <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -87,16 +101,16 @@ const AccordionTriggerWithActions = React.forwardRef<
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         {itemCount > 0 && <span className="text-sm text-muted-foreground ml-auto mr-3 flex-shrink-0">({itemCount} items)</span>}
-        {/* Removed totalAmount display: {itemCount > 0 && <span className="text-sm font-bold font-mono ml-auto mr-3 flex-shrink-0">{formatCurrency(totalAmount)}</span>} */}
       </ShadAccordionTrigger>
       <Button
           variant="ghost"
           size="sm"
           onClick={(e) => {
-            e.stopPropagation(); // Important: Stop click from bubbling to AccordionTrigger
+            e.stopPropagation(); 
             onAddClick();
           }}
-          className="h-7 px-2 mr-3 flex-shrink-0 data-[add-button]"
+          className="h-7 px-2 mr-3 flex-shrink-0"
+          data-add-button 
           aria-label={`Add new ${title.replace(/s$/, '')} item`}
         >
         <PlusCircle className="mr-1 h-3.5 w-3.5" />Add
@@ -126,8 +140,12 @@ export default function BudgetPage() {
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<BudgetItem | null>(null);
   const [categoryForNewItem, setCategoryForNewItem] = useState<BudgetItemCategory>('recurring-expense');
+  
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(() => {
     const currentPeriod = useBudgetStore.getState().budgetPeriod;
+    if (!currentPeriod || !/^\d{4}-\d{2}$/.test(currentPeriod)) { // Add a guard for invalid period format
+        return new Date(); // Default to current date if period is invalid
+    }
     return parse(currentPeriod, 'yyyy-MM', new Date());
   });
 
@@ -188,23 +206,12 @@ export default function BudgetPage() {
           income: [], 'recurring-expense': [], 'one-time-expense': [], goal: [], debt: [], 'unplanned-expense': [], 'unbudgeted-income': []
       };
       budgetItemsForPeriod.forEach(item => {
-          if (item.category && groups[item.category as BudgetItemCategory]) {
+          if (item.category && groups[item.category as BudgetItemCategory]) { 
             groups[item.category as BudgetItemCategory].push(item);
           }
       });
       return groups;
   }, [budgetItemsForPeriod]);
-
-   const groupTotals = useMemo(() => { // This can be removed if totalAmount is not used elsewhere, but kept for now if other calculations might depend on it.
-       const totals: Record<BudgetItemCategory, number> = {
-           income: 0, 'recurring-expense': 0, 'one-time-expense': 0, goal: 0, debt: 0, 'unplanned-expense': 0, 'unbudgeted-income': 0
-       };
-       Object.entries(groupedBudgetItems).forEach(([category, items]) => {
-           totals[category as BudgetItemCategory] = items.reduce((sum, item) => sum + item.amount, 0);
-       });
-       return totals;
-   }, [groupedBudgetItems]);
-
 
   const handleExport = () => {
     if(budgetItemsForPeriod.length === 0) {
@@ -319,13 +326,11 @@ export default function BudgetPage() {
                     title={name}
                     description={description}
                     icon={Icon}
-                    // totalAmount={groupTotals[key as BudgetItemCategory]} // totalAmount prop removed
                     onAddClick={() => handleAddClick(key as BudgetItemCategory)}
-                    itemCount={groupedBudgetItems[key as BudgetItemCategory].length}
-                    data-state={undefined} 
+                    itemCount={groupedBudgetItems[key as BudgetItemCategory]?.length || 0}
                   />
                   <AccordionContent className="p-0 border-t border-border">
-                      {groupedBudgetItems[key as BudgetItemCategory].length > 0 ? (
+                      {(groupedBudgetItems[key as BudgetItemCategory]?.length || 0) > 0 ? (
                         <ScrollArea className="h-[350px] w-full">
                             <Table>
                                 <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
@@ -383,5 +388,4 @@ export default function BudgetPage() {
     </div>
   );
 }
-
     
