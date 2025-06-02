@@ -1,34 +1,43 @@
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import {
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type SortingState,
+  type ColumnFiltersState,
+  type VisibilityState,
+  type RowSelectionState,
+} from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle, CalendarClock } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle, CalendarClock, Edit3, XCircle } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore';
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedDebt } from '@/store/budgetStore';
 import type { DebtItem } from '@/lib/types';
 import Link from 'next/link';
-// import { format } from 'date-fns'; // No longer used directly
 import DebtFormSheet from '@/components/debt/DebtFormSheet';
-import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet';
 import DebtAnalysisDialog from '@/components/debt/DebtAnalysisDialog';
 import { analyzeDebtStrategy, type DebtAnalysisInput, type DebtAnalysisOutput } from '@/ai/flows/debt-analysis-flow';
-import { formatCurrency, cn } from '@/lib/utils'; 
+import { formatCurrency, cn } from '@/lib/utils';
+import { DataTable } from '@/components/ui/data-table';
+import { getDebtColumns } from './columns';
+import { PageHeader } from '@/components/layout/PageHeader';
+import Papa from 'papaparse';
 
-const formatPercentage = (rate: number) => {
-    return `${rate.toFixed(2)}%`;
-};
 
 export default function DebtPage() {
-  const { debts, deleteDebt } = useDebtStore();
-  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome); 
-  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses); 
-  const totalBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt); 
+  const { debts, deleteDebt, setDebts } = useDebtStore(); // Added setDebts if mass delete needs it
+  const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
+  const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
+  const totalBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt);
   const { toast } = useToast();
 
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
@@ -39,8 +48,84 @@ export default function DebtPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
+  const [isMassDeleteDialogOpen, setIsMassDeleteDialogOpen] = useState(false);
 
-   useEffect(() => {
+
+  // Table state
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+
+  const handleAddClick = () => { setEditingDebt(null); setIsFormSheetOpen(true); };
+  
+  const handleEditClick = useCallback((debt: DebtItem) => { 
+    setEditingDebt(debt); 
+    setIsFormSheetOpen(true); 
+  }, []);
+
+  const handleFormSheetClose = () => { setIsFormSheetOpen(false); setEditingDebt(null); };
+  
+  const handleDeleteClick = useCallback((debt: DebtItem) => { 
+    setDebtToDelete(debt); 
+  }, []);
+  
+  const confirmDeleteDebt = () => { 
+    if (!debtToDelete) return; 
+    deleteDebt(debtToDelete.id); 
+    setDebtToDelete(null); 
+    toast({ title: 'Debt Deleted' }); 
+    setRowSelection({}); // Clear selection after single delete
+  };
+
+  const columns = React.useMemo(() => getDebtColumns(handleEditClick, handleDeleteClick), [handleEditClick, handleDeleteClick]);
+
+  const table = useReactTable({
+    data: debts,
+    columns,
+    state: {
+      sorting,
+      columnVisibility,
+      rowSelection,
+      columnFilters,
+    },
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+  
+  const selectedDebtIds = useMemo(() => {
+    return table.getSelectedRowModel().rows.map(row => row.original.id);
+  }, [rowSelection, table]);
+
+  const handleMassDeleteClick = () => {
+     if (selectedDebtIds.length === 0) {
+       toast({ title: 'No Selection', description: 'Please select debts to delete.', variant: 'default' });
+       return;
+     }
+     setIsMassDeleteDialogOpen(true);
+  };
+
+  const confirmMassDelete = () => {
+    if (selectedDebtIds.length > 0) {
+      // Directly call deleteDebt for each selected ID.
+      // This might be less efficient than a dedicated batch delete in the store,
+      // but works with the current store API.
+      const remainingDebts = debts.filter(debt => !selectedDebtIds.includes(debt.id));
+      setDebts(remainingDebts); // Assuming setDebts replaces all debts
+      toast({ title: 'Batch Delete Successful', description: `${selectedDebtIds.length} debt(s) deleted.` });
+      setRowSelection({}); // Clear selection
+    }
+    setIsMassDeleteDialogOpen(false);
+  };
+
+  useEffect(() => {
     const fundsForDebtPayment = totalBudgetedDebtPayment;
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
@@ -106,12 +191,6 @@ export default function DebtPage() {
      }
    }, [debts, totalBudgetedDebtPayment]); 
 
-  const handleAddClick = () => { setEditingDebt(null); setIsFormSheetOpen(true); };
-  const handleEditClick = (debt: DebtItem) => { setEditingDebt(debt); setIsFormSheetOpen(true); };
-  const handleFormSheetClose = () => { setIsFormSheetOpen(false); setEditingDebt(null); };
-  const handleDeleteClick = (debt: DebtItem) => { setDebtToDelete(debt); };
-  const confirmDeleteDebt = () => { if (!debtToDelete) return; deleteDebt(debtToDelete.id); setDebtToDelete(null); toast({ title: 'Debt Deleted' }); };
-
   const handleAnalyzeDebt = async () => {
       setIsAnalyzing(true); setAnalysisError(null); setAnalysisResult(null); setIsAnalysisDialogOpen(true);
       if (debts.length === 0) { setAnalysisError("Add debts first."); setIsAnalyzing(false); return; }
@@ -126,27 +205,41 @@ export default function DebtPage() {
 
   const handleExportCsv = useCallback(() => {
       if (debts.length === 0) { toast({ title: "No data to export" }); return; }
-      const csvRows = [['Description', 'Principal (KES)', 'Interest Rate (%)', 'Min Payment (KES)', 'Term']];
-      for (const debt of debts) { const sanitizedDesc = debt.description.replace(/"/g, "''"); csvRows.push([`"${sanitizedDesc}"`, debt.principal.toString(), debt.interestRate.toString(), debt.minPayment.toString(), debt.term].join(',')); }
-      const csvData = csvRows.join('\n'); const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'debts_export.csv'; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); toast({ title: "CSV Exported" });
+      const csvRows = debts.map(debt => ({
+        Description: debt.description.replace(/"/g, "''"), // Sanitize description
+        'Principal (KES)': debt.principal,
+        'Interest Rate (%)': debt.interestRate,
+        'Min Payment (KES)': debt.minPayment,
+        Term: debt.term,
+      }));
+      
+      const csvData = Papa.unparse(csvRows, { header: true });
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); 
+      const url = URL.createObjectURL(blob); 
+      const link = document.createElement('a'); 
+      link.href = url; 
+      link.download = 'debts_export.csv'; 
+      document.body.appendChild(link); 
+      link.click(); 
+      document.body.removeChild(link); 
+      URL.revokeObjectURL(url); 
+      toast({ title: "CSV Exported" });
   }, [debts, toast]);
 
   return (
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
-      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Coins className="h-6 w-6 text-primary"/> Manage Debts
-          </h1>
-          <p className="text-muted-foreground text-sm">Track debts, view amortization, and get payoff strategies.</p>
-        </div>
+      <PageHeader
+        title="Manage Debts"
+        description="Track debts, view amortization, and get payoff strategies."
+        icon={<Coins />}
+      >
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Debt</Button>
            <Button onClick={handleAnalyzeDebt} disabled={isAnalyzing || debts.length === 0}> {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit className="mr-2 h-4 w-4" />} {isAnalyzing ? 'Analyzing...' : 'Suggest Strategy'}</Button>
            <Button asChild variant="default"><Link href="/debt/import"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Link></Button>
             <Button variant="secondary" onClick={handleExportCsv} disabled={debts.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
         </div>
-      </header>
+      </PageHeader>
 
       <Card className="mb-6 mx-4 md:mx-6 lg:mx-8 shadow-md">
         <CardHeader className="p-6">
@@ -167,59 +260,67 @@ export default function DebtPage() {
 
       <main className="flex-1 px-4 md:px-6 lg:px-8">
         <Card className="shadow-sm">
-          <CardHeader className="p-6">
+           <CardHeader className="p-4 md:p-6 border-b">
             <CardTitle className="text-lg">Debt List</CardTitle>
             <CardDescription>Your current outstanding debts.</CardDescription>
+            {selectedDebtIds.length > 0 && (
+                <div className="mt-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center border-t pt-4">
+                    <span className="text-sm text-muted-foreground mb-2 sm:mb-0">{selectedDebtIds.length} selected</span>
+                    <div className="flex flex-wrap gap-2">
+                        {/* Batch update for debts could be added here if needed */}
+                        <Button size="sm" variant="destructive" onClick={handleMassDeleteClick}>
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setRowSelection({})}>
+                            <XCircle className="mr-2 h-4 w-4" /> Clear Selection
+                        </Button>
+                    </div>
+                </div>
+            )}
           </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[500px] w-full">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
-                  <TableRow>
-                    <TableHead className="pl-6 pr-3">Description</TableHead>
-                    <TableHead className="text-center px-3">Term</TableHead>
-                    <TableHead className="text-right px-3">Principal</TableHead>
-                    <TableHead className="text-right px-3">Rate</TableHead>
-                    <TableHead className="text-right px-3">Min. Payment</TableHead>
-                    <TableHead className="text-right w-[130px] pr-6 pl-3">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {debts.length > 0 ? (
-                    debts.map((debt) => (
-                      <TableRow key={debt.id}>
-                        <TableCell className="font-medium pl-6 pr-3">{debt.description}</TableCell>
-                        <TableCell className="text-center text-xs capitalize text-muted-foreground px-3">{debt.term}</TableCell>
-                        <TableCell className="text-right font-mono px-3">{formatCurrency(debt.principal)}</TableCell>
-                        <TableCell className="text-right font-mono px-3">{formatPercentage(debt.interestRate)}</TableCell>
-                        <TableCell className="text-right font-mono px-3">{formatCurrency(debt.minPayment)}</TableCell>
-                        <TableCell className="text-right pr-6 pl-3 py-1">
-                           <div className="flex justify-end items-center gap-0.5">
-                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditClick(debt)}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
-                               <DebtAmortizationSheet debt={debt}><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Amortization for ${debt.description}`}><List className="h-4 w-4" /><span className="sr-only">Amortization</span></Button></DebtAmortizationSheet>
-                               <AlertDialog open={debtToDelete?.id === debt.id} onOpenChange={(open) => !open && setDebtToDelete(null)}>
-                                 <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7" onClick={() => handleDeleteClick(debt)}><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button></AlertDialogTrigger>
-                                <AlertDialogContent>{debtToDelete && debtToDelete.id === debt.id && (<><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>Delete: <strong>{debtToDelete.description} ({formatCurrency(debtToDelete.principal)})</strong>?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteDebt}>Delete</AlertDialogAction></AlertDialogFooter></>)}</AlertDialogContent>
-                              </AlertDialog>
-                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No debts recorded yet.</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+          <CardContent className="p-4 md:p-6">
+            <DataTable
+              columns={columns}
+              data={debts}
+              table={table}
+              searchColumn="description"
+              searchPlaceholder="Search debt descriptions..."
+            />
           </CardContent>
+           {debts.length > 0 && (
+             <CardFooter className="p-4 border-t text-xs text-muted-foreground">
+               {table.getFilteredRowModel().rows.length} debt(s) showing.
+             </CardFooter>
+           )}
         </Card>
+      </main>
 
          <DebtFormSheet isOpen={isFormSheetOpen} onClose={handleFormSheetClose} debt={editingDebt} />
          <DebtAnalysisDialog isOpen={isAnalysisDialogOpen} onClose={handleAnalysisDialogClose} analysisResult={analysisResult} isLoading={isAnalyzing} error={analysisError} formatCurrency={formatCurrency} />
 
-      </main>
+        <AlertDialog open={!!debtToDelete} onOpenChange={(open) => !open && setDebtToDelete(null)}>
+        {debtToDelete && (
+            <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>Delete: <strong>{debtToDelete.description} ({formatCurrency(debtToDelete.principal)})</strong>?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteDebt}>Delete</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+        )}
+      </AlertDialog>
+
+      <AlertDialog open={isMassDeleteDialogOpen} onOpenChange={setIsMassDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Debts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedDebtIds.length} selected debt(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMassDelete}>Delete Selected</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }
