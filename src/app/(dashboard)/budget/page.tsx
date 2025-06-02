@@ -53,16 +53,16 @@ const AccordionTriggerWithActions = React.forwardRef<
     title: string;
     description: string;
     icon: React.ElementType;
-    totalAmount: number;
+    // totalAmount: number; // Removed totalAmount from props
     onAddClick: () => void;
     itemCount: number;
   }
->(({ title, description, icon: Icon, totalAmount, onAddClick, itemCount, children, className, ...props }, ref) => {
+>(({ title, description, icon: Icon, /* totalAmount, */ onAddClick, itemCount, children, className, ...props }, ref) => {
   return (
     // This div acts as the header for the accordion item
     <div className={cn(
         "flex items-center justify-between w-full hover:bg-muted/50 data-[state=open]:bg-muted/60",
-        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all", // Apply rounding based on state here
+        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all",
         props['data-state'] === 'open' ? 'rounded-b-none' : '',
         className
       )}
@@ -72,8 +72,6 @@ const AccordionTriggerWithActions = React.forwardRef<
         {...props}
         className={cn(
           "flex-grow p-4 hover:no-underline flex items-center gap-3 text-left",
-          // Remove rounding from trigger itself if parent div handles it
-          // "rounded-t-lg data-[state=closed]:rounded-b-lg data-[state=open]:rounded-b-none"
         )}
         // Prevent the trigger from firing if the add button was clicked
         onClick={(e) => {
@@ -88,8 +86,8 @@ const AccordionTriggerWithActions = React.forwardRef<
           <h3 className="text-base font-semibold">{title}</h3>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
-        {itemCount > 0 && <span className="text-sm font-bold font-mono ml-auto mr-3 flex-shrink-0">{formatCurrency(totalAmount)}</span>}
-        {/* The ChevronDown icon is part of ShadAccordionTrigger */}
+        {itemCount > 0 && <span className="text-sm text-muted-foreground ml-auto mr-3 flex-shrink-0">({itemCount} items)</span>}
+        {/* Removed totalAmount display: {itemCount > 0 && <span className="text-sm font-bold font-mono ml-auto mr-3 flex-shrink-0">{formatCurrency(totalAmount)}</span>} */}
       </ShadAccordionTrigger>
       <Button
           variant="ghost"
@@ -98,7 +96,7 @@ const AccordionTriggerWithActions = React.forwardRef<
             e.stopPropagation(); // Important: Stop click from bubbling to AccordionTrigger
             onAddClick();
           }}
-          className="h-7 px-2 mr-3 flex-shrink-0 data-[add-button]" // Added data-add-button for identification
+          className="h-7 px-2 mr-3 flex-shrink-0 data-[add-button]"
           aria-label={`Add new ${title.replace(/s$/, '')} item`}
         >
         <PlusCircle className="mr-1 h-3.5 w-3.5" />Add
@@ -197,7 +195,7 @@ export default function BudgetPage() {
       return groups;
   }, [budgetItemsForPeriod]);
 
-   const groupTotals = useMemo(() => {
+   const groupTotals = useMemo(() => { // This can be removed if totalAmount is not used elsewhere, but kept for now if other calculations might depend on it.
        const totals: Record<BudgetItemCategory, number> = {
            income: 0, 'recurring-expense': 0, 'one-time-expense': 0, goal: 0, debt: 0, 'unplanned-expense': 0, 'unbudgeted-income': 0
        };
@@ -218,7 +216,6 @@ export default function BudgetPage() {
         description: rest.description,
         amount: rest.amount,
     }));
-    // Dynamically import papaparse only when needed
     import('papaparse').then(Papa => {
       const csvData = Papa.unparse(dataToExport, {
         header: true,
@@ -266,7 +263,7 @@ export default function BudgetPage() {
                              selected={selectedMonthDate}
                              onSelect={handleMonthSelect}
                              captionLayout="dropdown-buttons"
-                             fromYear={new Date().getFullYear() - 5} // Adjusted range
+                             fromYear={new Date().getFullYear() - 5}
                              toYear={new Date().getFullYear() + 5}
                              initialFocus
                          />
@@ -314,7 +311,7 @@ export default function BudgetPage() {
          </CardContent>
       </Card>
 
-      <main className="flex flex-col gap-4 px-4 md:px-6 lg:px-8">
+      <main className="flex flex-col gap-4 px-4 md:px-6 lg:mx-8">
         <Accordion type="multiple" className="w-full space-y-4">
          {budgetCategories.map(({ name, key, icon: Icon, description }) => (
              <AccordionItem value={key} key={key} className="border-none shadow-sm rounded-lg overflow-hidden bg-card">
@@ -322,10 +319,10 @@ export default function BudgetPage() {
                     title={name}
                     description={description}
                     icon={Icon}
-                    totalAmount={groupTotals[key as BudgetItemCategory]}
+                    // totalAmount={groupTotals[key as BudgetItemCategory]} // totalAmount prop removed
                     onAddClick={() => handleAddClick(key as BudgetItemCategory)}
                     itemCount={groupedBudgetItems[key as BudgetItemCategory].length}
-                    data-state={undefined} // Pass Radix data-state for styling
+                    data-state={undefined} 
                   />
                   <AccordionContent className="p-0 border-t border-border">
                       {groupedBudgetItems[key as BudgetItemCategory].length > 0 ? (
