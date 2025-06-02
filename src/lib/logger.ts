@@ -2,8 +2,8 @@
 // src/lib/logger.ts
 'use client';
 
-//import { useAuth } from '@clerk/nextjs'; // Clerk disabled
 import { useCallback, useState } from 'react';
+import { useAuth } from '@clerk/nextjs'; // Ensure only client-side useAuth is imported here
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log';
 type LogContext = Record<string, unknown>;
@@ -21,11 +21,7 @@ const DEFAULT_OPTIONS: LoggerOptions = {
 };
 
 const getBaseContextForDirectLog = (userIdForLog?: string | null): LogContext => {
-  // When Clerk is disabled, always use the mock user ID from env if available
-  // const effectiveUserId = userIdForLog ?? process.env.NEXT_PUBLIC_MOCK_USER_ID ?? 'anonymous_or_server';
-  // With Clerk integrated, userIdForLog will come from auth context or be null
   const effectiveUserId = userIdForLog ?? 'anonymous_or_server';
-
 
   return {
     userId: effectiveUserId,
@@ -144,18 +140,15 @@ export const logDebug = (message: string, context?: LogContext, userId?: string 
 
 
 export const useLogger = (componentName?: string) => {
-  const { userId: clerkUserId, sessionId: clerkSessionId, orgId: clerkOrgId } = auth(); // Use Clerk's auth()
-  const userId = clerkUserId;
-  const sessionId = clerkSessionId;
-  const orgId = clerkOrgId;
+  const { userId, sessionId, orgId } = useAuth(); // Use the client-side useAuth hook
 
   const [options] = useState<LoggerOptions>(DEFAULT_OPTIONS);
 
   const getBaseContextWithAuth = useCallback((): LogContext => {
     return {
-      userId: userId ?? 'anonymous_hook_user',
-      sessionId: sessionId,
-      orgId: orgId,
+      userId: userId ?? 'anonymous_hook_user', // Use userId from the hook
+      sessionId: sessionId, // Use sessionId from the hook
+      orgId: orgId, // Use orgId from the hook
       componentName: componentName,
       environment: process.env.NODE_ENV || 'unknown_env',
       clientTimestamp: new Date().toISOString(),
@@ -192,7 +185,3 @@ export const useLogger = (componentName?: string) => {
     },
   };
 };
-
-// Re-add auth import for useLogger
-import { useAuth } from '@clerk/nextjs';
-import { auth } from '@clerk/nextjs/server';
