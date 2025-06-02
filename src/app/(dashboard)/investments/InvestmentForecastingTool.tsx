@@ -39,6 +39,7 @@ interface SummaryData {
   totalContributions: number;
   totalInterest: number;
   finalProjectedValue: number;
+  growthPercentage: number; // Added growth percentage
 }
 
 export default function InvestmentForecastingTool() {
@@ -70,10 +71,8 @@ export default function InvestmentForecastingTool() {
       const contributionsThisYear = monthlyContribution * 12;
 
       for (let month = 1; month <= 12; month++) {
-        // Add contribution at the START of the month
         currentBalance += monthlyContribution;
 
-        // Check if this month-end is a compounding point
         if (month % (12 / compoundingFrequency) === 0) {
           const interestAccruedThisPeriod = currentBalance * ratePerCompoundingPeriod;
           currentBalance += interestAccruedThisPeriod;
@@ -96,10 +95,16 @@ export default function InvestmentForecastingTool() {
     }
 
     setProjection(newProjection);
+
+    const growthPercentageCalc = overallCumulativeContributions > 0
+        ? (overallCumulativeInterest / overallCumulativeContributions) * 100
+        : 0;
+
     setSummary({
       totalContributions: overallCumulativeContributions,
       totalInterest: overallCumulativeInterest,
       finalProjectedValue: currentBalance,
+      growthPercentage: growthPercentageCalc,
     });
   };
 
@@ -215,7 +220,8 @@ export default function InvestmentForecastingTool() {
               <CardContent className="text-sm space-y-1.5">
                 <div className="flex justify-between"><span>Total Contributions:</span> <span className="font-mono font-medium text-blue-600 dark:text-blue-400">{formatCurrency(summary.totalContributions)}</span></div>
                 <div className="flex justify-between"><span>Total Interest Earned:</span> <span className="font-mono font-medium text-accent">{formatCurrency(summary.totalInterest)}</span></div>
-                <div className="flex justify-between text-base"><strong>Projected Final Value:</strong> <strong className="font-mono">{formatCurrency(summary.finalProjectedValue)}</strong></div>
+                <div className="flex justify-between"><span>Growth on Contributions:</span> <span className="font-mono font-medium text-green-600 dark:text-green-400">{summary.growthPercentage.toFixed(2)}%</span></div>
+                <div className="flex justify-between text-base mt-2 pt-2 border-t"><strong>Projected Final Value:</strong> <strong className="font-mono">{formatCurrency(summary.finalProjectedValue)}</strong></div>
               </CardContent>
             </Card>
           </div>
