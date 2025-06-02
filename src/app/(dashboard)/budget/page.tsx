@@ -1,8 +1,9 @@
+
 // src/app/(dashboard)/budget/page.tsx
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // CardFooter removed as it's integrated
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -47,52 +48,62 @@ const formatToPeriodKey = (date: Date): string => {
 }
 
 const AccordionTriggerWithActions = React.forwardRef<
-  HTMLButtonElement,
-  React.ComponentProps<typeof ShadAccordionTrigger> & { 
-    title: string; 
-    description: string; 
-    icon: React.ElementType; 
-    totalAmount: number; 
+  HTMLButtonElement, // Ref for the underlying button element of ShadAccordionTrigger
+  React.ComponentPropsWithoutRef<typeof ShadAccordionTrigger> & {
+    title: string;
+    description: string;
+    icon: React.ElementType;
+    totalAmount: number;
     onAddClick: () => void;
     itemCount: number;
   }
 >(({ title, description, icon: Icon, totalAmount, onAddClick, itemCount, children, className, ...props }, ref) => {
   return (
-    <ShadAccordionTrigger
-      ref={ref}
-      {...props}
-      className={cn(
-        "flex items-center justify-between w-full p-4 hover:no-underline rounded-t-lg data-[state=closed]:rounded-b-lg transition-all",
-        "bg-card hover:bg-muted/50 data-[state=open]:bg-muted/60 data-[state=open]:rounded-b-none",
+    // This div acts as the header for the accordion item
+    <div className={cn(
+        "flex items-center justify-between w-full hover:bg-muted/50 data-[state=open]:bg-muted/60",
+        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all", // Apply rounding based on state here
+        props['data-state'] === 'open' ? 'rounded-b-none' : '',
         className
       )}
-      onClick={(e) => { // Prevent accordion toggle when add button is clicked
-        if ((e.target as HTMLElement).closest('[data-add-button]')) {
-          e.preventDefault();
-        }
-      }}
     >
-      <div className="flex items-center gap-3">
-        <Icon className="h-5 w-5 text-muted-foreground" />
-        <div className="text-left">
+      <ShadAccordionTrigger
+        ref={ref}
+        {...props}
+        className={cn(
+          "flex-grow p-4 hover:no-underline flex items-center gap-3 text-left",
+          // Remove rounding from trigger itself if parent div handles it
+          // "rounded-t-lg data-[state=closed]:rounded-b-lg data-[state=open]:rounded-b-none"
+        )}
+        // Prevent the trigger from firing if the add button was clicked
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('[data-add-button]')) {
+            e.preventDefault(); // Prevent accordion toggle
+          }
+          // Allow default AccordionTrigger onClick to proceed if not the add button
+        }}
+      >
+        <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+        <div className="flex-grow">
           <h3 className="text-base font-semibold">{title}</h3>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
-      </div>
-      <div className="flex items-center gap-3">
-        {itemCount > 0 && <span className="text-sm font-bold font-mono">{formatCurrency(totalAmount)}</span>}
-        <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={(e) => { e.stopPropagation(); onAddClick(); }} 
-            className="h-7 px-2 data-[add-button]"
-            aria-label={`Add new ${title.replace(/s$/, '')} item`}
-            >
-          <PlusCircle className="mr-1 h-3.5 w-3.5" />Add
-        </Button>
-        {/* Chevron will be added by ShadAccordionTrigger */}
-      </div>
-    </ShadAccordionTrigger>
+        {itemCount > 0 && <span className="text-sm font-bold font-mono ml-auto mr-3 flex-shrink-0">{formatCurrency(totalAmount)}</span>}
+        {/* The ChevronDown icon is part of ShadAccordionTrigger */}
+      </ShadAccordionTrigger>
+      <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation(); // Important: Stop click from bubbling to AccordionTrigger
+            onAddClick();
+          }}
+          className="h-7 px-2 mr-3 flex-shrink-0 data-[add-button]" // Added data-add-button for identification
+          aria-label={`Add new ${title.replace(/s$/, '')} item`}
+        >
+        <PlusCircle className="mr-1 h-3.5 w-3.5" />Add
+      </Button>
+    </div>
   );
 });
 AccordionTriggerWithActions.displayName = "AccordionTriggerWithActions";
@@ -303,19 +314,20 @@ export default function BudgetPage() {
          </CardContent>
       </Card>
 
-      <main className="flex flex-col gap-4 px-4 md:px-6 lg:px-8"> {/* Changed to flex-col for accordions */}
+      <main className="flex flex-col gap-4 px-4 md:px-6 lg:px-8">
         <Accordion type="multiple" className="w-full space-y-4">
          {budgetCategories.map(({ name, key, icon: Icon, description }) => (
-             <AccordionItem value={key} key={key} className="border-none shadow-sm rounded-lg overflow-hidden">
-                 <AccordionTriggerWithActions 
+             <AccordionItem value={key} key={key} className="border-none shadow-sm rounded-lg overflow-hidden bg-card">
+                 <AccordionTriggerWithActions
                     title={name}
                     description={description}
                     icon={Icon}
                     totalAmount={groupTotals[key as BudgetItemCategory]}
                     onAddClick={() => handleAddClick(key as BudgetItemCategory)}
                     itemCount={groupedBudgetItems[key as BudgetItemCategory].length}
+                    data-state={undefined} // Pass Radix data-state for styling
                   />
-                  <AccordionContent className="p-0 border border-t-0 rounded-b-lg bg-card">
+                  <AccordionContent className="p-0 border-t border-border">
                       {groupedBudgetItems[key as BudgetItemCategory].length > 0 ? (
                         <ScrollArea className="h-[350px] w-full">
                             <Table>
@@ -374,3 +386,5 @@ export default function BudgetPage() {
     </div>
   );
 }
+
+    
