@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 // --- Transaction Schemas ---
@@ -99,6 +100,14 @@ export const InvestmentFormDataSchema = z.object({
   notes: z.string().max(500, "Notes too long").optional().nullable(),
 });
 export type InvestmentFormData = z.infer<typeof InvestmentFormDataSchema>;
+
+export const GovBondForecastingFormSchema = z.object({
+  faceValue: z.coerce.number().positive({ message: 'Face value must be positive.' }),
+  couponRate: z.coerce.number().min(0, { message: 'Coupon rate cannot be negative.' }).max(50, { message: 'Coupon rate seems too high (0-50).' }),
+  yearsToMaturity: z.coerce.number().int().min(1, { message: 'Duration must be at least 1 year.' }).max(50, { message: 'Max 50 years.' }),
+  couponPaymentFrequency: z.enum(['annually', 'semi-annually']),
+});
+export type GovBondForecastingFormData = z.infer<typeof GovBondForecastingFormSchema>;
 
 
 // --- API Payload Schemas ---

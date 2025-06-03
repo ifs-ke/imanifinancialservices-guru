@@ -36,6 +36,7 @@ import { Briefcase, PlusCircle, Trash2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import InvestmentForecastingTool from './InvestmentForecastingTool';
+import GovernmentBondProjectionTool from './GovernmentBondProjectionTool'; // Import new component
 import { Separator } from '@/components/ui/separator';
 
 export default function InvestmentsPage() {
@@ -99,7 +100,7 @@ export default function InvestmentsPage() {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    autoResetPageIndex: false, // Add this line
+    autoResetPageIndex: false,
   });
 
   const selectedInvestmentIds = useMemo(() => {
@@ -191,6 +192,10 @@ export default function InvestmentsPage() {
         <Separator className="my-8" />
 
         <InvestmentForecastingTool />
+
+        <Separator className="my-8" />
+
+        <GovernmentBondProjectionTool /> 
 
       </main>
 
