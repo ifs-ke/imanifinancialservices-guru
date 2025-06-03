@@ -252,9 +252,13 @@ export async function getClerkUserInfo(): Promise<{ success: boolean; message: s
   if (!userId) {
     return { success: false, message: 'User not authenticated.', duration: performance.now() - startTime };
   }
+  // If userId is present but clerkUser is null, it might indicate a hydration delay.
   if (!clerkUser) {
-    // This can happen if Clerk session is present but full user object isn't hydrated yet.
-    return { success: false, message: 'Clerk user details not available at this moment. Try again.', duration: performance.now() - startTime };
+    return { 
+        success: false, 
+        message: `User is authenticated (ID: ${userId}), but full Clerk user details are not available at this moment. This can sometimes happen if the session is new or still loading. Try again shortly.`, 
+        duration: performance.now() - startTime 
+    };
   }
 
   try {
