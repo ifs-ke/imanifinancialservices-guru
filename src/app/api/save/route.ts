@@ -14,7 +14,7 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 import { SaveDataPayloadSchema } from '@/lib/schemas';
 import { ensureUserInDb } from '@/app/actions/shareActions';
 
-const HASH_CHECK_ENABLED_ON_SERVER = true; // Enable hash check on server
+const HASH_CHECK_ENABLED_ON_SERVER = true;
 
 const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
   ? new Ratelimit({
@@ -65,6 +65,7 @@ async function upsertStatementSettings(tx: any, userId: string, startDate?: stri
     }
 
     if (Object.keys(dataToUpdate).length > 0) {
+        logDebug(`Save API: Upserting StatementSettings with data:`, { ...logContext, updateData: dataToUpdate }, userId);
         await tx.statementSettings.upsert({
             where: { userId },
             update: dataToUpdate,
@@ -131,13 +132,12 @@ export async function POST(request: Request) {
 
   const payload = validationResult.data;
   const { dataHash: clientDataHash, ...receivedData } = payload;
-  
-  // Prepare the received data using the same logic client uses before hashing
+
   const preparedDataForSaving = prepareDataForHashing(receivedData as any);
   const serverCalculatedReceivedDataHash = await hashData(stringify(preparedDataForSaving));
 
   if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedReceivedDataHash !== clientDataHash) {
-    logError('Save API: Data integrity check failed! Client hash does not match server-calculated hash of received data.', 
+    logError('Save API: Data integrity check failed! Client hash does not match server-calculated hash of received data.',
         new Error('Client vs Server hash mismatch for received data'), {
       clientHash: clientDataHash,
       serverCalculatedHash: serverCalculatedReceivedDataHash,
@@ -151,10 +151,8 @@ export async function POST(request: Request) {
       hashCheckEnabled: HASH_CHECK_ENABLED_ON_SERVER
   }, userId);
 
-
   try {
-    await prisma.$transaction(async (tx) => {
-      const {
+    const {
         transactions = [],
         debts = [],
         assetItems = [],
@@ -165,48 +163,74 @@ export async function POST(request: Request) {
         startDate,
         endDate,
         gettingStartedDismissed
-      } = preparedDataForSaving; // Use the already prepared data for DB operations
+    } = preparedDataForSaving;
 
+    logDebug('Save API: Data prepared for Prisma transaction.', {
+        userId,
+        transactionCount: transactions.length,
+        debtCount: debts.length,
+        assetItemCount: assetItems.length,
+        otherLiabilityItemCount: otherLiabilityItems.length,
+        budgetItemCount: budgetItems.length,
+        ownedReviewCount: Object.keys(ownedReviews).length,
+        investmentItemCount: investmentItems.length,
+        startDate, endDate, gettingStartedDismissed
+    }, userId);
+
+    await prisma.$transaction(async (tx) => {
+      logDebug('Save API: Starting delete operations within transaction.', { userId }, userId);
       await tx.transaction.deleteMany({ where: { userId } });
       await tx.debt.deleteMany({ where: { userId } });
+      await tx.investmentItem.deleteMany({where: {userId}});
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
       await tx.weeklyReview.deleteMany({ where: { userId } });
-      await tx.investmentItem.deleteMany({where: {userId}});
+      // Note: StatementSettings is upserted, not deleted first.
+      logDebug('Save API: Delete operations completed.', { userId }, userId);
 
+      logDebug('Save API: Starting create operations.', { userId }, userId);
       if (transactions.length > 0) {
+        logDebug(`Save API: Creating ${transactions.length} transactions.`, { userId }, userId);
         await tx.transaction.createMany({
           data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })),
         });
       }
       if (debts.length > 0) {
+        logDebug(`Save API: Creating ${debts.length} debts.`, { userId }, userId);
         await tx.debt.createMany({ data: debts.map((d:any) => ({ ...d, userId, principal: Number(d.principal), interestRate: Number(d.interestRate), minPayment: Number(d.minPayment) })) });
       }
       if (investmentItems.length > 0) {
+        logDebug(`Save API: Creating ${investmentItems.length} investment items.`, { userId }, userId);
         await tx.investmentItem.createMany({
           data: investmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate), quantity: Number(i.quantity), purchasePrice: Number(i.purchasePrice), currentValue: Number(i.currentValue) })),
         });
       }
       if (assetItems.length > 0) {
+        logDebug(`Save API: Creating ${assetItems.length} asset items.`, { userId }, userId);
         await tx.assetItem.createMany({ data: assetItems.map((a:any) => ({ ...a, userId, amount: Number(a.amount) })) });
       }
       if (otherLiabilityItems.length > 0) {
+        logDebug(`Save API: Creating ${otherLiabilityItems.length} other liability items.`, { userId }, userId);
         await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map((l:any) => ({ ...l, userId, amount: Number(l.amount) })) });
       }
       if (budgetItems.length > 0) {
+        logDebug(`Save API: Creating ${budgetItems.length} budget items.`, { userId }, userId);
         await tx.budgetItem.createMany({ data: budgetItems.map((b:any) => ({ ...b, userId, amount: Number(b.amount) })) });
       }
       if (Object.keys(ownedReviews).length > 0) {
+        logDebug(`Save API: Creating ${Object.keys(ownedReviews).length} owned reviews.`, { userId }, userId);
         await tx.weeklyReview.createMany({
           data: Object.entries(ownedReviews).map(([weekKey, reviewData]: [string, any]) => ({
             userId,
             weekKey,
             journal: reviewData.journal,
             transactionComments: reviewData.transactionComments || undefined,
+            // sharedWith is handled by the SharedReview table, not directly on WeeklyReview
           })),
         });
       }
+      logDebug('Save API: Create operations completed.', { userId }, userId);
       await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
@@ -221,4 +245,3 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 }
-    
