@@ -241,15 +241,15 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
       if (syncStatus === 'hash_mismatch') {
         if (!isMismatchDialogOpen) {
           setIsMismatchDialogOpen(true);
-          logInfo("Sidebar sync icon clicked during hash_mismatch: opening dialog.", { userId: currentUserId });
+          logInfo("Sidebar sync icon clicked during hash_mismatch: opening conflict dialog.", { userId: currentUserId });
         } else {
-          logInfo("Sidebar sync icon clicked during hash_mismatch: dialog already open.", { userId: currentUserId });
-          // Potentially, if dialog is open, a click could retry or have other meaning,
-          // but for now, just opening it if closed is the main goal.
+          logInfo("Sidebar sync icon clicked during hash_mismatch: conflict dialog already open.", { userId: currentUserId });
+          // Optional: If dialog is already open, maybe focus it or nothing.
+          // For now, the main goal is to ensure it opens if it's not.
         }
-        return; // Stop here if it's a hash mismatch, dialog handling takes over.
+        return; // Prevent calling manualSync if it's a hash_mismatch that needs dialog first.
       }
-
+      
       // For other clickable states (error, local_changes, or manual sync request if 'synced' or 'local')
       if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'error_local') {
         manualSync();
@@ -262,7 +262,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         syncStatus,
         manualSync,
         isMismatchDialogOpen,
-        setIsMismatchDialogOpen
+        setIsMismatchDialogOpen // Add setIsMismatchDialogOpen as a dependency
     ]);
 
     const sidebarActualState = isMobile ? "collapsed" : state;
