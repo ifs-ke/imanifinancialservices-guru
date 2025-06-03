@@ -18,21 +18,18 @@ import {
   saveTestData,
   fetchTestData,
   getHashForServerComparison,
-  getHashForServerPreparedObject, // New
-  createMultipleTestEntries, // New
-  readAllTestEntries, // New
-  updateSingleTestEntry, // New
-  deleteSingleTestEntry, // New
-  deleteAllUserTestEntries, // New
-  getClerkUserInfo, // New action for Clerk user info
+  getHashForServerPreparedObject,
+  createMultipleTestEntries,
+  readAllTestEntries,
+  updateSingleTestEntry,
+  deleteSingleTestEntry,
+  deleteAllUserTestEntries,
+  getClerkUserInfo,
 } from '@/app/actions/adminTestActions';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon, Server, Timer, Link2, Info, Eye, Copy as CopyIcon, Database, CircleSlash, UserCircle2 } from 'lucide-react'; // Added UserCircle2
+import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon, Server, Timer, Link2, Info, Eye, Copy as CopyIcon, Database, CircleSlash, UserCircle2 } from 'lucide-react';
 import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
-import { logDebug } from '@/lib/logger';
-import { Separator } from '@/components/ui/separator';
-// import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'; // Temporarily commented out
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -43,10 +40,11 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import { useUser } from "@clerk/nextjs"; // Import useUser
 
 interface DetailViewerProps {
   title: string;
-  content: string | object; // Allow object for raw data display
+  content: string | object;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -89,11 +87,11 @@ const DetailViewerDialog: React.FC<DetailViewerProps> = ({ title, content, isOpe
 const AdminConnectionTestPage: React.FC = () => {
   const { toast } = useToast();
   const { startDate, setStartDate, isHydrated: isStatementStoreHydrated } = useStatementStore();
+  const { isSignedIn: isClientUserSignedIn, user: clientClerkUser, isLoaded: isClientClerkLoaded } = useUser(); // useUser hook
 
   const [dbConnectionResult, setDbConnectionResult] = useState<{ success: boolean; message: string; duration?: number } | null>(null);
   const [isDbConnectionTesting, setIsDbConnectionTesting] = useState(false);
 
-  // Client-Server Hash Test (String-to-Hash)
   const [csStringTestData] = useState<any>({ user: "testUser", id: 99, timestamp: new Date().toISOString(), items: [1, "a", true] });
   const [csClientPreparedString, setCsClientPreparedString] = useState('');
   const [csClientCalculatedHash, setCsClientCalculatedHash] = useState('');
@@ -103,7 +101,6 @@ const AdminConnectionTestPage: React.FC = () => {
   const [isCsStringHashTesting, setIsCsStringHashTesting] = useState(false);
   const [csStringHashError, setCsStringHashError] = useState<string | null>(null);
 
-  // Client-Server Hash Test (Object-to-String-to-Hash for Data Prep)
   const [csObjectTestData] = useState<any>({ itemA: "valueA", itemB: 123, itemC: null, itemD: [1,2,3], date: new Date() });
   const [csObjClientPreparedString, setCsObjClientPreparedString] = useState('');
   const [csObjClientHash, setCsObjClientHash] = useState('');
@@ -114,7 +111,6 @@ const AdminConnectionTestPage: React.FC = () => {
   const [isCsObjectHashTesting, setIsCsObjectHashTesting] = useState(false);
   const [csObjectHashError, setCsObjectHashError] = useState<string | null>(null);
 
-  // Client-Side verifyHash Utility Test
   const [verifyHashTestResults, setVerifyHashTestResults] = useState<Array<{ description: string, expected: boolean, actual: boolean, data?: string, hash?: string, stringToVerify?: string }>>([]);
 
   const [testDataInput, setTestDataInput] = useState('Sample test data for saving.');
@@ -125,15 +121,13 @@ const AdminConnectionTestPage: React.FC = () => {
   const [fetchResult, setFetchResult] = useState<{ success: boolean; message: string; duration?: number } | null>(null);
   const [isFetchingData, setIsFetchingData] = useState(false);
 
-  // CRUD Test States
   const [crudTestLog, setCrudTestLog] = useState<string[]>([]);
   const [isCrudTesting, setIsCrudTesting] = useState(false);
   const [createdEntryIds, setCreatedEntryIds] = useState<string[]>([]);
 
-  // Clerk User Info Test States
-  const [clerkUserInfo, setClerkUserInfo] = useState<Record<string, any> | null>(null);
-  const [isClerkUserInfoLoading, setIsClerkUserInfoLoading] = useState(false);
-  const [clerkUserInfoError, setClerkUserInfoError] = useState<string | null>(null);
+  const [serverClerkUserInfo, setServerClerkUserInfo] = useState<Record<string, any> | null>(null);
+  const [isServerClerkUserInfoLoading, setIsServerClerkUserInfoLoading] = useState(false);
+  const [serverClerkUserInfoError, setServerClerkUserInfoError] = useState<string | null>(null);
 
 
   const [detailViewTitle, setDetailViewTitle] = useState('');
@@ -183,7 +177,7 @@ const AdminConnectionTestPage: React.FC = () => {
       const clientHash = await hashData(clientPreparedString);
       setCsObjClientHash(clientHash);
 
-      const serverResult = await getHashForServerPreparedObject(csObjectTestData); // Send raw object
+      const serverResult = await getHashForServerPreparedObject(csObjectTestData);
       if (serverResult.success && serverResult.serverPreparedString && serverResult.serverHash) {
         setCsObjServerPreparedString(serverResult.serverPreparedString);
         setCsObjServerHash(serverResult.serverHash);
@@ -226,7 +220,6 @@ const AdminConnectionTestPage: React.FC = () => {
     const log = (message: string) => setCrudTestLog(prev => [...prev, message]);
 
     log("Starting CRUD tests...");
-    // 1. Create Multiple
     const entriesToCreate = [{ data: "CRUD Entry 1" }, { data: "CRUD Entry 2" }];
     const createResult = await createMultipleTestEntries(entriesToCreate);
     log(`Create Multiple: ${createResult.success ? `Success (${createResult.message})` : `Failed (${createResult.message})`} (${createResult.duration?.toFixed(0)}ms)`);
@@ -234,29 +227,25 @@ const AdminConnectionTestPage: React.FC = () => {
       setCreatedEntryIds(createResult.createdIds);
       log(`Created IDs: ${createResult.createdIds.join(', ')}`);
 
-      // 2. Read All
       const readAllResult = await readAllTestEntries();
       log(`Read All: ${readAllResult.success ? `Success (${readAllResult.entries?.length} entries)` : `Failed (${readAllResult.message})`} (${readAllResult.duration?.toFixed(0)}ms)`);
       if (readAllResult.success && readAllResult.entries) {
         log(`Fetched IDs: ${readAllResult.entries.map(e => e.id).join(', ')}`);
       }
 
-      // 3. Update One (if IDs exist)
       const idToUpdate = createResult.createdIds[0];
       if (idToUpdate) {
         const updateResult = await updateSingleTestEntry(idToUpdate, "CRUD Entry 1 - Updated");
         log(`Update One (${idToUpdate}): ${updateResult.success ? 'Success' : `Failed (${updateResult.message})`} (${updateResult.duration?.toFixed(0)}ms)`);
       } else { log("Skipping Update: No entry ID from create step."); }
 
-      // 4. Delete One (if IDs exist)
-      const idToDelete = createResult.createdIds[1] || idToUpdate; // Try second, fallback to first if only one created/left
+      const idToDelete = createResult.createdIds[1] || idToUpdate;
       if (idToDelete) {
         const deleteResult = await deleteSingleTestEntry(idToDelete);
         log(`Delete One (${idToDelete}): ${deleteResult.success ? 'Success' : `Failed (${deleteResult.message})`} (${deleteResult.duration?.toFixed(0)}ms)`);
       } else { log("Skipping Delete: No entry ID available."); }
     }
 
-    // 5. Delete All (Cleanup)
     log("Running Cleanup: Delete All User Test Entries...");
     const deleteAllRes = await deleteAllUserTestEntries();
     log(`Delete All: ${deleteAllRes.success ? `Success (${deleteAllRes.count} deleted)` : `Failed (${deleteAllRes.message})`} (${deleteAllRes.duration?.toFixed(0)}ms)`);
@@ -264,17 +253,17 @@ const AdminConnectionTestPage: React.FC = () => {
     setIsCrudTesting(false);
   };
 
-  const handleFetchClerkUserInfo = async () => {
-    setIsClerkUserInfoLoading(true);
-    setClerkUserInfo(null);
-    setClerkUserInfoError(null);
+  const handleFetchServerClerkUserInfo = async () => {
+    setIsServerClerkUserInfoLoading(true);
+    setServerClerkUserInfo(null);
+    setServerClerkUserInfoError(null);
     const result = await getClerkUserInfo();
     if (result.success && result.userInfo) {
-      setClerkUserInfo(result.userInfo);
+      setServerClerkUserInfo(result.userInfo);
     } else {
-      setClerkUserInfoError(result.message);
+      setServerClerkUserInfoError(result.message);
     }
-    setIsClerkUserInfoLoading(false);
+    setIsServerClerkUserInfoLoading(false);
   };
 
 
@@ -291,7 +280,7 @@ const AdminConnectionTestPage: React.FC = () => {
     </Badge>
   );
 
-  useEffect(() => { // Run verifyHash test on load
+  useEffect(() => {
     handleVerifyHashUtilityTest();
   }, []);
 
@@ -348,7 +337,6 @@ const AdminConnectionTestPage: React.FC = () => {
             <CardDescription>Tests hashing algorithm and data preparation logic consistency between client and server.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Test 1: String-to-Hash Consistency */}
             <div className="p-3 border rounded-md space-y-3">
               <h4 className="font-semibold text-sm">Test 1: String-to-Hash Consistency</h4>
               <p className="text-xs text-muted-foreground">Verifies that client and server produce identical hashes for an *already stringified and prepared* data payload.</p>
@@ -373,7 +361,6 @@ const AdminConnectionTestPage: React.FC = () => {
               )}
             </div>
 
-            {/* Test 2: Object-to-String-to-Hash (Data Prep) Consistency */}
             <div className="p-3 border rounded-md space-y-3">
               <h4 className="font-semibold text-sm">Test 2: Data Preparation & Hashing Consistency</h4>
               <p className="text-xs text-muted-foreground">Client sends a raw JS object. Both client and server independently run `prepareDataForHashing` and `stringify`. Then both generated strings and their hashes are compared.</p>
@@ -401,7 +388,6 @@ const AdminConnectionTestPage: React.FC = () => {
               )}
             </div>
 
-            {/* Test 3: Client-Side verifyHash Utility */}
             <div className="p-3 border rounded-md space-y-3">
               <h4 className="font-semibold text-sm">Test 3: Client-Side `verifyHash` Utility</h4>
               <p className="text-xs text-muted-foreground">Tests the `verifyHash` function used by the client to check hashes from the server (e.g., during /api/sync).</p>
@@ -437,29 +423,54 @@ const AdminConnectionTestPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Clerk User Info Test Card */}
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <UserCircle2 size={20} /> Clerk User Information Test
+              <UserCircle2 size={20} /> Server-Side Clerk User Info Test
             </CardTitle>
-            <CardDescription>Displays information about the currently authenticated Clerk user.</CardDescription>
+            <CardDescription>Fetches and displays authenticated user info via a Server Action.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button onClick={handleFetchClerkUserInfo} disabled={isClerkUserInfoLoading} className="w-full">
-              {isClerkUserInfoLoading ? 'Fetching User Info...' : 'Fetch Clerk User Info'}
+            <Button onClick={handleFetchServerClerkUserInfo} disabled={isServerClerkUserInfoLoading} className="w-full">
+              {isServerClerkUserInfoLoading ? 'Fetching Server Info...' : 'Fetch Server Clerk User Info'}
             </Button>
-            {clerkUserInfoError && <ResultBadge success={false} message={clerkUserInfoError} />}
-            {clerkUserInfo && (
+            {serverClerkUserInfoError && <ResultBadge success={false} message={serverClerkUserInfoError} />}
+            {serverClerkUserInfo && (
               <ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs">
-                <pre>{JSON.stringify(clerkUserInfo, null, 2)}</pre>
+                <pre>{JSON.stringify(serverClerkUserInfo, null, 2)}</pre>
               </ScrollArea>
             )}
           </CardContent>
         </Card>
 
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCircle2 size={20} /> Client-Side Clerk User Info (Direct)
+            </CardTitle>
+            <CardDescription>Displays user info directly from the `useUser()` hook on the client.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            {!isClientClerkLoaded ? (
+              <p>Loading user info (client-side)...</p>
+            ) : !isClientUserSignedIn ? (
+              <ResultBadge success={false} message="Not signed in (client-side)" />
+            ) : clientClerkUser ? (
+              <div className="p-3 border rounded-md bg-muted/50">
+                <p><strong>Full Name:</strong> {clientClerkUser.fullName || "N/A"}</p>
+                <p><strong>Primary Email:</strong> {clientClerkUser.primaryEmailAddress?.emailAddress || "N/A"}</p>
+                <p><strong>User ID:</strong> {clientClerkUser.id}</p>
+                <p><strong>First Name:</strong> {clientClerkUser.firstName || "N/A"}</p>
+                <p><strong>Last Name:</strong> {clientClerkUser.lastName || "N/A"}</p>
+                <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => openDetailViewer("Client-Side Clerk User Object", clientClerkUser)}>View Full Object</Button>
+              </div>
+            ) : (
+              <ResultBadge success={false} message="User data not available (client-side), though signed in." />
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Original Save/Fetch TestEntry cards - could be removed if CRUD test is sufficient, or kept for simple single operations */}
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Save size={20} /> Simple DB Save (TestEntry)</CardTitle>
