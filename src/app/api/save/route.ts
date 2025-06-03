@@ -10,7 +10,6 @@ import stringify from 'fast-json-stable-stringify';
 import { Ratelimit } from '@upstash/ratelimit';
 import { kv } from '@vercel/kv';
 import { addCorsHeaders } from '@/lib/utils';
-import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 import { SaveDataPayloadSchema } from '@/lib/schemas';
 import { ensureUserInDb } from '@/app/actions/shareActions';
 
@@ -25,10 +24,10 @@ const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
 
 async function upsertStatementSettings(tx: any, userId: string, startDate?: string | null, endDate?: string | null, gettingStartedDismissed?: boolean) {
     const logContext = { userId, operation: 'upsertStatementSettings', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting upsert for StatementSettings`, logContext, userId);
+    console.debug(`[API /api/save] Save API: Starting upsert for StatementSettings. User: ${userId}`, logContext);
 
     if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) {
-        logDebug(`Save API: No StatementSettings fields provided. Skipping update.`, logContext, userId);
+        console.debug(`[API /api/save] Save API: No StatementSettings fields provided. Skipping update. User: ${userId}`, logContext);
         return;
     }
 
@@ -40,7 +39,7 @@ async function upsertStatementSettings(tx: any, userId: string, startDate?: stri
         } else {
             const parsed = new Date(startDate);
             if (isNaN(parsed.getTime())) {
-                logWarn('Invalid startDate string received in upsertStatementSettings. Setting to null.', { ...logContext, startDateValue: startDate }, userId);
+                console.warn(`[API /api/save] Invalid startDate string received in upsertStatementSettings. Setting to null. User: ${userId}`, { ...logContext, startDateValue: startDate });
                 dataToUpdate.statementStartDate = null;
             } else {
                 dataToUpdate.statementStartDate = parsed;
@@ -53,7 +52,7 @@ async function upsertStatementSettings(tx: any, userId: string, startDate?: stri
         } else {
             const parsed = new Date(endDate);
             if (isNaN(parsed.getTime())) {
-                logWarn('Invalid endDate string received in upsertStatementSettings. Setting to null.', { ...logContext, endDateValue: endDate }, userId);
+                console.warn(`[API /api/save] Invalid endDate string received in upsertStatementSettings. Setting to null. User: ${userId}`, { ...logContext, endDateValue: endDate });
                 dataToUpdate.statementEndDate = null;
             } else {
                 dataToUpdate.statementEndDate = parsed;
@@ -65,15 +64,15 @@ async function upsertStatementSettings(tx: any, userId: string, startDate?: stri
     }
 
     if (Object.keys(dataToUpdate).length > 0) {
-        logDebug(`Save API: Upserting StatementSettings with data:`, { ...logContext, updateData: dataToUpdate }, userId);
+        console.debug(`[API /api/save] Save API: Upserting StatementSettings with data. User: ${userId}`, { ...logContext, updateData: dataToUpdate });
         await tx.statementSettings.upsert({
             where: { userId },
             update: dataToUpdate,
             create: { userId, ...dataToUpdate },
         });
-        logInfo(`Save API: Successfully saved/updated StatementSettings`, logContext, userId);
+        console.info(`[API /api/save] Save API: Successfully saved/updated StatementSettings. User: ${userId}`, logContext);
     } else {
-        logDebug(`Save API: No valid StatementSettings fields to update.`, logContext, userId);
+        console.debug(`[API /api/save] Save API: No valid StatementSettings fields to update. User: ${userId}`, logContext);
     }
 }
 
@@ -88,7 +87,7 @@ export async function POST(request: Request) {
   const logContextBase = { userId: userId || 'unknown-save-post', operation: 'POST /api/save', apiRoute: '/api/save' };
 
   if (!userId || !clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
-    logWarn('Save API: Unauthorized save attempt: User not logged in or primary email missing.', logContextBase, userId);
+    console.warn(`[API /api/save] Save API: Unauthorized save attempt: User not logged in or primary email missing. User: ${userId || 'unknown'}`, logContextBase);
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in or primary email not available.' }, { status: 401 });
     return addCorsHeaders(response);
   }
@@ -96,7 +95,7 @@ export async function POST(request: Request) {
   try {
     await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
   } catch (dbError: any) {
-    logError('Save API: Failed to ensure user in DB.', dbError, logContextBase, userId);
+    console.error(`[API /api/save] Save API: Failed to ensure user in DB. User: ${userId}`, { error: dbError, ...logContextBase });
     const response = NextResponse.json({ error: 'Database operation failed while verifying user.' }, { status: 500 });
     return addCorsHeaders(response);
   }
@@ -105,27 +104,27 @@ export async function POST(request: Request) {
     const { success, limit, remaining, reset } = await ratelimit.limit(userId);
     const logContextWithRateLimit = { ...logContextBase, rateLimit: { limit, remaining, reset } };
     if (!success) {
-        logWarn('Save API: Rate limit exceeded.', logContextWithRateLimit, userId);
+        console.warn(`[API /api/save] Save API: Rate limit exceeded. User: ${userId}`, logContextWithRateLimit);
         const response = NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
         return addCorsHeaders(response);
     }
-    logDebug('Save API: Rate limit check passed.', logContextWithRateLimit, userId);
+    console.debug(`[API /api/save] Save API: Rate limit check passed. User: ${userId}`, logContextWithRateLimit);
   } else {
-    logWarn('Save API: Rate limiting is not configured (KV_REST_API_URL or KV_REST_API_TOKEN missing).', logContextBase, userId);
+    console.warn(`[API /api/save] Save API: Rate limiting is not configured (KV_REST_API_URL or KV_REST_API_TOKEN missing). User: ${userId}`, logContextBase);
   }
 
   let rawPayload: any;
   try {
     rawPayload = await request.json();
   } catch (error: any) {
-    logError('Save API: Invalid request body - JSON parsing failed.', error, logContextBase, userId);
+    console.error(`[API /api/save] Save API: Invalid request body - JSON parsing failed. User: ${userId}`, { error, ...logContextBase });
     const response = NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     return addCorsHeaders(response);
   }
 
   const validationResult = SaveDataPayloadSchema.safeParse(rawPayload);
   if (!validationResult.success) {
-    logWarn('Save API: Invalid payload structure or data types.', { ...logContextBase, errors: validationResult.error.flatten(), receivedPayload: rawPayload }, userId);
+    console.warn(`[API /api/save] Save API: Invalid payload structure or data types. User: ${userId}`, { ...logContextBase, errors: validationResult.error.flatten(), receivedPayload: rawPayload });
     const response = NextResponse.json({ error: 'Invalid payload structure or data types.', details: validationResult.error.flatten() }, { status: 400 });
     return addCorsHeaders(response);
   }
@@ -137,19 +136,21 @@ export async function POST(request: Request) {
   const serverCalculatedReceivedDataHash = await hashData(stringify(preparedDataForSaving));
 
   if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedReceivedDataHash !== clientDataHash) {
-    logError('Save API: Data integrity check failed! Client hash does not match server-calculated hash of received data.',
-        new Error('Client vs Server hash mismatch for received data'), {
+    console.error(`[API /api/save] Save API: Data integrity check failed! Client hash does not match server-calculated hash of received data. User: ${userId}`, {
+      error: new Error('Client vs Server hash mismatch for received data'),
       clientHash: clientDataHash,
       serverCalculatedHash: serverCalculatedReceivedDataHash,
-    }, userId);
+      ...logContextBase
+    });
     const response = NextResponse.json({ error: 'Data integrity check failed. Your data may be out of sync or corrupted. Please try syncing again.' }, { status: 400 });
     return addCorsHeaders(response);
   }
-  logInfo('Save API: Server-side data integrity check of client hash passed (or was skipped).', {
+  console.info(`[API /api/save] Save API: Server-side data integrity check of client hash passed (or was skipped). User: ${userId}`, {
       clientHash: clientDataHash,
       serverCalculatedHash: serverCalculatedReceivedDataHash,
-      hashCheckEnabled: HASH_CHECK_ENABLED_ON_SERVER
-  }, userId);
+      hashCheckEnabled: HASH_CHECK_ENABLED_ON_SERVER,
+      ...logContextBase
+  });
 
   try {
     const {
@@ -165,7 +166,7 @@ export async function POST(request: Request) {
         gettingStartedDismissed
     } = preparedDataForSaving;
 
-    logDebug('Save API: Data prepared for Prisma transaction.', {
+    console.debug(`[API /api/save] Save API: Data prepared for Prisma transaction. User: ${userId}`, {
         userId,
         transactionCount: transactions.length,
         debtCount: debts.length,
@@ -175,73 +176,77 @@ export async function POST(request: Request) {
         ownedReviewCount: Object.keys(ownedReviews).length,
         investmentItemCount: investmentItems.length,
         startDate, endDate, gettingStartedDismissed
-    }, userId);
+    });
 
     await prisma.$transaction(async (tx) => {
-      logDebug('Save API: Starting delete operations within transaction.', { userId }, userId);
+      console.debug(`[API /api/save] Save API: Starting delete operations within transaction. User: ${userId}`, { userId });
       await tx.transaction.deleteMany({ where: { userId } });
       await tx.debt.deleteMany({ where: { userId } });
       await tx.investmentItem.deleteMany({where: {userId}});
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } });
-      // Note: StatementSettings is upserted, not deleted first.
-      logDebug('Save API: Delete operations completed.', { userId }, userId);
+      await tx.weeklyReview.deleteMany({ where: { userId } }); // Deletes owned reviews
+      // Also need to delete shares related to these owned reviews
+      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } });
 
-      logDebug('Save API: Starting create operations.', { userId }, userId);
+
+      console.debug(`[API /api/save] Save API: Delete operations completed. User: ${userId}`, { userId });
+
+      console.debug(`[API /api/save] Save API: Starting create operations. User: ${userId}`, { userId });
       if (transactions.length > 0) {
-        logDebug(`Save API: Creating ${transactions.length} transactions.`, { userId }, userId);
+        console.debug(`[API /api/save] Creating ${transactions.length} transactions. User: ${userId}`);
         await tx.transaction.createMany({
           data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })),
         });
       }
       if (debts.length > 0) {
-        logDebug(`Save API: Creating ${debts.length} debts.`, { userId }, userId);
+        console.debug(`[API /api/save] Creating ${debts.length} debts. User: ${userId}`);
         await tx.debt.createMany({ data: debts.map((d:any) => ({ ...d, userId, principal: Number(d.principal), interestRate: Number(d.interestRate), minPayment: Number(d.minPayment) })) });
       }
       if (investmentItems.length > 0) {
-        logDebug(`Save API: Creating ${investmentItems.length} investment items.`, { userId }, userId);
+        console.debug(`[API /api/save] Creating ${investmentItems.length} investment items. User: ${userId}`);
         await tx.investmentItem.createMany({
           data: investmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate), quantity: Number(i.quantity), purchasePrice: Number(i.purchasePrice), currentValue: Number(i.currentValue) })),
         });
       }
       if (assetItems.length > 0) {
-        logDebug(`Save API: Creating ${assetItems.length} asset items.`, { userId }, userId);
+        console.debug(`[API /api/save] Creating ${assetItems.length} asset items. User: ${userId}`);
         await tx.assetItem.createMany({ data: assetItems.map((a:any) => ({ ...a, userId, amount: Number(a.amount) })) });
       }
       if (otherLiabilityItems.length > 0) {
-        logDebug(`Save API: Creating ${otherLiabilityItems.length} other liability items.`, { userId }, userId);
+        console.debug(`[API /api/save] Creating ${otherLiabilityItems.length} other liability items. User: ${userId}`);
         await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map((l:any) => ({ ...l, userId, amount: Number(l.amount) })) });
       }
       if (budgetItems.length > 0) {
-        logDebug(`Save API: Creating ${budgetItems.length} budget items.`, { userId }, userId);
+        console.debug(`[API /api/save] Creating ${budgetItems.length} budget items. User: ${userId}`);
         await tx.budgetItem.createMany({ data: budgetItems.map((b:any) => ({ ...b, userId, amount: Number(b.amount) })) });
       }
       if (Object.keys(ownedReviews).length > 0) {
-        logDebug(`Save API: Creating ${Object.keys(ownedReviews).length} owned reviews.`, { userId }, userId);
+        console.debug(`[API /api/save] Creating ${Object.keys(ownedReviews).length} owned reviews. User: ${userId}`);
         await tx.weeklyReview.createMany({
           data: Object.entries(ownedReviews).map(([weekKey, reviewData]: [string, any]) => ({
             userId,
             weekKey,
             journal: reviewData.journal,
             transactionComments: reviewData.transactionComments || undefined,
-            // sharedWith is handled by the SharedReview table, not directly on WeeklyReview
           })),
         });
       }
-      logDebug('Save API: Create operations completed.', { userId }, userId);
+      console.debug(`[API /api/save] Create operations completed. User: ${userId}`, { userId });
       await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    logInfo('Save API: Prisma transaction committed successfully.', logContextBase, userId);
+    console.info(`[API /api/save] Save API: Prisma transaction committed successfully. User: ${userId}`, logContextBase);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
     return addCorsHeaders(response);
 
   } catch (error: any) {
-    logError('Save API: Prisma transaction failed or aborted.', error, logContextBase, userId);
+    console.error(`[API /api/save] Save API: Prisma transaction failed or aborted. User: ${userId}`, { error, ...logContextBase });
     const errorMessage = error instanceof Error ? `Failed to save data: ${error.message}` : 'An unknown error occurred during save.';
     const response = NextResponse.json({ error: errorMessage }, { status: 500 });
     return addCorsHeaders(response);
   }
 }
+
+    

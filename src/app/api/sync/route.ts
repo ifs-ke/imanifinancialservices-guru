@@ -1,15 +1,14 @@
 
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-import { auth, clerkClient } from '@clerk/nextjs/server'; // Added clerkClient
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem, InvestmentItem } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { addCorsHeaders } from '@/lib/utils';
-import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
-import { ensureUserInDb } from '@/app/actions/shareActions'; // For ensuring user exists
+import { ensureUserInDb } from '@/app/actions/shareActions';
 
 interface SyncedDataForClient {
   transactions: TransactionWithId[];
@@ -37,24 +36,24 @@ export async function GET() {
   const logContextBase = { userId: userId || 'unknown-sync-get', operation: 'GET /api/sync', apiRoute: '/api/sync' };
 
   if (!userId || !clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
-    logWarn("Sync API: Unauthorized access attempt (GET). User, or primary email missing.", logContextBase, userId);
+    console.warn(`[API /api/sync] Sync API: Unauthorized access attempt (GET). User, or primary email missing. User: ${userId || 'unknown'}`, logContextBase);
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in or primary email missing.' }, { status: 401 });
     return addCorsHeaders(response);
   }
 
   try {
     await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
-    logDebug("Sync API: User ensured in DB successfully.", logContextBase, userId);
+    console.debug(`[API /api/sync] Sync API: User ensured in DB successfully. User: ${userId}`, logContextBase);
   } catch (dbError: any) {
-    logError('Sync API: Failed to ensure user in DB during sync GET.', dbError, logContextBase, userId);
+    console.error(`[API /api/sync] Sync API: Failed to ensure user in DB during sync GET. User: ${userId}`, { error: dbError, ...logContextBase });
     const response = NextResponse.json({ error: 'Database operation failed while verifying user for sync.' }, { status: 500 });
     return addCorsHeaders(response);
   }
 
-  logInfo(`Sync API: Initiating sync for user ${userId}`, logContextBase, userId);
+  console.info(`[API /api/sync] Sync API: Initiating sync for user ${userId}`, logContextBase);
 
   try {
-    logDebug("Sync API: Starting Prisma transaction to fetch data.", logContextBase, userId);
+    console.debug(`[API /api/sync] Sync API: Starting Prisma transaction to fetch data. User: ${userId}`, logContextBase);
     let transactions, debts, assetItems, otherLiabilityItems, budgetItems, ownedReviewsPrisma, sharedReviewsPrisma, statementSettings, notifications, investmentItems;
 
     try {
@@ -77,7 +76,7 @@ export async function GET() {
         prisma.notification.findMany({ where: { userId }, orderBy: { timestamp: 'desc' }, take: 50 }),
         prisma.investmentItem.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
         ]);
-        logDebug("Sync API: Prisma transaction completed.", { ...logContextBase,
+        console.debug(`[API /api/sync] Sync API: Prisma transaction completed. User: ${userId}`, { ...logContextBase,
         txCount: transactions.length,
         debtCount: debts.length,
         assetCount: assetItems.length,
@@ -88,10 +87,10 @@ export async function GET() {
         investmentCount: investmentItems.length,
         statementSettingsFound: !!statementSettings,
         notificationsCount: notifications.length,
-        }, userId);
+        });
     } catch (prismaError: any) {
-        logError('Sync API: Prisma transaction failed.', prismaError, logContextBase, userId);
-        throw new Error('Database query failed during sync.'); // Re-throw to be caught by outer try-catch
+        console.error(`[API /api/sync] Sync API: Prisma transaction failed. User: ${userId}`, { error: prismaError, ...logContextBase });
+        throw new Error('Database query failed during sync.');
     }
 
 
@@ -105,23 +104,22 @@ export async function GET() {
         weekKey: review.weekKey,
       };
     });
-    logDebug("Sync API: Owned reviews mapped.", {...logContextBase, count: Object.keys(ownedReviewsMap).length}, userId);
+    console.debug(`[API /api/sync] Sync API: Owned reviews mapped. User: ${userId}`, {...logContextBase, count: Object.keys(ownedReviewsMap).length});
 
     const sharedReviewsMap: Record<string, WeeklyReviewData> = {};
     const ownerIdsOfSharedReviews = Array.from(new Set(sharedReviewsPrisma.map(sr => sr.originalReview.userId)));
     let ownerUserDetails: Record<string, { name?: string | null, email?: string | null }> = {};
 
     if (ownerIdsOfSharedReviews.length > 0) {
-        logDebug(`Sync API: Fetching Clerk user details for ${ownerIdsOfSharedReviews.length} shared review owners.`, logContextBase, userId);
+        console.debug(`[API /api/sync] Sync API: Fetching Clerk user details for ${ownerIdsOfSharedReviews.length} shared review owners. User: ${userId}`, logContextBase);
         try {
             const clerkOwnerUsers = await clerkClient.users.getUserList({ userId: ownerIdsOfSharedReviews });
             clerkOwnerUsers.data.forEach(u => {
                 ownerUserDetails[u.id] = { name: u.fullName || u.firstName, email: u.primaryEmailAddress?.emailAddress };
             });
-            logDebug("Sync API: Clerk user details for shared review owners fetched.", {...logContextBase, count: clerkOwnerUsers.data.length}, userId);
+            console.debug(`[API /api/sync] Sync API: Clerk user details for shared review owners fetched. User: ${userId}`, {...logContextBase, count: clerkOwnerUsers.data.length});
         } catch (clerkError: any) {
-            logError('Sync API: Failed to fetch Clerk user details for shared review owners.', clerkError, logContextBase, userId);
-            // Continue without owner usernames for shared reviews if this fails
+            console.error(`[API /api/sync] Sync API: Failed to fetch Clerk user details for shared review owners. User: ${userId}`, { error: clerkError, ...logContextBase });
         }
     }
 
@@ -138,7 +136,7 @@ export async function GET() {
         };
       }
     });
-    logDebug("Sync API: Shared reviews mapped.", {...logContextBase, count: Object.keys(sharedReviewsMap).length }, userId);
+    console.debug(`[API /api/sync] Sync API: Shared reviews mapped. User: ${userId}`, {...logContextBase, count: Object.keys(sharedReviewsMap).length });
 
     const fetchedData: SyncedDataForClient = {
       transactions: transactions.map(t => ({...t, date: t.date || new Date(0), categoryName: t.categoryName || null })),
@@ -154,25 +152,26 @@ export async function GET() {
       endDate: statementSettings?.statementEndDate?.toISOString(),
       gettingStartedDismissed: statementSettings?.gettingStartedDismissed ?? false,
     };
-    logDebug("Sync API: fetchedData object assembled.", logContextBase, userId);
+    console.debug(`[API /api/sync] Sync API: fetchedData object assembled. User: ${userId}`, logContextBase);
 
     const preparedData = prepareDataForHashing(fetchedData as any);
-    logDebug("Sync API: Data prepared for hashing.", logContextBase, userId);
+    console.debug(`[API /api/sync] Sync API: Data prepared for hashing. User: ${userId}`, logContextBase);
 
     const dataString = stringify(preparedData);
-    logDebug("Sync API: Data stringified for hashing.", {...logContextBase, stringLength: dataString.length}, userId);
+    console.debug(`[API /api/sync] Sync API: Data stringified for hashing. User: ${userId}`, {...logContextBase, stringLength: dataString.length});
 
     const dataHash = await hashData(dataString);
-    logInfo(`Sync API: Generated server hash for user ${userId}: ${dataHash}`, logContextBase, userId);
+    console.info(`[API /api/sync] Sync API: Generated server hash for user ${userId}: ${dataHash}`, logContextBase);
 
     const response = NextResponse.json({ ...preparedData, dataHash });
     return addCorsHeaders(response);
 
   } catch (error: any) {
-    logError(`Sync API: Unrecoverable error during GET sync for user ${userId}.`, error, { ...logContextBase, errorDetails: error.message, stack: error.stack }, userId);
+    console.error(`[API /api/sync] Sync API: Unrecoverable error during GET sync for user ${userId}.`, { error, ...logContextBase, errorDetails: error.message, stack: error.stack });
     const errorMessage = error.message || 'Failed to fetch data from database';
     const response = NextResponse.json({ error: errorMessage }, { status: 500 });
     return addCorsHeaders(response);
   }
 }
+
     

@@ -4,8 +4,7 @@
 
 import prisma from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
-import { logError, logInfo, logDebug } from '@/lib/logger';
-import { hashData } from '@/lib/storage-utils'; // Import hashData
+import { hashData } from '@/lib/storage-utils';
 
 export async function checkDatabaseConnection(): Promise<{ success: boolean; message: string; data?: any; duration?: number }> {
   const { userId } = auth();
@@ -16,11 +15,11 @@ export async function checkDatabaseConnection(): Promise<{ success: boolean; mes
   try {
     const userCount = await prisma.user.count();
     const duration = performance.now() - startTime;
-    logInfo('Database connection test successful.', { userId, userCount, duration });
+    console.info(`[AdminActions] Database connection test successful. User: ${userId}`, { userId, userCount, duration });
     return { success: true, message: `Successfully connected. Found ${userCount} user(s).`, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
-    logError('Database connection test failed.', error, { userId, duration });
+    console.error(`[AdminActions] Database connection test failed. User: ${userId}`, { error, userId, duration });
     return { success: false, message: `Database connection failed: ${error.message}`, duration };
   }
 }
@@ -43,11 +42,11 @@ export async function saveTestData(data: string): Promise<{ success: boolean; me
       },
     });
     const duration = performance.now() - startTime;
-    logInfo('Test data saved successfully.', { userId, entryId: newEntry.id, duration });
+    console.info(`[AdminActions] Test data saved successfully. User: ${userId}`, { userId, entryId: newEntry.id, duration });
     return { success: true, message: 'Test data saved successfully.', entryId: newEntry.id, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
-    logError('Failed to save test data.', error, { userId, data, duration });
+    console.error(`[AdminActions] Failed to save test data. User: ${userId}`, { error, userId, data, duration });
     return { success: false, message: `Failed to save test data: ${error.message}`, duration };
   }
 }
@@ -68,15 +67,15 @@ export async function fetchTestData(): Promise<{ success: boolean; message: stri
     const duration = performance.now() - startTime;
 
     if (entry) {
-      logInfo('Test data fetched successfully.', { userId, entryId: entry.id, duration });
+      console.info(`[AdminActions] Test data fetched successfully. User: ${userId}`, { userId, entryId: entry.id, duration });
       return { success: true, message: 'Latest test data fetched.', data: entry, duration };
     } else {
-      logInfo('No test data found for user.', { userId, duration });
+      console.info(`[AdminActions] No test data found for user. User: ${userId}`, { userId, duration });
       return { success: true, message: 'No test data found.', data: null, duration };
     }
   } catch (error: any) {
     const duration = performance.now() - startTime;
-    logError('Failed to fetch test data.', error, { userId, duration });
+    console.error(`[AdminActions] Failed to fetch test data. User: ${userId}`, { error, userId, duration });
     return { success: false, message: `Failed to fetch test data: ${error.message}`, duration };
   }
 }
@@ -86,16 +85,18 @@ export async function getHashForServerComparison(dataString: string): Promise<{ 
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
-  logDebug("getHashForServerComparison called", { userId, dataStringLength: dataString.length });
+  console.debug(`[AdminActions] getHashForServerComparison called. User: ${userId}`, { userId, dataStringLength: dataString.length });
   const startTime = performance.now();
   try {
     const serverHash = await hashData(dataString);
     const duration = performance.now() - startTime;
-    logInfo('Server hash calculated for comparison.', { userId, serverHash, duration });
+    console.info(`[AdminActions] Server hash calculated for comparison. User: ${userId}`, { userId, serverHash, duration });
     return { success: true, serverHash, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
-    logError('Failed to calculate server hash for comparison.', error, { userId, duration });
+    console.error(`[AdminActions] Failed to calculate server hash for comparison. User: ${userId}`, { error, userId, duration });
     return { success: false, message: `Failed to calculate server hash: ${error.message}`, duration };
   }
 }
+
+    
