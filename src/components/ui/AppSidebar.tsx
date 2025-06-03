@@ -174,14 +174,13 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     const { isSignedIn } = useAuth();
 
     const isUserAdmin = React.useMemo(() => {
-        // Safely access privateMetadata and the role property
         const role = user?.privateMetadata?.role as AppRole | undefined;
         return role === 'admin';
     }, [user]);
 
 
     const syncManager = useSyncManager();
-    const { syncStatus, manualSync, isMismatchDialogOpen, isFetchDisabled } = syncManager;
+    const { syncStatus, manualSync, isMismatchDialogOpen, setIsMismatchDialogOpen } = syncManager;
 
     React.useEffect(() => {
       setHasMounted(true);
@@ -233,14 +232,38 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     }
 
     const handleSyncClick = React.useCallback(() => {
-      if (!isClerkLoaded || !isSignedIn) {
-        logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
+      const currentUserId = user?.id;
+      if (!isClerkLoaded || !isSignedIn || !currentUserId) {
+        logWarn("Sync click attempted but user not signed in, Clerk not loaded, or userId missing.", { isSignedIn, isClerkLoaded, userId: currentUserId});
         return;
       }
-      if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'hash_mismatch' || syncStatus === 'error_local') {
+
+      if (syncStatus === 'hash_mismatch') {
+        if (!isMismatchDialogOpen) {
+          setIsMismatchDialogOpen(true);
+          logInfo("Sidebar sync icon clicked during hash_mismatch: opening dialog.", { userId: currentUserId });
+        } else {
+          logInfo("Sidebar sync icon clicked during hash_mismatch: dialog already open.", { userId: currentUserId });
+          // Potentially, if dialog is open, a click could retry or have other meaning,
+          // but for now, just opening it if closed is the main goal.
+        }
+        return; // Stop here if it's a hash mismatch, dialog handling takes over.
+      }
+
+      // For other clickable states (error, local_changes, or manual sync request if 'synced' or 'local')
+      if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'error_local') {
         manualSync();
       }
-    }, [isClerkLoaded, isSignedIn, user?.id, isSyncButtonClickable, syncStatus, manualSync]);
+    }, [
+        isClerkLoaded,
+        isSignedIn,
+        user?.id,
+        isSyncButtonClickable,
+        syncStatus,
+        manualSync,
+        isMismatchDialogOpen,
+        setIsMismatchDialogOpen
+    ]);
 
     const sidebarActualState = isMobile ? "collapsed" : state;
 
