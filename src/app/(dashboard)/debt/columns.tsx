@@ -2,7 +2,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowUpDown, MoreHorizontal, Edit, Trash2, List } from 'lucide-react';
+import { ArrowUpDown, MoreHorizontal, Edit, Trash2, List, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -14,9 +14,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { DebtItem } from '@/lib/types';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, cn } from '@/lib/utils';
 import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet';
 import { Badge } from '@/components/ui/badge';
+import React from 'react';
 
 const formatPercentage = (rate: number) => {
     return `${rate.toFixed(2)}%`;
@@ -24,7 +25,9 @@ const formatPercentage = (rate: number) => {
 
 export const getDebtColumns = (
   onEdit: (item: DebtItem) => void,
-  onDelete: (item: DebtItem) => void
+  onDelete: (item: DebtItem) => void,
+  acknowledgeDebtChange: (debtId: string) => void, // Action to acknowledge change
+  acknowledgedPrincipals: Record<string, { principal: number; version: number }> // Map of acknowledged principals
 ): ColumnDef<DebtItem>[] => [
   {
     id: 'select',
@@ -49,6 +52,47 @@ export const getDebtColumns = (
     ),
     enableSorting: false,
     enableHiding: false,
+  },
+  {
+    id: 'statusIndicator', // New column for pulsing dot
+    header: 'Status',
+    cell: ({ row }) => {
+      const debtItem = row.original;
+      const acknowledgedInfo = acknowledgedPrincipals[debtItem.id];
+      const needsAcknowledgement = !acknowledgedInfo || 
+                                 acknowledgedInfo.principal !== debtItem.principal ||
+                                 acknowledgedInfo.version !== (debtItem as any)._acknowledgementVersion; // Compare with current version
+
+      if (needsAcknowledgement) {
+        return (
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 p-0 hover:bg-transparent"
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent row selection if a general row click handler exists
+                    acknowledgeDebtChange(debtItem.id);
+                  }}
+                >
+                  <AlertCircle className="h-4 w-4 text-destructive animate-pulse-subtle" />
+                  <span className="sr-only">Acknowledge change</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs">New or changed. Click to acknowledge.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      }
+      return null; // No indicator if acknowledged
+    },
+    enableSorting: false,
+    enableHiding: true, // Allow hiding if preferred
+    size: 60, // Small fixed size
   },
   {
     accessorKey: 'description',
@@ -114,7 +158,7 @@ export const getDebtColumns = (
                 <Button
                     variant="ghost"
                     className="w-full justify-start text-sm font-normal relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                    onClick={(e) => e.stopPropagation()} // Prevent dropdown from closing if not handled by sheet trigger
+                    onClick={(e) => e.stopPropagation()}
                 >
                     <List className="mr-2 h-4 w-4" /> Amortization
                 </Button>
@@ -132,3 +176,11 @@ export const getDebtColumns = (
     enableHiding: false,
   },
 ];
+
+// Dummy Tooltip components if not globally available or for local context
+// In a real app, import these from your UI library (e.g., Shadcn UI)
+const TooltipProvider = ({ children }: { children: React.ReactNode }) => <>{children}</>;
+const Tooltip = ({ children }: { children: React.ReactNode }) => <>{children}</>;
+const TooltipTrigger = ({ children, asChild }: { children: React.ReactNode, asChild?: boolean }) => asChild ? children : <div>{children}</div>;
+const TooltipContent = ({ children, side }: { children: React.ReactNode, side?: string }) => <div className="hidden group-hover:block absolute bg-black text-white p-1 rounded text-xs" style={{ zIndex: 100}}>{children}</div>;
+
