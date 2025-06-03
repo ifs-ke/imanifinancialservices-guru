@@ -2,11 +2,11 @@
 // src/app/(dashboard)/statements/BudgetVarianceReportSection.tsx
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as ShadTableFooter } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Info, PieChart as PieChartIcon, TrendingUp, TrendingDown, MinusCircle, Target as TargetIcon, Coins, DollarSign, HelpCircle } from 'lucide-react';
+import { Info, PieChart as PieChartIcon, TrendingUp, TrendingDown, MinusCircle, Target as TargetIcon, Coins, DollarSign, HelpCircle, Eye } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore, selectCurrentBudgetPeriod } from '@/store/budgetStore';
@@ -14,7 +14,17 @@ import type { TransactionWithId, BudgetItem, BudgetItemCategory as InternalBudge
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Separator } from '@/components/ui/separator';
 import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, parse, differenceInDays, getDaysInMonth, isEqual, isValid as isDateValid } from 'date-fns';
-import { Badge } from '@/components/ui/badge'; // Added import
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 interface BudgetVarianceReportSectionProps {
   startDate?: Date;
@@ -43,11 +53,10 @@ const AccordionTriggerWithSum = React.forwardRef<
 >(({ label, sum, budgetedSum, variance, itemCount, icon: Icon, children, className, ...props }, ref) => {
     const hasBudget = budgetedSum !== undefined && budgetedSum !== null;
     const hasVariance = variance !== undefined && variance !== null;
-    let varianceColor = 'text-muted-foreground'; // Default for N/A or no variance
+    let varianceColor = 'text-muted-foreground'; 
     if (hasVariance) {
-      if (variance > 0) varianceColor = 'text-accent'; // Favorable
-      else if (variance < 0) varianceColor = 'text-destructive'; // Unfavorable
-      // If variance is 0 or very close, it might remain muted or be primary
+      if (variance > 0) varianceColor = 'text-accent'; 
+      else if (variance < 0) varianceColor = 'text-destructive'; 
     }
 
   return (
@@ -62,7 +71,7 @@ const AccordionTriggerWithSum = React.forwardRef<
             </span>
             <div className="flex items-center gap-2">
                 {itemCount !== undefined && itemCount > 0 && <span className="text-xs text-muted-foreground">({itemCount} items)</span>}
-                {hasVariance && isFinite(variance) && (budgetedSum !== 0 || sum !== 0) && ( // Show variance only if meaningful
+                {hasVariance && isFinite(variance) && (budgetedSum !== 0 || sum !== 0) && ( 
                     <Badge variant={variance >=0 ? "default" : "destructive"} className={cn("text-xs font-mono", varianceColor)}>
                       {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
                     </Badge>
@@ -79,11 +88,13 @@ AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = ({ startDate, endDate }) => {
   const transactions = useTransactionsStore(state => state.transactions);
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
-  const budgetPeriod = useBudgetStore(selectCurrentBudgetPeriod); // This is yyyy-MM
+  const budgetPeriod = useBudgetStore(selectCurrentBudgetPeriod); 
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+
 
   const filteredTransactions = useMemo(() => {
     if (!startDate || !endDate || !isDateValid(startDate) || !isDateValid(endDate)) {
-      return []; // No transactions if date range is invalid
+      return []; 
     }
     const start = startDate.getTime();
     const endOfDay = new Date(endDate).setHours(23, 59, 59, 999);
@@ -118,7 +129,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
         if (isIncomeTx) {
             categoryKey = matchedBudgetItem && matchedBudgetItem.category === 'income' ? 'income' : 'unbudgeted-income';
             keyDescription = matchedBudgetItem ? matchedBudgetItem.description : tx.description;
-        } else { // Expense Transaction
+        } else { 
             categoryKey = matchedBudgetItem ? matchedBudgetItem.category : 'unplanned-expense';
             keyDescription = matchedBudgetItem ? matchedBudgetItem.description : tx.description;
         }
@@ -247,7 +258,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
    const netActual = totalActualIncomeCalculated - totalActualSpending;
    const overallVariance = netActual - netBudgeted;
 
-   return { ...totals, netBudgeted, netActual, overallVariance, totalActualIncome: totalActualIncomeCalculated, totalBudgetedIncome };
+   return { ...totals, netBudgeted, netActual, overallVariance, totalActualIncome: totalActualIncomeCalculated, totalBudgetedIncome, totalActualSpending, totalBudgetedSpending };
   }, [varianceDataByCategory]);
 
   const renderVarianceRow = (category: ExtendedBudgetItemCategory, description: string, budgeted: number, actual: number | null) => {
@@ -287,71 +298,45 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
     ? format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy')
     : 'Selected Period';
 
+  const renderSummaryItem = (label: string, actual: number, budgeted: number, isIncome: boolean) => {
+    const variance = isIncome ? actual - budgeted : budgeted - actual;
+    const varianceColor = variance >= 0 ? 'text-accent' : 'text-destructive';
+    const variancePrefix = variance >= 0 ? '+' : '';
+    const hasMeaningfulData = actual !== 0 || budgeted !== 0;
+
+    return (
+        <div className="p-4 border rounded-lg bg-background shadow-sm">
+            <h4 className="text-sm font-medium text-muted-foreground mb-1">{label}</h4>
+            <div className="flex justify-between items-baseline">
+                <span className="text-xl font-semibold font-mono">{formatCurrency(actual)}</span>
+                <span className="text-xs text-muted-foreground">Budget: {formatCurrency(budgeted)}</span>
+            </div>
+            {hasMeaningfulData && (
+              <p className={cn("text-xs font-mono mt-1", varianceColor)}>
+                  Variance: {variancePrefix}{formatCurrency(variance)}
+              </p>
+            )}
+        </div>
+    );
+  };
+
   return (
     <Card className="lg:col-span-2 shadow-md">
-        <CardHeader className="p-6">
-            <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
-            <CardDescription>Compares the budget for <span className='font-semibold'>{budgetPeriodDisplay}</span> with actual transactions from <span className='font-semibold'>{formatDateForStatements(startDate)}</span> to <span className='font-semibold'>{formatDateForStatements(endDate)}</span>.</CardDescription>
-            <p className='text-xs text-muted-foreground pt-1 flex items-center gap-1'><Info size={14}/>Items marked with * are unplanned/unbudgeted. Variance is (Net Actual - Net Budgeted).</p>
+        <CardHeader className="p-6 flex flex-row justify-between items-start">
+            <div>
+                <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
+                <CardDescription>Compares the budget for <span className='font-semibold'>{budgetPeriodDisplay}</span> with actual transactions from <span className='font-semibold'>{formatDateForStatements(startDate)}</span> to <span className='font-semibold'>{formatDateForStatements(endDate)}</span>.</CardDescription>
+                <p className='text-xs text-muted-foreground pt-1 flex items-center gap-1'><Info size={14}/>Items marked with * are unplanned/unbudgeted. Overall Variance is (Net Actual - Net Budgeted).</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setIsDetailDialogOpen(true)} disabled={Object.values(varianceDataByCategory).every(arr => arr.length === 0)}>
+                <Eye className="mr-2 h-4 w-4"/> View Detailed Breakdown
+            </Button>
         </CardHeader>
-        <CardContent className="p-6 pt-0">
-             <Accordion type="multiple" className="w-full space-y-2" defaultValue={[]}>
-                  {/* Income */}
-                  <AccordionItem value="income-variance" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-                      <AccordionTriggerWithSum label="Budgeted Income" icon={TrendingUp} sum={varianceTotalsByCategory.income.actual} budgetedSum={varianceTotalsByCategory.income.budgeted} variance={varianceTotalsByCategory.income.variance} itemCount={varianceTotalsByCategory.income.itemCount} className="text-accent data-[state=open]:border-b data-[state=closed]:border-b-0" />
-                      <AccordionContent className="p-0">{varianceDataByCategory.income.length > 0 ? (<ScrollArea className="h-[150px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.income.map(item => renderVarianceRow('income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No budgeted income for variance.</p>)}</AccordionContent>
-                  </AccordionItem>
-                  {/* Unbudgeted Income */}
-                  <AccordionItem value="unbudgeted-income-variance" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-                      <AccordionTriggerWithSum label="Unbudgeted Income" icon={DollarSign} sum={varianceTotalsByCategory['unbudgeted-income'].actual} budgetedSum={0} variance={varianceTotalsByCategory['unbudgeted-income'].variance} itemCount={varianceTotalsByCategory['unbudgeted-income'].itemCount} className="text-accent/80 data-[state=open]:border-b data-[state=closed]:border-b-0" />
-                      <AccordionContent className="p-0">{varianceDataByCategory['unbudgeted-income'].length > 0 ? (<ScrollArea className="h-[150px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['unbudgeted-income'].map(item => renderVarianceRow('unbudgeted-income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No unbudgeted income.</p>)}</AccordionContent>
-                  </AccordionItem>
-                  {/* Recurring Expenses */}
-                  <AccordionItem value="recurring-expense-variance" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-                      <AccordionTriggerWithSum label="Recurring Expenses" icon={TrendingDown} sum={varianceTotalsByCategory['recurring-expense'].actual} budgetedSum={varianceTotalsByCategory['recurring-expense'].budgeted} variance={varianceTotalsByCategory['recurring-expense'].variance} itemCount={varianceTotalsByCategory['recurring-expense'].itemCount} className="text-destructive data-[state=open]:border-b data-[state=closed]:border-b-0" />
-                      <AccordionContent className="p-0">{varianceDataByCategory['recurring-expense'].length > 0 ? (<ScrollArea className="h-[150px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['recurring-expense'].map(item => renderVarianceRow('recurring-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No recurring expenses for variance.</p>)}</AccordionContent>
-                  </AccordionItem>
-                  {/* One-Time Expenses */}
-                  <AccordionItem value="one-time-expense-variance" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-                      <AccordionTriggerWithSum label="One-Time Expenses" icon={MinusCircle} sum={varianceTotalsByCategory['one-time-expense'].actual} budgetedSum={varianceTotalsByCategory['one-time-expense'].budgeted} variance={varianceTotalsByCategory['one-time-expense'].variance} itemCount={varianceTotalsByCategory['one-time-expense'].itemCount} className="text-destructive data-[state=open]:border-b data-[state=closed]:border-b-0" />
-                      <AccordionContent className="p-0">{varianceDataByCategory['one-time-expense'].length > 0 ? (<ScrollArea className="h-[150px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['one-time-expense'].map(item => renderVarianceRow('one-time-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No one-time expenses for variance.</p>)}</AccordionContent>
-                  </AccordionItem>
-                  {/* Unplanned Expenses */}
-                  <AccordionItem value="unplanned-expense-variance" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-                      <AccordionTriggerWithSum label="Unplanned Expenses" icon={HelpCircle} sum={varianceTotalsByCategory['unplanned-expense'].actual} budgetedSum={0} variance={varianceTotalsByCategory['unplanned-expense'].variance} itemCount={varianceTotalsByCategory['unplanned-expense'].itemCount} className="text-destructive data-[state=open]:border-b data-[state=closed]:border-b-0" />
-                      <AccordionContent className="p-0">{varianceDataByCategory['unplanned-expense'].length > 0 ? (<ScrollArea className="h-[150px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['unplanned-expense'].map(item => renderVarianceRow('unplanned-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No unplanned expenses.</p>)}</AccordionContent>
-                  </AccordionItem>
-                  {/* Goals */}
-                  <AccordionItem value="goal-variance" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-                      <AccordionTriggerWithSum label="Goals" icon={TargetIcon} sum={varianceTotalsByCategory.goal.actual} budgetedSum={varianceTotalsByCategory.goal.budgeted} variance={varianceTotalsByCategory.goal.variance} itemCount={varianceTotalsByCategory.goal.itemCount} className="text-primary data-[state=open]:border-b data-[state=closed]:border-b-0" />
-                      <AccordionContent className="p-0">{varianceDataByCategory.goal.length > 0 ? (<ScrollArea className="h-[150px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.goal.map(item => renderVarianceRow('goal', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No goals for variance.</p>)}</AccordionContent>
-                  </AccordionItem>
-                  {/* Debt Allocation */}
-                  <AccordionItem value="debt-variance" className="border-b-0 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-                      <AccordionTriggerWithSum label="Debt Allocation" icon={Coins} sum={varianceTotalsByCategory.debt.actual} budgetedSum={varianceTotalsByCategory.debt.budgeted} variance={varianceTotalsByCategory.debt.variance} itemCount={varianceTotalsByCategory.debt.itemCount} className="text-destructive/80 data-[state=open]:border-b data-[state=closed]:border-b-0" />
-                      <AccordionContent className="p-0">{varianceDataByCategory.debt.length > 0 ? (<ScrollArea className="h-[150px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.debt.map(item => renderVarianceRow('debt', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No debt allocations for variance.</p>)}</AccordionContent>
-                  </AccordionItem>
-             </Accordion>
-         </CardContent>
+        <CardContent className="p-6 pt-0 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {renderSummaryItem("Total Income", varianceTotalsByCategory.totalActualIncome, varianceTotalsByCategory.totalBudgetedIncome, true)}
+            {renderSummaryItem("Total Spending", varianceTotalsByCategory.totalActualSpending, varianceTotalsByCategory.totalBudgetedSpending, false)}
+        </CardContent>
          <CardFooter className="flex flex-col gap-2 p-6 border-t">
-             <div className="flex justify-between w-full font-semibold text-sm">
-                 <span>Total Budgeted Income:</span>
-                 <span className="font-mono">{formatCurrency(varianceTotalsByCategory.totalBudgetedIncome)}</span>
-             </div>
-             <div className="flex justify-between w-full font-semibold text-sm">
-                 <span>Total Actual Income:</span>
-                 <span className="font-mono">{formatCurrency(varianceTotalsByCategory.totalActualIncome)}</span>
-             </div>
-             <Separator className="my-1" />
-              <div className="flex justify-between w-full font-semibold text-sm">
-                 <span>Total Budgeted Spending (Expenses + Goals + Debt):</span>
-                 <span className="font-mono">{formatCurrency(varianceTotalsByCategory['recurring-expense'].budgeted + varianceTotalsByCategory['one-time-expense'].budgeted + varianceTotalsByCategory.goal.budgeted + varianceTotalsByCategory.debt.budgeted)}</span>
-             </div>
-             <div className="flex justify-between w-full font-semibold text-sm">
-                 <span>Total Actual Spending (Expenses + Goals + Debt + Unplanned):</span>
-                 <span className="font-mono">{formatCurrency(varianceTotalsByCategory['recurring-expense'].actual + varianceTotalsByCategory['one-time-expense'].actual + varianceTotalsByCategory.goal.actual + varianceTotalsByCategory.debt.actual + varianceTotalsByCategory['unplanned-expense'].actual)}</span>
-             </div>
-             <Separator className="my-1" />
              <div className="flex justify-between w-full font-semibold text-base mt-1">
                  <span>Net Budgeted (Income - Budgeted Spending):</span>
                  <span className="font-mono">{formatCurrency(varianceTotalsByCategory.netBudgeted)}</span>
@@ -368,9 +353,58 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
                  </span>
              </div>
           </CardFooter>
+
+        <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+            <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>Detailed Budget Variance: {budgetPeriodDisplay}</DialogTitle>
+                    <DialogDescription>
+                        Breakdown of budgeted vs. actual amounts for the period {formatDateForStatements(startDate)} to {formatDateForStatements(endDate)}.
+                    </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="max-h-[70vh] pr-2">
+                    <Accordion type="multiple" className="w-full space-y-2 py-4" defaultValue={[]}>
+                        <AccordionItem value="income-variance" className="border-b-0 mb-2 rounded-lg border bg-muted/30 text-card-foreground shadow-sm overflow-hidden">
+                            <AccordionTriggerWithSum label="Budgeted Income" icon={TrendingUp} sum={varianceTotalsByCategory.income.actual} budgetedSum={varianceTotalsByCategory.income.budgeted} variance={varianceTotalsByCategory.income.variance} itemCount={varianceTotalsByCategory.income.itemCount} className="text-accent data-[state=open]:border-b data-[state=closed]:border-b-0" />
+                            <AccordionContent className="p-0 bg-background">{varianceDataByCategory.income.length > 0 ? (<ScrollArea className="h-[200px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.income.map(item => renderVarianceRow('income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No budgeted income for variance.</p>)}</AccordionContent>
+                        </AccordionItem>
+                        <AccordionItem value="unbudgeted-income-variance" className="border-b-0 mb-2 rounded-lg border bg-muted/30 text-card-foreground shadow-sm overflow-hidden">
+                            <AccordionTriggerWithSum label="Unbudgeted Income" icon={DollarSign} sum={varianceTotalsByCategory['unbudgeted-income'].actual} budgetedSum={0} variance={varianceTotalsByCategory['unbudgeted-income'].variance} itemCount={varianceTotalsByCategory['unbudgeted-income'].itemCount} className="text-accent/80 data-[state=open]:border-b data-[state=closed]:border-b-0" />
+                            <AccordionContent className="p-0 bg-background">{varianceDataByCategory['unbudgeted-income'].length > 0 ? (<ScrollArea className="h-[200px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['unbudgeted-income'].map(item => renderVarianceRow('unbudgeted-income', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No unbudgeted income.</p>)}</AccordionContent>
+                        </AccordionItem>
+                        <AccordionItem value="recurring-expense-variance" className="border-b-0 mb-2 rounded-lg border bg-muted/30 text-card-foreground shadow-sm overflow-hidden">
+                            <AccordionTriggerWithSum label="Recurring Expenses" icon={TrendingDown} sum={varianceTotalsByCategory['recurring-expense'].actual} budgetedSum={varianceTotalsByCategory['recurring-expense'].budgeted} variance={varianceTotalsByCategory['recurring-expense'].variance} itemCount={varianceTotalsByCategory['recurring-expense'].itemCount} className="text-destructive data-[state=open]:border-b data-[state=closed]:border-b-0" />
+                            <AccordionContent className="p-0 bg-background">{varianceDataByCategory['recurring-expense'].length > 0 ? (<ScrollArea className="h-[200px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['recurring-expense'].map(item => renderVarianceRow('recurring-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No recurring expenses for variance.</p>)}</AccordionContent>
+                        </AccordionItem>
+                        <AccordionItem value="one-time-expense-variance" className="border-b-0 mb-2 rounded-lg border bg-muted/30 text-card-foreground shadow-sm overflow-hidden">
+                            <AccordionTriggerWithSum label="One-Time Expenses" icon={MinusCircle} sum={varianceTotalsByCategory['one-time-expense'].actual} budgetedSum={varianceTotalsByCategory['one-time-expense'].budgeted} variance={varianceTotalsByCategory['one-time-expense'].variance} itemCount={varianceTotalsByCategory['one-time-expense'].itemCount} className="text-destructive data-[state=open]:border-b data-[state=closed]:border-b-0" />
+                            <AccordionContent className="p-0 bg-background">{varianceDataByCategory['one-time-expense'].length > 0 ? (<ScrollArea className="h-[200px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['one-time-expense'].map(item => renderVarianceRow('one-time-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No one-time expenses for variance.</p>)}</AccordionContent>
+                        </AccordionItem>
+                        <AccordionItem value="unplanned-expense-variance" className="border-b-0 mb-2 rounded-lg border bg-muted/30 text-card-foreground shadow-sm overflow-hidden">
+                            <AccordionTriggerWithSum label="Unplanned Expenses" icon={HelpCircle} sum={varianceTotalsByCategory['unplanned-expense'].actual} budgetedSum={0} variance={varianceTotalsByCategory['unplanned-expense'].variance} itemCount={varianceTotalsByCategory['unplanned-expense'].itemCount} className="text-destructive data-[state=open]:border-b data-[state=closed]:border-b-0" />
+                            <AccordionContent className="p-0 bg-background">{varianceDataByCategory['unplanned-expense'].length > 0 ? (<ScrollArea className="h-[200px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory['unplanned-expense'].map(item => renderVarianceRow('unplanned-expense', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No unplanned expenses.</p>)}</AccordionContent>
+                        </AccordionItem>
+                        <AccordionItem value="goal-variance" className="border-b-0 mb-2 rounded-lg border bg-muted/30 text-card-foreground shadow-sm overflow-hidden">
+                            <AccordionTriggerWithSum label="Goals" icon={TargetIcon} sum={varianceTotalsByCategory.goal.actual} budgetedSum={varianceTotalsByCategory.goal.budgeted} variance={varianceTotalsByCategory.goal.variance} itemCount={varianceTotalsByCategory.goal.itemCount} className="text-primary data-[state=open]:border-b data-[state=closed]:border-b-0" />
+                            <AccordionContent className="p-0 bg-background">{varianceDataByCategory.goal.length > 0 ? (<ScrollArea className="h-[200px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.goal.map(item => renderVarianceRow('goal', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No goals for variance.</p>)}</AccordionContent>
+                        </AccordionItem>
+                        <AccordionItem value="debt-variance" className="border-b-0 rounded-lg border bg-muted/30 text-card-foreground shadow-sm overflow-hidden">
+                            <AccordionTriggerWithSum label="Debt Allocation" icon={Coins} sum={varianceTotalsByCategory.debt.actual} budgetedSum={varianceTotalsByCategory.debt.budgeted} variance={varianceTotalsByCategory.debt.variance} itemCount={varianceTotalsByCategory.debt.itemCount} className="text-destructive/80 data-[state=open]:border-b data-[state=closed]:border-b-0" />
+                            <AccordionContent className="p-0 bg-background">{varianceDataByCategory.debt.length > 0 ? (<ScrollArea className="h-[200px] w-full"><Table><TableHeader className="sticky top-0 bg-background z-10 shadow-sm"><TableRow><TableHead className="pl-4 pr-2">Item</TableHead><TableHead className="text-right px-2">Budget</TableHead><TableHead className="text-right px-2">Actual</TableHead><TableHead className="text-right w-[180px] pr-4 pl-2">Variance</TableHead></TableRow></TableHeader><TableBody>{varianceDataByCategory.debt.map(item => renderVarianceRow('debt', item.description, item.budgeted, item.actual))}</TableBody></Table></ScrollArea>) : (<p className="text-center text-muted-foreground py-4 text-sm">No debt allocations for variance.</p>)}</AccordionContent>
+                        </AccordionItem>
+                    </Accordion>
+                </ScrollArea>
+                <DialogFooter className="mt-6">
+                    <DialogClose asChild>
+                        <Button type="button" variant="outline">Close</Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
     </Card>
   );
 };
 
 export default BudgetVarianceReportSection;
-
+    

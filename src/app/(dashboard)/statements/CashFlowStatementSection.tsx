@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/statements/CashFlowStatementSection.tsx
 'use client';
 
@@ -49,7 +50,7 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
 
   const filteredTransactions = useMemo(() => {
     if (!startDate || !endDate || !isDateValid(startDate) || !isDateValid(endDate)) {
-      return transactions; // Or an empty array if no dates means no data
+      return transactions; 
     }
     const start = startDate.getTime();
     const end = new Date(endDate).setHours(23, 59, 59, 999);
@@ -101,7 +102,7 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
         </CardDescription>
       </CardHeader>
        <CardContent className="p-6 pt-0 flex-grow">
-         <Accordion type="multiple" className="w-full" defaultValue={['income-accordion', 'expenses-accordion']}>
+         <Accordion type="multiple" className="w-full" defaultValue={[]}> {/* Default to collapsed */}
             <AccordionItem value="income-accordion" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
                 <AccordionTriggerWithSum label="Income" sum={totalActualIncome} itemCount={derivedIncomeItems.length} icon={TrendingUp} className="text-accent hover:text-accent-foreground data-[state=open]:border-b data-[state=closed]:border-b-0" />
                 <AccordionContent className="p-0">
@@ -145,3 +146,4 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
 };
 
 export default CashFlowStatementSection;
+    

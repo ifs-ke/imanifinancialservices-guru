@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/statements/NetWorthStatementSection.tsx
 'use client';
 
@@ -27,8 +28,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 interface NetWorthStatementSectionProps {
   isEditingAssetsLiabilities: boolean;
-  onSaveEdits: () => void; // Callback to notify parent that save has occurred
-  // Pass state and setters for assets and liabilities directly
+  onSaveEdits: () => void; 
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
   setAssetItems: (items: StatementItem[]) => void;
@@ -59,10 +59,10 @@ AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
   isEditingAssetsLiabilities,
   onSaveEdits,
-  assetItems: initialAssetItems, // Receive as initial props
-  otherLiabilityItems: initialOtherLiabilityItems, // Receive as initial props
-  setAssetItems: persistAssetItems, // Function to persist changes to Zustand
-  setOtherLiabilityItems: persistOtherLiabilityItems, // Function to persist changes to Zustand
+  assetItems: initialAssetItems, 
+  otherLiabilityItems: initialOtherLiabilityItems, 
+  setAssetItems: persistAssetItems, 
+  setOtherLiabilityItems: persistOtherLiabilityItems, 
 }) => {
   const debts = useDebtStore(state => state.debts);
   const { toast } = useToast();
@@ -71,7 +71,6 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
   const [editingOtherLiabilities, setEditingOtherLiabilities] = useState<OtherLiabilityItem[]>(initialOtherLiabilityItems);
   const [itemToDelete, setItemToDelete] = useState<{ item: StatementItem | OtherLiabilityItem; type: 'asset' | 'otherLiability' } | null>(null);
 
-  // Sync local editing state with Zustand store props when not in edit mode or when props change
   useEffect(() => {
     if (!isEditingAssetsLiabilities) {
       setEditingAssets([...initialAssetItems.map(item => ({ ...item }))]);
@@ -83,7 +82,7 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
   const handleInternalSave = () => {
     persistAssetItems(editingAssets);
     persistOtherLiabilityItems(editingOtherLiabilities);
-    onSaveEdits(); // Notify parent
+    onSaveEdits(); 
     toast({ title: 'Net Worth Items Saved', description: 'Assets and Other Liabilities have been updated.' });
   };
 
@@ -169,7 +168,7 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
         )}
       </CardHeader>
        <CardContent className="p-6 pt-0 flex-grow">
-         <Accordion type="multiple" className="w-full" defaultValue={['assets-accordion', 'liabilities-accordion']}>
+         <Accordion type="multiple" className="w-full" defaultValue={[]}> {/* Default to collapsed */}
              <AccordionItem value="assets-accordion" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
                 <AccordionTriggerWithSum label="Assets" sum={totalAssets} itemCount={editingAssets.length} icon={Landmark} className="text-primary hover:text-primary-foreground data-[state=open]:border-b data-[state=closed]:border-b-0" />
                 <AccordionContent className="p-0">
@@ -191,7 +190,7 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
                 <AccordionTriggerWithSum label="Liabilities" sum={totalLiabilities} itemCount={shortTermDebts.length + longTermDebts.length + editingOtherLiabilities.length} icon={Coins} className="text-destructive hover:text-destructive-foreground data-[state=open]:border-b data-[state=closed]:border-b-0" />
                 <AccordionContent className="p-0">
                     <ScrollArea className="h-[250px] w-full">
-                        <Accordion type="multiple" className="w-full pl-4 border-l ml-2" defaultValue={['short-term-debts-accordion', 'long-term-debts-accordion', 'other-liabilities-accordion']}>
+                        <Accordion type="multiple" className="w-full pl-4 border-l ml-2" defaultValue={[]}> {/* Default nested to collapsed */}
                             <AccordionItem value="short-term-debts-accordion" className="border-b-0">
                                 <AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} itemCount={shortTermDebts.length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2 data-[state=open]:border-b data-[state=closed]:border-b-0" />
                                 <AccordionContent className="pb-0 pl-2">
@@ -229,3 +228,4 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
 };
 
 export default NetWorthStatementSection;
+    
