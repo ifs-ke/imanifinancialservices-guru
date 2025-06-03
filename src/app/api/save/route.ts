@@ -1,7 +1,7 @@
 
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server'; // Added clerkClient
 import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, InvestmentItem } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
@@ -83,17 +83,40 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  const { userId, user: clerkUser } = auth();
+  const { userId, user: authClerkUser } = auth(); // Renamed user to authClerkUser for clarity
   const logContextBase = { userId: userId || 'unknown-save-post', operation: 'POST /api/save', apiRoute: '/api/save' };
 
-  if (!userId || !clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
-    console.warn(`[API /api/save] Save API: Unauthorized save attempt: User not logged in or primary email missing. User: ${userId || 'unknown'}`, logContextBase);
-    const response = NextResponse.json({ error: 'Unauthorized: User not logged in or primary email not available.' }, { status: 401 });
+  if (!userId) {
+    console.warn(`[API /api/save] Save API: Unauthorized save attempt: User not authenticated (no userId).`, logContextBase);
+    const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response);
   }
 
+  let userEmailForDb: string | undefined | null = authClerkUser?.primaryEmailAddress?.emailAddress;
+  let userNameForDb: string | undefined | null = authClerkUser?.fullName;
+
+  if (!userEmailForDb) {
+    console.warn(`[API /api/save] Primary email not immediately available from auth().user for ${userId}. Attempting direct fetch from Clerk.`, logContextBase);
+    try {
+      const fetchedClerkUser = await clerkClient.users.getUser(userId);
+      userEmailForDb = fetchedClerkUser?.primaryEmailAddress?.emailAddress;
+      userNameForDb = fetchedClerkUser?.fullName ?? fetchedClerkUser?.firstName ?? userNameForDb;
+      if (!userEmailForDb) {
+        console.error(`[API /api/save] Save API: CRITICAL - Could not retrieve primary email for user ${userId} even after direct Clerk fetch. Cannot ensure user in DB.`, logContextBase);
+        const response = NextResponse.json({ error: 'Failed to retrieve essential user information from authentication provider. Cannot save data.' }, { status: 500 });
+        return addCorsHeaders(response);
+      }
+      console.info(`[API /api/save] Successfully fetched email for user ${userId} via clerkClient.`, logContextBase);
+    } catch (clerkError: any) {
+      console.error(`[API /api/save] Save API: CRITICAL - Error fetching user details from Clerk for ${userId}. Cannot ensure user in DB.`, { error: clerkError, ...logContextBase });
+      const response = NextResponse.json({ error: 'Failed to communicate with authentication provider to verify user details. Cannot save data.' }, { status: 500 });
+      return addCorsHeaders(response);
+    }
+  }
+
   try {
-    await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
+    // Ensure userEmailForDb is a string when passed to ensureUserInDb
+    await ensureUserInDb(userId, userEmailForDb!, userNameForDb);
   } catch (dbError: any) {
     console.error(`[API /api/save] Save API: Failed to ensure user in DB. User: ${userId}`, { error: dbError, ...logContextBase });
     const response = NextResponse.json({ error: 'Database operation failed while verifying user.' }, { status: 500 });
@@ -186,10 +209,8 @@ export async function POST(request: Request) {
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } }); // Deletes owned reviews
-      // Also need to delete shares related to these owned reviews
+      await tx.weeklyReview.deleteMany({ where: { userId } });
       await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } });
-
 
       console.debug(`[API /api/save] Save API: Delete operations completed. User: ${userId}`, { userId });
 
