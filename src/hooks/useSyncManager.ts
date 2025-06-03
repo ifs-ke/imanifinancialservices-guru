@@ -18,7 +18,7 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
 const IS_FETCH_DISABLED = false;
 const HASH_CHECK_ENABLED = true;
-const API_TIMEOUT_MS = 5000;
+const API_TIMEOUT_MS = 60000; // Increased to 1 minute
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -154,6 +154,8 @@ export function useSyncManager() {
     if (!isPreCheck) updateSyncState({ status: 'syncing' });
     logInfo(`SyncManager: Fetching data from server... (isPreCheck: ${isPreCheck})`, { userId: currentUserId }, currentUserId);
 
+    const startTime = performance.now(); // Start timer for fetch duration
+
     if (!isPreCheck) {
       abortControllerRef.current?.abort('New fetch initiated');
       abortControllerRef.current = new AbortController();
@@ -163,6 +165,7 @@ export function useSyncManager() {
 
     try {
       const response = await fetch('/api/sync', { signal });
+      const duration = performance.now() - startTime; // End timer
 
       if (signal?.aborted) {
         const abortReason = signal.reason || 'Fetch aborted by new request or unmount.';
@@ -234,9 +237,9 @@ export function useSyncManager() {
         gettingStartedDismissed: dataToLoad.gettingStartedDismissed || false,
       });
       hasLocalChangesRef.current = false;
-      logInfo('SyncManager: Data fetched and loaded successfully.', { userId: currentUserId, serverHash }, currentUserId);
+      logInfo('SyncManager: Data fetched and loaded successfully.', { userId: currentUserId, serverHash, durationMs: duration }, currentUserId);
       if (syncStateRef.current.status !== 'syncing') { // Avoid double toast if fetch was part of a manual sync
-        toast({ title: 'Data Synced', description: 'Latest data loaded from the server.' });
+        toast({ title: 'Data Synced', description: `Latest data loaded from server. (Duration: ${duration.toFixed(0)}ms)` });
       }
       initialLoadDoneRef.current = true;
       return serverHash;
@@ -283,6 +286,8 @@ export function useSyncManager() {
     updateSyncState({ status: 'syncing' });
     logInfo('SyncManager: Saving data to server...', { userId: currentUserId, force, hashCheckEnabled: HASH_CHECK_ENABLED }, currentUserId);
 
+    const startTime = performance.now(); // Start timer for save duration
+
     const dataToSave: SyncedData = {
       transactions: getTransactionsState().transactions,
       debts: getDebtState().debts,
@@ -312,7 +317,7 @@ export function useSyncManager() {
         signal: localAbortController.signal,
       });
       clearTimeout(timeoutId);
-
+      const duration = performance.now() - startTime; // End timer
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: `Server error during save: ${response.status} ${response.statusText}`.trim() }));
@@ -336,8 +341,8 @@ export function useSyncManager() {
         isMismatchDialogOpen: false,
       });
       hasLocalChangesRef.current = false;
-      logInfo('SyncManager: Data saved successfully.', { userId: currentUserId, newHash: clientDataHash }, currentUserId);
-      toast({ title: 'Data Saved', description: 'Your changes have been saved to the server.' });
+      logInfo('SyncManager: Data saved successfully.', { userId: currentUserId, newHash: clientDataHash, durationMs: duration }, currentUserId);
+      toast({ title: 'Data Saved', description: `Changes saved to server. (Duration: ${duration.toFixed(0)}ms)` });
       return true;
     } catch (error: any) {
       clearTimeout(timeoutId);
