@@ -18,6 +18,7 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
 const IS_FETCH_DISABLED = false;
 const HASH_CHECK_ENABLED = true;
+const API_TIMEOUT_MS = 5000;
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -154,13 +155,24 @@ export function useSyncManager() {
     if (!isPreCheck) {
       abortControllerRef.current?.abort('New fetch initiated');
       abortControllerRef.current = new AbortController();
+      setTimeout(() => abortControllerRef.current?.abort('API call timed out'), API_TIMEOUT_MS);
     }
     const signal = isPreCheck ? undefined : abortControllerRef.current?.signal;
 
     try {
       const response = await fetch('/api/sync', { signal });
+
       if (signal?.aborted) {
-        logInfo('Fetch aborted by new request or unmount.', { userId: currentUserId, reason: signal.reason }, currentUserId);
+        const abortReason = signal.reason || 'Fetch aborted by new request or unmount.';
+        if (abortReason === 'API call timed out') {
+          logWarn(`Fetch aborted: API call timed out after ${API_TIMEOUT_MS}ms.`, { userId: currentUserId }, currentUserId);
+           if (!isPreCheck) {
+            toast({ title: 'Sync Timed Out', description: 'Could not retrieve data from the server in time.', variant: 'destructive' });
+            updateSyncState({ status: 'error' });
+          }
+        } else {
+          logInfo(`Fetch aborted: ${abortReason}`, { userId: currentUserId, reason: abortReason }, currentUserId);
+        }
         isFetchingRef.current = false;
         initialLoadDoneRef.current = true;
         return false;
@@ -200,7 +212,6 @@ export function useSyncManager() {
         logInfo('SyncManager: Fetched data hash verified successfully against server hash.', { userId: currentUserId, serverHash }, currentUserId);
       }
 
-
       getTransactionsState().setTransactions(dataToLoad.transactions || []);
       getDebtState().setDebts(dataToLoad.debts || []);
       getInvestmentState().setInvestmentItems(dataToLoad.investmentItems || []);
@@ -233,9 +244,9 @@ export function useSyncManager() {
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown fetch error");
       const stableCurrentUserId = currentUserId;
 
-      if (error.name === 'AbortError') {
-        logInfo(`Fetch aborted: ${error.message}`, { userId: stableCurrentUserId }, stableCurrentUserId);
-      } else {
+      if (error.name === 'AbortError' && signal?.reason !== 'API call timed out') { // Only log generic aborts if not timeout
+        logInfo(`Fetch aborted: ${signal?.reason || error.message}`, { userId: stableCurrentUserId }, stableCurrentUserId);
+      } else if (error.name !== 'AbortError') { // Don't log AbortError if it's not a timeout (timeout handled above)
         logError(`Error fetching data (isPreCheck: ${isPreCheck}):`, errorToLog, { userIdFromFetchScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
         if (!isPreCheck) {
           updateSyncState({ status: 'error' });
@@ -288,12 +299,18 @@ export function useSyncManager() {
     const preparedData = prepareDataForHashing(dataToSave);
     const clientDataHash = await hashData(stringify(preparedData));
 
+    const localAbortController = new AbortController();
+    const timeoutId = setTimeout(() => localAbortController.abort('API call timed out'), API_TIMEOUT_MS);
+
     try {
       const response = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...preparedData, dataHash: clientDataHash }),
+        signal: localAbortController.signal,
       });
+      clearTimeout(timeoutId);
+
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: `Server error during save: ${response.status} ${response.statusText}`.trim() }));
@@ -321,12 +338,22 @@ export function useSyncManager() {
       toast({ title: 'Data Saved', description: 'Your changes have been saved to the server.' });
       return true;
     } catch (error: any) {
+      clearTimeout(timeoutId);
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown save error");
       const stableCurrentUserId = currentUserId;
-      logError('Error saving data:', errorToLog, { userIdFromSaveScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
+      if (error.name === 'AbortError' && localAbortController.signal.reason === 'API call timed out') {
+        logWarn(`Save aborted: API call timed out after ${API_TIMEOUT_MS}ms.`, { userId: stableCurrentUserId }, stableCurrentUserId);
+        toast({ title: 'Save Timed Out', description: 'Could not save data to the server in time.', variant: 'destructive' });
+      } else if (error.name === 'AbortError') {
+        logInfo(`Save aborted: ${localAbortController.signal.reason || error.message}`, { userId: stableCurrentUserId }, stableCurrentUserId);
+      } else {
+        logError('Error saving data:', errorToLog, { userIdFromSaveScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
+      }
       updateSyncState({ status: 'error' });
-      toast({ title: 'Save Failed', description: `${errorMessage || 'Could not save data to server.'}`, variant: 'destructive' });
+      if (error.name !== 'AbortError' || localAbortController.signal.reason === 'API call timed out') { // Only show toast if it's a real error or our specific timeout
+        toast({ title: 'Save Failed', description: `${errorMessage || 'Could not save data to server.'}`, variant: 'destructive' });
+      }
       return false;
     } finally {
       isSavingRef.current = false;
@@ -437,10 +464,8 @@ export function useSyncManager() {
         gettingStartedDismissed: loadedGettingStartedDismissed,
       });
       initialLoadDoneRef.current = true;
-      logInfo('SyncManager: User context established. App ready with local data. Manual sync required or auto-sync will trigger.', { userId: currentUserId }, currentUserId);
-      if (!IS_FETCH_DISABLED) {
-          manualSync();
-      }
+      logInfo('SyncManager: User context established. App ready with local data. Awaiting manual sync.', { userId: currentUserId }, currentUserId);
+      // Removed automatic manualSync() call here
 
     } else if (!currentUserId && prevUserId) {
       logInfo(`SyncManager effect (user change): User signed out. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
@@ -463,11 +488,10 @@ export function useSyncManager() {
          updateSyncState({ status: 'local'});
       }
       initialLoadDoneRef.current = true;
-      if (!IS_FETCH_DISABLED) {
-          manualSync();
-      }
+      logInfo('SyncManager: Component mounted, local data loaded. Awaiting manual sync.', { userId: currentUserId }, currentUserId);
+      // Removed automatic manualSync() call here
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState, manualSync]);
+  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState]); // Removed manualSync from dependency array as it's not called here
 
   useEffect(() => {
     if (initialLoadDoneRef.current && isSignedIn && userId) {
@@ -536,3 +560,4 @@ export function useSyncManager() {
     },
   };
 }
+
