@@ -268,6 +268,7 @@ export async function getClerkUserInfo(): Promise<{ success: boolean; message: s
       createdAt: clerkUser.createdAt ? new Date(clerkUser.createdAt).toLocaleString() : null,
       updatedAt: clerkUser.updatedAt ? new Date(clerkUser.updatedAt).toLocaleString() : null,
       lastSignInAt: clerkUser.lastSignInAt ? new Date(clerkUser.lastSignInAt).toLocaleString() : null,
+      roleFromPrivateMetadata: clerkUser.privateMetadata?.role || 'Role not set',
       // Only include metadata if necessary and be mindful of what's exposed
       // publicMetadata: clerkUser.publicMetadata,
       // privateMetadata: clerkUser.privateMetadata, // Be very cautious exposing privateMetadata
