@@ -4,26 +4,28 @@
 
 import prisma from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
-import { logError, logInfo } from '@/lib/logger';
+import { logError, logInfo, logDebug } from '@/lib/logger';
+import { hashData } from '@/lib/storage-utils'; // Import hashData
 
-export async function checkDatabaseConnection(): Promise<{ success: boolean; message: string; data?: any }> {
+export async function checkDatabaseConnection(): Promise<{ success: boolean; message: string; data?: any; duration?: number }> {
   const { userId } = auth();
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
+  const startTime = performance.now();
   try {
-    // A simple query to check connectivity, e.g., count users or a specific table.
-    // Using User table count as it should exist with Clerk integration.
     const userCount = await prisma.user.count();
-    logInfo('Database connection test successful.', { userId, userCount });
-    return { success: true, message: `Successfully connected to the database. Found ${userCount} user(s).` };
+    const duration = performance.now() - startTime;
+    logInfo('Database connection test successful.', { userId, userCount, duration });
+    return { success: true, message: `Successfully connected. Found ${userCount} user(s).`, duration };
   } catch (error: any) {
-    logError('Database connection test failed.', error, { userId });
-    return { success: false, message: `Database connection failed: ${error.message}` };
+    const duration = performance.now() - startTime;
+    logError('Database connection test failed.', error, { userId, duration });
+    return { success: false, message: `Database connection failed: ${error.message}`, duration };
   }
 }
 
-export async function saveTestData(data: string): Promise<{ success: boolean; message: string; entryId?: string }> {
+export async function saveTestData(data: string): Promise<{ success: boolean; message: string; entryId?: string; duration?: number }> {
   const { userId } = auth();
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
@@ -32,6 +34,7 @@ export async function saveTestData(data: string): Promise<{ success: boolean; me
     return { success: false, message: 'Test data cannot be empty.' };
   }
 
+  const startTime = performance.now();
   try {
     const newEntry = await prisma.testEntry.create({
       data: {
@@ -39,36 +42,60 @@ export async function saveTestData(data: string): Promise<{ success: boolean; me
         data: data.trim(),
       },
     });
-    logInfo('Test data saved successfully.', { userId, entryId: newEntry.id });
-    return { success: true, message: 'Test data saved successfully.', entryId: newEntry.id };
+    const duration = performance.now() - startTime;
+    logInfo('Test data saved successfully.', { userId, entryId: newEntry.id, duration });
+    return { success: true, message: 'Test data saved successfully.', entryId: newEntry.id, duration };
   } catch (error: any) {
-    logError('Failed to save test data.', error, { userId, data });
-    return { success: false, message: `Failed to save test data: ${error.message}` };
+    const duration = performance.now() - startTime;
+    logError('Failed to save test data.', error, { userId, data, duration });
+    return { success: false, message: `Failed to save test data: ${error.message}`, duration };
   }
 }
 
-export async function fetchTestData(): Promise<{ success: boolean; message: string; data?: { id: string; data: string; createdAt: Date } | null }> {
+export async function fetchTestData(): Promise<{ success: boolean; message: string; data?: { id: string; data: string; createdAt: Date } | null; duration?: number }> {
   const { userId } = auth();
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
 
+  const startTime = performance.now();
   try {
     const entry = await prisma.testEntry.findFirst({
       where: { userId: userId },
-      orderBy: { createdAt: 'desc' }, // Get the latest entry
+      orderBy: { createdAt: 'desc' },
       select: { id: true, data: true, createdAt: true },
     });
+    const duration = performance.now() - startTime;
 
     if (entry) {
-      logInfo('Test data fetched successfully.', { userId, entryId: entry.id });
-      return { success: true, message: 'Latest test data fetched successfully.', data: entry };
+      logInfo('Test data fetched successfully.', { userId, entryId: entry.id, duration });
+      return { success: true, message: 'Latest test data fetched.', data: entry, duration };
     } else {
-      logInfo('No test data found for user.', { userId });
-      return { success: true, message: 'No test data found for this user.', data: null };
+      logInfo('No test data found for user.', { userId, duration });
+      return { success: true, message: 'No test data found.', data: null, duration };
     }
   } catch (error: any) {
-    logError('Failed to fetch test data.', error, { userId });
-    return { success: false, message: `Failed to fetch test data: ${error.message}` };
+    const duration = performance.now() - startTime;
+    logError('Failed to fetch test data.', error, { userId, duration });
+    return { success: false, message: `Failed to fetch test data: ${error.message}`, duration };
+  }
+}
+
+export async function getHashForServerComparison(dataString: string): Promise<{ success: boolean; serverHash?: string; duration?: number; message?: string }> {
+  const { userId } = auth();
+  if (!userId) {
+    return { success: false, message: 'User not authenticated.' };
+  }
+  logDebug("getHashForServerComparison called", { userId, dataStringLength: dataString.length });
+  const startTime = performance.now();
+  try {
+    const serverHash = await hashData(dataString);
+    const duration = performance.now() - startTime;
+    logInfo('Server hash calculated for comparison.', { userId, serverHash, duration });
+    return { success: true, serverHash, duration };
+  } catch (error: any) {
+    const duration = performance.now() - startTime;
+    logError('Failed to calculate server hash for comparison.', error, { userId, duration });
+    return { success: false, message: `Failed to calculate server hash: ${error.message}`, duration };
   }
 }
