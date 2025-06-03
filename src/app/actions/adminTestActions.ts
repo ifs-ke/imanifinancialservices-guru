@@ -30,17 +30,18 @@ export async function checkDatabaseConnection(): Promise<{ success: boolean; mes
 
 export async function saveTestData(data: string): Promise<{ success: boolean; message: string; entryId?: string; duration?: number }> {
   const { userId, user: clerkUser } = auth();
-  if (!userId || !clerkUser) {
-    return { success: false, message: 'User not authenticated or Clerk user details missing.' };
+  if (!userId) {
+    return { success: false, message: 'User not authenticated.' };
+  }
+  if (!clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
+    return { success: false, message: 'User not authenticated or essential Clerk user details (like primary email) are missing.' };
   }
   if (!data || typeof data !== 'string' || data.trim() === '') {
     return { success: false, message: 'Test data cannot be empty.' };
   }
 
-  const primaryEmail = clerkUser.primaryEmailAddress?.emailAddress;
-  if (!primaryEmail) {
-    return { success: false, message: 'Primary email address for the user is not available.' };
-  }
+  const primaryEmail = clerkUser.primaryEmailAddress.emailAddress;
+
 
   const startTime = performance.now();
   try {
@@ -138,7 +139,12 @@ export async function getHashForServerPreparedObject(rawData: any): Promise<{ su
 // --- New Database CRUD Test Actions ---
 export async function createMultipleTestEntries(entriesData: { data: string }[]): Promise<{ success: boolean; message: string; createdIds?: string[]; duration?: number }> {
   const { userId, user: clerkUser } = auth();
-  if (!userId || !clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) return { success: false, message: 'User not authenticated or email missing.' };
+   if (!userId) {
+    return { success: false, message: 'User not authenticated.' };
+  }
+  if (!clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
+    return { success: false, message: 'User not authenticated or essential Clerk user details (like primary email) are missing.' };
+  }
   const startTime = performance.now();
   try {
     await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
@@ -236,6 +242,44 @@ export async function deleteAllUserTestEntries(): Promise<{ success: boolean; me
     const duration = performance.now() - startTime;
     console.error(`[AdminActions] Error deleting all test entries for user ${userId}:`, error, {duration});
     return { success: false, message: `Error: ${error.message}`, duration };
+  }
+}
+
+export async function getClerkUserInfo(): Promise<{ success: boolean; message: string; userInfo?: Record<string, any>; duration?: number }> {
+  const { userId, user: clerkUser } = auth();
+  const startTime = performance.now();
+
+  if (!userId) {
+    return { success: false, message: 'User not authenticated.', duration: performance.now() - startTime };
+  }
+  if (!clerkUser) {
+    // This can happen if Clerk session is present but full user object isn't hydrated yet.
+    return { success: false, message: 'Clerk user details not available at this moment. Try again.', duration: performance.now() - startTime };
+  }
+
+  try {
+    const userInfoToReturn = {
+      id: clerkUser.id,
+      primaryEmail: clerkUser.primaryEmailAddress?.emailAddress,
+      fullName: clerkUser.fullName,
+      firstName: clerkUser.firstName,
+      lastName: clerkUser.lastName,
+      username: clerkUser.username,
+      createdAt: clerkUser.createdAt ? new Date(clerkUser.createdAt).toLocaleString() : null,
+      updatedAt: clerkUser.updatedAt ? new Date(clerkUser.updatedAt).toLocaleString() : null,
+      lastSignInAt: clerkUser.lastSignInAt ? new Date(clerkUser.lastSignInAt).toLocaleString() : null,
+      // Only include metadata if necessary and be mindful of what's exposed
+      // publicMetadata: clerkUser.publicMetadata,
+      // privateMetadata: clerkUser.privateMetadata, // Be very cautious exposing privateMetadata
+      // unsafeMetadata: clerkUser.unsafeMetadata,   // Be very cautious exposing unsafeMetadata
+    };
+    const duration = performance.now() - startTime;
+    console.info(`[AdminActions] Fetched Clerk user info. User: ${userId}`, { userId, duration });
+    return { success: true, message: 'Clerk user information fetched.', userInfo: userInfoToReturn, duration };
+  } catch (error: any) {
+    const duration = performance.now() - startTime;
+    console.error(`[AdminActions] Failed to fetch Clerk user info. User: ${userId}`, { error, userId, duration });
+    return { success: false, message: `Failed to fetch Clerk user info: ${error.message}`, duration };
   }
 }
     

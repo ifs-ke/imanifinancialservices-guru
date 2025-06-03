@@ -24,9 +24,10 @@ import {
   updateSingleTestEntry, // New
   deleteSingleTestEntry, // New
   deleteAllUserTestEntries, // New
+  getClerkUserInfo, // New action for Clerk user info
 } from '@/app/actions/adminTestActions';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon, Server, Timer, Link2, Info, Eye, Copy as CopyIcon, Database, CircleSlash } from 'lucide-react';
+import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon, Server, Timer, Link2, Info, Eye, Copy as CopyIcon, Database, CircleSlash, UserCircle2 } from 'lucide-react'; // Added UserCircle2
 import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { logDebug } from '@/lib/logger';
@@ -128,6 +129,12 @@ const AdminConnectionTestPage: React.FC = () => {
   const [crudTestLog, setCrudTestLog] = useState<string[]>([]);
   const [isCrudTesting, setIsCrudTesting] = useState(false);
   const [createdEntryIds, setCreatedEntryIds] = useState<string[]>([]);
+
+  // Clerk User Info Test States
+  const [clerkUserInfo, setClerkUserInfo] = useState<Record<string, any> | null>(null);
+  const [isClerkUserInfoLoading, setIsClerkUserInfoLoading] = useState(false);
+  const [clerkUserInfoError, setClerkUserInfoError] = useState<string | null>(null);
+
 
   const [detailViewTitle, setDetailViewTitle] = useState('');
   const [detailViewContent, setDetailViewContent] = useState<string | object>('');
@@ -255,6 +262,19 @@ const AdminConnectionTestPage: React.FC = () => {
     log(`Delete All: ${deleteAllRes.success ? `Success (${deleteAllRes.count} deleted)` : `Failed (${deleteAllRes.message})`} (${deleteAllRes.duration?.toFixed(0)}ms)`);
     log("CRUD tests completed.");
     setIsCrudTesting(false);
+  };
+
+  const handleFetchClerkUserInfo = async () => {
+    setIsClerkUserInfoLoading(true);
+    setClerkUserInfo(null);
+    setClerkUserInfoError(null);
+    const result = await getClerkUserInfo();
+    if (result.success && result.userInfo) {
+      setClerkUserInfo(result.userInfo);
+    } else {
+      setClerkUserInfoError(result.message);
+    }
+    setIsClerkUserInfoLoading(false);
   };
 
 
@@ -416,6 +436,28 @@ const AdminConnectionTestPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Clerk User Info Test Card */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCircle2 size={20} /> Clerk User Information Test
+            </CardTitle>
+            <CardDescription>Displays information about the currently authenticated Clerk user.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button onClick={handleFetchClerkUserInfo} disabled={isClerkUserInfoLoading} className="w-full">
+              {isClerkUserInfoLoading ? 'Fetching User Info...' : 'Fetch Clerk User Info'}
+            </Button>
+            {clerkUserInfoError && <ResultBadge success={false} message={clerkUserInfoError} />}
+            {clerkUserInfo && (
+              <ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs">
+                <pre>{JSON.stringify(clerkUserInfo, null, 2)}</pre>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+
 
         {/* Original Save/Fetch TestEntry cards - could be removed if CRUD test is sufficient, or kept for simple single operations */}
         <Card>
