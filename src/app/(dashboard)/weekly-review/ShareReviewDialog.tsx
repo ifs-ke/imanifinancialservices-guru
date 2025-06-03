@@ -194,7 +194,7 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
                 <p className="font-medium">{searchResult.name}</p>
                 <p className="text-xs text-muted-foreground">{searchResult.email}</p>
               </div>
-              <Button size="sm" onClick={handleShareClick} disabled={isSharing || sharedWithList.some(u => u.userId === searchResult.userId) || !isSignedIn}>
+              <Button size="sm" onClick={handleShareClick} disabled={isSharing || sharedWithList.some(u => u.userId === searchResult.userId) || !isSignedIn || !user}>
                 {isSharing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : sharedWithList.some(u => u.userId === searchResult.userId) ? <CheckCircle className="mr-1 h-4 w-4" /> : <UserPlus className="mr-1 h-4 w-4" />}
                 {isSharing ? 'Sharing...' : sharedWithList.some(u => u.userId === searchResult.userId) ? 'Already Shared' : 'Share'}
               </Button>
@@ -249,3 +249,4 @@ const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({ isOpen, onClose, 
 };
 
 export default ShareReviewDialog;
+
