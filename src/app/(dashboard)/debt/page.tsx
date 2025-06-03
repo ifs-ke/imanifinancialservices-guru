@@ -21,17 +21,21 @@ import { PlusCircle, Coins, FileUp, FileDown, AlertTriangle, CalendarClock, Chec
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore';
 import { useBudgetStore, selectTotalBudgetedDebt } from '@/store/budgetStore';
-import type { DebtItem } from '@/lib/types';
+import type { DebtItem as PublicDebtItem } from '@/lib/types'; // Public type
 import Link from 'next/link';
 import DebtFormSheet from '@/components/debt/DebtFormSheet';
 import { formatCurrency, cn } from '@/lib/utils';
 import { DataTable } from '@/components/ui/data-table';
-import { getDebtColumns } from './columns'; // getDebtColumns will need access to acknowledgeDebtChange
+import { getDebtColumns } from './columns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import Papa from 'papaparse';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 
+// Internal type for the page component, matching the store's version
+interface InternalDebtItem extends PublicDebtItem {
+  _acknowledgementVersion?: number;
+}
 
 export default function DebtPage() {
   const { debts, deleteDebt, setDebts, acknowledgeDebtChange, acknowledgedPrincipals } = useDebtStore();
@@ -39,8 +43,8 @@ export default function DebtPage() {
   const { toast } = useToast();
 
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
-  const [editingDebt, setEditingDebt] = useState<DebtItem | null>(null);
-  const [debtToDelete, setDebtToDelete] = useState<DebtItem | null>(null);
+  const [editingDebt, setEditingDebt] = useState<InternalDebtItem | null>(null);
+  const [debtToDelete, setDebtToDelete] = useState<InternalDebtItem | null>(null);
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>("N/A");
   const [isMassDeleteDialogOpen, setIsMassDeleteDialogOpen] = useState(false);
 
@@ -51,22 +55,22 @@ export default function DebtPage() {
 
   const handleAddClick = () => { setEditingDebt(null); setIsFormSheetOpen(true); };
   
-  const handleEditClick = useCallback((debt: DebtItem) => { 
-    setEditingDebt(debt); 
-    setIsFormSheetOpen(true); 
+  const handleEditClick = useCallback((debt: InternalDebtItem) => {
+    setEditingDebt(debt);
+    setIsFormSheetOpen(true);
   }, []);
 
   const handleFormSheetClose = () => { setIsFormSheetOpen(false); setEditingDebt(null); };
   
-  const handleDeleteClick = useCallback((debt: DebtItem) => { 
-    setDebtToDelete(debt); 
+  const handleDeleteClick = useCallback((debt: InternalDebtItem) => {
+    setDebtToDelete(debt);
   }, []);
   
-  const confirmDeleteDebt = () => { 
-    if (!debtToDelete) return; 
-    deleteDebt(debtToDelete.id); 
-    setDebtToDelete(null); 
-    toast({ title: 'Debt Deleted' }); 
+  const confirmDeleteDebt = () => {
+    if (!debtToDelete) return;
+    deleteDebt(debtToDelete.id);
+    setDebtToDelete(null);
+    toast({ title: 'Debt Deleted' });
     setRowSelection({});
   };
 
@@ -107,9 +111,9 @@ export default function DebtPage() {
   const confirmMassDelete = () => {
     if (selectedDebtIds.length > 0) {
       const remainingDebts = debts.filter(debt => !selectedDebtIds.includes(debt.id));
-      setDebts(remainingDebts); 
+      setDebts(remainingDebts);
       toast({ title: 'Batch Delete Successful', description: `${selectedDebtIds.length} debt(s) deleted.` });
-      setRowSelection({}); 
+      setRowSelection({});
     }
     setIsMassDeleteDialogOpen(false);
   };
@@ -141,7 +145,7 @@ export default function DebtPage() {
 
     let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
-    const MAX_MONTHS = 720; 
+    const MAX_MONTHS = 720;
 
     while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
         months++;
@@ -156,10 +160,10 @@ export default function DebtPage() {
              }
         });
         if (availablePayment > 0.01) {
-             currentDebts.sort((a, b) => { 
-                 const rateDiff = b.interestRate - a.interestRate; 
+             currentDebts.sort((a, b) => {
+                 const rateDiff = b.interestRate - a.interestRate;
                  if (rateDiff !== 0) return rateDiff;
-                 return b.principal - a.principal; 
+                 return b.principal - a.principal;
              });
              for (const debt of currentDebts) {
                  if (debt.principal > 0.01 && availablePayment > 0.01) {
@@ -167,10 +171,10 @@ export default function DebtPage() {
                     debt.principal -= extraPayment;
                     availablePayment -= extraPayment;
                   }
-                  if(availablePayment <= 0.01) break; 
+                  if(availablePayment <= 0.01) break;
               }
          }
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); 
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
     }
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
@@ -183,12 +187,12 @@ export default function DebtPage() {
         if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
-   }, [debts, totalBudgetedDebtPayment]); 
+   }, [debts, totalBudgetedDebtPayment]);
 
   const handleExportCsv = useCallback(() => {
       if (debts.length === 0) { toast({ title: "No data to export" }); return; }
       const csvRows = debts.map(debt => ({
-        Description: debt.description.replace(/"/g, "''"), 
+        Description: debt.description.replace(/"/g, "''"),
         'Principal (KES)': debt.principal,
         'Interest Rate (%)': debt.interestRate,
         'Min Payment (KES)': debt.minPayment,
@@ -196,15 +200,15 @@ export default function DebtPage() {
       }));
       
       const csvData = Papa.unparse(csvRows, { header: true });
-      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' }); 
-      const url = URL.createObjectURL(blob); 
-      const link = document.createElement('a'); 
-      link.href = url; 
-      link.download = 'debts_export.csv'; 
-      document.body.appendChild(link); 
-      link.click(); 
-      document.body.removeChild(link); 
-      URL.revokeObjectURL(url); 
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'debts_export.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       toast({ title: "CSV Exported" });
   }, [debts, toast]);
 
@@ -213,7 +217,7 @@ export default function DebtPage() {
     if (debts.length === 0) return { text: "No debts to reconcile.", variant: "default" as const, icon: Info };
     if (totalBudgetedDebtPayment <= 0) return { text: "No funds budgeted for debt repayment.", variant: "outline" as const, icon: Info };
     if (totalBudgetedDebtPayment < totalMinPayments) return { text: "Budgeted payment is less than total minimums. Action recommended.", variant: "destructive" as const, icon: AlertTriangle };
-    if (totalBudgetedDebtPayment > totalMinPayments * 1.2) return { text: "Budgeted payment exceeds minimums. Good progress expected!", variant: "default" as const, icon: CheckCircle }; // Using 'default' (primary) for positive
+    if (totalBudgetedDebtPayment > totalMinPayments * 1.2) return { text: "Budgeted payment exceeds minimums. Good progress expected!", variant: "default" as const, icon: CheckCircle };
     return { text: "Budgeted payment covers minimums.", variant: "outline" as const, icon: Info };
   }, [debts, totalBudgetedDebtPayment, totalMinPayments]);
 
@@ -268,7 +272,7 @@ export default function DebtPage() {
         <Card className="shadow-sm">
            <CardHeader className="p-4 md:p-6 border-b">
             <CardTitle className="text-lg">Debt List</CardTitle>
-            <CardDescription>Your current outstanding debts. A pulsing dot indicates an unacknowledged principal change or a new item.</CardDescription>
+            <CardDescription>Your current outstanding debts. A pulsing dot <AlertCircle className="inline h-3 w-3 text-destructive" /> indicates an unacknowledged principal change or a new item. Click dot to acknowledge.</CardDescription>
             {selectedDebtIds.length > 0 && (
                 <div className="mt-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center border-t pt-4">
                     <span className="text-sm text-muted-foreground mb-2 sm:mb-0">{selectedDebtIds.length} selected</span>
@@ -286,7 +290,7 @@ export default function DebtPage() {
           <CardContent className="p-4 md:p-6">
             <DataTable
               columns={columns}
-              data={debts}
+              data={debts as InternalDebtItem[]} // Cast here for DataTable if columns expect InternalDebtItem
               table={table}
               searchColumn="description"
               searchPlaceholder="Search debt descriptions..."
@@ -328,4 +332,3 @@ export default function DebtPage() {
     </div>
   );
 }
-

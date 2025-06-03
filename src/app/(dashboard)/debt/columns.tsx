@@ -13,86 +13,85 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { DebtItem } from '@/lib/types';
+import type { DebtItem } from '@/lib/types'; // Ensure DebtItem might need _acknowledgementVersion for type safety if used strictly
 import { formatCurrency, cn } from '@/lib/utils';
 import DebtAmortizationSheet from '@/components/debt/DebtAmortizationSheet';
 import { Badge } from '@/components/ui/badge';
 import React from 'react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+interface InternalDebtItem extends DebtItem {
+  _acknowledgementVersion?: number;
+}
 
 const formatPercentage = (rate: number) => {
     return `${rate.toFixed(2)}%`;
 };
 
 export const getDebtColumns = (
-  onEdit: (item: DebtItem) => void,
-  onDelete: (item: DebtItem) => void,
-  acknowledgeDebtChange: (debtId: string) => void, // Action to acknowledge change
-  acknowledgedPrincipals: Record<string, { principal: number; version: number }> // Map of acknowledged principals
-): ColumnDef<DebtItem>[] => [
+  onEdit: (item: InternalDebtItem) => void,
+  onDelete: (item: InternalDebtItem) => void,
+  acknowledgeDebtChange: (debtId: string) => void,
+  acknowledgedPrincipals: Record<string, { principal: number; version: number }>
+): ColumnDef<InternalDebtItem>[] => [
   {
     id: 'select',
     header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && 'indeterminate')
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-        className="translate-y-[2px]"
-      />
+      <div className="flex items-center">
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && 'indeterminate')
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+          className="translate-y-[2px]"
+        />
+      </div>
     ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-        className="translate-y-[2px]"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    id: 'statusIndicator', // New column for pulsing dot
-    header: 'Status',
     cell: ({ row }) => {
       const debtItem = row.original;
       const acknowledgedInfo = acknowledgedPrincipals[debtItem.id];
-      const needsAcknowledgement = !acknowledgedInfo || 
+      const needsAcknowledgement = !acknowledgedInfo ||
                                  acknowledgedInfo.principal !== debtItem.principal ||
-                                 acknowledgedInfo.version !== (debtItem as any)._acknowledgementVersion; // Compare with current version
-
-      if (needsAcknowledgement) {
-        return (
-          <TooltipProvider delayDuration={100}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 p-0 hover:bg-transparent"
-                  onClick={(e) => {
-                    e.stopPropagation(); // Prevent row selection if a general row click handler exists
-                    acknowledgeDebtChange(debtItem.id);
-                  }}
-                >
-                  <AlertCircle className="h-4 w-4 text-destructive animate-pulse-subtle" />
-                  <span className="sr-only">Acknowledge change</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="text-xs">New or changed. Click to acknowledge.</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
-      }
-      return null; // No indicator if acknowledged
+                                 acknowledgedInfo.version !== debtItem._acknowledgementVersion;
+      return (
+        <div className="flex items-center gap-2 px-1">
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+            className="translate-y-[2px]"
+          />
+          {needsAcknowledgement && (
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 p-0 hover:bg-transparent data-[state=open]:bg-transparent"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      acknowledgeDebtChange(debtItem.id);
+                    }}
+                  >
+                    <AlertCircle className="h-3.5 w-3.5 text-destructive animate-pulse-subtle" />
+                    <span className="sr-only">Acknowledge change for {debtItem.description}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs p-1.5">
+                  <p>Principal or details changed. Click to acknowledge.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      );
     },
     enableSorting: false,
-    enableHiding: true, // Allow hiding if preferred
-    size: 60, // Small fixed size
+    enableHiding: false,
+    size: 60, // Adjusted size for checkbox + potential icon
   },
   {
     accessorKey: 'description',
@@ -107,6 +106,9 @@ export const getDebtColumns = (
     accessorKey: 'term',
     header: 'Term',
     cell: ({ row }) => <Badge variant={row.getValue('term') === 'short' ? 'default' : 'secondary'} className="capitalize text-xs">{row.getValue('term')}</Badge>,
+    filterFn: (row, id, value) => {
+      return value.includes(row.getValue(id))
+    },
   },
   {
     accessorKey: 'principal',
@@ -176,11 +178,3 @@ export const getDebtColumns = (
     enableHiding: false,
   },
 ];
-
-// Dummy Tooltip components if not globally available or for local context
-// In a real app, import these from your UI library (e.g., Shadcn UI)
-const TooltipProvider = ({ children }: { children: React.ReactNode }) => <>{children}</>;
-const Tooltip = ({ children }: { children: React.ReactNode }) => <>{children}</>;
-const TooltipTrigger = ({ children, asChild }: { children: React.ReactNode, asChild?: boolean }) => asChild ? children : <div>{children}</div>;
-const TooltipContent = ({ children, side }: { children: React.ReactNode, side?: string }) => <div className="hidden group-hover:block absolute bg-black text-white p-1 rounded text-xs" style={{ zIndex: 100}}>{children}</div>;
-

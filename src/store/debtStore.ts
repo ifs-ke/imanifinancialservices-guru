@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { DebtItem } from '@/lib/types';
-import { encode, decode } from '@/lib/storage-utils'; 
+import { encode, decode } from '@/lib/storage-utils';
 import { logInfo } from '@/lib/logger';
 
 const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -42,24 +42,29 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); 
+        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e);
       }
     },
     removeItem: (name) => storage?.removeItem(name),
   };
 };
 
+// Define DebtItem with _acknowledgementVersion directly if not in lib/types
+interface InternalDebtItem extends DebtItem {
+  _acknowledgementVersion?: number;
+}
+
 export interface DebtState {
-    debts: DebtItem[];
-    isHydrated: boolean; 
-    acknowledgedPrincipals: Record<string, { principal: number; version: number }>; // Tracks acknowledged principal value and version for pulsing dot
-    setDebts: (debts: DebtItem[], userId?: string) => void; 
-    addDebt: (debtData: Omit<DebtItem, 'id'>, userId?: string) => DebtItem;
+    debts: InternalDebtItem[]; // Use internal type that includes version
+    isHydrated: boolean;
+    acknowledgedPrincipals: Record<string, { principal: number; version: number }>;
+    setDebts: (debts: DebtItem[], userId?: string) => void;
+    addDebt: (debtData: Omit<DebtItem, 'id'>, userId?: string) => InternalDebtItem;
     updateDebt: (updatedDebt: DebtItem, userId?: string) => void;
     deleteDebt: (id: string, userId?: string) => void;
-    importDebtsBatch: (newDebtsData: Omit<DebtItem, 'id'>[], userId?: string) => DebtItem[]; 
-    clearDebts: (userId?: string) => void; 
-    acknowledgeDebtChange: (debtId: string) => void; // Action to acknowledge a change
+    importDebtsBatch: (newDebtsData: Omit<DebtItem, 'id'>[], userId?: string) => InternalDebtItem[];
+    clearDebts: (userId?: string) => void;
+    acknowledgeDebtChange: (debtId: string) => void;
 }
 
 const initialState = {
@@ -73,12 +78,12 @@ export const useDebtStore = create<DebtState>()(
         (set, get) => ({
             ...initialState,
             setDebts: (debts, userIdForLog) => {
-                 const validatedDebts = (debts || []).map(d => ({ ...d, _acknowledgementVersion: (d as any)._acknowledgementVersion || 1 })); 
+                 const validatedDebts = (debts || []).map(d => ({ ...d, _acknowledgementVersion: (d as InternalDebtItem)._acknowledgementVersion || 1 }));
                  logInfo(`DebtStore: Setting debts for user ${userIdForLog || 'unknown'}. Count: ${validatedDebts.length}`, {userId: userIdForLog});
                  set({ debts: sortDebts(validatedDebts), isHydrated: true });
             },
             addDebt: (debtData, userIdForLog) => {
-                const newDebt: DebtItem & { _acknowledgementVersion: number } = {
+                const newDebt: InternalDebtItem = {
                     id: generateId(),
                     ...debtData,
                     _acknowledgementVersion: 1, // Initial version for new debts
@@ -86,49 +91,54 @@ export const useDebtStore = create<DebtState>()(
                 logInfo(`DebtStore: Adding debt for user ${userIdForLog || 'unknown'}`, {userId: userIdForLog, debtId: newDebt.id});
                 set((state) => ({ debts: sortDebts([...state.debts, newDebt]) }));
                 // New debts are implicitly unacknowledged by not being in acknowledgedPrincipals
-                return newDebt; 
+                return newDebt;
             },
-            updateDebt: (updatedDebt, userIdForLog) => {
-                logInfo(`DebtStore: Updating debt for user ${userIdForLog || 'unknown'}`, {userId: userIdForLog, debtId: updatedDebt.id});
-                const currentVersion = (get().debts.find(d => d.id === updatedDebt.id) as any)?._acknowledgementVersion || 0;
+            updateDebt: (updatedDebtData, userIdForLog) => {
+                logInfo(`DebtStore: Updating debt for user ${userIdForLog || 'unknown'}`, {userId: userIdForLog, debtId: updatedDebtData.id});
+                const currentDebt = get().debts.find(d => d.id === updatedDebtData.id);
+                const currentVersion = currentDebt?._acknowledgementVersion || 0;
                 const newVersion = incrementVersion(currentVersion);
+
+                const updatedDebtWithVersion: InternalDebtItem = {
+                    ...updatedDebtData,
+                    _acknowledgementVersion: newVersion,
+                };
 
                 set((state) => ({
                     debts: sortDebts(
-                        state.debts.map(d => d.id === updatedDebt.id ? { ...updatedDebt, _acknowledgementVersion: newVersion } : d)
+                        state.debts.map(d => d.id === updatedDebtWithVersion.id ? updatedDebtWithVersion : d)
                     ),
-                    // Automatically acknowledge the principal of the edited debt
                     acknowledgedPrincipals: {
                         ...state.acknowledgedPrincipals,
-                        [updatedDebt.id]: { principal: updatedDebt.principal, version: newVersion },
+                        [updatedDebtWithVersion.id]: { principal: updatedDebtWithVersion.principal, version: newVersion },
                     }
                 }));
             },
             deleteDebt: (id, userIdForLog) => {
                 logInfo(`DebtStore: Deleting debt for user ${userIdForLog || 'unknown'}`, {userId: userIdForLog, debtId: id});
-                set((state) => ({ 
+                set((state) => ({
                     debts: sortDebts(state.debts.filter(d => d.id !== id)),
-                    acknowledgedPrincipals: (({ [id]: _, ...rest }) => rest)(state.acknowledgedPrincipals) // Remove from acknowledgements
+                    acknowledgedPrincipals: (({ [id]: _, ...rest }) => rest)(state.acknowledgedPrincipals)
                 }));
             },
             importDebtsBatch: (newDebtsData, userIdForLog) => {
-                 const newDebtsWithIdsAndVersion = newDebtsData.map(debtData => ({
+                 const newDebtsWithIdsAndVersion: InternalDebtItem[] = newDebtsData.map(debtData => ({
                      id: generateId(),
                      ...debtData,
-                     _acknowledgementVersion: 1, // Initial version
+                     _acknowledgementVersion: 1,
                  }));
                  logInfo(`DebtStore: Importing batch of ${newDebtsWithIdsAndVersion.length} debts for user ${userIdForLog || 'unknown'}`, {userId: userIdForLog});
                  set((state) => ({ debts: sortDebts([...state.debts, ...newDebtsWithIdsAndVersion]) }));
-                 return newDebtsWithIdsAndVersion; 
+                 return newDebtsWithIdsAndVersion;
             },
             clearDebts: (userIdForLog) => {
                 logInfo(`DebtStore: Clearing debts state for user ${userIdForLog || 'unknown'}.`, {userId: userIdForLog});
-                set({ ...initialState, acknowledgedPrincipals: {}, isHydrated: true }); 
+                set({ ...initialState, acknowledgedPrincipals: {}, isHydrated: true });
             },
             acknowledgeDebtChange: (debtId) => {
                  const debt = get().debts.find(d => d.id === debtId);
                  if (debt) {
-                    const currentVersion = (debt as any)._acknowledgementVersion || 0;
+                    const currentVersion = debt._acknowledgementVersion || 0;
                     logInfo(`DebtStore: Acknowledging change for debt ${debtId}`, { debtId, principal: debt.principal, version: currentVersion });
                     set((state) => ({
                         acknowledgedPrincipals: {
@@ -140,19 +150,18 @@ export const useDebtStore = create<DebtState>()(
             },
         }),
         {
-            name: 'ifcGuru_debts_v2', // Consider versioning if schema changes significantly
-            storage: createJSONStorage(createSessionStorageWithEncoding), 
+            name: 'ifcGuru_debts_v3', // Incremented version due to schema change (_acknowledgementVersion)
+            storage: createJSONStorage(createSessionStorageWithEncoding),
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
-                   if (!state.acknowledgedPrincipals) { // Ensure acknowledgedPrincipals exists
+                   if (!state.acknowledgedPrincipals) {
                        state.acknowledgedPrincipals = {};
                    }
-                   // Ensure all debts have an _acknowledgementVersion
                    if (Array.isArray(state.debts)) {
-                       state.debts = state.debts.map(d => ({ ...d, _acknowledgementVersion: (d as any)._acknowledgementVersion || 1 }));
+                       state.debts = state.debts.map(d => ({ ...d, _acknowledgementVersion: (d as InternalDebtItem)._acknowledgementVersion || 1 }));
                    }
-                   logInfo("DebtStore: Rehydrated successfully.");
+                   logInfo("DebtStore: Rehydrated successfully (v3).");
                  }
              },
         }
@@ -161,4 +170,3 @@ export const useDebtStore = create<DebtState>()(
 
 export const selectTotalDebt = (state: DebtState): number =>
     state.debts.reduce((sum, debt) => sum + (debt.principal || 0), 0);
-
