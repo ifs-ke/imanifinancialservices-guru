@@ -18,7 +18,7 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 
 const IS_FETCH_DISABLED = false;
 const HASH_CHECK_ENABLED = true;
-const API_TIMEOUT_MS = 60000; // Increased to 1 minute
+const API_TIMEOUT_MS = 60000;
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -154,7 +154,7 @@ export function useSyncManager() {
     if (!isPreCheck) updateSyncState({ status: 'syncing' });
     logInfo(`SyncManager: Fetching data from server... (isPreCheck: ${isPreCheck})`, { userId: currentUserId }, currentUserId);
 
-    const startTime = performance.now(); // Start timer for fetch duration
+    const startTime = performance.now();
 
     if (!isPreCheck) {
       abortControllerRef.current?.abort('New fetch initiated');
@@ -165,7 +165,7 @@ export function useSyncManager() {
 
     try {
       const response = await fetch('/api/sync', { signal });
-      const duration = performance.now() - startTime; // End timer
+      const duration = performance.now() - startTime;
 
       if (signal?.aborted) {
         const abortReason = signal.reason || 'Fetch aborted by new request or unmount.';
@@ -238,7 +238,7 @@ export function useSyncManager() {
       });
       hasLocalChangesRef.current = false;
       logInfo('SyncManager: Data fetched and loaded successfully.', { userId: currentUserId, serverHash, durationMs: duration }, currentUserId);
-      if (syncStateRef.current.status !== 'syncing') { // Avoid double toast if fetch was part of a manual sync
+      if (syncStateRef.current.status !== 'syncing') {
         toast({ title: 'Data Synced', description: `Latest data loaded from server. (Duration: ${duration.toFixed(0)}ms)` });
       }
       initialLoadDoneRef.current = true;
@@ -286,7 +286,7 @@ export function useSyncManager() {
     updateSyncState({ status: 'syncing' });
     logInfo('SyncManager: Saving data to server...', { userId: currentUserId, force, hashCheckEnabled: HASH_CHECK_ENABLED }, currentUserId);
 
-    const startTime = performance.now(); // Start timer for save duration
+    const startTime = performance.now();
 
     const dataToSave: SyncedData = {
       transactions: getTransactionsState().transactions,
@@ -296,8 +296,8 @@ export function useSyncManager() {
       otherLiabilityItems: getStatementState().otherLiabilityItems,
       budgetItems: getBudgetState().budgetItems,
       ownedReviews: getWeeklyReviewState().ownedReviews,
-      sharedReviews: {}, // Shared reviews are not saved from client, only fetched
-      notifications: [], // Notifications are not saved from client, only fetched
+      sharedReviews: {}, 
+      notifications: [], 
       startDate: getStatementState().startDate?.toISOString(),
       endDate: getStatementState().endDate?.toISOString(),
       gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
@@ -317,14 +317,14 @@ export function useSyncManager() {
         signal: localAbortController.signal,
       });
       clearTimeout(timeoutId);
-      const duration = performance.now() - startTime; // End timer
+      const duration = performance.now() - startTime;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: `Server error during save: ${response.status} ${response.statusText}`.trim() }));
-        if (response.status === 400 && HASH_CHECK_ENABLED) {
-           logError('Save rejected by server due to data integrity check (hash mismatch).',
+        if (response.status === 400 && HASH_CHECK_ENABLED && (errorData.error as string || "").toLowerCase().includes("data integrity check failed")) {
+           logError('Save rejected by server due to data integrity check (hash mismatch). Client will now show conflict dialog.',
              new Error(errorData.error || 'Server-side hash validation failed'),
-             { userIdFromSaveScope: currentUserId, clientHash: clientDataHash, errorDetails: errorData.error },
+             { userIdFromSaveScope: currentUserId, clientHash: clientDataHash, errorDetails: errorData.error, serverResponseStatus: response.status },
              currentUserId
            );
            updateSyncState({ status: 'hash_mismatch', isMismatchDialogOpen: true, lastServerHash: syncStateRef.current.lastServerHash });
@@ -386,7 +386,7 @@ export function useSyncManager() {
 
     if (HASH_CHECK_ENABLED && syncStateRef.current.isMismatchDialogOpen) {
         logWarn("Manual sync attempted while hash mismatch dialog is open. User needs to resolve first.", {userId: currentUserId}, currentUserId);
-        updateSyncState({ status: 'hash_mismatch' }); // Keep status as mismatch
+        updateSyncState({ status: 'hash_mismatch' }); 
         toast({title: "Conflict Exists", description: "Please resolve the data conflict first.", variant: "destructive"});
         return;
     }
@@ -396,11 +396,9 @@ export function useSyncManager() {
       const saveSuccess = await saveData();
       if (saveSuccess) {
         logInfo('Manual Sync: Save successful. Now fetching latest from server.', { userId: currentUserId }, currentUserId);
-        await fetchData(); // Fetch after successful save to get latest server state including this save
+        await fetchData(); 
       } else {
         logWarn('Manual Sync: saveData failed. Full fetch after save skipped.', { userId: currentUserId }, currentUserId);
-         // If save failed, status might already be 'error' or 'hash_mismatch'.
-         // If it was 'syncing', revert to a state reflecting local changes persist.
         if(syncStateRef.current.status === 'syncing') {
             updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'error' });
         }
@@ -413,32 +411,29 @@ export function useSyncManager() {
 
   const forceSave = useCallback(async () => {
     const currentUserId = userId;
-    logInfo("Force Save initiated", { userId: currentUserId }, currentUserId);
+    logInfo("Force Save initiated by user from conflict dialog.", { userId: currentUserId }, currentUserId);
     return saveData(true);
   }, [saveData, userId]);
 
   const forceFetch = useCallback(async () => {
     const currentUserId = userId;
-    logInfo("Force Fetch initiated", { userId: currentUserId }, currentUserId);
+    logInfo("Force Fetch initiated by user from conflict dialog.", { userId: currentUserId }, currentUserId);
     if (IS_FETCH_DISABLED) {
         toast({ title: 'Cloud Sync Disabled', description: 'Cannot fetch from server. Fetching is currently off.', variant: 'destructive' });
         updateSyncState({ isMismatchDialogOpen: false, status: 'local' });
         return false;
     }
-    clearAllLocalStoreData(); // Clears stores and sets initialLoadDoneRef to false
-    const fetchResult = await fetchData(); // fetchData will set initialLoadDoneRef to true upon completion
-    if (fetchResult !== false) { // fetchResult is serverHash or false
+    clearAllLocalStoreData(); 
+    const fetchResult = await fetchData(); 
+    if (fetchResult !== false) { 
       updateSyncState({ isMismatchDialogOpen: false, status: 'synced', lastServerHash: fetchResult || null });
       return true;
     }
-    // If fetch fails, status might be 'error' or 'idle' if user signed out during fetch.
-    // Ensure isMismatchDialogOpen is closed.
     updateSyncState({ isMismatchDialogOpen: false, status: syncStateRef.current.status === 'idle' ? 'idle' : 'error' });
     return false;
   }, [clearAllLocalStoreData, fetchData, updateSyncState, toast, userId]);
 
 
-  // This effect manages the initial data load sequence and user switching.
   useEffect(() => {
     const currentUserId = userId;
     const prevUserId = previousUserIdRef.current;
@@ -448,28 +443,20 @@ export function useSyncManager() {
       return;
     }
 
-    // Case 1: User explicitly signs out (isSignedIn is false AND userId is null) AND there was a previous logged-in user.
     if (!isSignedIn && !currentUserId && prevUserId) {
         logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
-        clearAllLocalStoreData(); // Clears stores and resets initialLoadDoneRef
+        clearAllLocalStoreData(); 
         previousUserIdRef.current = null;
-        return; // Exit: signed out user, no further setup needed
+        return; 
     }
 
-    // Case 2: User is now signed in (isSignedIn is true AND currentUserId is present)
-    //         AND (it's a new user OR it's the first time we're processing this user after Clerk loaded and initialLoadDoneRef is false)
     if (isSignedIn && currentUserId && (currentUserId !== prevUserId || !initialLoadDoneRef.current)) {
         if (currentUserId !== prevUserId) {
             logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Setting up for new user.`, { userId: currentUserId }, currentUserId);
             previousUserIdRef.current = currentUserId;
-            // Crucially, reset initialLoadDoneRef ONLY for a new user ID.
-            // This ensures that if this effect re-runs for the *same* user due to other dep changes,
-            // but initial load was done, we don't reset it.
             initialLoadDoneRef.current = false;
         }
 
-        // This block will run if it's a new user (initialLoadDoneRef just set to false)
-        // OR if it's the same user but initial setup hasn't completed yet (e.g., first mount after Clerk loads).
         if (!initialLoadDoneRef.current) {
             logInfo(`SyncManager effect: Initializing for user ${currentUserId}. Current status: ${syncStateRef.current.status}`, { userId: currentUserId }, currentUserId);
             
@@ -489,22 +476,17 @@ export function useSyncManager() {
             }
 
             updateSyncState({
-                status: 'local', // Always start with 'local' status after auth is confirmed for a user
+                status: 'local', 
                 lastServerHash: loadedLastServerHash,
                 gettingStartedDismissed: loadedGettingStartedDismissed,
-                isMismatchDialogOpen: false, // Ensure dialog is closed on user switch/initial load
+                isMismatchDialogOpen: false, 
             });
-            initialLoadDoneRef.current = true; // Mark initial setup for THIS user as complete
+            initialLoadDoneRef.current = true; 
             logInfo('SyncManager: User context established. App ready with local data. Awaiting manual sync.', { userId: currentUserId, newStatus: 'local' }, currentUserId);
         }
     } else if (isSignedIn && currentUserId && initialLoadDoneRef.current) {
-        // User is signed in, and initial setup was already done for this user.
-        // This path might be hit on subsequent re-renders if dependencies like isSignedIn/isClerkLoaded toggle.
-        // Ensure status doesn't regress from a more active state.
         logDebug('SyncManager effect: User signed in, initial setup previously done. Current status:', { status: syncStateRef.current.status, userId: currentUserId }, currentUserId);
         if (syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
-            // If status somehow regressed to idle/loading_local while user is still signed in,
-            // and initial load was done, revert to 'local' or 'local_changes' based on hasLocalChangesRef.
             logWarn('SyncManager: Status regressed to idle/loading_local for an active user. Correcting.', { currentStatus: syncStateRef.current.status, hasLocalChanges: hasLocalChangesRef.current, userId: currentUserId }, currentUserId);
             updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'local' });
         }
@@ -525,11 +507,10 @@ export function useSyncManager() {
 
   const handleStoreChange = useCallback(() => {
     const currentUserId = userId;
-    // Do not mark local changes if a sync operation is in progress, or if user is not signed in, or initial load not done.
     if (syncStateRef.current.status === 'syncing' || !initialLoadDoneRef.current || !isSignedIn || !currentUserId) {
       return;
     }
-    if (!hasLocalChangesRef.current) { // Only log the first time it's marked
+    if (!hasLocalChangesRef.current) { 
         logInfo("SyncManager: Local store change detected, marking hasLocalChangesRef.", { userId: currentUserId }, currentUserId);
     }
     hasLocalChangesRef.current = true;
@@ -548,7 +529,6 @@ export function useSyncManager() {
     return () => unsubscribes.forEach(unsubscribe => unsubscribe());
   }, [handleStoreChange]);
 
-  // Cleanup AbortController on unmount
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort('Component unmounting');
@@ -559,22 +539,24 @@ export function useSyncManager() {
   return {
     syncStatus: syncState.status,
     isFetchDisabled: IS_FETCH_DISABLED,
-    retrySync: manualSync, // Exposed for error states
+    retrySync: manualSync,
     manualSync,
     forceSave,
     forceFetch,
     hashMismatch: HASH_CHECK_ENABLED && syncState.status === 'hash_mismatch',
     isMismatchDialogOpen: syncState.isMismatchDialogOpen,
-    setIsMismatchDialogOpen: (isOpen: boolean) => updateSyncState({ isMismatchDialogOpen: isOpen }),
+    setIsMismatchDialogOpen: (isOpen: boolean) => {
+        logDebug(`SyncManager: setIsMismatchDialogOpen called with ${isOpen}`, {currentStatus: syncStateRef.current.status, userId}, userId);
+        updateSyncState({ isMismatchDialogOpen: isOpen });
+    },
     lastSyncTime: syncState.lastFetchTime || syncState.lastSaveTime,
     gettingStartedDismissed: syncState.gettingStartedDismissed,
     setGettingStartedDismissed: (dismissed: boolean) => {
       const currentUserId = userId;
       updateSyncState({ gettingStartedDismissed: dismissed });
-      // If user is signed in and an active data state exists, mark this as a local change.
       if (isSignedIn && currentUserId && (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local' || syncStateRef.current.status === 'local_changes')) {
         hasLocalChangesRef.current = true;
-        if (syncStateRef.current.status !== 'local_changes') { // Avoid redundant status update
+        if (syncStateRef.current.status !== 'local_changes') { 
             updateSyncState({ status: 'local_changes' });
         }
         logInfo("SyncManager: gettingStartedDismissed changed. Marked for next sync.", { userId: currentUserId, dismissed }, currentUserId);

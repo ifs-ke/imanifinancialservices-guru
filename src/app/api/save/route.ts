@@ -96,8 +96,6 @@ export async function POST(request: Request) {
   let userEmailForDb: string | undefined | null = user.primaryEmailAddress?.emailAddress;
   let userNameForDb: string | undefined | null = user.fullName;
 
-  // Clerk's currentUser() should be more reliable for full user object, but we keep this as a safeguard
-  // or if specific scenarios required a re-fetch (though less likely with currentUser).
   if (!userEmailForDb) {
     console.warn(`[API /api/save] Primary email not available from currentUser() for ${userId}. This is unexpected. Attempting direct fetch.`, logContextBase);
     try {
@@ -160,8 +158,15 @@ export async function POST(request: Request) {
   const preparedDataForSaving = prepareDataForHashing(receivedData as any);
   const serverCalculatedReceivedDataHash = await hashData(stringify(preparedDataForSaving));
 
+  console.debug(`[API /api/save] Hash Check Details. User: ${userId}`, {
+    clientProvidedHash: clientDataHash,
+    serverCalculatedHashOfReceivedData: serverCalculatedReceivedDataHash,
+    hashCheckEnabled: HASH_CHECK_ENABLED_ON_SERVER,
+    ...logContextBase
+  });
+
   if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedReceivedDataHash !== clientDataHash) {
-    console.error(`[API /api/save] Save API: Data integrity check failed! Client hash does not match server-calculated hash of received data. User: ${userId}`, {
+    console.error(`[API /api/save] Save API: Data integrity check FAILED! Client hash does not match server-calculated hash of received data. User: ${userId}`, {
       error: new Error('Client vs Server hash mismatch for received data'),
       clientHash: clientDataHash,
       serverCalculatedHash: serverCalculatedReceivedDataHash,
@@ -253,7 +258,6 @@ export async function POST(request: Request) {
             weekKey,
             journal: reviewData.journal,
             transactionComments: reviewData.transactionComments || undefined,
-            // sharedWith details are handled by SharedReview table
           })),
         });
       }
