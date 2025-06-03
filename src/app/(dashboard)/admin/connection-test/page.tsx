@@ -188,17 +188,11 @@ const AdminConnectionTestPage: React.FC = () => {
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
       <PageHeader title="Admin Connection & Utility Tests" icon={<TestTube />} description="Verify core application functionalities." />
 
-      <div className="flex-1 px-4 md:px-6 lg:px-8 grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div className="flex-1 px-4 md:px-6 lg:px-8 grid gap-6 grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <RotateCcw size={20} /> Zustand Persistence
-              {/* <HoverCard> Temporarily commented out
-                <HoverCardTrigger asChild><Button variant="ghost" size="icon" className="h-5 w-5"><Info size={14} className="text-muted-foreground"/></Button></HoverCardTrigger>
-                <HoverCardContent className="w-80 text-sm">
-                  Tests if Zustand state (e.g., 'Statement Start Date') correctly persists in Session Storage across page refreshes.
-                </HoverCardContent>
-              </HoverCard> */}
               <Button variant="ghost" size="icon" className="h-5 w-5" title="Tests if Zustand state (e.g., 'Statement Start Date') correctly persists in Session Storage across page refreshes. (HoverCard component missing)">
                   <Info size={14} className="text-muted-foreground"/>
               </Button>
@@ -236,7 +230,7 @@ const AdminConnectionTestPage: React.FC = () => {
           </CardContent>
         </Card>
         
-        <Card className="lg:col-span-2">
+        <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Link2 size={20}/> Client-Server Hash Consistency</CardTitle>
             <CardDescription>Tests if client & server produce identical hashes for the same data string. Uses `fast-json-stable-stringify` and SHA-256.</CardDescription>
