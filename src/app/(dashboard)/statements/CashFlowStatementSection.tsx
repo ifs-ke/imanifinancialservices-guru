@@ -31,7 +31,7 @@ const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; itemCount: number; icon?: React.ElementType; className?: string }
 >(({ label, sum, itemCount, icon: Icon, className, children, ...props }, ref) => (
-    <AccordionTrigger ref={ref} {...props} className={`hover:no-underline py-3 px-4 data-[state=open]:border-b data-[state=closed]:border-b-0 ${className}`}>
+    <AccordionTrigger ref={ref} {...props} className={cn('hover:no-underline py-3 px-4 data-[state=open]:border-b data-[state=closed]:border-b-0', className)}>
       <div className="flex justify-between items-center w-full">
           <span className="flex items-center gap-2 text-base font-semibold">
             {Icon && <Icon className="h-4 w-4" />} {label}
@@ -50,7 +50,7 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
 
   const filteredTransactions = useMemo(() => {
     if (!startDate || !endDate || !isDateValid(startDate) || !isDateValid(endDate)) {
-      return transactions; 
+      return []; // Return empty if dates are invalid or not set, to avoid processing all transactions
     }
     const start = startDate.getTime();
     const end = new Date(endDate).setHours(23, 59, 59, 999);
@@ -102,7 +102,7 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
         </CardDescription>
       </CardHeader>
        <CardContent className="p-6 pt-0 flex-grow">
-         <Accordion type="multiple" className="w-full" defaultValue={[]}> {/* Default to collapsed */}
+         <Accordion type="multiple" className="w-full" defaultValue={[]}>
             <AccordionItem value="income-accordion" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
                 <AccordionTriggerWithSum label="Income" sum={totalActualIncome} itemCount={derivedIncomeItems.length} icon={TrendingUp} className="text-accent hover:text-accent-foreground data-[state=open]:border-b data-[state=closed]:border-b-0" />
                 <AccordionContent className="p-0">
@@ -146,4 +146,3 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
 };
 
 export default CashFlowStatementSection;
-    

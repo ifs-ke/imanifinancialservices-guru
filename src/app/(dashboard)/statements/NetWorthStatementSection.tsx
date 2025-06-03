@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, ChangeEvent, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableRow, TableFooter as ShadTableFooter } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -21,14 +21,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, cn } from '@/lib/utils';
 import { useDebtStore } from '@/store/debtStore';
 import type { StatementItem, DebtItem, OtherLiabilityItem } from '@/lib/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface NetWorthStatementSectionProps {
   isEditingAssetsLiabilities: boolean;
-  onSaveEdits: () => void; 
+  onSaveEdits: () => void;
   assetItems: StatementItem[];
   otherLiabilityItems: OtherLiabilityItem[];
   setAssetItems: (items: StatementItem[]) => void;
@@ -41,7 +41,7 @@ const AccordionTriggerWithSum = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; itemCount: number; icon?: React.ElementType; className?: string }
 >(({ label, sum, itemCount, icon: Icon, className, children, ...props }, ref) => (
-    <AccordionTrigger ref={ref} {...props} className={`hover:no-underline py-3 px-4 data-[state=open]:border-b data-[state=closed]:border-b-0 ${className}`}>
+    <AccordionTrigger ref={ref} {...props} className={cn('hover:no-underline py-3 px-4 data-[state=open]:border-b data-[state=closed]:border-b-0', className)}>
       <div className="flex justify-between items-center w-full">
           <span className="flex items-center gap-2 text-base font-semibold">
             {Icon && <Icon className="h-4 w-4" />} {label}
@@ -59,10 +59,10 @@ AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
   isEditingAssetsLiabilities,
   onSaveEdits,
-  assetItems: initialAssetItems, 
-  otherLiabilityItems: initialOtherLiabilityItems, 
-  setAssetItems: persistAssetItems, 
-  setOtherLiabilityItems: persistOtherLiabilityItems, 
+  assetItems: initialAssetItems,
+  otherLiabilityItems: initialOtherLiabilityItems,
+  setAssetItems: persistAssetItems,
+  setOtherLiabilityItems: persistOtherLiabilityItems,
 }) => {
   const debts = useDebtStore(state => state.debts);
   const { toast } = useToast();
@@ -82,7 +82,7 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
   const handleInternalSave = () => {
     persistAssetItems(editingAssets);
     persistOtherLiabilityItems(editingOtherLiabilities);
-    onSaveEdits(); 
+    onSaveEdits();
     toast({ title: 'Net Worth Items Saved', description: 'Assets and Other Liabilities have been updated.' });
   };
 
@@ -138,7 +138,7 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
       )}
     </TableRow>
   );
-  
+
   const renderDerivedDebtRow = (debt: DebtItem) => (
     <TableRow key={debt.id} className="text-sm">
         <TableCell className="pl-2 py-1.5">{debt.description}</TableCell>
@@ -168,7 +168,7 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
         )}
       </CardHeader>
        <CardContent className="p-6 pt-0 flex-grow">
-         <Accordion type="multiple" className="w-full" defaultValue={[]}> {/* Default to collapsed */}
+         <Accordion type="multiple" className="w-full" defaultValue={[]}>
              <AccordionItem value="assets-accordion" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
                 <AccordionTriggerWithSum label="Assets" sum={totalAssets} itemCount={editingAssets.length} icon={Landmark} className="text-primary hover:text-primary-foreground data-[state=open]:border-b data-[state=closed]:border-b-0" />
                 <AccordionContent className="p-0">
@@ -185,12 +185,12 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
                     {isEditingAssetsLiabilities && (<div className="text-center py-2 border-t border-dashed mt-1"><Button variant="ghost" size="sm" onClick={() => handleAddItemClick('asset')}><PlusCircle className="mr-2 h-4 w-4" /> Add Asset Item</Button></div>)}
                 </AccordionContent>
              </AccordionItem>
-             
+
              <AccordionItem value="liabilities-accordion" className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
                 <AccordionTriggerWithSum label="Liabilities" sum={totalLiabilities} itemCount={shortTermDebts.length + longTermDebts.length + editingOtherLiabilities.length} icon={Coins} className="text-destructive hover:text-destructive-foreground data-[state=open]:border-b data-[state=closed]:border-b-0" />
                 <AccordionContent className="p-0">
                     <ScrollArea className="h-[250px] w-full">
-                        <Accordion type="multiple" className="w-full pl-4 border-l ml-2" defaultValue={[]}> {/* Default nested to collapsed */}
+                        <Accordion type="multiple" className="w-full pl-4 border-l ml-2" defaultValue={[]}>
                             <AccordionItem value="short-term-debts-accordion" className="border-b-0">
                                 <AccordionTriggerWithSum label="Short-Term Debts" sum={totalShortTermDebt} itemCount={shortTermDebts.length} className="text-sm font-medium text-muted-foreground hover:no-underline py-2 data-[state=open]:border-b data-[state=closed]:border-b-0" />
                                 <AccordionContent className="pb-0 pl-2">
@@ -228,4 +228,3 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
 };
 
 export default NetWorthStatementSection;
-    
