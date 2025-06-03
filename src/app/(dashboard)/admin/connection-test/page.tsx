@@ -15,12 +15,13 @@ import { hashData, verifyHash } from '@/lib/storage-utils';
 import { checkDatabaseConnection, saveTestData, fetchTestData } from '@/app/actions/adminTestActions';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon } from 'lucide-react';
-import { format, isValid } from 'date-fns';
+import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { logDebug } from '@/lib/logger';
 
 const AdminConnectionTestPage: React.FC = () => {
   const { toast } = useToast();
+  // Directly use startDate and setStartDate from the Zustand store
   const { startDate, setStartDate, isHydrated: isStatementStoreHydrated } = useStatementStore();
 
   const [dbConnectionResult, setDbConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -40,13 +41,7 @@ const AdminConnectionTestPage: React.FC = () => {
   const [fetchResult, setFetchResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isFetchingData, setIsFetchingData] = useState(false);
 
-  const [sessionStorageTestDate, setSessionStorageTestDate] = useState<Date | undefined>(undefined);
-
-  useEffect(() => {
-    if (isStatementStoreHydrated) {
-      setSessionStorageTestDate(startDate);
-    }
-  }, [isStatementStoreHydrated, startDate]);
+  // Removed local sessionStorageTestDate state
 
   const handleDbConnectionTest = async () => {
     setIsDbConnectionTesting(true);
@@ -63,8 +58,8 @@ const AdminConnectionTestPage: React.FC = () => {
     setPreparedHashString(str);
     const hash = await hashData(str);
     setGeneratedHash(hash);
-    const isValid = await verifyHash(str, hash);
-    setVerificationResult(isValid);
+    const isValidHash = await verifyHash(str, hash);
+    setVerificationResult(isValidHash);
     const isMismatchValid = await verifyHash(str, "deliberately_wrong_hash_string_for_testing");
     setMismatchVerificationResult(isMismatchValid);
   };
@@ -92,13 +87,11 @@ const AdminConnectionTestPage: React.FC = () => {
   };
 
   const handleZustandDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newDate = new Date(e.target.value);
+    const newDate = parse(e.target.value, 'yyyy-MM-dd', new Date()); // Parse string to Date
     if (isValid(newDate)) {
-      setStartDate(newDate);
-      setSessionStorageTestDate(newDate); // Keep local state in sync for display
+      setStartDate(newDate); // Directly update the Zustand store
     } else {
-      setStartDate(undefined); // Or handle invalid date
-      setSessionStorageTestDate(undefined);
+      setStartDate(undefined); // Or handle invalid date as per store logic
     }
   };
 
@@ -126,15 +119,16 @@ const AdminConnectionTestPage: React.FC = () => {
                 <Input
                   type="date"
                   id="zustand-date"
-                  value={sessionStorageTestDate ? format(sessionStorageTestDate, 'yyyy-MM-dd') : ''}
+                  // Format the date from the store for the input field
+                  value={startDate && isValid(startDate) ? format(startDate, 'yyyy-MM-dd') : ''}
                   onChange={handleZustandDateChange}
                   className="mt-1"
                 />
               )}
             </div>
-            {isStatementStoreHydrated && sessionStorageTestDate && (
+            {isStatementStoreHydrated && startDate && isValid(startDate) && (
               <p className="text-xs text-muted-foreground">
-                Current value in store: {format(sessionStorageTestDate, 'PP')}
+                Current value in store: {format(startDate, 'PP')}
               </p>
             )}
              {!isStatementStoreHydrated && (<p className="text-xs text-muted-foreground">Store hydrating...</p>)}
