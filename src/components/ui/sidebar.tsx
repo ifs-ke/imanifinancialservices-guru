@@ -23,17 +23,17 @@ import {
   PanelLeft,
   BookOpen,
   Bell,
-  Cloud,
-  CloudOff,
-  UploadCloud,
+  Cloud, 
+  CloudOff, 
+  UploadCloud, 
   AlertTriangle,
   ClipboardList,
-  RefreshCw,
+  RefreshCw, 
   Menu,
-  PieChart as PieChartIcon,
+  PieChart as PieChartIcon, // Renamed to avoid conflict if PieChart component is imported
   Users,
   Briefcase,
-  TestTube, // Added for Admin Test Page
+  TestTube, 
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -65,7 +65,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
   { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
-  { href: '/admin/connection-test', label: 'Admin Tests', icon: <TestTube size={18} />, adminOnly: true }, // Added test page
+  { href: '/admin/connection-test', label: 'Admin Tests', icon: <TestTube size={18} />, adminOnly: true },
 ];
 
 export type SidebarState = "collapsed" | "expanded";
@@ -470,3 +470,4 @@ export const SidebarInset = React.forwardRef<
 });
 SidebarInset.displayName = "SidebarInset";
 
+    
