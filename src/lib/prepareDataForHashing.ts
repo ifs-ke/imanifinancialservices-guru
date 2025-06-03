@@ -26,11 +26,7 @@ interface SyncDataInput {
  * - Includes the 'period' field for budget items.
  * - Includes the 'categoryName' field for transactions.
  * - Includes investment items.
- *
- * NOTE: In local-only mode, the primary use of hashing for client-server integrity is gone.
- * This function is kept primarily for the /api/sync route which still needs to produce
- * a hash for an empty dataset to satisfy initial client expectations.
- * It can be simplified or removed if no internal hashing of local state is ever needed.
+ * - Converts numeric monetary values to fixed-point strings for stable hashing.
  */
 export function prepareDataForHashing(data: SyncDataInput): any {
 
@@ -40,7 +36,7 @@ export function prepareDataForHashing(data: SyncDataInput): any {
     const otherLiabilityItems = Array.isArray(data.otherLiabilityItems) ? data.otherLiabilityItems : [];
     const budgetItems = Array.isArray(data.budgetItems) ? data.budgetItems : [];
     const ownedReviews = typeof data.ownedReviews === 'object' && data.ownedReviews !== null ? data.ownedReviews : {};
-    const investmentItems = Array.isArray(data.investmentItems) ? data.investmentItems : []; // Added
+    const investmentItems = Array.isArray(data.investmentItems) ? data.investmentItems : [];
 
     const toISOStringOptional = (date?: Date | string): string | undefined => {
       if (date instanceof Date && !isNaN(date.getTime())) return date.toISOString();
@@ -49,6 +45,13 @@ export function prepareDataForHashing(data: SyncDataInput): any {
         if (!isNaN(d.getTime())) return d.toISOString();
       }
       return undefined;
+    };
+
+    const toFixedIfNumber = (value: number | undefined | null, digits: number): string | undefined | null => {
+        if (typeof value === 'number' && !isNaN(value)) {
+            return value.toFixed(digits);
+        }
+        return value === undefined ? undefined : null;
     };
 
     const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
@@ -128,33 +131,27 @@ export function prepareDataForHashing(data: SyncDataInput): any {
         return sortedReviews;
     };
 
-    const toFixedIfNumber = (value: number | undefined | null, digits: number): string | undefined | null => {
-        if (typeof value === 'number' && !isNaN(value)) {
-            return value.toFixed(digits);
-        }
-        return value === undefined ? undefined : null; // keep null as null
-    };
-
     return {
         transactions: sortTransactions(transactions).map(tx => ({
             ...tx,
             date: toISOStringOptional(tx.date),
+            amount: toFixedIfNumber(tx.amount, 2), // Consistently stringify amount
             categoryName: tx.categoryName || null,
         })),
         debts: sortDebts(debts).map(d => ({
             ...d,
             principal: toFixedIfNumber(d.principal, 2),
-            interestRate: toFixedIfNumber(d.interestRate, 4), // Higher precision for rates
+            interestRate: toFixedIfNumber(d.interestRate, 4),
             minPayment: toFixedIfNumber(d.minPayment, 2),
         })),
         assetItems: sortStatementItems(assetItems).map(a => ({ ...a, amount: toFixedIfNumber(a.amount, 2) })),
         otherLiabilityItems: sortStatementItems(otherLiabilityItems).map(l => ({ ...l, amount: toFixedIfNumber(l.amount, 2) })),
         budgetItems: sortBudgetItems(budgetItems).map(b => ({ ...b, amount: toFixedIfNumber(b.amount, 2) })),
         ownedReviews: formatReviewData(ownedReviews),
-        investmentItems: sortInvestmentItems(investmentItems).map(i => ({ // Added
+        investmentItems: sortInvestmentItems(investmentItems).map(i => ({
             ...i,
             purchaseDate: toISOStringOptional(i.purchaseDate),
-            quantity: toFixedIfNumber(i.quantity, 8), // Example precision for quantity
+            quantity: toFixedIfNumber(i.quantity, 8),
             purchasePrice: toFixedIfNumber(i.purchasePrice, 2),
             currentValue: toFixedIfNumber(i.currentValue, 2),
         })),

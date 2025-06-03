@@ -16,7 +16,7 @@ export const TransactionFormDataSchema = z.object({
     message: "Invalid date format",
   }),
   description: z.string().min(1, { message: "Description is required" }).max(100, { message: "Description too long" }),
-  amount: z.number({
+  amount: z.number({ // Keep as number for form input
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }),
@@ -44,7 +44,7 @@ export type BudgetItemCategory = z.infer<typeof BudgetItemCategorySchema>;
 
 export const BudgetItemFormDataSchema = z.object({
   description: z.string().min(1, "Description is required").max(100, "Description too long"),
-  amount: z.number({
+  amount: z.number({ // Keep as number for form input
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }).positive({ message: "Amount must be positive" }),
@@ -61,15 +61,15 @@ export type DebtTerm = z.infer<typeof DebtTermSchema>;
 
 export const DebtItemFormDataSchema = z.object({
   description: z.string().min(1, "Description is required").max(100, "Description too long"),
-  principal: z.number({
+  principal: z.number({ // Keep as number for form input
     required_error: "Principal is required",
     invalid_type_error: "Principal must be a number",
   }).positive({ message: "Principal must be positive" }),
-  interestRate: z.number({
+  interestRate: z.number({ // Keep as number for form input
     required_error: "Interest rate is required",
     invalid_type_error: "Interest rate must be a number",
   }).min(0, "Interest rate cannot be negative").max(100, "Interest rate seems too high"),
-  minPayment: z.number({
+  minPayment: z.number({ // Keep as number for form input
     required_error: "Minimum payment is required",
     invalid_type_error: "Minimum payment must be a number",
   }).min(0, "Minimum payment cannot be negative"),
@@ -84,15 +84,15 @@ export const InvestmentFormDataSchema = z.object({
   purchaseDate: z.string().refine((date) => !isNaN(new Date(date).getTime()), {
     message: "Invalid purchase date",
   }),
-  quantity: z.number({
+  quantity: z.number({ // Keep as number for form input
     required_error: "Quantity is required",
     invalid_type_error: "Quantity must be a number",
   }).positive({ message: "Quantity must be positive" }),
-  purchasePrice: z.number({
+  purchasePrice: z.number({ // Keep as number for form input
     required_error: "Purchase price is required",
     invalid_type_error: "Purchase price must be a number",
   }).positive({ message: "Purchase price must be positive" }),
-  currentValue: z.number({
+  currentValue: z.number({ // Keep as number for form input
     required_error: "Current value is required",
     invalid_type_error: "Current value must be a number",
   }).min(0, { message: "Current value cannot be negative" }),
@@ -119,13 +119,14 @@ export const ClientLogPayloadSchema = z.object({
 export type ClientLogPayload = z.infer<typeof ClientLogPayloadSchema>;
 
 
-const BaseItemSchema = z.object({
+// Base schema for items that might have their amounts stringified by prepareDataForHashing
+const BaseItemSchemaForAPI = z.object({
   id: z.string(),
   description: z.string(),
-  amount: z.number(),
+  amount: z.coerce.number(), // Expect string from payload, coerce to number
 });
 
-const TransactionItemSchema = BaseItemSchema.extend({
+const TransactionItemSchemaForAPI = BaseItemSchemaForAPI.extend({
   date: z.string(), // ISO string
   modeOfPayment: ModeOfPaymentSchema,
   frequency: TransactionFrequencySchema.nullable(),
@@ -136,16 +137,16 @@ const TransactionItemSchema = BaseItemSchema.extend({
 const DebtItemAPISchema = z.object({
   id: z.string(),
   description: z.string(),
-  principal: z.number(),
-  interestRate: z.number(),
-  minPayment: z.number(),
+  principal: z.coerce.number(), // Expect string from payload, coerce to number
+  interestRate: z.coerce.number(), // Expect string from payload, coerce to number
+  minPayment: z.coerce.number(), // Expect string from payload, coerce to number
   term: DebtTermSchema,
 });
 
 const BudgetItemAPISchema = z.object({
   id: z.string(),
   description: z.string(),
-  amount: z.number(),
+  amount: z.coerce.number(), // Expect string from payload, coerce to number
   category: BudgetItemCategorySchema,
   period: z.string(),
 });
@@ -155,9 +156,9 @@ const InvestmentItemAPISchema = z.object({
   name: z.string(),
   type: z.string(),
   purchaseDate: z.string(), // ISO string
-  quantity: z.number(),
-  purchasePrice: z.number(),
-  currentValue: z.number(),
+  quantity: z.coerce.number(), // Expect string from payload, coerce to number
+  purchasePrice: z.coerce.number(), // Expect string from payload, coerce to number
+  currentValue: z.coerce.number(), // Expect string from payload, coerce to number
   currency: z.string(),
   notes: z.string().optional().nullable(),
 });
@@ -168,17 +169,18 @@ const WeeklyReviewDataAPISchema = z.object({
   journal: z.string(),
   transactionComments: z.record(z.string()).optional(),
   sharedWith: z.array(z.string()).optional(),
+  // weekKey is usually the key in the record, not a field within
 });
 
 
 export const SaveDataPayloadSchema = z.object({
-  transactions: z.array(TransactionItemSchema).optional().default([]),
+  transactions: z.array(TransactionItemSchemaForAPI).optional().default([]),
   debts: z.array(DebtItemAPISchema).optional().default([]),
-  assetItems: z.array(BaseItemSchema).optional().default([]),
-  otherLiabilityItems: z.array(BaseItemSchema).optional().default([]),
+  assetItems: z.array(BaseItemSchemaForAPI).optional().default([]),
+  otherLiabilityItems: z.array(BaseItemSchemaForAPI).optional().default([]),
   budgetItems: z.array(BudgetItemAPISchema).optional().default([]),
   ownedReviews: z.record(WeeklyReviewDataAPISchema).optional().default({}),
-  investmentItems: z.array(InvestmentItemAPISchema).optional().default([]), // Added
+  investmentItems: z.array(InvestmentItemAPISchema).optional().default([]),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   gettingStartedDismissed: z.boolean().optional(),
@@ -192,15 +194,16 @@ export const SearchUserByEmailInputSchema = z.object({
 });
 
 export const ShareReviewInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."), // Allow for single or double digit week
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const RevokeShareInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."), // Allow for single or double digit week
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const GetSharedWithUsersInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."), // Allow for single or double digit week
 });
+
