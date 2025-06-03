@@ -33,6 +33,7 @@ import {
   PieChart as PieChartIcon,
   Users,
   Briefcase,
+  TestTube, // Added for Admin Test Page
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -50,6 +51,7 @@ interface SidebarMenuItem {
   href: string;
   label: string;
   icon: React.ReactNode;
+  adminOnly?: boolean; // Optional flag
 }
 
 const menuItems: SidebarMenuItem[] = [
@@ -63,6 +65,7 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
   { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
   { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
+  { href: '/admin/connection-test', label: 'Admin Tests', icon: <TestTube size={18} />, adminOnly: true }, // Added test page
 ];
 
 export type SidebarState = "collapsed" | "expanded";
@@ -169,6 +172,12 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     const { user, isLoaded: isClerkLoaded } = useUser();
     const { isSignedIn } = useAuth();
 
+    // For prototype, show admin link if user has 'admin' in email. Replace with real role check.
+    const isUserAdmin = React.useMemo(() => {
+        return user?.primaryEmailAddress?.emailAddress?.includes('admin') ?? false;
+    }, [user]);
+
+
     const syncManager = useSyncManager();
     const { syncStatus, manualSync, isMismatchDialogOpen, isFetchDisabled } = syncManager;
 
@@ -270,7 +279,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
 
         <ScrollArea className="flex-grow">
           <nav className="space-y-1 p-2.5">
-            {menuItems.map((item) => (
+            {menuItems.filter(item => !item.adminOnly || (item.adminOnly && isUserAdmin)).map((item) => (
               <TooltipProvider key={item.href} delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>

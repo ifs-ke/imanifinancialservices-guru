@@ -1,45 +1,53 @@
+
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql" // Or your chosen provider
+  url      = env("DATABASE_URL")
+}
+
 generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-  provider = "postgresql" // Changed from sqlite
-  url      = env("DATABASE_URL")
-}
-
 model User {
-  id                    String           @id @unique
-  email                 String           @unique
+  id                    String                 @id @unique
+  email                 String                 @unique
   name                  String?
+  statementSettings     StatementSettings?
   transactions          Transaction[]
   debts                 Debt[]
   assetItems            AssetItem[]
   otherLiabilityItems   OtherLiabilityItem[]
   budgetItems           BudgetItem[]
-  statementSettings     StatementSettings?
+  investmentItems       InvestmentItem[] // Added from previous step
+  ownedWeeklyReviews    WeeklyReview[]         @relation("OwnedReviews")
+  sharedReviews         SharedReview[]         @relation("SharedReviewsTarget") // User who the review is shared WITH
   notifications         Notification[]
-  ownedWeeklyReviews    WeeklyReview[]   @relation("OwnedReviews")
-  sharedReviewsCreated  SharedReview[]   @relation("ReviewsSharedByOwner")
-  reviewsSharedWithMe   SharedReview[]   @relation("ReviewsSharedWithUser")
-  investmentItems       InvestmentItem[] // Added relation
+  testEntries           TestEntry[]            // Relation for TestEntry
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model StatementSettings {
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
+  statementStartDate    DateTime?
+  statementEndDate      DateTime?
+  gettingStartedDismissed Boolean?  @default(false)
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Transaction {
-  id                String                  @id @default(cuid())
-  userId            String
-  date              DateTime
-  description       String
-  amount            Float
-  modeOfPayment     String // "Cash", "Bank", "Mpesa"
-  frequency         String? // "recurring", "one-time"
-  variability       String? // "fixed", "variable"
-  categoryName      String? // Link to BudgetItem's description
-  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  id              String    @id @default(cuid())
+  userId          String
+  date            DateTime
+  description     String
+  amount          Float
+  modeOfPayment   String // Cash, Bank, Mpesa
+  frequency       String?   // recurring, one-time
+  variability     String?   // fixed, variable
+  categoryName    String?   // Linked budget item description
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, date])
 }
@@ -49,24 +57,43 @@ model Debt {
   userId        String
   description   String
   principal     Float
-  interestRate  Float // Annual percentage rate
+  interestRate  Float    // Annual interest rate as a percentage (e.g., 12.5 for 12.5%)
   minPayment    Float
-  term          String // "short", "long"
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  term          String   // short, long
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
+
+model InvestmentItem {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  type          String   // e.g., Stock, Bond, Real Estate, Crypto
+  purchaseDate  DateTime
+  quantity      Float
+  purchasePrice Float    // Price per unit at purchase
+  currentValue  Float    // Total current market value of this holding
+  currency      String   @default("KES") // Currency of purchasePrice and currentValue
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 
 model AssetItem {
   id          String   @id @default(cuid())
   userId      String
   description String
   amount      Float
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -76,96 +103,80 @@ model OtherLiabilityItem {
   userId      String
   description String
   amount      Float
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model BudgetItem {
-  id          String   @id @default(cuid())
-  userId      String
-  description String
-  amount      Float
-  category    String // "income", "recurring-expense", "one-time-expense", "goal", "debt"
-  period      String // Format: "YYYY-MM" e.g., "2024-07"
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  userId        String
+  description   String
+  amount        Float
+  category      String   // income, recurring-expense, one-time-expense, goal, debt
+  period        String   // Format: "YYYY-MM" e.g., "2023-01"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, period])
 }
 
-model InvestmentItem {
-  id            String   @id @default(cuid())
-  userId        String
-  name          String
-  type          String // e.g., Stock, Bond, Real Estate
-  purchaseDate  DateTime
-  quantity      Float
-  purchasePrice Float
-  currentValue  Float
-  currency      String   @default("KES")
-  notes         String?
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([userId])
-}
-
-model StatementSettings {
-  userId                 String    @id @unique
-  statementStartDate     DateTime?
-  statementEndDate       DateTime?
-  gettingStartedDismissed Boolean   @default(false)
-  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-}
-
 model WeeklyReview {
-  id                  String          @id @default(cuid())
-  userId              String // Owner of the review
-  weekKey             String // Format: "YYYY-WW", e.g., "2024-28"
-  journal             String?
-  transactionComments Json? // Reverted to Json? for PostgreSQL
-  user                User            @relation("OwnedReviews", fields: [userId], references: [id], onDelete: Cascade)
-  sharedInstances     SharedReview[]  @relation("OriginalReview")
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                  String    @id @default(cuid())
+  userId              String    // Owner of the review
+  weekKey             String    // Format: "YYYY-WW" e.g., "2023-01"
+  journal             String?   @db.Text
+  transactionComments Json?     // {"transactionId": "comment"}
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  @@unique([userId, weekKey]) // Ensure a user can only have one review per weekKey
+  user                User      @relation("OwnedReviews", fields: [userId], references: [id], onDelete: Cascade)
+  sharedInstances     SharedReview[] @relation("OriginalReview") // How this review is shared
+
+  @@unique([userId, weekKey])
   @@index([userId])
 }
 
 model SharedReview {
-  id              String        @id @default(cuid())
+  id              String    @id @default(cuid())
   weekKey         String
-  reviewOwnerId   String
-  sharedWithId    String
-  originalReview  WeeklyReview  @relation("OriginalReview", fields: [reviewOwnerId, weekKey], references: [userId, weekKey], onDelete: Cascade)
-  owner           User          @relation("ReviewsSharedByOwner", fields: [reviewOwnerId], references: [id], onDelete: Cascade)
-  sharedWithUser  User          @relation("ReviewsSharedWithUser", fields: [sharedWithId], references: [id], onDelete: Cascade)
-  sharedAt        DateTime      @default(now())
+  reviewOwnerId   String    // User who owns the original review
+  sharedWithId    String    // User with whom the review is shared
+  sharedAt        DateTime  @default(now())
 
-  @@unique([reviewOwnerId, weekKey, sharedWithId]) // Prevent duplicate shares
-  @@index([sharedWithId]) // For quick lookup of reviews shared with a user
-  @@index([reviewOwnerId, weekKey]) // For finding all shares of a specific review
+  originalReview  WeeklyReview @relation("OriginalReview", fields: [reviewOwnerId, weekKey], references: [userId, weekKey], onDelete: Cascade)
+  sharedWithUser  User         @relation("SharedReviewsTarget", fields: [sharedWithId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewOwnerId, weekKey, sharedWithId]) // Ensure a review is shared only once with a user
+  @@index([sharedWithId])
+  @@index([reviewOwnerId])
 }
-
 
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String // "info", "warning", "error", "success", "budget", "collaboration", "update"
+  type      String   // e.g., 'info', 'warning', 'error', 'budget', 'collaboration', 'update'
   title     String
-  message   String
+  message   String   @db.Text
   link      String?
   read      Boolean  @default(false)
   timestamp DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, read, timestamp])
+}
+
+// New model for testing DB save/fetch
+model TestEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  data      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
