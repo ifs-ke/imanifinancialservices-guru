@@ -33,7 +33,7 @@ interface BudgetVarianceReportSectionProps {
 
 type ExtendedBudgetItemCategory = InternalBudgetItemCategory | 'unplanned-expense' | 'unbudgeted-income';
 
-const formatDateForStatements = (date: Date | undefined, defaultText: string = "Pick a date") => {
+const formatDateForStatements = (date: Date | undefined, defaultText: string = "N/A") => {
     if (!date || !isDateValid(date)) return <span>{defaultText}</span>;
     return format(date, "LLL dd, y");
 };
@@ -42,8 +42,9 @@ const getUniqueMonthsInRange = (start: Date, end: Date): string[] => {
     if (!isDateValid(start) || !isDateValid(end) || end < start) return [];
     const months = eachMonthOfInterval({ start, end });
     // Ensure the end month is included if the end date is in that month, even if not the start of it.
-    if (!months.find(m => isEqual(dfnsStartOfMonth(m), dfnsStartOfMonth(end)))) {
-        months.push(dfnsStartOfMonth(end));
+    const endMonthStart = dfnsStartOfMonth(end);
+    if (!months.find(m => isEqual(dfnsStartOfMonth(m), endMonthStart))) {
+        months.push(endMonthStart);
     }
     return Array.from(new Set(months.map(date => format(date, 'yyyy-MM'))));
 };
@@ -97,12 +98,8 @@ AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
 
 const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = ({ startDate, endDate }) => {
   const transactions = useTransactionsStore(state => state.transactions);
-  const allBudgetItemsGlobal = useBudgetStore(state => state.budgetItems); // All budget items from store
+  const allBudgetItemsGlobal = useBudgetStore(state => state.budgetItems);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-
-  const statementStartDate = useMemo(() => startDate && isDateValid(startDate) ? dfnsStartOfMonth(startDate) : undefined, [startDate]);
-  const statementEndDate = useMemo(() => endDate && isDateValid(endDate) ? dfnsEndOfMonth(endDate) : undefined, [endDate]);
-
 
   const filteredTransactions = useMemo(() => {
     if (!startDate || !endDate || !isDateValid(startDate) || !isDateValid(endDate)) return [];
@@ -123,7 +120,6 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
         const isIncomeTx = tx.amount > 0;
         let matchedBudgetItemCategory: InternalBudgetItemCategory | undefined = undefined;
 
-        // Try to match to a budget item's category if categoryName is present
         if (tx.categoryName) {
             const matchedItem = allBudgetItemsGlobal.find(
                 bi => bi.description === tx.categoryName &&
@@ -137,7 +133,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
             effectiveCategory = matchedBudgetItemCategory;
         }
 
-        const keyDescription = tx.categoryName || tx.description; // Prefer linked budget item name
+        const keyDescription = tx.categoryName || tx.description;
         const groupKey = `${effectiveCategory}-${keyDescription.toLowerCase().trim()}`;
         const amount = Math.abs(tx.amount);
 
@@ -166,10 +162,10 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
             .map(bi => bi.description)
     ));
 
-    // Process budgeted items
     allDescriptionsFromRelevantBudgets.forEach(description => {
         let totalProratedBudgetForDesc = 0;
         let categoryForDesc: InternalBudgetItemCategory | undefined = undefined;
+        let firstBudgetItemFoundForDesc: BudgetItem | undefined = undefined;
 
         relevantBudgetMonths.forEach(periodKey_yyyy_MM => {
             const budgetItemForThisPeriod = allBudgetItemsGlobal.find(
@@ -177,8 +173,11 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
             );
 
             if (budgetItemForThisPeriod) {
-                if (!categoryForDesc) categoryForDesc = budgetItemForThisPeriod.category; // Take category from first instance
-
+                if (!firstBudgetItemFoundForDesc) {
+                    firstBudgetItemFoundForDesc = budgetItemForThisPeriod;
+                    categoryForDesc = budgetItemForThisPeriod.category;
+                }
+                
                 const budgetAmountForPeriod = budgetItemForThisPeriod.amount;
                 const budgetMonthDate = parse(periodKey_yyyy_MM, 'yyyy-MM', new Date());
                 const budgetMonthStart = dfnsStartOfMonth(budgetMonthDate);
@@ -195,7 +194,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
             }
         });
         
-        if (categoryForDesc) { // Only add if it was actually budgeted
+        if (categoryForDesc && firstBudgetItemFoundForDesc) {
             const actualGroupKey = `${categoryForDesc}-${description.toLowerCase().trim()}`;
             const actualGroup = actualSpendingByDescriptionAndCategory[actualGroupKey];
             const actualAmount = actualGroup ? actualGroup.amount : null;
@@ -210,22 +209,20 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
         }
     });
 
-    // Process actuals that didn't match any budget item description via categoryName link
     Object.entries(actualSpendingByDescriptionAndCategory).forEach(([groupKey, data]) => {
-        const [categoryStr, descStr] = groupKey.split(/-(.+)/s); // Split only on the first hyphen
+        const [categoryStr, descStr] = groupKey.split(/-(.+)/s);
         const actualCategory = categoryStr as ExtendedBudgetItemCategory;
         const actualDescription = descStr.trim();
 
-        // Check if this actual (by its original description and category) is already represented
         const alreadyAccountedFor = varianceMap[actualCategory]?.some(
           item => item.description.toLowerCase().trim() === actualDescription && item.actual !== null
         );
 
         if (!alreadyAccountedFor) {
             const targetArray = varianceMap[data.category];
-            if (targetArray) { // Should always be true for defined categories
+            if (targetArray) {
                 targetArray.push({
-                    description: `* ${actualDescription}`, // Mark as unbudgeted
+                    description: `* ${actualDescription}`,
                     budgeted: 0,
                     actual: data.amount,
                     itemCount: data.count,
@@ -258,8 +255,8 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
         'one-time-expense': { budgeted: 0, actual: 0, variance: 0, itemCount: 0 },
         goal: { budgeted: 0, actual: 0, variance: 0, itemCount: 0 },
         debt: { budgeted: 0, actual: 0, variance: 0, itemCount: 0 },
-        'unplanned-expense': { budgeted: 0, actual: 0, variance: 0, itemCount: 0 }, // Actuals only
-        'unbudgeted-income': { budgeted: 0, actual: 0, variance: 0, itemCount: 0 }, // Actuals only
+        'unplanned-expense': { budgeted: 0, actual: 0, variance: 0, itemCount: 0 },
+        'unbudgeted-income': { budgeted: 0, actual: 0, variance: 0, itemCount: 0 },
     };
 
     Object.entries(varianceDataByCategory).forEach(([categoryStringKey, items]) => {
@@ -272,7 +269,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
             });
             if (catKey === 'income' || catKey === 'unbudgeted-income') {
                 totals[catKey].variance = totals[catKey].actual - totals[catKey].budgeted;
-            } else { // Expenses, Goals, Debt, Unplanned
+            } else {
                 totals[catKey].variance = totals[catKey].budgeted - totals[catKey].actual;
             }
          }
@@ -308,7 +305,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
      else if (isUnbudgeted) { statusText = `${isIncomeCategory ? '+' : '-'}${formatCurrency(actualValue)} (Unbudgeted)`; statusColor = isIncomeCategory ? 'text-accent' : 'text-destructive'; }
      else if (actual === null) { statusText = `${isIncomeCategory ? '-' : '+'}${formatCurrency(budgetedValue)} (Not ${isIncomeCategory ? 'Realized' : 'Spent'})`; statusColor = isIncomeCategory ? 'text-destructive' : 'text-accent'; }
      else {
-        const threshold = Math.max(Math.abs(budgetedValue * 0.05), 50); // 5% or 50 KES, whichever is larger
+        const threshold = Math.max(Math.abs(budgetedValue * 0.05), 50);
         if (Math.abs(variance) <= threshold && budgetedValue !== 0) { statusText = 'On Track'; statusColor = 'text-primary'; }
         else if (isFavorable && (budgetedValue !== 0 || actualValue !== 0)) { statusText = `+${formatCurrency(Math.abs(variance))} (Favorable)`; statusColor = 'text-accent'; }
         else if (!isFavorable && (budgetedValue !== 0 || actualValue !== 0)) { statusText = `-${formatCurrency(Math.abs(variance))} (Unfavorable)`; statusColor = 'text-destructive'; }
@@ -362,7 +359,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
             <div>
                 <CardTitle className="flex items-center gap-2"><PieChartIcon className="h-5 w-5 text-primary"/>Budget Variance Report</CardTitle>
                 <CardDescription>
-                    Compares actuals from <span className='font-semibold'>{formatDateForStatements(startDate, "N/A")}</span> to <span className='font-semibold'>{formatDateForStatements(endDate, "N/A")}</span>
+                    Compares actuals from <span className='font-semibold'>{formatDateForStatements(startDate)}</span> to <span className='font-semibold'>{formatDateForStatements(endDate)}</span>
                     {` `}against cumulative & prorated budget from <span className='font-semibold'>{budgetPeriodRangeForDisplay}</span>.
                 </CardDescription>
                 <p className='text-xs text-muted-foreground pt-1 flex items-center gap-1'><Info size={14}/>Items marked with * are unplanned/unbudgeted. Overall Variance is (Net Actual - Net Budgeted).</p>
@@ -406,7 +403,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
                 <DialogHeader>
                     <DialogTitle>Detailed Budget Variance: {budgetPeriodRangeForDisplay}</DialogTitle>
                     <DialogDescription>
-                        Breakdown of budgeted vs. actual amounts for the period {formatDateForStatements(startDate, "N/A")} to {formatDateForStatements(endDate, "N/A")}.
+                        Breakdown of budgeted vs. actual amounts for the period {formatDateForStatements(startDate)} to {formatDateForStatements(endDate)}.
                     </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="max-h-[70vh] pr-2">
@@ -454,3 +451,4 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 };
 
 export default BudgetVarianceReportSection;
+
