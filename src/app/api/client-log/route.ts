@@ -1,7 +1,7 @@
 
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { ClientLogPayloadSchema } from '@/lib/schemas';
 
 export async function POST(request: Request) {
@@ -9,8 +9,8 @@ export async function POST(request: Request) {
   let logContextBase: Record<string, any> = {};
 
   try {
-    const { userId: clerkUserId } = auth();
-    effectiveUserId = clerkUserId;
+    const user = await currentUser();
+    effectiveUserId = user?.id || null;
 
     let rawPayload;
     try {
@@ -52,8 +52,6 @@ export async function POST(request: Request) {
     const serverLevel = payload.level === 'log' ? 'info' : payload.level;
     const logMessage = `[Client ${payload.level.toUpperCase()}] ${payload.message}`;
 
-    // This part is for processing the client's log and printing it to the server console.
-    // It's correct to use console.* here for this purpose.
     switch (serverLevel) {
       case 'info':
         console.log(logMessage, contextForLog);
@@ -87,5 +85,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: 'Failed to process client log on server' }, { status: 500 });
   }
 }
-
     

@@ -1,7 +1,7 @@
 
 // src/app/api/sync/route.ts
 import { NextResponse } from 'next/server';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { currentUser, clerkClient } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem, InvestmentItem } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
@@ -32,17 +32,18 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  const { userId, user: clerkUser } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   const logContextBase = { userId: userId || 'unknown-sync-get', operation: 'GET /api/sync', apiRoute: '/api/sync' };
 
-  if (!userId || !clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
-    console.warn(`[API /api/sync] Sync API: Unauthorized access attempt (GET). User, or primary email missing. User: ${userId || 'unknown'}`, logContextBase);
+  if (!user || !userId || !user.primaryEmailAddress?.emailAddress) {
+    console.warn(`[API /api/sync] Sync API: Unauthorized access attempt (GET). User, ID, or primary email missing. User: ${userId || 'unknown'}`, logContextBase);
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in or primary email missing.' }, { status: 401 });
     return addCorsHeaders(response);
   }
 
   try {
-    await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
+    await ensureUserInDb(userId, user.primaryEmailAddress.emailAddress, user.fullName);
     console.debug(`[API /api/sync] Sync API: User ensured in DB successfully. User: ${userId}`, logContextBase);
   } catch (dbError: any) {
     console.error(`[API /api/sync] Sync API: Failed to ensure user in DB during sync GET. User: ${userId}`, { error: dbError, ...logContextBase });
@@ -95,13 +96,13 @@ export async function GET() {
 
 
     const ownedReviewsMap: Record<string, WeeklyReviewData> = {};
-    ownedReviewsPrisma.forEach(review => {
-      ownedReviewsMap[review.weekKey] = {
-        ownerId: review.userId,
-        ownerUsername: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress,
-        journal: review.journal || "",
-        transactionComments: typeof review.transactionComments === 'object' && review.transactionComments !== null ? review.transactionComments as Record<string, string> : {},
-        weekKey: review.weekKey,
+    ownedReviewsPrisma.forEach(reviewItem => { // Renamed review to reviewItem to avoid conflict
+      ownedReviewsMap[reviewItem.weekKey] = {
+        ownerId: reviewItem.userId,
+        ownerUsername: user.fullName || user.username || user.primaryEmailAddress?.emailAddress,
+        journal: reviewItem.journal || "",
+        transactionComments: typeof reviewItem.transactionComments === 'object' && reviewItem.transactionComments !== null ? reviewItem.transactionComments as Record<string, string> : {},
+        weekKey: reviewItem.weekKey,
       };
     });
     console.debug(`[API /api/sync] Sync API: Owned reviews mapped. User: ${userId}`, {...logContextBase, count: Object.keys(ownedReviewsMap).length});
@@ -132,7 +133,7 @@ export async function GET() {
           journal: originalReview.journal || "",
           transactionComments: typeof originalReview.transactionComments === 'object' && originalReview.transactionComments !== null ? originalReview.transactionComments as Record<string, string> : {},
           weekKey: originalReview.weekKey,
-          sharedWith: [userId]
+          sharedWith: [userId] // Current user is the one it's shared with
         };
       }
     });
@@ -173,5 +174,4 @@ export async function GET() {
     return addCorsHeaders(response);
   }
 }
-
     

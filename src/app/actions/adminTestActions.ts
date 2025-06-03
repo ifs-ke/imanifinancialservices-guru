@@ -3,15 +3,15 @@
 'use server';
 
 import prisma from '@/lib/prisma';
-import { auth } from '@clerk/nextjs/server';
-import { hashData, verifyHash } // verifyHash might not be directly used here but good to have if we expand
-from '@/lib/storage-utils';
+import { currentUser } from '@clerk/nextjs/server';
+import { hashData } from '@/lib/storage-utils';
 import { ensureUserInDb } from '@/app/actions/shareActions';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 
 export async function checkDatabaseConnection(): Promise<{ success: boolean; message: string; data?: any; duration?: number }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
@@ -29,23 +29,23 @@ export async function checkDatabaseConnection(): Promise<{ success: boolean; mes
 }
 
 export async function saveTestData(data: string): Promise<{ success: boolean; message: string; entryId?: string; duration?: number }> {
-  const { userId, user: clerkUser } = auth();
-  if (!userId) {
+  const user = await currentUser();
+  const userId = user?.id;
+
+  if (!user || !userId) {
     return { success: false, message: 'User not authenticated.' };
   }
-  if (!clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
+  if (!user.primaryEmailAddress?.emailAddress) {
     return { success: false, message: 'User not authenticated or essential Clerk user details (like primary email) are missing.' };
   }
   if (!data || typeof data !== 'string' || data.trim() === '') {
     return { success: false, message: 'Test data cannot be empty.' };
   }
 
-  const primaryEmail = clerkUser.primaryEmailAddress.emailAddress;
-
-
+  const primaryEmail = user.primaryEmailAddress.emailAddress;
   const startTime = performance.now();
   try {
-    await ensureUserInDb(userId, primaryEmail, clerkUser.fullName);
+    await ensureUserInDb(userId, primaryEmail, user.fullName);
     console.info(`[AdminActions] User ${userId} ensured in DB. Proceeding to save test data.`);
 
     const newEntry = await prisma.testEntry.create({
@@ -68,7 +68,8 @@ export async function saveTestData(data: string): Promise<{ success: boolean; me
 }
 
 export async function fetchTestData(): Promise<{ success: boolean; message: string; data?: { id: string; data: string; createdAt: Date } | null; duration?: number }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
@@ -97,7 +98,8 @@ export async function fetchTestData(): Promise<{ success: boolean; message: stri
 }
 
 export async function getHashForServerComparison(dataString: string): Promise<{ success: boolean; serverHash?: string; duration?: number; message?: string }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
@@ -116,7 +118,8 @@ export async function getHashForServerComparison(dataString: string): Promise<{ 
 }
 
 export async function getHashForServerPreparedObject(rawData: any): Promise<{ success: boolean; serverPreparedString?: string; serverHash?: string; duration?: number; message?: string }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
@@ -136,27 +139,23 @@ export async function getHashForServerPreparedObject(rawData: any): Promise<{ su
   }
 }
 
-// --- New Database CRUD Test Actions ---
 export async function createMultipleTestEntries(entriesData: { data: string }[]): Promise<{ success: boolean; message: string; createdIds?: string[]; duration?: number }> {
-  const { userId, user: clerkUser } = auth();
-   if (!userId) {
+  const user = await currentUser();
+  const userId = user?.id;
+  if (!user || !userId) {
     return { success: false, message: 'User not authenticated.' };
   }
-  if (!clerkUser || !clerkUser.primaryEmailAddress?.emailAddress) {
+  if (!user.primaryEmailAddress?.emailAddress) {
     return { success: false, message: 'User not authenticated or essential Clerk user details (like primary email) are missing.' };
   }
   const startTime = performance.now();
   try {
-    await ensureUserInDb(userId, clerkUser.primaryEmailAddress.emailAddress, clerkUser.fullName);
+    await ensureUserInDb(userId, user.primaryEmailAddress.emailAddress, user.fullName);
     const createdEntries = await prisma.testEntry.createMany({
       data: entriesData.map(entry => ({ userId, data: entry.data })),
     });
-    // Note: createMany for PostgreSQL doesn't return IDs directly in the same way.
-    // We'll fetch them back for confirmation if needed, or just return count.
-    // For simplicity, returning count for now.
     const duration = performance.now() - startTime;
     console.info(`[AdminActions] Created ${createdEntries.count} test entries for user ${userId}.`, { duration });
-    // Fetching IDs to return
     const newEntries = await prisma.testEntry.findMany({
         where: {userId},
         orderBy: { createdAt: 'desc'},
@@ -171,7 +170,8 @@ export async function createMultipleTestEntries(entriesData: { data: string }[])
 }
 
 export async function readAllTestEntries(): Promise<{ success: boolean; message: string; entries?: { id: string; data: string }[]; duration?: number }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
@@ -191,12 +191,13 @@ export async function readAllTestEntries(): Promise<{ success: boolean; message:
 }
 
 export async function updateSingleTestEntry(id: string, newData: string): Promise<{ success: boolean; message: string; updatedId?: string; duration?: number }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
     const updatedEntry = await prisma.testEntry.update({
-      where: { id, userId }, // Ensure user owns the entry
+      where: { id, userId }, 
       data: { data: newData },
     });
     const duration = performance.now() - startTime;
@@ -210,12 +211,13 @@ export async function updateSingleTestEntry(id: string, newData: string): Promis
 }
 
 export async function deleteSingleTestEntry(id: string): Promise<{ success: boolean; message: string; deletedId?: string; duration?: number }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
     const deletedEntry = await prisma.testEntry.delete({
-      where: { id, userId }, // Ensure user owns the entry
+      where: { id, userId },
     });
     const duration = performance.now() - startTime;
     console.info(`[AdminActions] Deleted test entry ${id} for user ${userId}.`, { duration });
@@ -228,7 +230,8 @@ export async function deleteSingleTestEntry(id: string): Promise<{ success: bool
 }
 
 export async function deleteAllUserTestEntries(): Promise<{ success: boolean; message: string; count?: number; duration?: number }> {
-  const { userId } = auth();
+  const user = await currentUser();
+  const userId = user?.id;
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
@@ -246,45 +249,46 @@ export async function deleteAllUserTestEntries(): Promise<{ success: boolean; me
 }
 
 export async function getClerkUserInfo(): Promise<{ success: boolean; message: string; userInfo?: Record<string, any>; duration?: number }> {
-  const { userId, user: clerkUser } = auth();
+  const user = await currentUser();
   const startTime = performance.now();
 
-  if (!userId) {
-    return { success: false, message: 'User not authenticated.', duration: performance.now() - startTime };
-  }
-  // If userId is present but clerkUser is null, it might indicate a hydration delay.
-  if (!clerkUser) {
+  if (!user || !user.id) {
     return { 
         success: false, 
-        message: `User is authenticated (ID: ${userId}), but full Clerk user details are not available at this moment. This can sometimes happen if the session is new or still loading. Try again shortly.`, 
+        message: 'User not authenticated (currentUser returned null or no ID).', 
         duration: performance.now() - startTime 
+    };
+  }
+  // With currentUser(), if `user` is non-null, it should be fully populated.
+  // The case where `user.id` is present but other details are missing is less likely with currentUser() than with `auth().user`.
+  if (!user.primaryEmailAddress?.emailAddress) {
+    return {
+        success: false,
+        message: `User is authenticated (ID: ${user.id}), but essential details like primary email are missing from Clerk. This might indicate an issue with the Clerk user record.`,
+        duration: performance.now() - startTime
     };
   }
 
   try {
     const userInfoToReturn = {
-      id: clerkUser.id,
-      primaryEmail: clerkUser.primaryEmailAddress?.emailAddress,
-      fullName: clerkUser.fullName,
-      firstName: clerkUser.firstName,
-      lastName: clerkUser.lastName,
-      username: clerkUser.username,
-      createdAt: clerkUser.createdAt ? new Date(clerkUser.createdAt).toLocaleString() : null,
-      updatedAt: clerkUser.updatedAt ? new Date(clerkUser.updatedAt).toLocaleString() : null,
-      lastSignInAt: clerkUser.lastSignInAt ? new Date(clerkUser.lastSignInAt).toLocaleString() : null,
-      roleFromPrivateMetadata: clerkUser.privateMetadata?.role || 'Role not set',
-      // Only include metadata if necessary and be mindful of what's exposed
-      // publicMetadata: clerkUser.publicMetadata,
-      // privateMetadata: clerkUser.privateMetadata, // Be very cautious exposing privateMetadata
-      // unsafeMetadata: clerkUser.unsafeMetadata,   // Be very cautious exposing unsafeMetadata
+      id: user.id,
+      primaryEmail: user.primaryEmailAddress?.emailAddress,
+      fullName: user.fullName,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      createdAt: user.createdAt ? new Date(user.createdAt).toLocaleString() : null,
+      updatedAt: user.updatedAt ? new Date(user.updatedAt).toLocaleString() : null,
+      lastSignInAt: user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString() : null,
+      roleFromPrivateMetadata: user.privateMetadata?.role || 'Role not set',
     };
     const duration = performance.now() - startTime;
-    console.info(`[AdminActions] Fetched Clerk user info. User: ${userId}`, { userId, duration });
+    console.info(`[AdminActions] Fetched Clerk user info. User: ${user.id}`, { userId: user.id, duration });
     return { success: true, message: 'Clerk user information fetched.', userInfo: userInfoToReturn, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
-    console.error(`[AdminActions] Failed to fetch Clerk user info. User: ${userId}`, { error, userId, duration });
-    return { success: false, message: `Failed to fetch Clerk user info: ${error.message}`, duration };
+    console.error(`[AdminActions] Failed to process Clerk user info. User: ${user.id}`, { error, userId: user.id, duration });
+    return { success: false, message: `Failed to process Clerk user info: ${error.message}`, duration };
   }
 }
     

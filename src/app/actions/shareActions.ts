@@ -9,11 +9,12 @@ import {
     RevokeShareInputSchema,
     GetSharedWithUsersInputSchema
 } from '@/lib/schemas';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { currentUser, clerkClient } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 
 export async function searchUserByEmailApi(email: string): Promise<UserShareInfo | null> {
-    const { userId: currentUserId } = auth();
+    const user = await currentUser();
+    const currentUserId = user?.id;
     if (!currentUserId) {
         console.warn('[ShareActions] searchUserByEmailApi: Unauthenticated attempt.', { apiAction: 'searchUserByEmailApi' });
         throw new Error('User not authenticated.');
@@ -50,7 +51,8 @@ export async function searchUserByEmailApi(email: string): Promise<UserShareInfo
 }
 
 export async function shareReviewApi(weekKey: string, targetUserId: string): Promise<void> {
-    const { userId: currentUserId } = auth();
+    const user = await currentUser();
+    const currentUserId = user?.id;
     if (!currentUserId) {
         console.warn('[ShareActions] shareReviewApi: Unauthenticated attempt.', { apiAction: 'shareReviewApi' });
         throw new Error('User not authenticated.');
@@ -92,9 +94,9 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
         });
         console.info(`[ShareActions] shareReviewApi: Review ${weekKey} owned by ${currentUserId} shared with ${targetUserId}.`, { currentUserId, targetUserId, weekKey });
     } catch (error: any) {
-        if (error.code === 'P2002') {
+        if (error.code === 'P2002') { // Unique constraint violation
             console.warn(`[ShareActions] shareReviewApi: Review ${weekKey} by ${currentUserId} already shared with ${targetUserId}.`, { currentUserId, targetUserId, weekKey });
-            return;
+            return; // Or throw a specific error if preferred
         }
         console.error('[ShareActions] Error sharing review in DB', { error, weekKey, reviewOwnerId: currentUserId, sharedWithId: targetUserId });
         throw new Error(`Failed to share review: ${error.message}`);
@@ -102,7 +104,8 @@ export async function shareReviewApi(weekKey: string, targetUserId: string): Pro
 }
 
 export async function revokeShareApi(weekKey: string, targetUserId: string): Promise<void> {
-    const { userId: currentUserId } = auth();
+    const user = await currentUser();
+    const currentUserId = user?.id;
     if (!currentUserId) {
         console.warn('[ShareActions] revokeShareApi: Unauthenticated attempt.', { apiAction: 'revokeShareApi' });
         throw new Error('User not authenticated.');
@@ -118,7 +121,7 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
         await prisma.sharedReview.deleteMany({
             where: {
                 weekKey: weekKey,
-                reviewOwnerId: currentUserId,
+                reviewOwnerId: currentUserId, // Only the owner can revoke their shares
                 sharedWithId: targetUserId,
             },
         });
@@ -130,7 +133,8 @@ export async function revokeShareApi(weekKey: string, targetUserId: string): Pro
 }
 
 export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareInfo[]> {
-    const { userId: currentUserId } = auth();
+    const user = await currentUser();
+    const currentUserId = user?.id;
     if (!currentUserId) {
         console.warn('[ShareActions] getSharedWithUsersApi: Unauthenticated attempt.', { apiAction: 'getSharedWithUsersApi' });
         throw new Error('User not authenticated.');
@@ -146,7 +150,7 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
         const shares = await prisma.sharedReview.findMany({
             where: {
                 weekKey: weekKey,
-                reviewOwnerId: currentUserId,
+                reviewOwnerId: currentUserId, // Assuming only the owner sees who they shared with
             },
             select: {
                 sharedWithId: true,
@@ -185,12 +189,22 @@ export async function ensureUserInDb(userId: string, email: string, name?: strin
                     name: name,
                 },
             });
+        } else if (user.email !== email || (name && user.name !== name)) {
+            // Optionally update email or name if they've changed in Clerk
+            console.info(`[ShareActions] User ${userId} found. Updating details...`, { userId, newEmail: email, oldEmail: user.email, newName: name, oldName: user.name });
+            user = await prisma.user.update({
+                where: { id: userId },
+                data: {
+                    email: email,
+                    name: name ?? user.name, // Keep old name if new one is null
+                },
+            });
         }
         return user;
     } catch (error: any) {
         console.error('[ShareActions] Error ensuring user in DB', { error, userId, email, name });
+        // Re-throw the error to be handled by the caller, or handle more specifically
         throw new Error('Failed to ensure user record in database.');
     }
 }
-
     

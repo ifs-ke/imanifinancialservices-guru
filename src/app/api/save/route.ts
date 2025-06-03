@@ -1,7 +1,7 @@
 
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-import { auth, clerkClient } from '@clerk/nextjs/server'; // Added clerkClient
+import { currentUser, clerkClient } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, InvestmentItem } from '@/lib/types';
 import { hashData } from '@/lib/storage-utils';
@@ -83,20 +83,23 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  const { userId, user: authClerkUser } = auth(); // Renamed user to authClerkUser for clarity
+  const user = await currentUser();
+  const userId = user?.id;
   const logContextBase = { userId: userId || 'unknown-save-post', operation: 'POST /api/save', apiRoute: '/api/save' };
 
-  if (!userId) {
-    console.warn(`[API /api/save] Save API: Unauthorized save attempt: User not authenticated (no userId).`, logContextBase);
+  if (!user || !userId) {
+    console.warn(`[API /api/save] Save API: Unauthorized save attempt: User not authenticated (no userId from currentUser).`, logContextBase);
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response);
   }
 
-  let userEmailForDb: string | undefined | null = authClerkUser?.primaryEmailAddress?.emailAddress;
-  let userNameForDb: string | undefined | null = authClerkUser?.fullName;
+  let userEmailForDb: string | undefined | null = user.primaryEmailAddress?.emailAddress;
+  let userNameForDb: string | undefined | null = user.fullName;
 
+  // Clerk's currentUser() should be more reliable for full user object, but we keep this as a safeguard
+  // or if specific scenarios required a re-fetch (though less likely with currentUser).
   if (!userEmailForDb) {
-    console.warn(`[API /api/save] Primary email not immediately available from auth().user for ${userId}. Attempting direct fetch from Clerk.`, logContextBase);
+    console.warn(`[API /api/save] Primary email not available from currentUser() for ${userId}. This is unexpected. Attempting direct fetch.`, logContextBase);
     try {
       const fetchedClerkUser = await clerkClient.users.getUser(userId);
       userEmailForDb = fetchedClerkUser?.primaryEmailAddress?.emailAddress;
@@ -106,7 +109,7 @@ export async function POST(request: Request) {
         const response = NextResponse.json({ error: 'Failed to retrieve essential user information from authentication provider. Cannot save data.' }, { status: 500 });
         return addCorsHeaders(response);
       }
-      console.info(`[API /api/save] Successfully fetched email for user ${userId} via clerkClient.`, logContextBase);
+      console.info(`[API /api/save] Successfully fetched email for user ${userId} via clerkClient after initial miss from currentUser().`, logContextBase);
     } catch (clerkError: any) {
       console.error(`[API /api/save] Save API: CRITICAL - Error fetching user details from Clerk for ${userId}. Cannot ensure user in DB.`, { error: clerkError, ...logContextBase });
       const response = NextResponse.json({ error: 'Failed to communicate with authentication provider to verify user details. Cannot save data.' }, { status: 500 });
@@ -115,7 +118,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Ensure userEmailForDb is a string when passed to ensureUserInDb
     await ensureUserInDb(userId, userEmailForDb!, userNameForDb);
   } catch (dbError: any) {
     console.error(`[API /api/save] Save API: Failed to ensure user in DB. User: ${userId}`, { error: dbError, ...logContextBase });
@@ -210,7 +212,7 @@ export async function POST(request: Request) {
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
       await tx.weeklyReview.deleteMany({ where: { userId } });
-      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } });
+      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } }); // Delete shares owned by this user
 
       console.debug(`[API /api/save] Save API: Delete operations completed. User: ${userId}`, { userId });
 
@@ -251,6 +253,7 @@ export async function POST(request: Request) {
             weekKey,
             journal: reviewData.journal,
             transactionComments: reviewData.transactionComments || undefined,
+            // sharedWith details are handled by SharedReview table
           })),
         });
       }
@@ -269,5 +272,4 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 }
-
     
