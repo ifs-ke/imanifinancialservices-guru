@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle, CalendarClock, Edit3, XCircle } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Coins, FileUp, FileDown, List, BrainCircuit, Loader2, AlertTriangle, CalendarClock, Edit3, XCircle, BarChartHorizontalBig } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore';
 import { useBudgetStore, selectTotalBudgetedIncome, selectTotalBudgetedExpenses, selectTotalBudgetedDebt } from '@/store/budgetStore';
@@ -34,10 +34,10 @@ import Papa from 'papaparse';
 
 
 export default function DebtPage() {
-  const { debts, deleteDebt, setDebts } = useDebtStore(); // Added setDebts if mass delete needs it
+  const { debts, deleteDebt, setDebts } = useDebtStore();
   const totalBudgetedIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalBudgetedExpenses = useBudgetStore(selectTotalBudgetedExpenses);
-  const totalBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt);
+  const totalBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt); // Used for analysis dialog
   const { toast } = useToast();
 
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
@@ -114,26 +114,23 @@ export default function DebtPage() {
 
   const confirmMassDelete = () => {
     if (selectedDebtIds.length > 0) {
-      // Directly call deleteDebt for each selected ID.
-      // This might be less efficient than a dedicated batch delete in the store,
-      // but works with the current store API.
       const remainingDebts = debts.filter(debt => !selectedDebtIds.includes(debt.id));
-      setDebts(remainingDebts); // Assuming setDebts replaces all debts
+      setDebts(remainingDebts); 
       toast({ title: 'Batch Delete Successful', description: `${selectedDebtIds.length} debt(s) deleted.` });
-      setRowSelection({}); // Clear selection
+      setRowSelection({}); 
     }
     setIsMassDeleteDialogOpen(false);
   };
 
   useEffect(() => {
-    const fundsForDebtPayment = totalBudgetedDebtPayment;
+    const fundsForDebtPaymentFromBudget = totalBudgetedDebtPayment; // Use the specific budgeted amount for debt
     const totalDebtPrincipal = debts.reduce((sum, debt) => sum + debt.principal, 0);
 
     if (totalDebtPrincipal <= 0) {
         setDebtPayoffTimeline("Debt Free!");
         return;
     }
-    if (fundsForDebtPayment <= 0) {
+    if (fundsForDebtPaymentFromBudget <= 0) {
         setDebtPayoffTimeline("Cannot estimate: No funds budgeted for debt.");
         return;
     }
@@ -145,8 +142,8 @@ export default function DebtPage() {
             interestWarning = true;
         }
     });
-    if (fundsForDebtPayment < totalMinPayments) {
-        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low." : "Warning: Budgeted debt funds < min payments.");
+    if (fundsForDebtPaymentFromBudget < totalMinPayments) {
+        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments too low relative to interest." : "Warning: Budgeted debt funds < total min payments.");
         return;
     }
 
@@ -156,22 +153,30 @@ export default function DebtPage() {
 
     while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
         months++;
-        let availablePayment = fundsForDebtPayment;
+        let availablePayment = fundsForDebtPaymentFromBudget;
         currentDebts.forEach(debt => { if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12); });
+        
+        // Pay minimums first
         currentDebts.forEach(debt => {
              if (debt.principal > 0 && availablePayment > 0.01) {
-                 const payment = Math.min(debt.minPayment, debt.principal, availablePayment);
-                 debt.principal -= payment;
-                 availablePayment -= payment;
+                 const paymentTowardsMin = Math.min(debt.minPayment, debt.principal, availablePayment);
+                 debt.principal -= paymentTowardsMin;
+                 availablePayment -= paymentTowardsMin;
              }
         });
+        // Apply extra to highest interest (Avalanche)
         if (availablePayment > 0.01) {
-             currentDebts.sort((a, b) => { const rateDiff = b.interestRate - a.interestRate; return rateDiff !== 0 ? rateDiff : b.principal - a.principal; });
+             currentDebts.sort((a, b) => { 
+                 const rateDiff = b.interestRate - a.interestRate; 
+                 if (rateDiff !== 0) return rateDiff;
+                 // If rates are equal, prioritize higher principal to break ties or if one is much larger
+                 return b.principal - a.principal; 
+             });
              for (const debt of currentDebts) {
                  if (debt.principal > 0.01 && availablePayment > 0.01) {
-                    const payment = Math.min(availablePayment, debt.principal);
-                    debt.principal -= payment;
-                    availablePayment -= payment;
+                    const extraPayment = Math.min(availablePayment, debt.principal);
+                    debt.principal -= extraPayment;
+                    availablePayment -= extraPayment;
                   }
                   if(availablePayment <= 0.01) break; 
               }
@@ -193,12 +198,32 @@ export default function DebtPage() {
 
   const handleAnalyzeDebt = async () => {
       setIsAnalyzing(true); setAnalysisError(null); setAnalysisResult(null); setIsAnalysisDialogOpen(true);
-      if (debts.length === 0) { setAnalysisError("Add debts first."); setIsAnalyzing(false); return; }
-      const analysisInput: DebtAnalysisInput = { debts, totalBudgetedIncome, totalBudgetedExpenses };
+      if (debts.length === 0) { setAnalysisError("Add debts first to get an analysis."); setIsAnalyzing(false); return; }
+      
+      // The AI flow uses totalBudgetedIncome and totalBudgetedExpenses to determine available funds.
+      // This is different from totalBudgetedDebtPayment which is what the user explicitly set aside.
+      // The AI will determine optimal payments based on the *overall* financial picture.
+      const analysisInput: DebtAnalysisInput = { 
+          debts: debts.map(d => ({
+            id: d.id, // Ensure ID is passed for matching in output
+            description: d.description,
+            principal: d.principal,
+            interestRate: d.interestRate,
+            minPayment: d.minPayment,
+            term: d.term,
+          })),
+          totalBudgetedIncome, // From budget store
+          totalBudgetedExpenses, // From budget store (non-debt expenses)
+      };
       try {
+          console.log("Sending to AI for analysis:", JSON.stringify(analysisInput, null, 2));
           const result = await analyzeDebtStrategy(analysisInput);
           setAnalysisResult(result);
-      } catch (error: any) { console.error("Debt analysis failed:", error); setAnalysisError(`Analysis failed: ${error.message || 'Please try again.'}`); toast({ title: "Analysis Failed", variant: "destructive" }); }
+      } catch (error: any) { 
+          console.error("Debt analysis failed:", error); 
+          setAnalysisError(`Analysis failed: ${error.message || 'Please try again.'}`); 
+          toast({ title: "Analysis Failed", description: `Error: ${error.message || 'Unknown error'}`, variant: "destructive" }); 
+      }
       finally { setIsAnalyzing(false); }
   };
   const handleAnalysisDialogClose = () => { setIsAnalysisDialogOpen(false); };
@@ -206,7 +231,7 @@ export default function DebtPage() {
   const handleExportCsv = useCallback(() => {
       if (debts.length === 0) { toast({ title: "No data to export" }); return; }
       const csvRows = debts.map(debt => ({
-        Description: debt.description.replace(/"/g, "''"), // Sanitize description
+        Description: debt.description.replace(/"/g, "''"), 
         'Principal (KES)': debt.principal,
         'Interest Rate (%)': debt.interestRate,
         'Min Payment (KES)': debt.minPayment,
@@ -235,7 +260,7 @@ export default function DebtPage() {
       >
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Debt</Button>
-           <Button onClick={handleAnalyzeDebt} disabled={isAnalyzing || debts.length === 0}> {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BrainCircuit className="mr-2 h-4 w-4" />} {isAnalyzing ? 'Analyzing...' : 'Suggest Strategy'}</Button>
+           <Button onClick={handleAnalyzeDebt} disabled={isAnalyzing || debts.length === 0}> {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BarChartHorizontalBig className="mr-2 h-4 w-4" />} {isAnalyzing ? 'Analyzing...' : 'Analyze & Reconcile Debts'}</Button>
            <Button asChild variant="default"><Link href="/debt/import"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Link></Button>
             <Button variant="secondary" onClick={handleExportCsv} disabled={debts.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
         </div>
@@ -267,7 +292,6 @@ export default function DebtPage() {
                 <div className="mt-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center border-t pt-4">
                     <span className="text-sm text-muted-foreground mb-2 sm:mb-0">{selectedDebtIds.length} selected</span>
                     <div className="flex flex-wrap gap-2">
-                        {/* Batch update for debts could be added here if needed */}
                         <Button size="sm" variant="destructive" onClick={handleMassDeleteClick}>
                             <Trash2 className="mr-2 h-4 w-4" /> Delete Selected
                         </Button>
@@ -296,7 +320,17 @@ export default function DebtPage() {
       </main>
 
          <DebtFormSheet isOpen={isFormSheetOpen} onClose={handleFormSheetClose} debt={editingDebt} />
-         <DebtAnalysisDialog isOpen={isAnalysisDialogOpen} onClose={handleAnalysisDialogClose} analysisResult={analysisResult} isLoading={isAnalyzing} error={analysisError} formatCurrency={formatCurrency} />
+         <DebtAnalysisDialog 
+            isOpen={isAnalysisDialogOpen} 
+            onClose={handleAnalysisDialogClose} 
+            analysisResult={analysisResult} 
+            isLoading={isAnalyzing} 
+            error={analysisError} 
+            formatCurrency={formatCurrency}
+            totalBudgetedDebtPayment={totalBudgetedDebtPayment} // Pass this down
+            totalBudgetedIncome={totalBudgetedIncome} // Pass this down
+            totalBudgetedExpenses={totalBudgetedExpenses} // Pass this down
+         />
 
         <AlertDialog open={!!debtToDelete} onOpenChange={(open) => !open && setDebtToDelete(null)}>
         {debtToDelete && (
