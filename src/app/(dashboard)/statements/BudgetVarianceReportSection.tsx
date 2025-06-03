@@ -14,6 +14,7 @@ import type { TransactionWithId, BudgetItem, BudgetItemCategory as InternalBudge
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Separator } from '@/components/ui/separator';
 import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, parse, differenceInDays, getDaysInMonth, isEqual, isValid as isDateValid } from 'date-fns';
+import { Badge } from '@/components/ui/badge'; // Added import
 
 interface BudgetVarianceReportSectionProps {
   startDate?: Date;
@@ -372,3 +373,4 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 };
 
 export default BudgetVarianceReportSection;
+
