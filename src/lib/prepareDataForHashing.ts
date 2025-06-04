@@ -47,12 +47,23 @@ export function prepareDataForHashing(data: SyncDataInput): any {
       return undefined;
     };
 
-    const toFixedIfNumber = (value: number | undefined | null, digits: number): string | undefined | null => {
-        if (typeof value === 'number' && !isNaN(value)) {
-            return value.toFixed(digits);
+    const toFixedIfNumber = (value: number | string | undefined | null, digits: number): string | undefined | null => {
+        if (value == null) { // Handles undefined and null correctly
+            return value;
         }
-        return value === undefined ? undefined : null;
+        // Attempt to convert to number. This handles both actual numbers and numeric strings.
+        const num = Number(value);
+
+        if (isNaN(num)) {
+            // If conversion results in NaN (e.g., original was a non-numeric string, or already NaN)
+            // For hashing stability, it's important to have a consistent output.
+            // Schemas should ideally prevent non-numeric strings from getting this far.
+            // Return null if the value (even if a string) couldn't be parsed into a valid number.
+            return null;
+        }
+        return num.toFixed(digits);
     };
+
 
     const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
         if (!Array.isArray(txs)) return [];
