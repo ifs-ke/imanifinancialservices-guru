@@ -25,8 +25,8 @@ import {
   deleteSingleTestEntry,
   deleteAllUserTestEntries,
   getClerkUserInfo,
-  verifyClientDataHashAction, // New action
-  simulateSaveWithPotentialMismatchAction, // New action
+  verifyClientDataHashAction,
+  simulateSaveWithPotentialMismatchAction,
 } from '@/app/actions/adminTestActions';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon, Server, Timer, Link2, Info, Eye, Copy as CopyIcon, Database, CircleSlash, UserCircle2, ShieldCheck, ShieldAlert, FileSignature, Loader2 } from 'lucide-react';
@@ -130,7 +130,6 @@ const AdminConnectionTestPage: React.FC = () => {
   const [isServerClerkUserInfoLoading, setIsServerClerkUserInfoLoading] = useState(false);
   const [serverClerkUserInfoError, setServerClerkUserInfoError] = useState<string | null>(null);
 
-  // State for Data Integrity Test
   const [integrityTestData, setIntegrityTestData] = useState<any>(
     { id: "tx_1", date: new Date().toISOString(), description: "Coffee", amount: -3.50, type: "expense", items: [{id:1, qty:2}, {id:2, qty:1}] }
   );
@@ -139,10 +138,9 @@ const AdminConnectionTestPage: React.FC = () => {
   const [integrityTestServerResult, setIntegrityTestServerResult] = useState<Awaited<ReturnType<typeof verifyClientDataHashAction>> | null>(null);
   const [isIntegrityTesting, setIsIntegrityTesting] = useState(false);
 
-  // State for Save Mismatch Simulation Test
   const [mismatchInitialData, setMismatchInitialData] = useState<any>(null);
   const [mismatchInitialHash, setMismatchInitialHash] = useState<string | null>(null);
-  const [mismatchModifiedDataString, setMismatchModifiedDataString] = useState<string>(''); // Store as string to allow user edit
+  const [mismatchModifiedDataString, setMismatchModifiedDataString] = useState<string>('');
   const [mismatchSimulationResult, setMismatchSimulationResult] = useState<Awaited<ReturnType<typeof simulateSaveWithPotentialMismatchAction>> | null>(null);
   const [isMismatchSimulating, setIsMismatchSimulating] = useState(false);
 
@@ -159,8 +157,14 @@ const AdminConnectionTestPage: React.FC = () => {
 
   const handleDbConnectionTest = async () => {
     setIsDbConnectionTesting(true); setDbConnectionResult(null);
-    const result = await checkDatabaseConnection();
-    setDbConnectionResult(result); setIsDbConnectionTesting(false);
+    try {
+      const result = await checkDatabaseConnection();
+      setDbConnectionResult(result);
+    } catch (error: any) {
+      setDbConnectionResult({ success: false, message: error.message || "Client-side error during DB connection test."});
+    } finally {
+      setIsDbConnectionTesting(false);
+    }
   };
 
   const handleCsStringHashTest = async () => {
@@ -241,8 +245,8 @@ const AdminConnectionTestPage: React.FC = () => {
     const prepared = prepareDataForHashing(initialData);
     const hash = await hashData(stringify(prepared));
     setMismatchInitialHash(hash);
-    setMismatchModifiedDataString(JSON.stringify({ ...initialData, value: 100 }, null, 2)); // Initialize editable data
-    setMismatchSimulationResult(null); // Reset previous simulation result
+    setMismatchModifiedDataString(JSON.stringify({ ...initialData, value: 100 }, null, 2));
+    setMismatchSimulationResult(null);
     toast({ title: "Step 1 Complete", description: "Initial data and hash generated for mismatch test." });
   };
 
@@ -254,7 +258,7 @@ const AdminConnectionTestPage: React.FC = () => {
     setIsMismatchSimulating(true);
     setMismatchSimulationResult(null);
     try {
-      const modifiedData = JSON.parse(mismatchModifiedDataString); // Parse the user-modified string
+      const modifiedData = JSON.parse(mismatchModifiedDataString);
       const result = await simulateSaveWithPotentialMismatchAction(modifiedData, mismatchInitialHash);
       setMismatchSimulationResult(result);
     } catch (error: any) {
@@ -264,11 +268,140 @@ const AdminConnectionTestPage: React.FC = () => {
     }
   };
 
+  const handleSaveTestData = async () => {
+    setIsSavingData(true); setSaveResult(null);
+    try {
+      const result = await saveTestData(testDataInput);
+      setSaveResult(result);
+      if (result.success) toast({ title: "Save Test", description: result.message });
+      else toast({ title: "Save Test Failed", description: result.message, variant: "destructive" });
+    } catch (error: any) {
+      const message = error.message || "An unexpected error occurred during save test.";
+      setSaveResult({ success: false, message });
+      toast({ title: "Save Test Error", description: message, variant: "destructive" });
+    } finally {
+      setIsSavingData(false);
+    }
+  };
+  
+  const handleFetchTestData = async () => {
+    setIsFetchingData(true); setFetchResult(null); setFetchedData(null);
+    try {
+      const result = await fetchTestData();
+      setFetchResult(result);
+      if (result.success && result.data) setFetchedData(result.data);
+      if (result.success) toast({ title: "Fetch Test", description: result.message });
+      else toast({ title: "Fetch Test Failed", description: result.message, variant: "destructive" });
+    } catch (error: any) {
+      const message = error.message || "An unexpected error occurred during fetch test.";
+      setFetchResult({ success: false, message });
+      toast({ title: "Fetch Test Error", description: message, variant: "destructive" });
+    } finally {
+      setIsFetchingData(false);
+    }
+  };
 
-  const handleSaveTestData = async () => { /* ... existing ... */ };
-  const handleFetchTestData = async () => { /* ... existing ... */ };
-  const handleRunCrudTests = async () => { /* ... existing ... */ };
-  const handleFetchServerClerkUserInfo = async () => { /* ... existing ... */ };
+  const handleFetchServerClerkUserInfo = async () => {
+    setIsServerClerkUserInfoLoading(true); setServerClerkUserInfo(null); setServerClerkUserInfoError(null);
+    try {
+      const result = await getClerkUserInfo();
+      if (result.success && result.userInfo) setServerClerkUserInfo(result.userInfo);
+      else if (!result.success) setServerClerkUserInfoError(result.message);
+      toast({ title: "Clerk User Info (Server)", description: result.message, variant: result.success ? "default" : "destructive" });
+    } catch (error: any) {
+      const message = error.message || "An unexpected error occurred fetching server Clerk info.";
+      setServerClerkUserInfoError(message);
+      toast({ title: "Clerk User Info Error", description: message, variant: "destructive" });
+    } finally {
+      setIsServerClerkUserInfoLoading(false);
+    }
+  };
+
+  const handleRunCrudTests = async () => {
+    setIsCrudTesting(true);
+    setCrudTestLog([]);
+    const log = (message: string) => setCrudTestLog(prev => [...prev, message]);
+
+    try {
+      log("Starting CRUD tests...");
+
+      log("Attempting to delete all previous test entries...");
+      const deleteAllRes = await deleteAllUserTestEntries();
+      log(`Delete all result: ${deleteAllRes.message} (Count: ${deleteAllRes.count ?? 'N/A'})`);
+      if (!deleteAllRes.success && deleteAllRes.count === undefined) {
+          throw new Error(`Failed to clear previous test entries: ${deleteAllRes.message}`);
+      }
+
+      log("\nCreating 3 new test entries...");
+      const entriesToCreate = [{ data: "Entry A" }, { data: "Entry B" }, { data: "Entry C" }];
+      const createRes = await createMultipleTestEntries(entriesToCreate);
+      log(`Create multiple result: ${createRes.message}`);
+      if (!createRes.success || !createRes.createdIds || createRes.createdIds.length !== 3) {
+        throw new Error(`Failed to create test entries. Result: ${createRes.message}`);
+      }
+      const [idA, idB, idC] = createRes.createdIds;
+      log(`Created IDs: A=${idA}, B=${idB}, C=${idC}`);
+
+      log("\nReading all test entries...");
+      const readRes = await readAllTestEntries();
+      log(`Read all result: ${readRes.message}`);
+      if (!readRes.success || !readRes.entries) throw new Error("Failed to read test entries.");
+      log(`Found ${readRes.entries.length} entries. Expected 3.`);
+      if (readRes.entries.length !== 3) {
+          log("Entries found: " + JSON.stringify(readRes.entries.map(e => ({id: e.id, data: e.data}))))
+          throw new Error(`Entry count mismatch after create. Expected 3, got ${readRes.entries.length}.`);
+      }
+      const entryBExists = readRes.entries.find(e => e.id === idB && e.data === "Entry B");
+      if (!entryBExists) throw new Error(`Entry B (ID: ${idB}) not found or data mismatch after create.`);
+      log("Initial entries verified.");
+
+      log(`\nUpdating Entry B (ID: ${idB}) to "Entry B - Updated"...`);
+      const updateRes = await updateSingleTestEntry(idB, "Entry B - Updated");
+      log(`Update result: ${updateRes.message}`);
+      if (!updateRes.success) throw new Error(`Failed to update Entry B. Result: ${updateRes.message}`);
+      const readAfterUpdateRes = await readAllTestEntries();
+      const updatedEntryB = readAfterUpdateRes.entries?.find(e => e.id === idB);
+      if (!updatedEntryB || updatedEntryB.data !== "Entry B - Updated") {
+        throw new Error(`Entry B not updated correctly. Found: ${JSON.stringify(updatedEntryB)}`);
+      }
+      log("Entry B updated and verified.");
+
+      log(`\nDeleting Entry A (ID: ${idA})...`);
+      const deleteARes = await deleteSingleTestEntry(idA);
+      log(`Delete A result: ${deleteARes.message}`);
+      if (!deleteARes.success) throw new Error(`Failed to delete Entry A. Result: ${deleteARes.message}`);
+      const readAfterDeleteARes = await readAllTestEntries();
+      if (readAfterDeleteARes.entries?.length !== 2) {
+        throw new Error(`Entry count mismatch after deleting A. Expected 2, got ${readAfterDeleteARes.entries?.length}.`);
+      }
+      if (readAfterDeleteARes.entries?.find(e => e.id === idA)) throw new Error("Entry A still found after deletion.");
+      log("Entry A deleted and verified.");
+
+      log("\nDeleting all remaining test entries for user...");
+      const finalDeleteRes = await deleteAllUserTestEntries();
+      log(`Final delete all result: ${finalDeleteRes.message} (Count: ${finalDeleteRes.count ?? 'N/A'})`);
+      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) {
+        throw new Error(`Failed to delete remaining entries. Expected 2, got ${finalDeleteRes.count ?? 0}. Result: ${finalDeleteRes.message}`);
+      }
+      const readAfterFinalDeleteRes = await readAllTestEntries();
+      if (readAfterFinalDeleteRes.entries?.length !== 0) {
+        throw new Error(`Entries still found after final delete all. Count: ${readAfterFinalDeleteRes.entries?.length}.`);
+      }
+      log("All test entries successfully cleaned up.");
+
+      log("\nCRUD tests completed successfully!");
+      toast({ title: "CRUD Tests", description: "All CRUD operations passed." });
+
+    } catch (error: any) {
+      const message = error.message || "An unexpected error occurred during CRUD tests.";
+      log(`\nCRUD TEST FAILED: ${message}`);
+      log(`Stack: ${error.stack || 'N/A'}`);
+      toast({ title: "CRUD Test Failed", description: message, variant: "destructive" });
+    } finally {
+      setIsCrudTesting(false);
+    }
+  };
+
   const handleZustandDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const dateStr = e.target.value;
     if (dateStr) {
@@ -276,13 +409,12 @@ const AdminConnectionTestPage: React.FC = () => {
       if (isValid(parsedDate)) {
         setStartDate(parsedDate);
       } else {
-        setStartDate(undefined); // Or keep old value, or show error
+        setStartDate(undefined);
       }
     } else {
-      setStartDate(undefined); // Handle empty input
+      setStartDate(undefined);
     }
   };
-
 
   const ResultBadge: React.FC<{ success?: boolean; message?: string; children?: React.ReactNode; duration?: number, variant?: "default" | "destructive" | "secondary" | "outline" | null | undefined, icon?: React.ElementType }> = ({ success, message, children, duration, variant, icon: Icon }) => {
     const actualVariant = success === undefined ? "secondary" : (success ? "default" : "destructive");
@@ -324,16 +456,12 @@ const AdminConnectionTestPage: React.FC = () => {
         <Card className="md:col-span-2">
           <CardHeader><CardTitle className="flex items-center gap-2"><HashIcon size={20}/> Hashing & Data Preparation Consistency</CardTitle><CardDescription>Tests hashing algorithm and data preparation logic consistency between client and server.</CardDescription></CardHeader>
           <CardContent className="space-y-6">
-            
             <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 1: String-to-Hash Consistency</h4><Textarea value={JSON.stringify(csStringTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" /><Button onClick={handleCsStringHashTest} disabled={isCsStringHashTesting} className="w-full">{isCsStringHashTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{isCsStringHashTesting ? 'Testing...' : 'Run String Hash Test'}</Button>{csStringHashError && <ResultBadge success={false} message={csStringHashError}/>}{csClientCalculatedHash && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10"><p>Client Hash: <span className="font-mono">{csClientCalculatedHash.substring(0,20)}...</span></p><p>Server Hash: <span className="font-mono">{csServerCalculatedHash ? csServerCalculatedHash.substring(0,20)+"..." : 'N/A'}</span></p><ResultBadge success={csHashMatchResult===true} message={`Hashes Match: ${csHashMatchResult===true ? 'Yes' : 'No'}`} duration={csServerHashingDuration ?? undefined}/></div>)}</div>
-            
             <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 2: Data Preparation & Hashing Consistency</h4><Textarea value={JSON.stringify(csObjectTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" /><Button onClick={handleCsObjectHashTest} disabled={isCsObjectHashTesting} className="w-full">{isCsObjectHashTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{isCsObjectHashTesting ? 'Testing...' : 'Run Data Prep & Hash Test'}</Button>{csObjectHashError && <ResultBadge success={false} message={csObjectHashError}/>}{csObjClientPreparedString && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10"><ResultBadge success={csObjPrepMatch===true} message={`Prepared Strings Match: ${csObjPrepMatch===true ? 'Yes' : 'No'}`}/><ResultBadge success={csObjHashMatch===true} message={`Hashes Match: ${csObjHashMatch===true ? 'Yes' : 'No'}`}/></div>)}</div>
-            
             <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 3: Client-Side `verifyHash` Utility</h4><Button onClick={handleVerifyHashUtilityTest} className="w-full">Run `verifyHash` Tests</Button>{verifyHashTestResults.length > 0 && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10">{verifyHashTestResults.map((res, i) => (<ResultBadge key={i} success={res.expected === res.actual}>{res.description}: Expected {String(res.expected)}, Got {String(res.actual)}</ResultBadge>))}</div>)}</div>
           </CardContent>
         </Card>
 
-        
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ShieldCheck size={20}/> Data Integrity End-to-End Verification</CardTitle>
@@ -363,7 +491,6 @@ const AdminConnectionTestPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ShieldAlert size={20}/> Save with Stale Hash (Mismatch Simulation)</CardTitle>
@@ -424,7 +551,6 @@ const AdminConnectionTestPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        
         <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Database size={20}/> Database CRUD Operations</CardTitle><CardDescription>Tests Create, Read, Update, Delete operations on `TestEntry` model.</CardDescription></CardHeader><CardContent className="space-y-3">
           <Button onClick={handleRunCrudTests} disabled={isCrudTesting} className="w-full">
             {isCrudTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -461,4 +587,3 @@ const AdminConnectionTestPage: React.FC = () => {
 
 export default AdminConnectionTestPage;
     
-
