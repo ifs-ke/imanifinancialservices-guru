@@ -29,7 +29,7 @@ import {
   simulateSaveWithPotentialMismatchAction, // New action
 } from '@/app/actions/adminTestActions';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon, Server, Timer, Link2, Info, Eye, Copy as CopyIcon, Database, CircleSlash, UserCircle2, ShieldCheck, ShieldAlert, FileSignature } from 'lucide-react';
+import { TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, Download, HashIcon, Server, Timer, Link2, Info, Eye, Copy as CopyIcon, Database, CircleSlash, UserCircle2, ShieldCheck, ShieldAlert, FileSignature, Loader2 } from 'lucide-react';
 import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -269,7 +269,20 @@ const AdminConnectionTestPage: React.FC = () => {
   const handleFetchTestData = async () => { /* ... existing ... */ };
   const handleRunCrudTests = async () => { /* ... existing ... */ };
   const handleFetchServerClerkUserInfo = async () => { /* ... existing ... */ };
-  const handleZustandDateChange = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... existing ... */ };
+  const handleZustandDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const dateStr = e.target.value;
+    if (dateStr) {
+      const parsedDate = parse(dateStr, 'yyyy-MM-dd', new Date());
+      if (isValid(parsedDate)) {
+        setStartDate(parsedDate);
+      } else {
+        setStartDate(undefined); // Or keep old value, or show error
+      }
+    } else {
+      setStartDate(undefined); // Handle empty input
+    }
+  };
+
 
   const ResultBadge: React.FC<{ success?: boolean; message?: string; children?: React.ReactNode; duration?: number, variant?: "default" | "destructive" | "secondary" | "outline" | null | undefined, icon?: React.ElementType }> = ({ success, message, children, duration, variant, icon: Icon }) => {
     const actualVariant = success === undefined ? "secondary" : (success ? "default" : "destructive");
@@ -289,8 +302,7 @@ const AdminConnectionTestPage: React.FC = () => {
       <PageHeader title="Admin Connection & Utility Tests" icon={<TestTube />} description="Verify core application functionalities." />
 
       <div className="flex-1 px-4 md:px-6 lg:px-8 grid gap-6 md:grid-cols-2">
-        {/* Zustand Persistence, DB Connection, Hashing Consistency (Strings & Objects), verifyHash utility */}
-        {/* These cards are largely unchanged, so their JSX is omitted for brevity but should remain */}
+        
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><RotateCcw size={20} /> Zustand Persistence</CardTitle><CardDescription>Checks Session Storage persistence.</CardDescription></CardHeader>
           <CardContent className="space-y-3">
@@ -301,21 +313,27 @@ const AdminConnectionTestPage: React.FC = () => {
         </Card>
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><DatabaseZap size={20} /> Database Connection</CardTitle><CardDescription>Tests connectivity to the database via Prisma.</CardDescription></CardHeader>
-          <CardContent className="space-y-3"><Button onClick={handleDbConnectionTest} disabled={isDbConnectionTesting} className="w-full">{isDbConnectionTesting ? 'Testing...' : 'Run DB Connection Test'}</Button>{dbConnectionResult && (<ResultBadge success={dbConnectionResult.success} message={dbConnectionResult.message} duration={dbConnectionResult.duration} />)}</CardContent>
+          <CardContent className="space-y-3">
+            <Button onClick={handleDbConnectionTest} disabled={isDbConnectionTesting} className="w-full">
+              {isDbConnectionTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isDbConnectionTesting ? 'Testing...' : 'Run DB Connection Test'}
+            </Button>
+            {dbConnectionResult && (<ResultBadge success={dbConnectionResult.success} message={dbConnectionResult.message} duration={dbConnectionResult.duration} />)}
+          </CardContent>
         </Card>
         <Card className="md:col-span-2">
           <CardHeader><CardTitle className="flex items-center gap-2"><HashIcon size={20}/> Hashing & Data Preparation Consistency</CardTitle><CardDescription>Tests hashing algorithm and data preparation logic consistency between client and server.</CardDescription></CardHeader>
           <CardContent className="space-y-6">
-            {/* Test 1: String-to-Hash */}
-            <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 1: String-to-Hash Consistency</h4><Textarea value={JSON.stringify(csStringTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" /><Button onClick={handleCsStringHashTest} disabled={isCsStringHashTesting} className="w-full">{isCsStringHashTesting ? 'Testing...' : 'Run String Hash Test'}</Button>{csStringHashError && <ResultBadge success={false} message={csStringHashError}/>}{csClientCalculatedHash && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10"><p>Client Hash: <span className="font-mono">{csClientCalculatedHash.substring(0,20)}...</span></p><p>Server Hash: <span className="font-mono">{csServerCalculatedHash ? csServerCalculatedHash.substring(0,20)+"..." : 'N/A'}</span></p><ResultBadge success={csHashMatchResult===true} message={`Hashes Match: ${csHashMatchResult===true ? 'Yes' : 'No'}`} duration={csServerHashingDuration ?? undefined}/></div>)}</div>
-            {/* Test 2: Object Prep & Hash */}
-            <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 2: Data Preparation & Hashing Consistency</h4><Textarea value={JSON.stringify(csObjectTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" /><Button onClick={handleCsObjectHashTest} disabled={isCsObjectHashTesting} className="w-full">{isCsObjectHashTesting ? 'Testing...' : 'Run Data Prep & Hash Test'}</Button>{csObjectHashError && <ResultBadge success={false} message={csObjectHashError}/>}{csObjClientPreparedString && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10"><ResultBadge success={csObjPrepMatch===true} message={`Prepared Strings Match: ${csObjPrepMatch===true ? 'Yes' : 'No'}`}/><ResultBadge success={csObjHashMatch===true} message={`Hashes Match: ${csObjHashMatch===true ? 'Yes' : 'No'}`}/></div>)}</div>
-            {/* Test 3: verifyHash utility */}
+            
+            <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 1: String-to-Hash Consistency</h4><Textarea value={JSON.stringify(csStringTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" /><Button onClick={handleCsStringHashTest} disabled={isCsStringHashTesting} className="w-full">{isCsStringHashTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{isCsStringHashTesting ? 'Testing...' : 'Run String Hash Test'}</Button>{csStringHashError && <ResultBadge success={false} message={csStringHashError}/>}{csClientCalculatedHash && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10"><p>Client Hash: <span className="font-mono">{csClientCalculatedHash.substring(0,20)}...</span></p><p>Server Hash: <span className="font-mono">{csServerCalculatedHash ? csServerCalculatedHash.substring(0,20)+"..." : 'N/A'}</span></p><ResultBadge success={csHashMatchResult===true} message={`Hashes Match: ${csHashMatchResult===true ? 'Yes' : 'No'}`} duration={csServerHashingDuration ?? undefined}/></div>)}</div>
+            
+            <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 2: Data Preparation & Hashing Consistency</h4><Textarea value={JSON.stringify(csObjectTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" /><Button onClick={handleCsObjectHashTest} disabled={isCsObjectHashTesting} className="w-full">{isCsObjectHashTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{isCsObjectHashTesting ? 'Testing...' : 'Run Data Prep & Hash Test'}</Button>{csObjectHashError && <ResultBadge success={false} message={csObjectHashError}/>}{csObjClientPreparedString && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10"><ResultBadge success={csObjPrepMatch===true} message={`Prepared Strings Match: ${csObjPrepMatch===true ? 'Yes' : 'No'}`}/><ResultBadge success={csObjHashMatch===true} message={`Hashes Match: ${csObjHashMatch===true ? 'Yes' : 'No'}`}/></div>)}</div>
+            
             <div className="p-3 border rounded-md space-y-3"><h4 className="font-semibold text-sm">Test 3: Client-Side `verifyHash` Utility</h4><Button onClick={handleVerifyHashUtilityTest} className="w-full">Run `verifyHash` Tests</Button>{verifyHashTestResults.length > 0 && (<div className="space-y-1 mt-2 text-xs border p-2 rounded-md bg-muted/10">{verifyHashTestResults.map((res, i) => (<ResultBadge key={i} success={res.expected === res.actual}>{res.description}: Expected {String(res.expected)}, Got {String(res.actual)}</ResultBadge>))}</div>)}</div>
           </CardContent>
         </Card>
 
-        {/* NEW: Data Integrity Check Test Card */}
+        
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ShieldCheck size={20}/> Data Integrity End-to-End Verification</CardTitle>
@@ -327,6 +345,7 @@ const AdminConnectionTestPage: React.FC = () => {
               <Textarea id="integrity-data" value={JSON.stringify(integrityTestData, null, 2)} onChange={(e) => { try { setIntegrityTestData(JSON.parse(e.target.value)); } catch { /* ignore parse error while typing */ }}} rows={4} className="text-xs font-mono"/>
             </div>
             <Button onClick={handleRunIntegrityTest} disabled={isIntegrityTesting} className="w-full">
+              {isIntegrityTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {isIntegrityTesting ? 'Verifying...' : 'Run Client-Server Hash Verification Test'}
             </Button>
             {integrityTestServerResult && (
@@ -344,7 +363,7 @@ const AdminConnectionTestPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* NEW: Save Data with Stale Hash (Mismatch Simulation) Test Card */}
+        
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ShieldAlert size={20}/> Save with Stale Hash (Mismatch Simulation)</CardTitle>
@@ -378,6 +397,7 @@ const AdminConnectionTestPage: React.FC = () => {
                 <div className="p-3 border rounded-md space-y-2">
                     <h5 className="font-medium text-sm">Step 3: Attempt Save</h5>
                      <Button onClick={handleAttemptSaveWithMismatch} disabled={isMismatchSimulating || !mismatchModifiedDataString.trim()} className="w-full">
+                        {isMismatchSimulating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         {isMismatchSimulating ? 'Simulating Save...' : 'Attempt Save (Modified Data, ORIGINAL Hash)'}
                     </Button>
                 </div>
@@ -388,10 +408,10 @@ const AdminConnectionTestPage: React.FC = () => {
                  <p><strong>Client Provided (Stale) Hash:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.clientProvidedOriginalHash ? mismatchSimulationResult.clientProvidedOriginalHash.substring(0,20)+'...' : 'N/A'}</span></p>
                  <p><strong>Server Calculated Hash of Data Sent:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.serverHashOfDataSent ? mismatchSimulationResult.serverHashOfDataSent.substring(0,20)+'...' : 'N/A'}</span></p>
                  <ResultBadge
-                    success={mismatchSimulationResult.mismatchDetected === false} // Test "passes" if mismatch IS detected OR if somehow hashes still matched (test setup issue)
+                    success={mismatchSimulationResult.mismatchDetected === false} 
                     message={mismatchSimulationResult.message}
                     duration={mismatchSimulationResult.duration}
-                    icon={mismatchSimulationResult.mismatchDetected ? ShieldAlert : (mismatchSimulationResult.success ? ShieldCheck : AlertTriangle)} // Custom icon logic
+                    icon={mismatchSimulationResult.mismatchDetected ? ShieldAlert : (mismatchSimulationResult.success ? ShieldCheck : AlertTriangle)} 
                  />
                  {mismatchSimulationResult.mismatchDetected === false && !mismatchSimulationResult.success && (
                     <p className="text-destructive mt-1">Note: Mismatch was NOT detected, but the server action reported failure. Check server logs.</p>
@@ -404,14 +424,34 @@ const AdminConnectionTestPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* CRUD Operations, Server-Side Clerk Info, Client-Side Clerk Info, Simple DB Save/Fetch */}
-        {/* These cards are largely unchanged, so their JSX is omitted for brevity but should remain */}
-        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Database size={20}/> Database CRUD Operations</CardTitle><CardDescription>Tests Create, Read, Update, Delete operations on `TestEntry` model.</CardDescription></CardHeader><CardContent className="space-y-3"><Button onClick={handleRunCrudTests} disabled={isCrudTesting} className="w-full">{isCrudTesting ? 'Testing CRUD...' : 'Run All CRUD Tests'}</Button>{crudTestLog.length > 0 && (<ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs">{crudTestLog.map((log, i) => <p key={i} className="font-mono whitespace-pre-wrap">{log}</p>)}</ScrollArea>)}</CardContent></Card>
-        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><UserCircle2 size={20} /> Server-Side Clerk User Info Test</CardTitle><CardDescription>Fetches and displays authenticated user info via a Server Action.</CardDescription></CardHeader><CardContent className="space-y-3"><Button onClick={handleFetchServerClerkUserInfo} disabled={isServerClerkUserInfoLoading} className="w-full">{isServerClerkUserInfoLoading ? 'Fetching Server Info...' : 'Fetch Server Clerk User Info'}</Button>{serverClerkUserInfoError && <ResultBadge success={false} message={serverClerkUserInfoError} />}{serverClerkUserInfo && (<ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs"><pre>{JSON.stringify(serverClerkUserInfo, null, 2)}</pre></ScrollArea>)}</CardContent></Card>
+        
+        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Database size={20}/> Database CRUD Operations</CardTitle><CardDescription>Tests Create, Read, Update, Delete operations on `TestEntry` model.</CardDescription></CardHeader><CardContent className="space-y-3">
+          <Button onClick={handleRunCrudTests} disabled={isCrudTesting} className="w-full">
+            {isCrudTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isCrudTesting ? 'Testing CRUD...' : 'Run All CRUD Tests'}
+          </Button>
+          {crudTestLog.length > 0 && (<ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs">{crudTestLog.map((log, i) => <p key={i} className="font-mono whitespace-pre-wrap">{log}</p>)}</ScrollArea>)}</CardContent></Card>
+        
+        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><UserCircle2 size={20} /> Server-Side Clerk User Info Test</CardTitle><CardDescription>Fetches and displays authenticated user info via a Server Action.</CardDescription></CardHeader><CardContent className="space-y-3">
+          <Button onClick={handleFetchServerClerkUserInfo} disabled={isServerClerkUserInfoLoading} className="w-full">
+            {isServerClerkUserInfoLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isServerClerkUserInfoLoading ? 'Fetching Server Info...' : 'Fetch Server Clerk User Info'}
+          </Button>
+          {serverClerkUserInfoError && <ResultBadge success={false} message={serverClerkUserInfoError} />}{serverClerkUserInfo && (<ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs"><pre>{JSON.stringify(serverClerkUserInfo, null, 2)}</pre></ScrollArea>)}</CardContent></Card>
+        
         <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><UserCircle2 size={20} /> Client-Side Clerk User Info (Direct)</CardTitle><CardDescription>Displays user info directly from the `useUser()` hook on the client.</CardDescription></CardHeader><CardContent className="space-y-3 text-xs">{!isClientClerkLoaded ? (<p>Loading user info (client-side)...</p>) : !isClientUserSignedIn ? (<ResultBadge success={false} message="Not signed in (client-side)" />) : clientClerkUser ? (<div className="p-3 border rounded-md bg-muted/50"><p><strong>Full Name:</strong> {clientClerkUser.fullName || "N/A"}</p><p><strong>User ID:</strong> {clientClerkUser.id}</p><Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => openDetailViewer("Client-Side Clerk User Object", clientClerkUser)}>View Full Object</Button></div>) : (<ResultBadge success={false} message="User data not available (client-side), though signed in." />)}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Save size={20} /> Simple DB Save (TestEntry)</CardTitle></CardHeader><CardContent className="space-y-3"><Input value={testDataInput} onChange={(e) => setTestDataInput(e.target.value)} placeholder="Enter data to save" /><Button onClick={handleSaveTestData} disabled={isSavingData || !testDataInput.trim()} className="w-full">{isSavingData ? 'Saving...' : 'Save Single Test Data'}</Button>{saveResult && <ResultBadge success={saveResult.success} message={saveResult.message} duration={saveResult.duration} />}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Download size={20} /> Simple DB Fetch (TestEntry)</CardTitle></CardHeader><CardContent className="space-y-3"><Button onClick={handleFetchTestData} disabled={isFetchingData} className="w-full">{isFetchingData ? 'Fetching...' : 'Fetch Latest Single Test Data'}</Button>{fetchResult && <ResultBadge success={fetchResult.success} message={fetchResult.message} duration={fetchResult.duration} /> }{fetchedData && (<div className="space-y-1 border p-3 rounded-md bg-muted/50 text-xs"><p><strong>ID:</strong> {fetchedData.id}</p><p><strong>Data:</strong> {fetchedData.data}</p><p><strong>Created:</strong> {isValid(new Date(fetchedData.createdAt)) ? format(new Date(fetchedData.createdAt), 'PPpp') : 'Invalid Date'}</p></div>)}</CardContent></Card>
-
+        
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Save size={20} /> Simple DB Save (TestEntry)</CardTitle></CardHeader><CardContent className="space-y-3"><Input value={testDataInput} onChange={(e) => setTestDataInput(e.target.value)} placeholder="Enter data to save" /><Button onClick={handleSaveTestData} disabled={isSavingData || !testDataInput.trim()} className="w-full">
+          {isSavingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {isSavingData ? 'Saving...' : 'Save Single Test Data'}
+          </Button>{saveResult && <ResultBadge success={saveResult.success} message={saveResult.message} duration={saveResult.duration} />}</CardContent></Card>
+        
+        <Card><CardHeader><CardTitle className="flex items-center gap-2"><Download size={20} /> Simple DB Fetch (TestEntry)</CardTitle></CardHeader><CardContent className="space-y-3">
+          <Button onClick={handleFetchTestData} disabled={isFetchingData} className="w-full">
+            {isFetchingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isFetchingData ? 'Fetching...' : 'Fetch Latest Single Test Data'}
+          </Button>
+          {fetchResult && <ResultBadge success={fetchResult.success} message={fetchResult.message} duration={fetchResult.duration} /> }{fetchedData && (<div className="space-y-1 border p-3 rounded-md bg-muted/50 text-xs"><p><strong>ID:</strong> {fetchedData.id}</p><p><strong>Data:</strong> {fetchedData.data}</p><p><strong>Created:</strong> {isValid(new Date(fetchedData.createdAt)) ? format(new Date(fetchedData.createdAt), 'PPpp') : 'Invalid Date'}</p></div>)}</CardContent></Card>
 
       </div>
       <DetailViewerDialog title={detailViewTitle} content={detailViewContent} isOpen={isDetailViewerOpen} onClose={() => setIsDetailViewerOpen(false)} />
@@ -421,3 +461,4 @@ const AdminConnectionTestPage: React.FC = () => {
 
 export default AdminConnectionTestPage;
     
+
