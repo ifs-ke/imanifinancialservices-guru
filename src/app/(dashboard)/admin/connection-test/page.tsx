@@ -245,21 +245,31 @@ const AdminConnectionTestPage: React.FC = () => {
     const prepared = prepareDataForHashing(initialData);
     const hash = await hashData(stringify(prepared));
     setMismatchInitialHash(hash);
-    setMismatchModifiedDataString(JSON.stringify({ ...initialData, value: 100 }, null, 2));
+    setMismatchModifiedDataString(JSON.stringify(initialData, null, 2)); // Use initialData directly
     setMismatchSimulationResult(null);
     toast({ title: "Step 1 Complete", description: "Initial data and hash generated for mismatch test." });
   };
 
   const handleAttemptSaveWithMismatch = async () => {
-    if (!mismatchInitialHash || !mismatchModifiedDataString) {
+    // Ensure we use the most current string from state for parsing.
+    const currentMismatchModifiedDataString = mismatchModifiedDataString;
+
+    if (!mismatchInitialHash || !currentMismatchModifiedDataString) {
       toast({ title: "Error", description: "Please complete Step 1 first or ensure modified data is valid JSON.", variant: "destructive" });
       return;
     }
     setIsMismatchSimulating(true);
     setMismatchSimulationResult(null);
     try {
-      const modifiedData = JSON.parse(mismatchModifiedDataString);
-      const result = await simulateSaveWithPotentialMismatchAction(modifiedData, mismatchInitialHash);
+      // Parse the string from the textarea (which should reflect edits)
+      const modifiedData = JSON.parse(currentMismatchModifiedDataString);
+      
+      // Send a shallow copy of the parsed object to the server action to be absolutely sure
+      // it's not an unintentionally shared reference, though this is unlikely the root cause.
+      const result = await simulateSaveWithPotentialMismatchAction(
+        { ...modifiedData }, 
+        mismatchInitialHash
+      );
       setMismatchSimulationResult(result);
     } catch (error: any) {
       setMismatchSimulationResult({ success: false, message: `Client-side error: ${error.message}. Ensure modified data is valid JSON.` });
