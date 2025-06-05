@@ -14,59 +14,39 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  LayoutDashboard,
-  ReceiptText,
-  FileText,
-  Coins,
-  TrendingUp,
-  PanelLeft,
-  BookOpen,
-  Bell,
-  Cloud, 
-  CloudOff, 
-  UploadCloud, 
-  AlertTriangle,
-  ClipboardList,
-  RefreshCw, 
-  Menu,
-  PieChart as PieChartIcon, // Renamed to avoid conflict if PieChart component is imported
-  Users,
-  Briefcase,
-  TestTube, 
-} from "lucide-react";
-import Link from "next/link";
+
 import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser, useAuth, type User } from "@clerk/nextjs";
+import { UserButton, useUser, useAuth } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AppRole } from '@/lib/roles';
+import IconLoader from '@/components/IconLoader'; // Import IconLoader
 
 
 interface SidebarMenuItem {
   href: string;
   label: string;
-  icon: React.ReactNode;
-  adminOnly?: boolean; // Optional flag
+  iconName: string; // Changed from icon: React.ReactNode
+  adminOnly?: boolean;
 }
 
 const menuItems: SidebarMenuItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
-  { href: "/transactions", label: "Transactions", icon: <ReceiptText size={18} /> },
-  { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
-  { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
-  { href: "/investments", label: "Investments", icon: <Briefcase size={18} /> },
-  { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
-  { href: "/budget", label: "Budget", icon: <PieChartIcon size={18} /> },
-  { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
-  { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  { href: '/logger', label: 'Logger', icon: <ClipboardList size={18} /> },
-  { href: '/admin/connection-test', label: 'Admin Tests', icon: <TestTube size={18} />, adminOnly: true },
+  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard" },
+  { href: "/transactions", label: "Transactions", iconName: "ReceiptText" },
+  { href: "/income-expenses", label: "Income/Expenses", iconName: "TrendingUp" },
+  { href: "/debt", label: "Debts", iconName: "Coins" },
+  { href: "/investments", label: "Investments", iconName: "Briefcase" },
+  { href: "/statements", label: "Statements", iconName: "FileText" },
+  { href: "/budget", label: "Budget", iconName: "PieChart" },
+  { href: "/weekly-review", label: "Weekly Review", iconName: "BookOpen" },
+  { href: "/notifications", label: "Notifications", iconName: "Bell" },
+  { href: '/logger', label: 'Logger', iconName: "ClipboardList" },
+  { href: '/admin/connection-test', label: 'Admin Tests', iconName: "TestTube", adminOnly: true },
 ];
 
 export type SidebarState = "collapsed" | "expanded";
@@ -112,7 +92,7 @@ export const SidebarProvider = React.forwardRef<HTMLDivElement, React.PropsWithC
           if (storedValue === "collapsed" || storedValue === "expanded") {
             setSidebarState(storedValue);
           } else {
-            setSidebarState("expanded"); // Default to expanded if localStorage is invalid or not set
+            setSidebarState("expanded");
           }
         }
       }
@@ -174,6 +154,8 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     const { isSignedIn } = useAuth();
 
     const isUserAdmin = React.useMemo(() => {
+        // For prototype, show admin link if user has 'admin' in email.
+        // Replace with proper role check from user.publicMetadata or privateMetadata
         const role = user?.privateMetadata?.role as AppRole | undefined;
         return role === 'admin';
     }, [user]);
@@ -187,7 +169,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
       setClientUnreadCount(unreadCount);
     }, [unreadCount]);
 
-    let SyncIcon: React.ElementType = CloudOff;
+    let syncIconName: string = "CloudOff";
     let syncStatusText = 'Offline';
     let syncTooltipText = 'Sign in to enable cloud sync.';
     let iconColor = 'text-muted-foreground';
@@ -195,35 +177,35 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     let animateIcon = false;
 
     if (!isClerkLoaded) {
-      SyncIcon = RefreshCw;
+      syncIconName = "RefreshCw";
       syncStatusText = 'Auth Loading...';
       syncTooltipText = 'Waiting for authentication status...';
       iconColor = 'text-muted-foreground';
       animateIcon = true;
     } else if (!isSignedIn) {
-      SyncIcon = CloudOff;
+      syncIconName = "CloudOff";
       syncStatusText = 'Offline';
       syncTooltipText = 'Sign in to enable cloud sync.';
       iconColor = 'text-muted-foreground';
     } else {
       isSyncButtonClickable = true;
       switch (syncStatus) {
-        case 'syncing': SyncIcon = RefreshCw; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
-        case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
-        case 'local_changes': SyncIcon = UploadCloud; syncStatusText = 'Local Changes'; syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; iconColor = 'text-yellow-500'; break;
-        case 'error': SyncIcon = AlertTriangle; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
-        case 'hash_mismatch': SyncIcon = AlertTriangle; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. Click to resolve.'; iconColor = 'text-destructive'; break;
-        case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
-        case 'error_local': SyncIcon = AlertTriangle; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
+        case 'syncing': syncIconName = "RefreshCw"; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
+        case 'synced': syncIconName = "Cloud"; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
+        case 'local_changes': syncIconName = "UploadCloud"; syncStatusText = 'Local Changes'; syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; iconColor = 'text-yellow-500'; break;
+        case 'error': syncIconName = "AlertTriangle"; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
+        case 'hash_mismatch': syncIconName = "AlertTriangle"; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. Click to resolve.'; iconColor = 'text-destructive'; break;
+        case 'loading_local': syncIconName = "RefreshCw"; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
+        case 'error_local': syncIconName = "AlertTriangle"; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'local':
-             SyncIcon = Cloud;
+             syncIconName = "Cloud";
              syncStatusText = 'Local Data';
              syncTooltipText = 'Data loaded locally. Click to sync with server.';
              iconColor = 'text-primary';
             break;
         case 'idle':
         default:
-          SyncIcon = CloudOff;
+          syncIconName = "CloudOff";
           syncStatusText = 'Not Synced';
           syncTooltipText = 'Click to sync data with server.';
           iconColor = 'text-muted-foreground';
@@ -244,13 +226,10 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
           logInfo("Sidebar sync icon clicked during hash_mismatch: opening conflict dialog.", { userId: currentUserId });
         } else {
           logInfo("Sidebar sync icon clicked during hash_mismatch: conflict dialog already open.", { userId: currentUserId });
-          // Optional: If dialog is already open, maybe focus it or nothing.
-          // For now, the main goal is to ensure it opens if it's not.
         }
-        return; // Prevent calling manualSync if it's a hash_mismatch that needs dialog first.
+        return;
       }
       
-      // For other clickable states (error, local_changes, or manual sync request if 'synced' or 'local')
       if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'error_local') {
         manualSync();
       }
@@ -262,7 +241,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         syncStatus,
         manualSync,
         isMismatchDialogOpen,
-        setIsMismatchDialogOpen // Add setIsMismatchDialogOpen as a dependency
+        setIsMismatchDialogOpen
     ]);
 
     const sidebarActualState = isMobile ? "collapsed" : state;
@@ -289,7 +268,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
               onClick={toggleSidebar}
               aria-label={sidebarActualState === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              {sidebarActualState === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
+              <IconLoader name={sidebarActualState === 'collapsed' ? "Menu" : "PanelLeft"} size={20} />
             </Button>
             <span
               className={cn(
@@ -318,7 +297,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                       asChild
                     >
                       <Link href={item.href}>
-                        {React.cloneElement(item.icon as React.ReactElement, { size: 18, className: "flex-shrink-0" })}
+                        <IconLoader name={item.iconName} size={18} className="flex-shrink-0" />
                         <span className={cn(
                           "ml-2 truncate",
                           sidebarActualState === "collapsed" && "hidden"
@@ -375,7 +354,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                   aria-label={syncTooltipText}
                   disabled={!isSyncButtonClickable && syncStatus !== 'error' && syncStatus !== 'hash_mismatch' && syncStatus !== 'error_local'}
                 >
-                  <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "text-destructive" )} />
+                  <IconLoader name={syncIconName} size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "text-destructive" )} />
                   <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
                     {syncStatusText}
                   </span>
@@ -407,7 +386,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                      <TooltipTrigger asChild>
                        <Button variant="ghost" size="icon" className={cn("h-8 w-8", sidebarActualState === 'collapsed' && "h-7 w-7")} asChild>
                          <Link href="/sign-in" aria-label="Sign In">
-                           <Users size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
+                           <IconLoader name="Users" size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
                          </Link>
                        </Button>
                      </TooltipTrigger>
@@ -448,7 +427,7 @@ export const Sidebar = React.forwardRef<
       <Sheet open={state === "expanded" && isMobile} onOpenChange={(open) => { if(!open && state === "expanded") toggleSidebar()}}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="fixed top-3 left-3 z-50 md:hidden bg-background/80 backdrop-blur-sm h-10 w-10" onClick={toggleSidebar}>
-            <Menu size={24} />
+            <IconLoader name="Menu" size={24} />
             <span className="sr-only">Open sidebar</span>
           </Button>
         </SheetTrigger>
@@ -494,5 +473,4 @@ export const SidebarInset = React.forwardRef<
  );
 });
 SidebarInset.displayName = "SidebarInset";
-
     

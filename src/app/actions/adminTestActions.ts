@@ -139,6 +139,101 @@ export async function getHashForServerPreparedObject(rawData: any): Promise<{ su
   }
 }
 
+export async function verifyClientDataHashAction(
+  clientProvidedData: any,
+  clientProvidedHash: string
+): Promise<{ success: boolean; serverCalculatedHash?: string; clientHashMatches?: boolean; message: string; duration?: number }> {
+  const user = await currentUser();
+  const userId = user?.id;
+  if (!userId) {
+    return { success: false, message: 'User not authenticated.' };
+  }
+  console.debug(`[AdminActions] verifyClientDataHashAction called. User: ${userId}`, { userId });
+  const startTime = performance.now();
+  try {
+    const serverPreparedData = prepareDataForHashing(clientProvidedData);
+    const serverCalculatedHash = await hashData(stringify(serverPreparedData));
+    const clientHashMatches = serverCalculatedHash === clientProvidedHash;
+    const duration = performance.now() - startTime;
+
+    console.info(`[AdminActions] Client data hash verification. User: ${userId}`, {
+      userId, serverCalculatedHash, clientProvidedHash, clientHashMatches, duration,
+    });
+    return {
+      success: true,
+      serverCalculatedHash,
+      clientHashMatches,
+      message: clientHashMatches ? 'Server successfully verified client hash.' : 'Client hash does NOT match server hash of provided data.',
+      duration,
+    };
+  } catch (error: any) {
+    const duration = performance.now() - startTime;
+    console.error(`[AdminActions] Error during client data hash verification. User: ${userId}`, { error, userId, duration });
+    return { success: false, message: `Error verifying client hash: ${error.message}`, duration };
+  }
+}
+
+export async function simulateSaveWithPotentialMismatchAction(
+  clientModifiedData: any,
+  originalServerHashForComparison: string
+): Promise<{
+  success: boolean;
+  mismatchDetected?: boolean;
+  message: string;
+  serverHashOfDataSent?: string;
+  clientProvidedOriginalHash?: string;
+  duration?: number;
+}> {
+  const user = await currentUser();
+  const userId = user?.id;
+  if (!userId) {
+    return { success: false, message: 'User not authenticated.' };
+  }
+  console.debug(`[AdminActions] simulateSaveWithPotentialMismatchAction called. User: ${userId}`, { userId });
+  const startTime = performance.now();
+  try {
+    // This simulates the server receiving clientModifiedData and originalServerHashForComparison (like from /api/save)
+    const serverPreparedDataFromClient = prepareDataForHashing(clientModifiedData);
+    const currentServerHashOfClientData = await hashData(stringify(serverPreparedDataFromClient));
+
+    const duration = performance.now() - startTime;
+    const mismatch = currentServerHashOfClientData !== originalServerHashForComparison;
+
+    if (mismatch) {
+      console.warn(`[AdminActions] Simulated Save: Mismatch DETECTED. User: ${userId}`, {
+        userId, currentServerHashOfClientData, originalServerHashForComparison, duration,
+      });
+      return {
+        success: false, // Or true, depending on how you define "success" of the test
+        mismatchDetected: true,
+        message: 'Simulated save: Data integrity check FAILED (hashes do not match). Data would NOT be saved.',
+        serverHashOfDataSent: currentServerHashOfClientData,
+        clientProvidedOriginalHash: originalServerHashForComparison,
+        duration,
+      };
+    } else {
+      // This case means the client's modified data + original hash *did* match, which is unexpected for this test
+      // if the client correctly simulated modifying the data but sending the OLD hash.
+      console.info(`[AdminActions] Simulated Save: Hashes MATCHED. User: ${userId}`, {
+        userId, currentServerHashOfClientData, originalServerHashForComparison, duration,
+      });
+      return {
+        success: true,
+        mismatchDetected: false,
+        message: 'Simulated save: Data integrity check PASSED (hashes matched). Data would be saved. (Test setup might be flawed if mismatch was expected).',
+        serverHashOfDataSent: currentServerHashOfClientData,
+        clientProvidedOriginalHash: originalServerHashForComparison,
+        duration,
+      };
+    }
+  } catch (error: any) {
+    const duration = performance.now() - startTime;
+    console.error(`[AdminActions] Error during simulated save mismatch test. User: ${userId}`, { error, userId, duration });
+    return { success: false, message: `Error in mismatch simulation: ${error.message}`, duration };
+  }
+}
+
+
 export async function createMultipleTestEntries(entriesData: { data: string }[]): Promise<{ success: boolean; message: string; createdIds?: string[]; duration?: number }> {
   const user = await currentUser();
   const userId = user?.id;
@@ -197,7 +292,7 @@ export async function updateSingleTestEntry(id: string, newData: string): Promis
   const startTime = performance.now();
   try {
     const updatedEntry = await prisma.testEntry.update({
-      where: { id, userId }, 
+      where: { id, userId },
       data: { data: newData },
     });
     const duration = performance.now() - startTime;
@@ -253,14 +348,12 @@ export async function getClerkUserInfo(): Promise<{ success: boolean; message: s
   const startTime = performance.now();
 
   if (!user || !user.id) {
-    return { 
-        success: false, 
-        message: 'User not authenticated (currentUser returned null or no ID).', 
-        duration: performance.now() - startTime 
+    return {
+        success: false,
+        message: 'User not authenticated (currentUser returned null or no ID).',
+        duration: performance.now() - startTime
     };
   }
-  // With currentUser(), if `user` is non-null, it should be fully populated.
-  // The case where `user.id` is present but other details are missing is less likely with currentUser() than with `auth().user`.
   if (!user.primaryEmailAddress?.emailAddress) {
     return {
         success: false,
