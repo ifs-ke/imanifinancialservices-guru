@@ -52,10 +52,10 @@ import { useUser } from "@clerk/nextjs";
 import { Separator } from '@/components/ui/separator';
 
 // Helper for section headers
-const SectionHeader: React.FC<{ title: string; description?: string; icon?: React.ElementType }> = ({ title, description, icon: Icon }) => (
+const SectionHeader: React.FC<{ title: string; description?: string; icon?: React.ElementType }> = ({ title, description, icon: IconComponent }) => (
   <div className="my-8 first:mt-0 md:col-span-2">
     <div className="flex items-center gap-3 mb-2">
-      {Icon && <Icon className="h-6 w-6 text-primary" />}
+      {IconComponent && <IconComponent className="h-6 w-6 text-primary" />}
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
     </div>
     {description && <p className="text-sm text-muted-foreground">{description}</p>}
@@ -212,7 +212,7 @@ const AdminConnectionTestPage: React.FC = () => {
       setDbConnectionResult({
         success: false,
         message: `Client-side error: ${message}`,
-        duration: 0
+        duration: 0 // Duration is not applicable for client-side errors before action call
       });
       toast({
         title: "Connection Error",
@@ -304,7 +304,7 @@ const AdminConnectionTestPage: React.FC = () => {
         variant: serverResult.success && serverResult.clientHashMatches ? "default" : "destructive"
       });
     } catch (error: any) {
-      setIntegrityTestServerResult({ success: false, message: `Client-side error: ${error.message}`, duration: 0 });
+      setIntegrityTestServerResult({ success: false, message: `Client-side error: ${error.message}`, duration: 0 }); // Added duration
        toast({
         title: "Integrity Test Error",
         description: error.message,
@@ -318,7 +318,7 @@ const AdminConnectionTestPage: React.FC = () => {
   const handleFetchInitialDataForMismatch = async () => {
     const initialData = { id: 'test-obj-1', value: 100, name: 'Initial Test Object', timestamp: new Date().toISOString() };
     setMismatchInitialData(initialData);
-    const prepared = prepareDataForHashing(initialData);
+    const prepared = prepareDataForHashing(initialData as any); // Cast as requested
     const hash = await hashData(stringify(prepared));
     setMismatchInitialHash(hash);
     setMismatchModifiedDataString(JSON.stringify(initialData, null, 2));
@@ -338,7 +338,7 @@ const AdminConnectionTestPage: React.FC = () => {
     try {
       const modifiedData = JSON.parse(currentMismatchModifiedDataString);
       const result = await simulateSaveWithPotentialMismatchAction(
-        { ...modifiedData },
+        { ...modifiedData }, // Send a shallow copy
         mismatchInitialHash
       );
       setMismatchSimulationResult(result);
@@ -418,7 +418,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("Attempting to delete all previous test entries...");
       const deleteAllRes = await deleteAllUserTestEntries();
-      if (!deleteAllRes.success && deleteAllRes.count === undefined) {
+      if (!deleteAllRes.success && deleteAllRes.count === undefined) { // Check if count is undefined for specific error
           throw new Error(`Failed to clear previous test entries: ${deleteAllRes.message}`);
       }
       log(`Cleared ${deleteAllRes.count ?? 'N/A'} entries`, 'success');
@@ -466,7 +466,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("\nDeleting all remaining test entries for user...");
       const finalDeleteRes = await deleteAllUserTestEntries();
-      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) {
+      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) { // Strict check for 2 deleted
         throw new Error(`Failed to delete remaining entries. Expected 2, got ${finalDeleteRes.count ?? 0}. Result: ${finalDeleteRes.message}`);
       }
       const readAfterFinalDeleteRes = await readAllTestEntries();
@@ -522,9 +522,9 @@ const AdminConnectionTestPage: React.FC = () => {
     }
   };
 
-  const ResultBadge: React.FC<{ success?: boolean; message?: string; children?: React.ReactNode; duration?: number, variant?: "default" | "destructive" | "secondary" | "outline" | null | undefined, icon?: React.ElementType }> = ({ success, message, children, duration, variant, icon: Icon }) => {
+  const ResultBadge: React.FC<{ success?: boolean; message?: string; children?: React.ReactNode; duration?: number, variant?: "default" | "destructive" | "secondary" | "outline" | null | undefined, icon?: React.ElementType }> = ({ success, message, children, duration, variant, icon: IconComponent }) => {
     const actualVariant = success === undefined ? "secondary" : (success ? "default" : "destructive");
-    const ActualIcon = Icon || (success === undefined ? Info : (success ? CheckCircle : AlertTriangle));
+    const ActualIcon = IconComponent || (success === undefined ? Info : (success ? CheckCircle : AlertTriangle));
     return (
     <Badge variant={variant || actualVariant} className="text-sm p-2 w-full justify-start gap-2">
       <ActualIcon className="h-4 w-4" />
@@ -597,7 +597,10 @@ const AdminConnectionTestPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="mt-2">
-                      <Badge variant={csHashMatchResult ? "default" : "destructive"} className="w-full justify-start gap-2 p-1.5 text-xs">
+                      <Badge 
+                        variant={csHashMatchResult ? "default" : "destructive"}
+                        className="w-full justify-start gap-2 p-1.5 text-xs"
+                      >
                         {csHashMatchResult ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
                         {csHashMatchResult === true ? "Hashes match perfectly!" : csHashMatchResult === false ? "Hashes DO NOT match!" : "Hash comparison not run or error."}
                       </Badge>
@@ -714,7 +717,7 @@ const AdminConnectionTestPage: React.FC = () => {
                  <p><strong>Client Provided (Stale) Hash:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.clientProvidedOriginalHash ? mismatchSimulationResult.clientProvidedOriginalHash.substring(0,20)+'...' : 'N/A'}</span></p>
                  <p><strong>Server Calculated Hash of Data Sent:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.serverHashOfDataSent ? mismatchSimulationResult.serverHashOfDataSent.substring(0,20)+'...' : 'N/A'}</span></p>
                  <ResultBadge
-                    success={mismatchSimulationResult.mismatchDetected === false}
+                    success={mismatchSimulationResult.mismatchDetected === false && mismatchSimulationResult.success}
                     message={mismatchSimulationResult.message}
                     duration={mismatchSimulationResult.duration}
                     icon={mismatchSimulationResult.mismatchDetected ? ShieldAlert : (mismatchSimulationResult.success ? ShieldCheck : AlertTriangle)}
@@ -723,7 +726,7 @@ const AdminConnectionTestPage: React.FC = () => {
                     <p className="text-destructive mt-1">Note: Mismatch was NOT detected, but the server action reported failure. Check server logs.</p>
                  )}
                  {mismatchSimulationResult.mismatchDetected === false && mismatchSimulationResult.success && (
-                    <p className="text-yellow-600 mt-1">Note: Mismatch was NOT detected and server reported success. Ensure data was actually modified client-side for a valid test.</p>
+                    <p className="text-yellow-600 dark:text-yellow-400 mt-1">Note: Mismatch was NOT detected and server reported success. Ensure data was actually modified client-side for a valid test.</p>
                  )}
               </div>
             )}
@@ -779,4 +782,3 @@ const AdminConnectionTestPage: React.FC = () => {
 };
 
 export default AdminConnectionTestPage;
-

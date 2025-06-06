@@ -8,6 +8,7 @@ import { hashData } from '@/lib/storage-utils';
 import { ensureUserInDb } from '@/app/actions/shareActions';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
+import type { TransactionWithId, DebtItem } from '@/lib/types'; // For performComprehensiveSaveTest
 
 export async function checkDatabaseConnection(): Promise<{ success: boolean; message: string; data?: any; duration?: number }> {
   const user = await currentUser();
@@ -384,4 +385,127 @@ export async function getClerkUserInfo(): Promise<{ success: boolean; message: s
     return { success: false, message: `Failed to process Clerk user info: ${error.message}`, duration };
   }
 }
-    
+
+export async function performComprehensiveSaveTest(): Promise<{
+  success: boolean;
+  message: string;
+  duration?: number;
+  details?: {
+    createdTransactionId?: string;
+    createdDebtId?: string;
+    verifiedTransaction?: boolean;
+    verifiedDebt?: boolean;
+    deletedTransaction?: boolean;
+    deletedDebt?: boolean;
+  };
+}> {
+  const user = await currentUser();
+  const userId = user?.id;
+  if (!user || !userId) {
+    return { success: false, message: 'User not authenticated.' };
+  }
+  if (!user.primaryEmailAddress?.emailAddress) {
+    return { success: false, message: 'User primary email not found.' };
+  }
+
+  const startTime = performance.now();
+  let testTransactionId: string | undefined;
+  let testDebtId: string | undefined;
+  const details: any = {};
+
+  try {
+    await ensureUserInDb(userId, user.primaryEmailAddress.emailAddress, user.fullName);
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Create Test Transaction
+      const createdTx = await tx.transaction.create({
+        data: {
+          userId,
+          date: new Date(),
+          description: 'Admin Test Transaction - Comprehensive Save',
+          amount: -123.45,
+          modeOfPayment: 'Bank',
+          frequency: 'one-time',
+          variability: 'fixed',
+        },
+      });
+      testTransactionId = createdTx.id;
+      details.createdTransactionId = testTransactionId;
+      console.info(`[AdminActions CS Test] Created test transaction ${testTransactionId} for user ${userId}`);
+
+      // 2. Create Test Debt
+      const createdDebt = await tx.debt.create({
+        data: {
+          userId,
+          description: 'Admin Test Debt - Comprehensive Save',
+          principal: 5000,
+          interestRate: 5,
+          minPayment: 100,
+          term: 'short',
+        },
+      });
+      testDebtId = createdDebt.id;
+      details.createdDebtId = testDebtId;
+      console.info(`[AdminActions CS Test] Created test debt ${testDebtId} for user ${userId}`);
+
+      // 3. Verify Creation (Optional, create implies success, but explicit check is good)
+      const foundTx = await tx.transaction.findUnique({ where: { id: testTransactionId, userId } });
+      const foundDebt = await tx.debt.findUnique({ where: { id: testDebtId, userId } });
+      if (!foundTx || !foundDebt) {
+        throw new Error('Test data verification failed after creation.');
+      }
+      details.verifiedTransaction = !!foundTx;
+      details.verifiedDebt = !!foundDebt;
+      console.info(`[AdminActions CS Test] Verified creation for user ${userId}`);
+
+      // 4. Delete Test Transaction
+      const deletedTx = await tx.transaction.delete({ where: { id: testTransactionId, userId } });
+      details.deletedTransaction = !!deletedTx;
+      console.info(`[AdminActions CS Test] Deleted test transaction ${testTransactionId} for user ${userId}`);
+
+      // 5. Delete Test Debt
+      const deletedDebt = await tx.debt.delete({ where: { id: testDebtId, userId } });
+      details.deletedDebt = !!deletedDebt;
+      console.info(`[AdminActions CS Test] Deleted test debt ${testDebtId} for user ${userId}`);
+    });
+
+    const duration = performance.now() - startTime;
+    console.info(`[AdminActions CS Test] Comprehensive save/cleanup test PASSED for user ${userId}.`, { duration });
+    return {
+      success: true,
+      message: 'Comprehensive save and cleanup test completed successfully.',
+      duration,
+      details,
+    };
+  } catch (error: any) {
+    const duration = performance.now() - startTime;
+    console.error(`[AdminActions CS Test] Comprehensive save/cleanup test FAILED for user ${userId}:`, error, { duration });
+    // Attempt cleanup outside transaction if part of it failed
+    if (testTransactionId) {
+      try {
+        await prisma.transaction.deleteMany({ where: { id: testTransactionId, userId }});
+        details.deletedTransaction = true; // Mark as cleaned up if successful
+         console.info(`[AdminActions CS Test] Cleanup: Deleted orphan test transaction ${testTransactionId} for user ${userId}`);
+      } catch (cleanupError: any) {
+        console.error(`[AdminActions CS Test] Cleanup Error: Failed to delete orphan test transaction ${testTransactionId} for user ${userId}:`, cleanupError);
+        details.deletedTransaction = false;
+      }
+    }
+    if (testDebtId) {
+      try {
+        await prisma.debt.deleteMany({ where: { id: testDebtId, userId }});
+        details.deletedDebt = true; // Mark as cleaned up if successful
+        console.info(`[AdminActions CS Test] Cleanup: Deleted orphan test debt ${testDebtId} for user ${userId}`);
+      } catch (cleanupError: any) {
+        console.error(`[AdminActions CS Test] Cleanup Error: Failed to delete orphan test debt ${testDebtId} for user ${userId}:`, cleanupError);
+        details.deletedDebt = false;
+      }
+    }
+    return {
+      success: false,
+      message: `Comprehensive save/cleanup test failed: ${error.message}`,
+      duration,
+      details,
+    };
+  }
+}
