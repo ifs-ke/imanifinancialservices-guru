@@ -100,7 +100,7 @@
                          message: `You've spent ${formatCurrency(actualAmount)} out of ${formatCurrency(budgetedAmount)} budgeted for "${budgetItemDescription}" in ${formatDateFns(startOfMonth(new Date(budgetPeriod.split('-')[0], parseInt(budgetPeriod.split('-')[1])-1)), 'MMMM yyyy')}.`,
                          link: '/budget',
                      });
-                      logError(`Over budget for "${budgetItemDescription}"`, undefined, logContext, userId);
+                      logError(`Over budget for "${budgetItemDescription}"`, new Error(`Budget exceeded for ${budgetItemDescription}`), logContext, userId);
                       generatedNotificationKeys.add(notifKey);
                  }
              }
@@ -162,4 +162,5 @@
      });
       logInfo(`App update notification triggered: ${title}`, { notificationId: newNotif.id, message, link }, currentUserIdForLog);
  }
+
 
