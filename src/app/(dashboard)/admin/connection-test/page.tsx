@@ -34,7 +34,7 @@ import {
     TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save,
     Download, HashIcon, Server, Timer, Info, Eye, Copy as CopyIcon,
     Database, UserCircle2, ShieldCheck, ShieldAlert, FileSignature,
-    Loader2, Settings, Layers, Users, Lock, Smartphone
+    Loader2, Settings, Layers, Users, Lock, Smartphone, UploadCloud, DownloadCloud
 } from 'lucide-react';
 import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -48,6 +48,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Import the dialog
 import { useUser } from "@clerk/nextjs";
 import { Separator } from '@/components/ui/separator';
 import type { TransactionWithId, DebtItem, BudgetItem } from '@/lib/types'; // For test data
@@ -200,6 +201,8 @@ const AdminConnectionTestPage: React.FC = () => {
   const [staleHash_dataToSendToServer, setStaleHash_dataToSendToServer] = useState<any>(null);
   const [staleHash_simulationResult, setStaleHash_simulationResult] = useState<Awaited<ReturnType<typeof simulateSaveWithPotentialMismatchAction>> | null>(null);
   const [isStaleHashSimulating, setIsStaleHashSimulating] = useState(false);
+  const [isStaleHashTestDialogVisible, setIsStaleHashTestDialogVisible] = useState(false);
+  const [staleHashSimulationResolution, setStaleHashSimulationResolution] = useState<string | null>(null);
 
 
   const [comprehensiveSaveTestResult, setComprehensiveSaveTestResult] = useState<{ success: boolean; message: string; duration?: number; details?: any } | null>(null);
@@ -251,12 +254,12 @@ const AdminConnectionTestPage: React.FC = () => {
   const handleCsStringHashTest = async () => {
     setIsCsStringHashTesting(true); setCsStringHashError(null); setCsClientCalculatedHash(''); setCsServerCalculatedHash(''); setCsServerHashingDuration(null); setCsHashMatchResult(null);
     try {
-      const preparedClientData = prepareDataForHashing(csStringTestData); // csStringTestData is now a SyncDataInput
+      const preparedClientData = prepareDataForHashing(csStringTestData);
       const clientString = stringify(preparedClientData);
       setCsClientPreparedString(clientString);
       const localClientHash = await hashData(clientString);
       setCsClientCalculatedHash(localClientHash);
-      const serverResult = await getHashForServerComparison(clientString); // Server gets the already prepared string
+      const serverResult = await getHashForServerComparison(clientString);
       if (serverResult.success && serverResult.serverHash) {
         setCsServerCalculatedHash(serverResult.serverHash);
         setCsServerHashingDuration(serverResult.duration || null);
@@ -269,13 +272,13 @@ const AdminConnectionTestPage: React.FC = () => {
   const handleCsObjectHashTest = async () => {
     setIsCsObjectHashTesting(true); setCsObjectHashError(null); setCsObjClientPreparedString(''); setCsObjClientHash(''); setCsObjServerPreparedString(''); setCsObjServerHash(''); setCsObjPrepMatch(null); setCsObjHashMatch(null);
     try {
-      const clientPreparedData = prepareDataForHashing(csObjectTestData); // csObjectTestData is now a SyncDataInput
+      const clientPreparedData = prepareDataForHashing(csObjectTestData);
       const clientPreparedString = stringify(clientPreparedData);
       setCsObjClientPreparedString(clientPreparedString);
       const clientHash = await hashData(clientPreparedString);
       setCsObjClientHash(clientHash);
 
-      const serverResult = await getHashForServerPreparedObject(csObjectTestData); // Server gets raw object and prepares it
+      const serverResult = await getHashForServerPreparedObject(csObjectTestData);
       if (serverResult.success && serverResult.serverPreparedString && serverResult.serverHash) {
         setCsObjServerPreparedString(serverResult.serverPreparedString);
         setCsObjServerHash(serverResult.serverHash);
@@ -308,14 +311,14 @@ const AdminConnectionTestPage: React.FC = () => {
       if (!integrityTestData || typeof integrityTestData !== 'object') {
         throw new Error("Please provide valid test data in JSON format for integrity test.");
       }
-      const clientPreparedData = prepareDataForHashing(integrityTestData); // integrityTestData is now a SyncDataInput
+      const clientPreparedData = prepareDataForHashing(integrityTestData);
       const clientPreparedString = stringify(clientPreparedData);
       const clientHash = await hashData(clientPreparedString);
       setIntegrityTestClientPreparedString(clientPreparedString);
       setIntegrityTestClientHash(clientHash);
 
       const startTime = performance.now();
-      const serverResult = await verifyClientDataHashAction(integrityTestData, clientHash); // Server gets raw object and client hash
+      const serverResult = await verifyClientDataHashAction(integrityTestData, clientHash);
       const duration = performance.now() - startTime;
 
       setIntegrityTestServerResult({
@@ -340,17 +343,18 @@ const AdminConnectionTestPage: React.FC = () => {
   };
 
   const handleGenerateStaleHashData = async () => {
-    const initialData = { // This should also be a SyncDataInput if simulateSaveWithPotentialMismatchAction expects it
+    const initialData = {
         transactions: [{ id: 'stale_tx_1', date: new Date(2023, 2, 10).toISOString(), description: 'Initial Stale Test TX', amount: 50.00, modeOfPayment: 'Bank' } as TransactionWithId],
         gettingStartedDismissed: true
     };
     setStaleHash_originalData(initialData);
-    const prepared = prepareDataForHashing(initialData as any); // Cast if not strictly SyncDataInput
+    const prepared = prepareDataForHashing(initialData as any);
     const hash = await hashData(stringify(prepared));
     setStaleHash_staleHash(hash);
-    setStaleHash_dataToSendToServer(initialData);
-    setStaleHash_editableJSONString(JSON.stringify(initialData, null, 2));
+    setStaleHash_dataToSendToServer(initialData); // Initialize data to send with original data
+    setStaleHash_editableJSONString(JSON.stringify(initialData, null, 2)); // Populate editor
     setStaleHash_simulationResult(null);
+    setStaleHashSimulationResolution(null); // Reset resolution message
     toast({ title: "Step 1 Complete", description: "Initial data & stale hash generated. Edit in Step 2." });
   };
 
@@ -361,7 +365,8 @@ const AdminConnectionTestPage: React.FC = () => {
     }
     try {
       const modifiedData = JSON.parse(staleHash_editableJSONString);
-      setStaleHash_dataToSendToServer(modifiedData);
+      setStaleHash_dataToSendToServer(modifiedData); // This is the data that will be sent
+      // Re-stringify to ensure editor reflects what would be parsed if saved/sent
       setStaleHash_editableJSONString(JSON.stringify(modifiedData, null, 2));
       toast({ title: "Data Updated", description: "Editor changes applied to 'Modified Data' payload. Stale hash remains unchanged." });
     } catch (error: any) {
@@ -376,23 +381,47 @@ const AdminConnectionTestPage: React.FC = () => {
     }
     setIsStaleHashSimulating(true);
     setStaleHash_simulationResult(null);
+    setStaleHashSimulationResolution(null);
     try {
       const result = await simulateSaveWithPotentialMismatchAction(
-        staleHash_dataToSendToServer,
-        staleHash_staleHash
+        staleHash_dataToSendToServer, // Send the (potentially modified) data
+        staleHash_staleHash          // Send the original, stale hash
       );
       setStaleHash_simulationResult(result);
-      toast({
-        title: result.mismatchDetected ? "Mismatch Detected (Expected!)" : (result.success ? "No Mismatch (Unexpected)" : "Simulation Error"),
-        description: result.message,
-        variant: result.mismatchDetected ? "default" : (result.success ? "destructive" : "destructive")
-      });
+      if (result.mismatchDetected) {
+        setIsStaleHashTestDialogVisible(true); // Show the dialog
+        toast({
+            title: "Mismatch DETECTED (Expected!)",
+            description: `${result.message} The conflict resolution dialog has been opened.`,
+            variant: "default"
+        });
+      } else {
+        toast({
+          title: result.success ? "No Mismatch (Unexpected)" : "Simulation Error",
+          description: result.message,
+          variant: result.success ? "destructive" : "destructive"
+        });
+      }
     } catch (error: any) {
       setStaleHash_simulationResult({ success: false, message: `Client-side error: ${error.message}.`, duration: 0, mismatchDetected: false });
        toast({ title: "Simulation Error", description: `Client-side error: ${error.message}.`, variant: "destructive"});
     } finally {
       setIsStaleHashSimulating(false);
     }
+  };
+
+  const handleSimulatedForceSave = async () => {
+    toast({ title: "Simulated: Keep Local", description: "You chose to keep local data & overwrite cloud." });
+    setStaleHashSimulationResolution("User chose: Keep Local & Overwrite Cloud (Simulated)");
+    setIsStaleHashTestDialogVisible(false);
+    return true; // Simulate success
+  };
+
+  const handleSimulatedForceFetch = async () => {
+    toast({ title: "Simulated: Load Cloud", description: "You chose to discard local data & load from cloud." });
+    setStaleHashSimulationResolution("User chose: Discard Local & Load Cloud (Simulated)");
+    setIsStaleHashTestDialogVisible(false);
+    return true; // Simulate success
   };
 
 
@@ -459,15 +488,18 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("Attempting to delete all previous test entries...");
       const deleteAllRes = await deleteAllUserTestEntries();
-      if (!deleteAllRes.success && deleteAllRes.count === undefined) {
+      if (!deleteAllRes.success && deleteAllRes.count === undefined) { // Stricter check, count must be defined if success is false in some cases
+          log(`Failed to clear previous test entries: ${deleteAllRes.message}. Count: ${deleteAllRes.count ?? 'N/A'}`, 'error');
           throw new Error(`Failed to clear previous test entries: ${deleteAllRes.message}`);
       }
-      log(`Cleared ${deleteAllRes.count ?? 'N/A'} entries`, 'success');
+      log(`Cleared ${deleteAllRes.count ?? 0} entries`, 'success');
+
 
       log("\nCreating 3 new test entries...");
       const entriesToCreate = [{ data: "Entry A" }, { data: "Entry B" }, { data: "Entry C" }];
       const createRes = await createMultipleTestEntries(entriesToCreate);
       if (!createRes.success || !createRes.createdIds || createRes.createdIds.length !== 3) {
+        log(`Failed to create test entries. Result: ${createRes.message}, IDs: ${JSON.stringify(createRes.createdIds)}`, 'error');
         throw new Error(`Failed to create test entries. Result: ${createRes.message}`);
       }
       const [idA, idB, idC] = createRes.createdIds;
@@ -475,43 +507,62 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("\nReading all test entries...");
       const readRes = await readAllTestEntries();
-      if (!readRes.success || !readRes.entries) throw new Error("Failed to read test entries.");
+      if (!readRes.success || !readRes.entries) {
+        log(`Failed to read test entries. Message: ${readRes.message}`, 'error');
+        throw new Error("Failed to read test entries.");
+      }
       log(`Found ${readRes.entries.length} entries. Expected 3.`);
       if (readRes.entries.length !== 3) {
           log("Entries found: " + JSON.stringify(readRes.entries.map(e => ({id: e.id, data: e.data}))), 'error')
           throw new Error(`Entry count mismatch after create. Expected 3, got ${readRes.entries.length}.`);
       }
       const entryBExists = readRes.entries.find(e => e.id === idB && e.data === "Entry B");
-      if (!entryBExists) throw new Error(`Entry B (ID: ${idB}) not found or data mismatch after create. Found: ${JSON.stringify(readRes.entries.find(e => e.id === idB))}`);
+      if (!entryBExists) {
+        log(`Entry B (ID: ${idB}) not found or data mismatch after create. Found: ${JSON.stringify(readRes.entries.find(e => e.id === idB))}`, 'error')
+        throw new Error(`Entry B (ID: ${idB}) not found or data mismatch after create.`);
+      }
       log("Initial entries verified.", 'success');
 
       log(`\nUpdating Entry B (ID: ${idB}) to "Entry B - Updated"...`);
       const updateRes = await updateSingleTestEntry(idB, "Entry B - Updated");
-      if (!updateRes.success) throw new Error(`Failed to update Entry B. Result: ${updateRes.message}`);
+      if (!updateRes.success) {
+        log(`Failed to update Entry B. Result: ${updateRes.message}`, 'error');
+        throw new Error(`Failed to update Entry B. Result: ${updateRes.message}`);
+      }
       const readAfterUpdateRes = await readAllTestEntries();
       const updatedEntryB = readAfterUpdateRes.entries?.find(e => e.id === idB);
       if (!updatedEntryB || updatedEntryB.data !== "Entry B - Updated") {
-        throw new Error(`Entry B not updated correctly. Found: ${JSON.stringify(updatedEntryB)}`);
+        log(`Entry B not updated correctly. Found: ${JSON.stringify(updatedEntryB)}`, 'error');
+        throw new Error(`Entry B not updated correctly.`);
       }
       log("Entry B updated and verified.", 'success');
 
       log(`\nDeleting Entry A (ID: ${idA})...`);
       const deleteARes = await deleteSingleTestEntry(idA);
-      if (!deleteARes.success) throw new Error(`Failed to delete Entry A. Result: ${deleteARes.message}`);
+      if (!deleteARes.success) {
+        log(`Failed to delete Entry A. Result: ${deleteARes.message}`, 'error');
+        throw new Error(`Failed to delete Entry A. Result: ${deleteARes.message}`);
+      }
       const readAfterDeleteARes = await readAllTestEntries();
       if (readAfterDeleteARes.entries?.length !== 2) {
+        log(`Entry count mismatch after deleting A. Expected 2, got ${readAfterDeleteARes.entries?.length}.`, 'error');
         throw new Error(`Entry count mismatch after deleting A. Expected 2, got ${readAfterDeleteARes.entries?.length}.`);
       }
-      if (readAfterDeleteARes.entries?.find(e => e.id === idA)) throw new Error("Entry A still found after deletion.");
+      if (readAfterDeleteARes.entries?.find(e => e.id === idA)) {
+        log("Entry A still found after deletion.", 'error');
+        throw new Error("Entry A still found after deletion.");
+      }
       log("Entry A deleted and verified.", 'success');
 
       log("\nDeleting all remaining test entries for user...");
       const finalDeleteRes = await deleteAllUserTestEntries();
-      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) {
+      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) { // Stricter check on count
+        log(`Failed to delete remaining entries. Expected 2, got ${finalDeleteRes.count ?? 0}. Result: ${finalDeleteRes.message}`, 'error');
         throw new Error(`Failed to delete remaining entries. Expected 2, got ${finalDeleteRes.count ?? 0}. Result: ${finalDeleteRes.message}`);
       }
       const readAfterFinalDeleteRes = await readAllTestEntries();
       if (readAfterFinalDeleteRes.entries?.length !== 0) {
+        log(`Entries still found after final delete all. Count: ${readAfterFinalDeleteRes.entries?.length}.`, 'error');
         throw new Error(`Entries still found after final delete all. Count: ${readAfterFinalDeleteRes.entries?.length}.`);
       }
       log("All test entries successfully cleaned up.", 'success');
@@ -739,9 +790,9 @@ const AdminConnectionTestPage: React.FC = () => {
             </div>
             {staleHash_originalData && staleHash_staleHash && (
                  <div className="p-3 border rounded-md space-y-2">
-                    <h5 className="font-medium text-sm">Step 2: Edit Data in Editor (this becomes 'Modified Data')</h5>
+                    <h5 className="font-medium text-sm">Step 2: Edit Data & Apply Changes</h5>
                     <Textarea value={staleHash_editableJSONString} onChange={(e) => setStaleHash_editableJSONString(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Modify the JSON data here..." />
-                     <p className="text-xs text-muted-foreground italic">
+                    <p className="text-xs text-muted-foreground italic">
                         Modify the JSON data above (e.g., change a description or amount). Then, click "Apply Editor Changes" to update the data payload that will be sent in Step 3. The 'Stale Hash' from Step 1 will remain unchanged.
                     </p>
                     <Button onClick={handleApplyEditorChangesToStaleTestData} size="sm" variant="secondary" className="w-full" disabled={!staleHash_editableJSONString.trim()}>
@@ -778,6 +829,9 @@ const AdminConnectionTestPage: React.FC = () => {
                  )}
                  {staleHash_simulationResult.mismatchDetected === false && staleHash_simulationResult.success && (
                     <p className="text-yellow-600 dark:text-yellow-400 mt-1">Note: Mismatch was NOT detected and server reported success. Ensure data was actually modified (and 'Apply Editor Changes' was clicked) for a valid mismatch test.</p>
+                 )}
+                 {staleHashSimulationResolution && (
+                    <p className="text-primary mt-2 font-medium">Simulated Resolution: {staleHashSimulationResolution}</p>
                  )}
               </div>
             )}
@@ -828,6 +882,14 @@ const AdminConnectionTestPage: React.FC = () => {
 
       </div>
       <DetailViewerDialog title={detailViewTitle} content={detailViewContent} isOpen={isDetailViewerOpen} onClose={() => setIsDetailViewerOpen(false)} />
+    
+      {/* Dialog for the Stale Hash Simulation Test */}
+      <DataSyncMismatchDialog
+        isOpen={isStaleHashTestDialogVisible}
+        onClose={() => setIsStaleHashTestDialogVisible(false)}
+        onForceSave={handleSimulatedForceSave}
+        onForceFetch={handleSimulatedForceFetch}
+      />
     </div>
   );
 };
