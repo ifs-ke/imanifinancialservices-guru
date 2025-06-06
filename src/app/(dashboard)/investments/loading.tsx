@@ -11,7 +11,7 @@ export default function Loading() {
       <PageHeader
         title="Investments"
         description="Track your current portfolio and plan for future growth."
-        icon={<Briefcase className="h-6 w-6" />}
+        icon={Briefcase} // Corrected: Pass the component type directly
       >
         <Skeleton className="h-9 w-36" /> {/* Placeholder for Add Investment button */}
       </PageHeader>
@@ -56,7 +56,7 @@ export default function Loading() {
           </CardContent>
         </Card>
         
-        <Skeleton className="h-4 w-full my-8" /> {/* Separator skeleton */}
+        <Skeleton className="h-px w-full my-8" /> {/* Separator skeleton, changed from h-4 */}
 
         {/* Investment Forecasting Tool Skeleton */}
         <Card className="shadow-md">
