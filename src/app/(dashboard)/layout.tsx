@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/layout.tsx
  'use client';
 
@@ -37,13 +38,21 @@
    }, [syncManager, isClerkLoaded, isSignedIn, userId]);
 
 
-   if (!isClerkLoaded || !syncManager || (syncManager.syncStatus === 'idle' && isSignedIn) || (syncManager.syncStatus === 'syncing' && isSignedIn && !syncManager.lastSyncTime) || (syncManager.syncStatus === 'loading_local')) {
+   // Refined loading condition
+   const isLoading = !isClerkLoaded ||
+                     !syncManager ||
+                     (syncManager.syncStatus === 'idle' && isSignedIn) ||
+                     ((syncManager.syncStatus === 'syncing' || syncManager.syncStatus === 'local' || syncManager.syncStatus === 'error') && isSignedIn && !syncManager.lastSyncTime) ||
+                     (syncManager.syncStatus === 'loading_local');
+
+   if (isLoading) {
      return (
        <div className="flex items-center justify-center min-h-screen w-full bg-background">
          <LoadingSpinner size={48} text={
              !isClerkLoaded ? "Authenticating..." :
              syncManager?.syncStatus === 'syncing' ? "Syncing data..." :
              syncManager?.syncStatus === 'loading_local' ? "Loading local data..." :
+             syncManager?.syncStatus === 'error' && !syncManager.lastSyncTime ? "Initial sync failed. Retrying..." :
              "Initializing..."
          } />
        </div>
