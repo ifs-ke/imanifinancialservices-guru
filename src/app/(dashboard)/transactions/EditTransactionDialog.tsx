@@ -27,22 +27,22 @@ import { format, parse, isValid } from 'date-fns';
 interface EditTransactionDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  transaction: TransactionWithId;
-  allBudgetItems: BudgetItem[]; 
+  transaction: TransactionWithId | null; // Null for "Add" mode
+  allBudgetItems: BudgetItem[];
 }
 
-const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__"; 
-const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__"; 
+const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__";
+const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__";
 
 const formatDateForInput = (date: Date | string | undefined | null): string => {
     if (date instanceof Date) {
         if (isValid(date)) {
             return format(date, 'yyyy-MM-dd');
         }
-        return format(new Date(0), 'yyyy-MM-dd'); 
+        return format(new Date(0), 'yyyy-MM-dd');
     }
     if (typeof date === 'string') {
-        let parsedDate = new Date(date); 
+        let parsedDate = new Date(date);
         if (isValid(parsedDate)) {
             return format(parsedDate, 'yyyy-MM-dd');
         }
@@ -62,19 +62,19 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
   transaction,
   allBudgetItems,
 }) => {
-  const { updateTransaction } = useTransactionsStore();
+  const { addTransaction, updateTransaction } = useTransactionsStore();
   const { toast } = useToast();
 
   const form = useForm<TransactionFormData>({
     resolver: zodResolver(TransactionFormDataSchema),
-    defaultValues: { 
+    defaultValues: {
       date: formatDateForInput(new Date()),
       description: '',
       amount: 0,
       modeOfPayment: 'Bank',
       frequency: undefined,
       variability: undefined,
-      categoryName: NONE_CATEGORY_VALUE, 
+      categoryName: NONE_CATEGORY_VALUE,
     },
   });
 
@@ -87,8 +87,8 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       const transactionDate = parse(transactionDateStr, 'yyyy-MM-dd', new Date());
       if (!isValid(transactionDate)) return [];
       const periodKey = format(transactionDate, 'yyyy-MM');
-      
-      return allBudgetItems.filter(item => 
+
+      return allBudgetItems.filter(item =>
         item.period === periodKey &&
         (transactionAmount >= 0 ? item.category === 'income' : item.category !== 'income') &&
         item.description && item.description.trim() !== ''
@@ -99,47 +99,69 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
   }, [transactionDateStr, transactionAmount, allBudgetItems]);
 
   useEffect(() => {
-    if (transaction && isOpen) {
-      // Do not reset date if already valid and present
-      const initialDate = transaction.date ? formatDateForInput(transaction.date) : formatDateForInput(new Date());
-      form.reset({
-        date: initialDate,
-        description: transaction.description,
-        amount: transaction.amount,
-        modeOfPayment: transaction.modeOfPayment,
-        frequency: transaction.frequency || undefined,
-        variability: transaction.variability || undefined,
-        categoryName: transaction.categoryName || NONE_CATEGORY_VALUE, 
-      });
+    if (isOpen) { // When the dialog opens
+      if (transaction) { // Editing existing item
+        const initialDate = transaction.date ? formatDateForInput(transaction.date) : formatDateForInput(new Date());
+        form.reset({
+          date: initialDate,
+          description: transaction.description,
+          amount: transaction.amount,
+          modeOfPayment: transaction.modeOfPayment,
+          frequency: transaction.frequency || undefined,
+          variability: transaction.variability || undefined,
+          categoryName: transaction.categoryName || NONE_CATEGORY_VALUE,
+        });
+      } else { // Adding new item
+        form.reset({ // Explicitly reset to "add" defaults
+          date: formatDateForInput(new Date()),
+          description: '',
+          amount: 0,
+          modeOfPayment: 'Bank',
+          frequency: undefined,
+          variability: undefined,
+          categoryName: NONE_CATEGORY_VALUE,
+        });
+      }
     }
-  }, [transaction, isOpen, form]);
+  }, [transaction, isOpen, form]); // form is stable, transaction and isOpen trigger the effect
 
   const onSubmit = (data: TransactionFormData) => {
     try {
       const processedCategoryName = data.categoryName === NONE_CATEGORY_VALUE ? null : data.categoryName;
-      updateTransaction({
-        ...transaction, 
-        date: parse(data.date, 'yyyy-MM-dd', new Date()), 
+      const transactionPayload = {
+        date: parse(data.date, 'yyyy-MM-dd', new Date()),
         description: data.description,
         amount: data.amount,
         modeOfPayment: data.modeOfPayment,
         frequency: data.frequency,
         variability: data.variability,
-        categoryName: processedCategoryName, 
-      });
-      toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
+        categoryName: processedCategoryName,
+      };
+
+      if (transaction) {
+        updateTransaction({
+          ...transaction,
+          ...transactionPayload,
+        });
+        toast({ title: 'Transaction Updated', description: 'Successfully updated.' });
+      } else {
+        addTransaction(transactionPayload);
+        toast({ title: 'Transaction Added', description: 'Successfully added.' });
+      }
       onClose();
     } catch (error) {
-      toast({ title: 'Error Updating', description: 'Could not update the transaction.', variant: 'destructive' });
+      toast({ title: 'Error Saving', description: 'Could not save the transaction.', variant: 'destructive' });
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[480px]"> 
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Edit Transaction</DialogTitle>
-          <DialogDescription>Update the details for this transaction.</DialogDescription>
+          <DialogTitle>{transaction ? 'Edit Transaction' : 'Add New Transaction'}</DialogTitle>
+          <DialogDescription>
+            {transaction ? 'Update the details for this transaction.' : 'Enter the details for the new transaction.'}
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -176,7 +198,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                 <FormItem className="grid grid-cols-4 items-center gap-4">
                   <FormLabel className="text-right col-span-1">Amount (KES)</FormLabel>
                   <FormControl className="col-span-3">
-                    <Input type="number" step="0.01" {...field} 
+                    <Input type="number" step="0.01" {...field}
                       onChange={e => field.onChange(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       placeholder="e.g., -500 or 10000"
                     />
@@ -285,7 +307,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                 <Button type="button" variant="outline" onClick={() => {form.reset(); onClose();}}>Cancel</Button>
               </DialogClose>
               <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
+                {form.formState.isSubmitting ? "Saving..." : (transaction ? "Save Changes" : "Add Transaction")}
               </Button>
             </DialogFooter>
           </form>
@@ -296,4 +318,3 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 };
 
 export default EditTransactionDialog;
-
