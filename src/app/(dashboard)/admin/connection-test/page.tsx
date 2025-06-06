@@ -172,11 +172,14 @@ const AdminConnectionTestPage: React.FC = () => {
   const [integrityTestServerResult, setIntegrityTestServerResult] = useState<Awaited<ReturnType<typeof verifyClientDataHashAction>> | null>(null);
   const [isIntegrityTesting, setIsIntegrityTesting] = useState(false);
 
-  const [mismatchInitialData, setMismatchInitialData] = useState<any>(null);
-  const [mismatchInitialHash, setMismatchInitialHash] = useState<string | null>(null);
-  const [mismatchModifiedDataString, setMismatchModifiedDataString] = useState<string>('');
-  const [mismatchSimulationResult, setMismatchSimulationResult] = useState<Awaited<ReturnType<typeof simulateSaveWithPotentialMismatchAction>> | null>(null);
-  const [isMismatchSimulating, setIsMismatchSimulating] = useState(false);
+  // States for Stale Hash Simulation Test
+  const [staleHash_originalData, setStaleHash_originalData] = useState<any>(null); // Data used to generate the stale hash
+  const [staleHash_staleHash, setStaleHash_staleHash] = useState<string | null>(null); // The stale hash itself
+  const [staleHash_editableJSONString, setStaleHash_editableJSONString] = useState<string>(''); // Content of the textarea
+  const [staleHash_dataToSendToServer, setStaleHash_dataToSendToServer] = useState<any>(null); // Data payload for the "Attempt Save" step
+  const [staleHash_simulationResult, setStaleHash_simulationResult] = useState<Awaited<ReturnType<typeof simulateSaveWithPotentialMismatchAction>> | null>(null);
+  const [isStaleHashSimulating, setIsStaleHashSimulating] = useState(false);
+
 
   const [comprehensiveSaveTestResult, setComprehensiveSaveTestResult] = useState<{ success: boolean; message: string; duration?: number; details?: any } | null>(null);
   const [isComprehensiveSaveTesting, setIsComprehensiveSaveTesting] = useState(false);
@@ -212,7 +215,7 @@ const AdminConnectionTestPage: React.FC = () => {
       setDbConnectionResult({
         success: false,
         message: `Client-side error: ${message}`,
-        duration: 0 // Duration is not applicable for client-side errors before action call
+        duration: 0 
       });
       toast({
         title: "Connection Error",
@@ -304,7 +307,7 @@ const AdminConnectionTestPage: React.FC = () => {
         variant: serverResult.success && serverResult.clientHashMatches ? "default" : "destructive"
       });
     } catch (error: any) {
-      setIntegrityTestServerResult({ success: false, message: `Client-side error: ${error.message}`, duration: 0 }); // Added duration
+      setIntegrityTestServerResult({ success: false, message: `Client-side error: ${error.message}`, duration: 0 }); 
        toast({
         title: "Integrity Test Error",
         description: error.message,
@@ -315,45 +318,60 @@ const AdminConnectionTestPage: React.FC = () => {
     }
   };
 
-  const handleFetchInitialDataForMismatch = async () => {
-    const initialData = { id: 'test-obj-1', value: 100, name: 'Initial Test Object', timestamp: new Date().toISOString() };
-    setMismatchInitialData(initialData);
-    const prepared = prepareDataForHashing(initialData as any); // Cast as requested
+  const handleGenerateStaleHashData = async () => {
+    const initialData = { id: 'test-obj-1', value: 100, name: 'Initial Stale Test Object', timestamp: new Date().toISOString(), items: ['apple', 'banana'] };
+    setStaleHash_originalData(initialData);
+    const prepared = prepareDataForHashing(initialData as any);
     const hash = await hashData(stringify(prepared));
-    setMismatchInitialHash(hash);
-    setMismatchModifiedDataString(JSON.stringify(initialData, null, 2));
-    setMismatchSimulationResult(null);
-    toast({ title: "Step 1 Complete", description: "Initial data and hash generated for mismatch test." });
+    setStaleHash_staleHash(hash);
+    setStaleHash_dataToSendToServer(initialData); // Current data to send starts as the original data
+    setStaleHash_editableJSONString(JSON.stringify(initialData, null, 2));
+    setStaleHash_simulationResult(null);
+    toast({ title: "Step 1 Complete", description: "Initial data & stale hash generated. Edit in Step 2." });
   };
 
-  const handleAttemptSaveWithMismatch = async () => {
-    const currentMismatchModifiedDataString = mismatchModifiedDataString;
-
-    if (!mismatchInitialHash || !currentMismatchModifiedDataString) {
-      toast({ title: "Error", description: "Please complete Step 1 first or ensure modified data is valid JSON.", variant: "destructive" });
+  const handleApplyEditorChangesToStaleTestData = () => {
+    if (!staleHash_editableJSONString) {
+      toast({ title: "Error", description: "Editor is empty.", variant: "destructive" });
       return;
     }
-    setIsMismatchSimulating(true);
-    setMismatchSimulationResult(null);
     try {
-      const modifiedData = JSON.parse(currentMismatchModifiedDataString);
+      const modifiedData = JSON.parse(staleHash_editableJSONString);
+      setStaleHash_dataToSendToServer(modifiedData);
+      // Normalize the string in the editor by re-stringifying the parsed object
+      setStaleHash_editableJSONString(JSON.stringify(modifiedData, null, 2));
+      toast({ title: "Data Updated", description: "Editor changes applied to 'Modified Data' payload. Stale hash remains unchanged." });
+    } catch (error: any) {
+      toast({ title: "JSON Parse Error", description: `Could not parse JSON: ${error.message}`, variant: "destructive" });
+    }
+  };
+
+  const handleAttemptSaveWithStaleHash = async () => {
+    if (!staleHash_staleHash || staleHash_dataToSendToServer === null || staleHash_dataToSendToServer === undefined) {
+      toast({ title: "Error", description: "Please complete Step 1 & ensure data payload is set (apply editor changes if needed).", variant: "destructive" });
+      return;
+    }
+    setIsStaleHashSimulating(true);
+    setStaleHash_simulationResult(null);
+    try {
       const result = await simulateSaveWithPotentialMismatchAction(
-        { ...modifiedData }, // Send a shallow copy
-        mismatchInitialHash
+        staleHash_dataToSendToServer, // Send the current data payload
+        staleHash_staleHash         // Send the original stale hash
       );
-      setMismatchSimulationResult(result);
+      setStaleHash_simulationResult(result);
       toast({
         title: result.mismatchDetected ? "Mismatch Detected (Expected!)" : (result.success ? "No Mismatch (Unexpected)" : "Simulation Error"),
         description: result.message,
         variant: result.mismatchDetected ? "default" : (result.success ? "destructive" : "destructive")
       });
     } catch (error: any) {
-      setMismatchSimulationResult({ success: false, message: `Client-side error: ${error.message}. Ensure modified data is valid JSON.`, duration: 0 });
+      setStaleHash_simulationResult({ success: false, message: `Client-side error: ${error.message}.`, duration: 0 });
        toast({ title: "Simulation Error", description: `Client-side error: ${error.message}.`, variant: "destructive"});
     } finally {
-      setIsMismatchSimulating(false);
+      setIsStaleHashSimulating(false);
     }
   };
+
 
   const handleSaveTestData = async () => {
     setIsSavingData(true); setSaveResult(null);
@@ -418,7 +436,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("Attempting to delete all previous test entries...");
       const deleteAllRes = await deleteAllUserTestEntries();
-      if (!deleteAllRes.success && deleteAllRes.count === undefined) { // Check if count is undefined for specific error
+      if (!deleteAllRes.success && deleteAllRes.count === undefined) { 
           throw new Error(`Failed to clear previous test entries: ${deleteAllRes.message}`);
       }
       log(`Cleared ${deleteAllRes.count ?? 'N/A'} entries`, 'success');
@@ -466,7 +484,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("\nDeleting all remaining test entries for user...");
       const finalDeleteRes = await deleteAllUserTestEntries();
-      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) { // Strict check for 2 deleted
+      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) { 
         throw new Error(`Failed to delete remaining entries. Expected 2, got ${finalDeleteRes.count ?? 0}. Result: ${finalDeleteRes.message}`);
       }
       const readAfterFinalDeleteRes = await readAllTestEntries();
@@ -687,48 +705,56 @@ const AdminConnectionTestPage: React.FC = () => {
           <CardHeader><CardTitle className="flex items-center gap-2"><ShieldAlert size={20}/> Save with Stale Hash (Mismatch Simulation)</CardTitle><CardDescription>Tests server rejection of saves with an old/stale hash for modified data.</CardDescription></CardHeader>
           <CardContent className="space-y-4">
             <div className="p-3 border rounded-md space-y-2">
-                <h5 className="font-medium text-sm">Step 1: Simulate Initial State</h5>
-                <Button onClick={handleFetchInitialDataForMismatch} size="sm" className="w-full">Fetch/Set Initial Data & Hash</Button>
-                {mismatchInitialData && mismatchInitialHash && (
+                <h5 className="font-medium text-sm">Step 1: Generate Initial Data & Stale Hash</h5>
+                <Button onClick={handleGenerateStaleHashData} size="sm" className="w-full">Generate Data & Stale Hash</Button>
+                {staleHash_originalData && staleHash_staleHash && (
                     <div className="text-xs mt-1 space-y-0.5">
-                        <p><strong>Initial Data (as object):</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Mismatch Sim: Initial Data", mismatchInitialData)}>View</Button></p>
-                        <p><strong>Initial (Stale) Hash:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchInitialHash.substring(0,20)}...</span> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Mismatch Sim: Initial Hash", mismatchInitialHash)}>Full</Button></p>
+                        <p><strong>Initial Data (used for stale hash):</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Original Data", staleHash_originalData)}>View</Button></p>
+                        <p><strong>Stale Hash (from original data):</strong> <span className="font-mono bg-muted/50 p-1 rounded">{staleHash_staleHash.substring(0,20)}...</span> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Stale Hash", staleHash_staleHash)}>Full</Button></p>
                     </div>
                 )}
             </div>
-            {mismatchInitialData && mismatchInitialHash && (
+            {staleHash_originalData && staleHash_staleHash && (
                  <div className="p-3 border rounded-md space-y-2">
-                    <h5 className="font-medium text-sm">Step 2: Modify Data Locally (JSON)</h5>
-                    <Textarea value={mismatchModifiedDataString} onChange={(e) => setMismatchModifiedDataString(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Modify the JSON data here..." />
-                    <p className="text-xs text-muted-foreground italic">
-                        Modify the JSON data above to test the mismatch detection. For example, change a value or add a new field.
+                    <h5 className="font-medium text-sm">Step 2: Edit Data in Editor (this becomes 'Modified Data')</h5>
+                    <Textarea value={staleHash_editableJSONString} onChange={(e) => setStaleHash_editableJSONString(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Modify the JSON data here..." />
+                     <p className="text-xs text-muted-foreground italic">
+                        Modify the JSON data above. Then, click "Apply Editor Changes" to update the data payload that will be sent in Step 3. The 'Stale Hash' from Step 1 will remain unchanged.
                     </p>
+                    <Button onClick={handleApplyEditorChangesToStaleTestData} size="sm" variant="secondary" className="w-full" disabled={!staleHash_editableJSONString.trim()}>
+                      Apply Editor Changes as 'Modified Data' Payload
+                    </Button>
+                     {staleHash_dataToSendToServer && (
+                        <div className="text-xs mt-1">
+                            <p><strong>Current 'Modified Data' to send:</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Current Data to Send", staleHash_dataToSendToServer)}>View</Button></p>
+                        </div>
+                     )}
                 </div>
             )}
-            {mismatchInitialData && mismatchInitialHash && (
+            {staleHash_originalData && staleHash_staleHash && (
                 <div className="p-3 border rounded-md space-y-2">
-                    <h5 className="font-medium text-sm">Step 3: Attempt Save</h5>
-                     <Button onClick={handleAttemptSaveWithMismatch} disabled={isMismatchSimulating || !mismatchModifiedDataString.trim()} className="w-full">
-                        {isMismatchSimulating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Attempt Save (Modified Data, ORIGINAL Hash)'}
+                    <h5 className="font-medium text-sm">Step 3: Attempt Save (Sends 'Modified Data' with 'Stale Hash')</h5>
+                     <Button onClick={handleAttemptSaveWithStaleHash} disabled={isStaleHashSimulating || staleHash_dataToSendToServer === null} className="w-full">
+                        {isStaleHashSimulating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Attempt Save with Stale Hash"}
                     </Button>
                 </div>
             )}
-            {mismatchSimulationResult && (
+            {staleHash_simulationResult && (
               <div className="space-y-2 mt-2 text-xs border p-3 rounded-md bg-muted/10">
                 <h5 className="font-semibold mb-1">Mismatch Simulation Result:</h5>
-                 <p><strong>Client Provided (Stale) Hash:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.clientProvidedOriginalHash ? mismatchSimulationResult.clientProvidedOriginalHash.substring(0,20)+'...' : 'N/A'}</span></p>
-                 <p><strong>Server Calculated Hash of Data Sent:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.serverHashOfDataSent ? mismatchSimulationResult.serverHashOfDataSent.substring(0,20)+'...' : 'N/A'}</span></p>
+                 <p><strong>Client Provided (Stale) Hash:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{staleHash_simulationResult.clientProvidedOriginalHash ? staleHash_simulationResult.clientProvidedOriginalHash.substring(0,20)+'...' : 'N/A'}</span></p>
+                 <p><strong>Server Calculated Hash of Data Sent:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{staleHash_simulationResult.serverHashOfDataSent ? staleHash_simulationResult.serverHashOfDataSent.substring(0,20)+'...' : 'N/A'}</span></p>
                  <ResultBadge
-                    success={mismatchSimulationResult.mismatchDetected === false && mismatchSimulationResult.success}
-                    message={mismatchSimulationResult.message}
-                    duration={mismatchSimulationResult.duration}
-                    icon={mismatchSimulationResult.mismatchDetected ? ShieldAlert : (mismatchSimulationResult.success ? ShieldCheck : AlertTriangle)}
+                    success={staleHash_simulationResult.mismatchDetected === false && staleHash_simulationResult.success}
+                    message={staleHash_simulationResult.message}
+                    duration={staleHash_simulationResult.duration}
+                    icon={staleHash_simulationResult.mismatchDetected ? ShieldAlert : (staleHash_simulationResult.success ? ShieldCheck : AlertTriangle)}
                  />
-                 {mismatchSimulationResult.mismatchDetected === false && !mismatchSimulationResult.success && (
+                 {staleHash_simulationResult.mismatchDetected === false && !staleHash_simulationResult.success && (
                     <p className="text-destructive mt-1">Note: Mismatch was NOT detected, but the server action reported failure. Check server logs.</p>
                  )}
-                 {mismatchSimulationResult.mismatchDetected === false && mismatchSimulationResult.success && (
-                    <p className="text-yellow-600 dark:text-yellow-400 mt-1">Note: Mismatch was NOT detected and server reported success. Ensure data was actually modified client-side for a valid test.</p>
+                 {staleHash_simulationResult.mismatchDetected === false && staleHash_simulationResult.success && (
+                    <p className="text-yellow-600 dark:text-yellow-400 mt-1">Note: Mismatch was NOT detected and server reported success. Ensure data was actually modified (and 'Apply Editor Changes' was clicked) for a valid mismatch test.</p>
                  )}
               </div>
             )}
@@ -784,3 +810,4 @@ const AdminConnectionTestPage: React.FC = () => {
 };
 
 export default AdminConnectionTestPage;
+
