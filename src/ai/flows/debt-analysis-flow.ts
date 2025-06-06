@@ -91,6 +91,26 @@ Based on this information:
 
 Return the analysis in the specified JSON format. Ensure all amounts are in KES.
 `,
+  config: { // Added safety settings configuration
+    safetySettings: [
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+      {
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_ONLY_HIGH',
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_NONE', // Relaxed for financial advice context
+      },
+    ],
+  },
 });
 
 
@@ -125,5 +145,4 @@ const debtAnalysisFlow = ai.defineFlow<
     return output;
   }
 );
- 
       
