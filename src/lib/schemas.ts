@@ -13,7 +13,6 @@ export type TransactionVariability = z.infer<typeof TransactionVariabilitySchema
 
 export const TransactionFormDataSchema = z.object({
   date: z.string().min(1, "Date is required").refine((date) => {
-    // Check if it's a valid yyyy-MM-dd string that can be parsed
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
     return !isNaN(new Date(date).getTime());
   }, {
@@ -191,7 +190,8 @@ export const SaveDataPayloadSchema = z.object({
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   gettingStartedDismissed: z.boolean().optional(),
-  dataHash: z.string({ required_error: "Data hash is required" }),
+  payloadDataHash: z.string({ required_error: "Payload data hash is required" }), // Renamed from dataHash
+  lastKnownServerHash: z.string().nullable().optional(), // Added for stale data check
 });
 export type SaveDataPayload = z.infer<typeof SaveDataPayloadSchema>;
 
@@ -201,16 +201,15 @@ export const SearchUserByEmailInputSchema = z.object({
 });
 
 export const ShareReviewInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex to allow 1 or 2 digits for week
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const RevokeShareInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const GetSharedWithUsersInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
 });
-

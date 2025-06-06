@@ -13,7 +13,7 @@ import { addCorsHeaders } from '@/lib/utils';
 import { SaveDataPayloadSchema } from '@/lib/schemas';
 import { ensureUserInDb } from '@/app/actions/shareActions';
 
-const HASH_CHECK_ENABLED_ON_SERVER = true; // Keep this for payload integrity
+const HASH_CHECK_ENABLED_ON_SERVER = true;
 
 const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
   ? new Ratelimit({
@@ -94,7 +94,7 @@ async function getCurrentServerDataForUser(userId: string) {
     const ownedReviewsMap: Record<string, WeeklyReviewData> = {};
     ownedReviewsPrisma.forEach(review => {
       ownedReviewsMap[review.weekKey] = {
-        ownerId: review.userId, // This will be currentUserId
+        ownerId: review.userId,
         journal: review.journal || "",
         transactionComments: typeof review.transactionComments === 'object' && review.transactionComments !== null ? review.transactionComments as Record<string, string> : {},
         weekKey: review.weekKey,
@@ -188,31 +188,40 @@ export async function POST(request: Request) {
   }
 
   const payload = validationResult.data;
-  const { dataHash: clientProvidedDataHash, ...receivedDataForSave } = payload;
+  const { payloadDataHash: clientProvidedPayloadHash, lastKnownServerHash: clientLastKnownServerHash, ...receivedDataForSave } = payload;
+  
   const preparedDataForSaving = prepareDataForHashing(receivedDataForSave as any);
-  const serverCalculatedHashOfReceivedData = await hashData(stringify(preparedDataForSaving));
+  const serverCalculatedHashOfReceivedPayload = await hashData(stringify(preparedDataForSaving));
 
-  if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedHashOfReceivedData !== clientProvidedDataHash) {
-    console.error(`[API /api/save] Payload integrity check FAILED! Client hash does not match server hash of received data. User: ${userId}`, {
-      error: new Error('Payload hash mismatch'), clientHash: clientProvidedDataHash, serverCalculatedHash: serverCalculatedHashOfReceivedData, ...logContextBase
+  // 1. Payload Integrity Check
+  if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedHashOfReceivedPayload !== clientProvidedPayloadHash) {
+    console.error(`[API /api/save] PAYLOAD INTEGRITY CHECK FAILED! Client's payload hash does not match server's hash of received data. User: ${userId}`, {
+      error: new Error('Payload hash mismatch during save.'), clientPayloadHash, serverCalculatedHashOfReceivedPayload, ...logContextBase
     });
-    const response = NextResponse.json({ error: 'Data integrity check failed. Payload may have been corrupted.' }, { status: 400 });
+    // This indicates the data sent might be different from what the client intended to hash and send, or client-side hashing issue.
+    const response = NextResponse.json({ error: 'Data integrity check failed. Payload may have been corrupted or hashing differs.' }, { status: 400 });
     return addCorsHeaders(response);
   }
-  console.info(`[API /api/save] Payload integrity check passed. User: ${userId}`, { clientHash: clientProvidedDataHash, ...logContextBase });
+  console.info(`[API /api/save] Payload integrity check passed. User: ${userId}`, { clientPayloadHash, ...logContextBase });
 
-  // --- Stale Data Check ---
-  const currentServerData = await getCurrentServerDataForUser(userId);
-  const preparedCurrentServerData = prepareDataForHashing(currentServerData);
-  const currentServerStateHash = await hashData(stringify(preparedCurrentServerData));
+  // 2. Stale Data Check (Only if client sent a lastKnownServerHash)
+  if (HASH_CHECK_ENABLED_ON_SERVER && clientLastKnownServerHash) {
+    const currentServerData = await getCurrentServerDataForUser(userId);
+    const preparedCurrentServerData = prepareDataForHashing(currentServerData);
+    const currentServerStateHash = await hashData(stringify(preparedCurrentServerData));
 
-  if (clientProvidedDataHash !== currentServerStateHash) {
-      console.warn(`[API /api/save] Stale data detected! Client's hash (${clientProvidedDataHash}) does not match current server state hash (${currentServerStateHash}). User: ${userId}`, logContextBase);
-      const response = NextResponse.json({ error: "Your data is out of sync with the server. Please sync again before saving." }, { status: 409 }); // 409 Conflict
-      return addCorsHeaders(response);
+    if (clientLastKnownServerHash !== currentServerStateHash) {
+        console.warn(`[API /api/save] STALE DATA DETECTED! Client's last known server hash (${clientLastKnownServerHash}) does not match current server state hash (${currentServerStateHash}). User: ${userId}`, { ...logContextBase, currentServerHash: currentServerStateHash });
+        const response = NextResponse.json({ error: "Your data is out of sync with the server. Please sync again before saving.", currentServerHash: currentServerStateHash }, { status: 409 }); // 409 Conflict
+        return addCorsHeaders(response);
+    }
+    console.info(`[API /api/save] Client's last known server hash matches current server state. Proceeding with save. User: ${userId}`, { clientLastKnownServerHash, currentServerStateHash, ...logContextBase });
+  } else if (HASH_CHECK_ENABLED_ON_SERVER && !clientLastKnownServerHash) {
+    console.warn(`[API /api/save] Client did not provide lastKnownServerHash. Proceeding with save, but this might be risky if client data is stale. User: ${userId}`, logContextBase);
+    // This could be an initial save or a "force save" scenario from the client.
+    // Depending on strictness, you might choose to reject here too if a hash is always expected after first sync.
   }
-  console.info(`[API /api/save] Client data hash matches current server state hash. Proceeding with save. User: ${userId}`, { clientHash: clientProvidedDataHash, serverHash: currentServerStateHash, ...logContextBase });
-  // --- End Stale Data Check ---
+
 
   try {
     const {
@@ -220,24 +229,29 @@ export async function POST(request: Request) {
         otherLiabilityItems = [], budgetItems = [],
         ownedReviews = {}, investmentItems = [],
         startDate, endDate, gettingStartedDismissed
-    } = preparedDataForSaving;
+    } = preparedDataForSaving; // Use the data from preparedDataForSaving
 
     await prisma.$transaction(async (tx) => {
+      // Clear existing data for the user. This is a "replace all" strategy.
       await tx.transaction.deleteMany({ where: { userId } });
       await tx.debt.deleteMany({ where: { userId } });
       await tx.investmentItem.deleteMany({where: {userId}});
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } });
-      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } });
+      await tx.weeklyReview.deleteMany({ where: { userId } }); // Clears owned reviews
+      // Note: SharedReview entries where this user IS THE OWNER are implicitly handled by cascade or need explicit logic if not cascading.
+      // For shared reviews where this user is a recipient, those are not cleared here.
+      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } }); // Clear shares initiated by this user
 
+      // Create new data
       if (transactions.length > 0) await tx.transaction.createMany({ data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })) });
       if (debts.length > 0) await tx.debt.createMany({ data: debts.map((d:any) => ({ ...d, userId, principal: Number(d.principal), interestRate: Number(d.interestRate), minPayment: Number(d.minPayment) })) });
       if (investmentItems.length > 0) await tx.investmentItem.createMany({ data: investmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate), quantity: Number(i.quantity), purchasePrice: Number(i.purchasePrice), currentValue: Number(i.currentValue) })) });
       if (assetItems.length > 0) await tx.assetItem.createMany({ data: assetItems.map((a:any) => ({ ...a, userId, amount: Number(a.amount) })) });
       if (otherLiabilityItems.length > 0) await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map((l:any) => ({ ...l, userId, amount: Number(l.amount) })) });
       if (budgetItems.length > 0) await tx.budgetItem.createMany({ data: budgetItems.map((b:any) => ({ ...b, userId, amount: Number(b.amount) })) });
+      
       if (Object.keys(ownedReviews).length > 0) {
         await tx.weeklyReview.createMany({
           data: Object.entries(ownedReviews).map(([weekKey, reviewData]: [string, any]) => ({
@@ -245,11 +259,12 @@ export async function POST(request: Request) {
           })),
         });
       }
+      // Save statement settings (start/end date, getting started)
       await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    // The hash of the data *just saved* is clientProvidedDataHash (or serverCalculatedHashOfReceivedData, they are the same at this point)
-    const newServerHashAfterSave = clientProvidedDataHash;
+    // After successful save, the new server state hash is the hash of the data we just saved.
+    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; // This is the hash of the data that was just written.
     console.info(`[API /api/save] Prisma transaction committed. User: ${userId}. New server hash: ${newServerHashAfterSave}`, logContextBase);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}`, newServerHash: newServerHashAfterSave });
     return addCorsHeaders(response);
