@@ -12,11 +12,15 @@ export const TransactionVariabilitySchema = z.enum(['fixed', 'variable']).option
 export type TransactionVariability = z.infer<typeof TransactionVariabilitySchema>;
 
 export const TransactionFormDataSchema = z.object({
-  date: z.string().refine((date) => !isNaN(new Date(date).getTime()), {
-    message: "Invalid date format",
+  date: z.string().min(1, "Date is required").refine((date) => {
+    // Check if it's a valid yyyy-MM-dd string that can be parsed
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    return !isNaN(new Date(date).getTime());
+  }, {
+    message: "Invalid date format. Use YYYY-MM-DD.",
   }),
   description: z.string().min(1, { message: "Description is required" }).max(100, { message: "Description too long" }),
-  amount: z.number({ // Keep as number for form input
+  amount: z.number({
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }),
@@ -44,7 +48,7 @@ export type BudgetItemCategory = z.infer<typeof BudgetItemCategorySchema>;
 
 export const BudgetItemFormDataSchema = z.object({
   description: z.string().min(1, "Description is required").max(100, "Description too long"),
-  amount: z.number({ // Keep as number for form input
+  amount: z.number({
     required_error: "Amount is required",
     invalid_type_error: "Amount must be a number",
   }).positive({ message: "Amount must be positive" }),
@@ -61,15 +65,15 @@ export type DebtTerm = z.infer<typeof DebtTermSchema>;
 
 export const DebtItemFormDataSchema = z.object({
   description: z.string().min(1, "Description is required").max(100, "Description too long"),
-  principal: z.number({ // Keep as number for form input
+  principal: z.number({
     required_error: "Principal is required",
     invalid_type_error: "Principal must be a number",
   }).positive({ message: "Principal must be positive" }),
-  interestRate: z.number({ // Keep as number for form input
+  interestRate: z.number({
     required_error: "Interest rate is required",
     invalid_type_error: "Interest rate must be a number",
   }).min(0, "Interest rate cannot be negative").max(100, "Interest rate seems too high"),
-  minPayment: z.number({ // Keep as number for form input
+  minPayment: z.number({
     required_error: "Minimum payment is required",
     invalid_type_error: "Minimum payment must be a number",
   }).min(0, "Minimum payment cannot be negative"),
@@ -81,18 +85,21 @@ export type DebtItemFormData = z.infer<typeof DebtItemFormDataSchema>;
 export const InvestmentFormDataSchema = z.object({
   name: z.string().min(1, "Investment name is required").max(100, "Name too long"),
   type: z.string().min(1, "Investment type is required").max(50, "Type too long"),
-  purchaseDate: z.string().refine((date) => !isNaN(new Date(date).getTime()), {
-    message: "Invalid purchase date",
+  purchaseDate: z.string().min(1, "Purchase date is required").refine((date) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    return !isNaN(new Date(date).getTime());
+  }, {
+    message: "Invalid purchase date. Use YYYY-MM-DD.",
   }),
-  quantity: z.number({ // Keep as number for form input
+  quantity: z.number({
     required_error: "Quantity is required",
     invalid_type_error: "Quantity must be a number",
   }).positive({ message: "Quantity must be positive" }),
-  purchasePrice: z.number({ // Keep as number for form input
+  purchasePrice: z.number({
     required_error: "Purchase price is required",
     invalid_type_error: "Purchase price must be a number",
   }).positive({ message: "Purchase price must be positive" }),
-  currentValue: z.number({ // Keep as number for form input
+  currentValue: z.number({
     required_error: "Current value is required",
     invalid_type_error: "Current value must be a number",
   }).min(0, { message: "Current value cannot be negative" }),
@@ -123,7 +130,7 @@ export type ClientLogPayload = z.infer<typeof ClientLogPayloadSchema>;
 const BaseItemSchemaForAPI = z.object({
   id: z.string(),
   description: z.string(),
-  amount: z.coerce.number(), // Expect string from payload, coerce to number
+  amount: z.coerce.number(),
 });
 
 const TransactionItemSchemaForAPI = BaseItemSchemaForAPI.extend({
@@ -137,16 +144,16 @@ const TransactionItemSchemaForAPI = BaseItemSchemaForAPI.extend({
 const DebtItemAPISchema = z.object({
   id: z.string(),
   description: z.string(),
-  principal: z.coerce.number(), // Expect string from payload, coerce to number
-  interestRate: z.coerce.number(), // Expect string from payload, coerce to number
-  minPayment: z.coerce.number(), // Expect string from payload, coerce to number
+  principal: z.coerce.number(),
+  interestRate: z.coerce.number(),
+  minPayment: z.coerce.number(),
   term: DebtTermSchema,
 });
 
 const BudgetItemAPISchema = z.object({
   id: z.string(),
   description: z.string(),
-  amount: z.coerce.number(), // Expect string from payload, coerce to number
+  amount: z.coerce.number(),
   category: BudgetItemCategorySchema,
   period: z.string(),
 });
@@ -156,9 +163,9 @@ const InvestmentItemAPISchema = z.object({
   name: z.string(),
   type: z.string(),
   purchaseDate: z.string(), // ISO string
-  quantity: z.coerce.number(), // Expect string from payload, coerce to number
-  purchasePrice: z.coerce.number(), // Expect string from payload, coerce to number
-  currentValue: z.coerce.number(), // Expect string from payload, coerce to number
+  quantity: z.coerce.number(),
+  purchasePrice: z.coerce.number(),
+  currentValue: z.coerce.number(),
   currency: z.string(),
   notes: z.string().optional().nullable(),
 });
@@ -194,16 +201,16 @@ export const SearchUserByEmailInputSchema = z.object({
 });
 
 export const ShareReviewInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."), // Allow for single or double digit week
+  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."),
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const RevokeShareInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."), // Allow for single or double digit week
+  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."),
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const GetSharedWithUsersInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."), // Allow for single or double digit week
+  weekKey: z.string().regex(/^\d{4}-\d{1,2}$/, "Invalid weekKey format (YYYY-WW)."),
 });
 

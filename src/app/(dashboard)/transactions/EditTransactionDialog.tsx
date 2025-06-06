@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/transactions/EditTransactionDialog.tsx
 'use client';
 
@@ -36,23 +37,24 @@ const NO_ITEMS_PLACEHOLDER_VALUE = "__NO_BUDGET_ITEMS_PLACEHOLDER__";
 
 const formatDateForInput = (date: Date | string | undefined | null): string => {
     if (date instanceof Date) {
-        if (isValid(date)) {
-            return format(date, 'yyyy-MM-dd');
-        }
-        return format(new Date(0), 'yyyy-MM-dd');
+        return isValid(date) ? format(date, 'yyyy-MM-dd') : ''; // Return empty for invalid Date object
     }
     if (typeof date === 'string') {
-        let parsedDate = new Date(date);
+        // Try parsing as ISO or other common formats
+        const parsedDate = new Date(date);
         if (isValid(parsedDate)) {
             return format(parsedDate, 'yyyy-MM-dd');
         }
-        parsedDate = parse(date, 'yyyy-MM-dd', new Date());
-        if (isValid(parsedDate)) {
-            return format(parsedDate, 'yyyy-MM-dd');
+        // If direct parsing fails, specifically try 'yyyy-MM-dd'
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            const specificParse = parse(date, 'yyyy-MM-dd', new Date());
+            if (isValid(specificParse)) {
+                return format(specificParse, 'yyyy-MM-dd');
+            }
         }
-        return format(new Date(0), 'yyyy-MM-dd');
+        return ''; // Return empty for unparsable string
     }
-    return format(new Date(0), 'yyyy-MM-dd');
+    return ''; // Default to empty if date is undefined/null or not a string/Date
 };
 
 
@@ -68,7 +70,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
   const form = useForm<TransactionFormData>({
     resolver: zodResolver(TransactionFormDataSchema),
     defaultValues: {
-      date: formatDateForInput(new Date()),
+      date: format(new Date(), 'yyyy-MM-dd'), // Sensible default for add
       description: '',
       amount: 0,
       modeOfPayment: 'Bank',
@@ -99,11 +101,11 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
   }, [transactionDateStr, transactionAmount, allBudgetItems]);
 
   useEffect(() => {
-    if (isOpen) { // When the dialog opens
-      if (transaction) { // Editing existing item
-        const initialDate = transaction.date ? formatDateForInput(transaction.date) : formatDateForInput(new Date());
+    if (isOpen) {
+      if (transaction) {
+        const initialDate = formatDateForInput(transaction.date);
         form.reset({
-          date: initialDate,
+          date: initialDate, // Will be empty if transaction.date is invalid, Zod will catch
           description: transaction.description,
           amount: transaction.amount,
           modeOfPayment: transaction.modeOfPayment,
@@ -111,9 +113,9 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
           variability: transaction.variability || undefined,
           categoryName: transaction.categoryName || NONE_CATEGORY_VALUE,
         });
-      } else { // Adding new item
-        form.reset({ // Explicitly reset to "add" defaults
-          date: formatDateForInput(new Date()),
+      } else {
+        form.reset({
+          date: format(new Date(), 'yyyy-MM-dd'), // Always use current date for new transactions
           description: '',
           amount: 0,
           modeOfPayment: 'Bank',
@@ -123,13 +125,13 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         });
       }
     }
-  }, [transaction, isOpen, form]); // form is stable, transaction and isOpen trigger the effect
+  }, [transaction, isOpen, form]);
 
   const onSubmit = (data: TransactionFormData) => {
     try {
       const processedCategoryName = data.categoryName === NONE_CATEGORY_VALUE ? null : data.categoryName;
       const transactionPayload = {
-        date: parse(data.date, 'yyyy-MM-dd', new Date()),
+        date: parse(data.date, 'yyyy-MM-dd', new Date()), // data.date is validated by Zod to be 'yyyy-MM-dd'
         description: data.description,
         amount: data.amount,
         modeOfPayment: data.modeOfPayment,
@@ -245,7 +247,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                        <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                        {budgetItemsForSelectedMonth.length > 0 ? (
                         budgetItemsForSelectedMonth.map(item => (
-                           item.description && item.description.trim() !== '' && ( // Ensure description is not empty
+                           item.description && item.description.trim() !== '' && (
                             <SelectItem key={item.id} value={item.description}>
                               {item.description} ({item.category === 'income' ? 'Income' : 'Expense/Goal/Debt'})
                             </SelectItem>
@@ -318,3 +320,4 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 };
 
 export default EditTransactionDialog;
+

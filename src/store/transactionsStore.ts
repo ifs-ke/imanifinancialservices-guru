@@ -1,9 +1,11 @@
+
 // src/store/transactionsStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { TransactionWithId, TransactionFrequency, TransactionVariability, ModeOfPayment, TransactionFormData as SharedTransactionFormData } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils'; 
-import { logInfo, logDebug } from '@/lib/logger'; 
+import { logInfo, logDebug, logWarn } from '@/lib/logger'; 
+import { isValid } from 'date-fns'; // Import isValid from date-fns
 
 const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
@@ -22,6 +24,22 @@ const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
     });
 };
 
+// Helper to ensure date is valid, defaulting to now if not.
+const ensureValidDate = (dateInput: Date | string | undefined | null): Date => {
+    if (dateInput instanceof Date && isValid(dateInput)) {
+        return dateInput;
+    }
+    if (typeof dateInput === 'string') {
+        const parsed = new Date(dateInput);
+        if (isValid(parsed)) {
+            return parsed;
+        }
+    }
+    logWarn("Invalid date encountered in transaction store, defaulting to current date:", { originalDate: dateInput });
+    return new Date();
+};
+
+
 const createSessionStorageWithEncoding = (): StateStorage => {
   const storage = typeof window !== 'undefined' ? sessionStorage : undefined;
   return {
@@ -34,7 +52,8 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         return JSON.parse(decodedStr, (key, value) => {
             if (key === 'date' && typeof value === 'string') {
                 const parsedDate = new Date(value);
-                return !isNaN(parsedDate.getTime()) ? parsedDate : new Date(0); 
+                // Ensure rehydrated dates are valid Date objects
+                return isValid(parsedDate) ? parsedDate : ensureValidDate(null); 
             }
             return value;
         });
@@ -71,7 +90,7 @@ export interface TransactionsState {
     deleteTransaction: (id: string) => void;
     importTransactionsBatch: (newTransactionsData: Omit<TransactionWithId, 'id'>[]) => TransactionWithId[];
     clearTransactions: () => void; 
-    deleteSelectedTransactions: (idsToDelete: string[]) => void; // Accepts IDs
+    deleteSelectedTransactions: (idsToDelete: string[]) => void;
     batchUpdateTransactions: (updates: Array<{ id: string; data: Partial<SharedTransactionFormData> }>) => void;
 }
 
@@ -87,7 +106,7 @@ export const useTransactionsStore = create<TransactionsState>()(
              setTransactions: (transactions) => {
                  const validatedTransactions = (transactions || []).map(tx => ({
                      ...tx,
-                     date: tx.date instanceof Date && !isNaN(tx.date.getTime()) ? tx.date : new Date(0),
+                     date: ensureValidDate(tx.date),
                      categoryName: tx.categoryName || null,
                  }));
                  set({ transactions: sortTransactions(validatedTransactions), isHydrated: true });
@@ -96,16 +115,14 @@ export const useTransactionsStore = create<TransactionsState>()(
                 const newTransaction: TransactionWithId = {
                     id: generateId(),
                     ...transactionData,
-                    date: transactionData.date instanceof Date && !isNaN(transactionData.date.getTime()) ? transactionData.date : new Date(0),
+                    date: ensureValidDate(transactionData.date),
                     categoryName: transactionData.categoryName || null,
                 };
                 set((state) => ({ transactions: sortTransactions([...state.transactions, newTransaction]) }));
                 return newTransaction; 
             },
             updateTransaction: (updatedTransaction) => {
-                 const validatedDate = updatedTransaction.date instanceof Date && !isNaN(updatedTransaction.date.getTime())
-                     ? updatedTransaction.date
-                     : new Date(0); 
+                 const validatedDate = ensureValidDate(updatedTransaction.date);
                 set((state) => ({
                     transactions: sortTransactions(
                         state.transactions.map(tx => tx.id === updatedTransaction.id ? { ...updatedTransaction, date: validatedDate, categoryName: updatedTransaction.categoryName || null } : tx)
@@ -121,7 +138,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                  const newTransactionsWithIds = newTransactionsData.map(txData => ({
                      id: generateId(),
                      ...txData,
-                     date: txData.date instanceof Date && !isNaN(txData.date.getTime()) ? txData.date : new Date(0),
+                     date: ensureValidDate(txData.date),
                      categoryName: txData.categoryName || null,
                  }));
                  set((state) => ({ transactions: sortTransactions([...state.transactions, ...newTransactionsWithIds]) }));
@@ -143,27 +160,21 @@ export const useTransactionsStore = create<TransactionsState>()(
                     const updatedTransactions = state.transactions.map(tx => {
                         const updateDataForTx = updates.find(u => u.id === tx.id);
                         if (updateDataForTx) {
-                             const validatedDate = updateDataForTx.data.date && !(new Date(updateDataForTx.data.date) instanceof Date && !isNaN(new Date(updateDataForTx.data.date).getTime())) 
-                                ? new Date(0) 
-                                : updateDataForTx.data.date ? new Date(updateDataForTx.data.date) : tx.date;
-                            
-                            // Create a new object for the updated transaction
-                            const newTxData: Partial<TransactionWithId> = {};
+                             const newTxData: Partial<TransactionWithId> = {};
                             if (updateDataForTx.data.modeOfPayment !== undefined) newTxData.modeOfPayment = updateDataForTx.data.modeOfPayment;
                             if (updateDataForTx.data.frequency !== undefined) newTxData.frequency = updateDataForTx.data.frequency;
                             if (updateDataForTx.data.variability !== undefined) newTxData.variability = updateDataForTx.data.variability;
-                            if (updateDataForTx.data.date !== undefined) newTxData.date = validatedDate; // Use validatedDate
                             
-                            // Handle categoryName explicitly
+                            // Validate date only if it's part of the update
+                            if (updateDataForTx.data.date !== undefined) {
+                                newTxData.date = ensureValidDate(updateDataForTx.data.date);
+                            }
+                            
                             if (Object.prototype.hasOwnProperty.call(updateDataForTx.data, 'categoryName')) {
                                 newTxData.categoryName = updateDataForTx.data.categoryName === "" ? null : updateDataForTx.data.categoryName;
                             }
 
-
-                            return { 
-                                ...tx, 
-                                ...newTxData
-                             };
+                            return { ...tx, ...newTxData };
                         }
                         return tx;
                     });
@@ -179,6 +190,13 @@ export const useTransactionsStore = create<TransactionsState>()(
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
+                   // Ensure dates are valid upon rehydration
+                   if (Array.isArray(state.transactions)) {
+                       state.transactions = state.transactions.map(tx => ({
+                           ...tx,
+                           date: ensureValidDate(tx.date)
+                       }));
+                   }
                    logInfo("TransactionsStore: Rehydrated successfully.");
                  }
              },
@@ -195,3 +213,4 @@ export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
