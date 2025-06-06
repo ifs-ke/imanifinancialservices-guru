@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/layout.tsx
  'use client';
 
@@ -7,7 +6,7 @@
  import {
    Sidebar,
    SidebarInset,
- } from "@/components/ui/sidebar";
+ } from "@/components/ui/sidebar"; // Corrected import for AppSidebar components
  import { useSyncManager } from '@/hooks/useSyncManager';
  import FloatingChatButton from '@/components/layout/FloatingChatButton';
  import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
@@ -30,11 +29,12 @@
    useEffect(() => {
        if (!isClerkLoaded || !isSignedIn || !userId || !syncManager) return;
 
+       // Ensure dialog opens if hashMismatch is true and dialog is not already flagged to open
        if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
            logInfo("DashboardLayout: Hash mismatch detected. Opening dialog.", { userId });
-           syncManager.setIsMismatchDialogOpen(true);
+           syncManager.setIsMismatchDialogOpen(true); // This now comes from syncManager
        }
-   }, [syncManager, isClerkLoaded, isSignedIn, userId]); // syncManager itself is stable, specific props cause re-run
+   }, [syncManager, isClerkLoaded, isSignedIn, userId]);
 
 
    if (!isClerkLoaded || !syncManager || (syncManager.syncStatus === 'idle' && isSignedIn) || (syncManager.syncStatus === 'syncing' && isSignedIn && !syncManager.lastSyncTime) || (syncManager.syncStatus === 'loading_local')) {
@@ -61,23 +61,25 @@
        <FloatingChatButton />
        <Toaster />
 
-        {isSignedIn && syncManager.hashMismatch && syncManager.isMismatchDialogOpen && (
+        {/* Render dialog based on syncManager state */}
+        {isSignedIn && syncManager.isMismatchDialogOpen && (
           <DataSyncMismatchDialog
             isOpen={syncManager.isMismatchDialogOpen}
             onClose={() => syncManager.setIsMismatchDialogOpen(false)}
             onForceSave={async () => {
               const success = await syncManager.forceSave();
-              if (success) syncManager.setIsMismatchDialogOpen(false);
+              // Dialog closure is now handled by forceSave if successful
               return success;
             }}
             onForceFetch={async () => {
               const success = await syncManager.forceFetch();
-              if (success) syncManager.setIsMismatchDialogOpen(false);
+              // Dialog closure is now handled by forceFetch if successful
               return success;
             }}
+            localDataPreview={syncManager.conflictingLocalDataString}
+            serverDataPreview={syncManager.conflictingServerDataString}
           />
         )}
      </div>
    );
  }
-
