@@ -25,7 +25,7 @@ import { ScrollArea } from "./scroll-area";
 import { logInfo, logWarn, logDebug } from "@/lib/logger";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AppRole } from '@/lib/roles';
-import IconLoader from '@/components/IconLoader'; // Import IconLoader
+import IconLoader from '@/components/IconLoader';
 
 
 interface SidebarMenuItem {
@@ -192,7 +192,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         case 'synced': syncIconName = "Cloud"; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
         case 'local_changes': syncIconName = "UploadCloud"; syncStatusText = 'Local Changes'; syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; iconColor = 'text-yellow-500'; break;
         case 'error': syncIconName = "AlertTriangle"; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
-        case 'hash_mismatch': syncIconName = "AlertTriangle"; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. Click to resolve.'; iconColor = 'text-destructive'; break;
+        case 'hash_mismatch': syncIconName = "AlertTriangle"; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. Main button refreshes, or use Resolve button.'; iconColor = 'text-destructive'; break;
         case 'loading_local': syncIconName = "RefreshCw"; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'error_local': syncIconName = "AlertTriangle"; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'local':
@@ -212,38 +212,33 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     }
 
     const handleSyncClick = React.useCallback(() => {
-      const currentUserId = user?.id;
+      const currentUserId = user?.id; // Capture userId for logging context
       if (!isClerkLoaded || !isSignedIn || !currentUserId) {
-        logWarn("Sync click attempted but user not signed in, Clerk not loaded, or userId missing.", { isSignedIn, isClerkLoaded, userId: currentUserId});
+        logWarn("Main Sync Button: Clicked but user not signed in, Clerk not loaded, or userId missing.", { isSignedIn, isClerkLoaded, userId: currentUserId });
         return;
       }
 
       if (syncStatus === 'hash_mismatch') {
+        logInfo("Main Sync Button: Clicked during hash_mismatch. Ensuring dialog is open.", { userId: currentUserId, isMismatchDialogOpen });
         if (!isMismatchDialogOpen) {
           setIsMismatchDialogOpen(true);
-          logInfo("Sidebar sync icon clicked during hash_mismatch: opening conflict dialog.", { userId: currentUserId });
-        } else {
-          logInfo("Sidebar sync icon clicked during hash_mismatch: conflict dialog already open.", { userId: currentUserId });
         }
+        // Do NOT call manualSync here, user must resolve via dialog or "Resolve Conflict" button.
         return;
       }
       
+      // Only call manualSync if not a hash_mismatch and other conditions are met.
       if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'error_local') {
+        logInfo("Main Sync Button: Calling manualSync.", { userId: currentUserId, syncStatus, isSyncButtonClickable });
         manualSync();
+      } else {
+        logDebug("Main Sync Button: Clicked but no action taken (not hash_mismatch, but button not active for current state).", { userId: currentUserId, syncStatus, isSyncButtonClickable});
       }
-    }, [
-        isClerkLoaded,
-        isSignedIn,
-        user?.id,
-        isSyncButtonClickable,
-        syncStatus,
-        manualSync,
-        isMismatchDialogOpen,
-        setIsMismatchDialogOpen
-    ]);
+    }, [isClerkLoaded, isSignedIn, user?.id, syncStatus, isMismatchDialogOpen, setIsMismatchDialogOpen, isSyncButtonClickable, manualSync]);
+
 
     const sidebarActualState = isMobile ? "collapsed" : state;
-    const showConflictResolver = syncStatus === 'hash_mismatch' || isMismatchDialogOpen;
+    const showDedicatedConflictResolverButton = syncStatus === 'hash_mismatch' || isMismatchDialogOpen;
 
     return (
       <div
@@ -338,6 +333,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
           <ThemeToggle sidebarState={sidebarActualState} />
 
+          {/* Main Sync Status Button */}
           <TooltipProvider delayDuration={100}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -348,12 +344,12 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                     "w-full justify-start text-sm h-9",
                     sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
                     "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    showConflictResolver && "border-destructive ring-1 ring-destructive hover:bg-destructive/10" // Adjusted styling for conflict
+                     (syncStatus === 'hash_mismatch' && !isMismatchDialogOpen) && "border-destructive ring-1 ring-destructive hover:bg-destructive/10" // Subtle indication if dialog not yet open
                   )}
                   aria-label={syncTooltipText}
-                  disabled={!isSyncButtonClickable && syncStatus !== 'error' && syncStatus !== 'hash_mismatch' && syncStatus !== 'error_local'}
+                  disabled={!isSyncButtonClickable && !(syncStatus === 'error' || syncStatus === 'hash_mismatch' || syncStatus === 'error_local')}
                 >
-                  <IconLoader name={syncIconName} size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", showConflictResolver && "text-destructive" )} />
+                  <IconLoader name={syncIconName} size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", (syncStatus === 'hash_mismatch' && isMismatchDialogOpen) && "text-destructive" )} />
                   <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
                     {syncStatusText}
                   </span>
@@ -367,13 +363,17 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
             </Tooltip>
           </TooltipProvider>
 
-          {showConflictResolver && (
+          {/* Dedicated "Resolve Conflict" Button - shows only when needed */}
+          {showDedicatedConflictResolverButton && (
              <TooltipProvider delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                         variant="destructive"
-                        onClick={() => setIsMismatchDialogOpen(true)}
+                        onClick={() => {
+                            logInfo("Resolve Conflict button clicked. Setting isMismatchDialogOpen to true.", {userId: user?.id});
+                            setIsMismatchDialogOpen(true);
+                        }}
                         className={cn(
                             "w-full justify-start text-sm h-9",
                             sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9"
@@ -501,3 +501,4 @@ export const SidebarInset = React.forwardRef<
 });
 SidebarInset.displayName = "SidebarInset";
     
+
