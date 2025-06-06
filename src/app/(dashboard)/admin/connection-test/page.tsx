@@ -597,7 +597,7 @@ const AdminConnectionTestPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="mt-2">
-                      <Badge 
+                      <Badge
                         variant={csHashMatchResult ? "default" : "destructive"}
                         className="w-full justify-start gap-2 p-1.5 text-xs"
                       >
@@ -700,7 +700,9 @@ const AdminConnectionTestPage: React.FC = () => {
                  <div className="p-3 border rounded-md space-y-2">
                     <h5 className="font-medium text-sm">Step 2: Modify Data Locally (JSON)</h5>
                     <Textarea value={mismatchModifiedDataString} onChange={(e) => setMismatchModifiedDataString(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Modify the JSON data here..." />
-                     <p className="text-xs text-muted-foreground">Example: Change 'value' from 100 to 150, or 'name'.</p>
+                    <p className="text-xs text-muted-foreground italic">
+                        Modify the JSON data above to test the mismatch detection. For example, change a value or add a new field.
+                    </p>
                 </div>
             )}
             {mismatchInitialData && mismatchInitialHash && (
