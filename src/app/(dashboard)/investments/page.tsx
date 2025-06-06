@@ -91,6 +91,7 @@ export default function InvestmentsPage() {
       rowSelection,
       columnFilters,
     },
+    autoResetPageIndex: false,
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
@@ -100,7 +101,6 @@ export default function InvestmentsPage() {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    autoResetPageIndex: false,
   });
 
   const selectedInvestmentIds = useMemo(() => {
@@ -129,7 +129,7 @@ export default function InvestmentsPage() {
        <PageHeader
           title="Investments"
           description="Track your current portfolio and plan for future growth."
-          icon={<Briefcase className="h-6 w-6" />}
+          icon={Briefcase}
         >
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Investment</Button>
@@ -137,7 +137,7 @@ export default function InvestmentsPage() {
         </PageHeader>
 
       <main className="flex-1 px-4 md:px-6 lg:px-8 space-y-8">
-        
+
         <Card className="shadow-md">
           <CardHeader className="p-6">
             <CardTitle>Current Portfolio Overview</CardTitle>
@@ -195,7 +195,7 @@ export default function InvestmentsPage() {
 
         <Separator className="my-8" />
 
-        <GovernmentBondProjectionTool /> 
+        <GovernmentBondProjectionTool />
 
       </main>
 

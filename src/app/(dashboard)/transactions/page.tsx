@@ -48,10 +48,10 @@ const formatDateForInput = (date: Date | string | undefined | null): string => {
     if (isDateValid(date)) {
       return format(date, 'yyyy-MM-dd');
     }
-    return format(new Date(0), 'yyyy-MM-dd'); 
+    return format(new Date(0), 'yyyy-MM-dd');
   }
   if (typeof date === 'string') {
-    let parsedDate = new Date(date); 
+    let parsedDate = new Date(date);
     if (isDateValid(parsedDate)) {
         return format(parsedDate, 'yyyy-MM-dd');
     }
@@ -62,7 +62,7 @@ const formatDateForInput = (date: Date | string | undefined | null): string => {
     }
     return format(new Date(0), 'yyyy-MM-dd');
   }
-  return format(new Date(0), 'yyyy-MM-dd'); 
+  return format(new Date(0), 'yyyy-MM-dd');
 };
 
 
@@ -82,9 +82,9 @@ export default function TransactionsPage() {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
-  
+
   const handleAddClick = () => {
-    setEditingTransaction(null); 
+    setEditingTransaction(null);
     setIsEditTransactionDialogOpen(true);
   };
 
@@ -96,7 +96,7 @@ export default function TransactionsPage() {
   const handleDeleteClick = useCallback((transaction: TransactionWithId) => {
     setTransactionToDelete(transaction);
   }, []);
-  
+
   const handleEditTransactionDialogClose = () => {
     setIsEditTransactionDialogOpen(false);
     setEditingTransaction(null);
@@ -105,7 +105,7 @@ export default function TransactionsPage() {
   const confirmDeleteTransaction = () => {
     if (!transactionToDelete) return;
     deleteTransaction(transactionToDelete.id);
-    setTransactionToDelete(null); 
+    setTransactionToDelete(null);
     toast({ title: 'Transaction Deleted', description: 'Successfully removed transaction.' });
   };
 
@@ -120,6 +120,7 @@ export default function TransactionsPage() {
       rowSelection,
       columnFilters,
     },
+    autoResetPageIndex: false,
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
@@ -169,7 +170,7 @@ export default function TransactionsPage() {
       toast({ title: "No data to export" });
       return;
     }
-    
+
     const dataToExport = transactions.map(({ id, date, ...rest }) => ({
       date: formatDateForInput(date),
       ...rest,
@@ -180,7 +181,7 @@ export default function TransactionsPage() {
 
     const csv = Papa.unparse(dataToExport, {
         header: true,
-        columns: ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability', 'categoryName'] 
+        columns: ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability', 'categoryName']
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -208,7 +209,7 @@ export default function TransactionsPage() {
             <Button variant="secondary" onClick={handleExportCsv} disabled={transactions.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
           </div>
         </PageHeader>
-      
+
       <main className="flex-1 px-4 md:px-6 lg:px-8">
         <Card className="shadow-sm">
            <CardHeader className="p-4 md:p-6 border-b">
@@ -234,7 +235,7 @@ export default function TransactionsPage() {
           <CardContent className="p-4 md:p-6">
             <DataTable
               columns={columns}
-              data={transactions} 
+              data={transactions}
               table={table}
               searchColumn="description"
               searchPlaceholder="Search descriptions..."
@@ -247,7 +248,7 @@ export default function TransactionsPage() {
         <EditTransactionDialog
           isOpen={isEditTransactionDialogOpen}
           onClose={handleEditTransactionDialogClose}
-          transaction={editingTransaction!} 
+          transaction={editingTransaction!}
           allBudgetItems={allBudgetItems}
         />
       )}
@@ -257,11 +258,11 @@ export default function TransactionsPage() {
         isOpen={isBatchUpdateDialogOpen}
         onClose={() => {
             setIsBatchUpdateDialogOpen(false);
-            setRowSelection({}); 
+            setRowSelection({});
         }}
         transactionIds={selectedTransactionIds}
         allBudgetItems={allBudgetItems}
-        onComplete={() => setRowSelection({})} 
+        onComplete={() => setRowSelection({})}
       />
 
       <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>

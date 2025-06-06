@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
@@ -54,18 +55,18 @@ export default function DebtPage() {
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
 
   const handleAddClick = () => { setEditingDebt(null); setIsFormSheetOpen(true); };
-  
+
   const handleEditClick = useCallback((debt: InternalDebtItem) => {
     setEditingDebt(debt);
     setIsFormSheetOpen(true);
   }, []);
 
   const handleFormSheetClose = () => { setIsFormSheetOpen(false); setEditingDebt(null); };
-  
+
   const handleDeleteClick = useCallback((debt: InternalDebtItem) => {
     setDebtToDelete(debt);
   }, []);
-  
+
   const confirmDeleteDebt = () => {
     if (!debtToDelete) return;
     deleteDebt(debtToDelete.id);
@@ -85,6 +86,7 @@ export default function DebtPage() {
       rowSelection,
       columnFilters,
     },
+    autoResetPageIndex: false,
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
@@ -95,7 +97,7 @@ export default function DebtPage() {
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
-  
+
   const selectedDebtIds = useMemo(() => {
     return table.getSelectedRowModel().rows.map(row => row.original.id);
   }, [rowSelection, table]);
@@ -151,7 +153,7 @@ export default function DebtPage() {
         months++;
         let availablePayment = fundsForDebtPaymentFromBudget;
         currentDebts.forEach(debt => { if (debt.principal > 0) debt.principal += debt.principal * (debt.interestRate / 100 / 12); });
-        
+
         currentDebts.forEach(debt => {
              if (debt.principal > 0 && availablePayment > 0.01) {
                  const paymentTowardsMin = Math.min(debt.minPayment, debt.principal, availablePayment);
@@ -198,7 +200,7 @@ export default function DebtPage() {
         'Min Payment (KES)': debt.minPayment,
         Term: debt.term,
       }));
-      
+
       const csvData = Papa.unparse(csvRows, { header: true });
       const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
