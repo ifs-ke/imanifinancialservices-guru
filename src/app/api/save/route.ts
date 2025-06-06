@@ -133,29 +133,17 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 
-  let userEmailForDb: string | undefined | null = user.primaryEmailAddress?.emailAddress;
-  let userNameForDb: string | undefined | null = user.fullName;
+  const userEmailForDb = user.primaryEmailAddress?.emailAddress;
+  const userNameForDb = user.fullName; // This can be null, ensureUserInDb handles it.
 
   if (!userEmailForDb) {
-    console.warn(`[API /api/save] Primary email not available from currentUser() for ${userId}. Attempting direct fetch.`, logContextBase);
-    try {
-      const fetchedClerkUser = await clerkClient.users.getUser(userId);
-      userEmailForDb = fetchedClerkUser?.primaryEmailAddress?.emailAddress;
-      userNameForDb = fetchedClerkUser?.fullName ?? fetchedClerkUser?.firstName ?? userNameForDb;
-      if (!userEmailForDb) {
-        console.error(`[API /api/save] CRITICAL - Could not retrieve primary email for user ${userId} even after direct Clerk fetch.`, logContextBase);
-        const response = NextResponse.json({ error: 'Failed to retrieve essential user information.' }, { status: 500 });
-        return addCorsHeaders(response);
-      }
-    } catch (clerkError: any) {
-      console.error(`[API /api/save] CRITICAL - Error fetching user details from Clerk for ${userId}.`, { error: clerkError, ...logContextBase });
-      const response = NextResponse.json({ error: 'Failed to communicate with authentication provider.' }, { status: 500 });
-      return addCorsHeaders(response);
-    }
+    console.error(`[API /api/save] CRITICAL - Primary email not available from currentUser() for user ${userId}. This user may have an incomplete Clerk profile or there's an issue fetching it. Cannot proceed with save.`, logContextBase);
+    const response = NextResponse.json({ error: 'Essential user information (email) is missing. Cannot save.' }, { status: 500 });
+    return addCorsHeaders(response);
   }
 
   try {
-    await ensureUserInDb(userId, userEmailForDb!, userNameForDb);
+    await ensureUserInDb(userId, userEmailForDb, userNameForDb);
   } catch (dbError: any) {
     console.error(`[API /api/save] Failed to ensure user in DB. User: ${userId}`, { error: dbError, ...logContextBase });
     const response = NextResponse.json({ error: 'Database operation failed while verifying user.' }, { status: 500 });
@@ -195,14 +183,13 @@ export async function POST(request: Request) {
 
   // 1. Payload Integrity Check
   if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedHashOfReceivedPayload !== clientProvidedPayloadHash) {
-    console.error(`[API /api/save] PAYLOAD INTEGRITY CHECK FAILED! Client's payload hash does not match server's hash of received data. User: ${userId}`, {
-      error: new Error('Payload hash mismatch during save.'), clientPayloadHash, serverCalculatedHashOfReceivedPayload, ...logContextBase
+    console.error(`[API /api/save] PAYLOAD INTEGRITY CHECK FAILED! Client's payload hash (${clientProvidedPayloadHash}) does not match server's hash of received data (${serverCalculatedHashOfReceivedPayload}). User: ${userId}`, {
+      error: new Error('Payload hash mismatch during save.'), ...logContextBase
     });
-    // This indicates the data sent might be different from what the client intended to hash and send, or client-side hashing issue.
-    const response = NextResponse.json({ error: 'Data integrity check failed. Payload may have been corrupted or hashing differs.' }, { status: 400 });
+    const response = NextResponse.json({ error: 'Data integrity check failed. Your data may be out of sync or corrupted. Please try syncing again.' }, { status: 400 });
     return addCorsHeaders(response);
   }
-  console.info(`[API /api/save] Payload integrity check passed. User: ${userId}`, { clientPayloadHash, ...logContextBase });
+  console.info(`[API /api/save] Payload integrity check passed. User: ${userId}`, { clientProvidedPayloadHash, ...logContextBase });
 
   // 2. Stale Data Check (Only if client sent a lastKnownServerHash)
   if (HASH_CHECK_ENABLED_ON_SERVER && clientLastKnownServerHash) {
@@ -218,8 +205,6 @@ export async function POST(request: Request) {
     console.info(`[API /api/save] Client's last known server hash matches current server state. Proceeding with save. User: ${userId}`, { clientLastKnownServerHash, currentServerStateHash, ...logContextBase });
   } else if (HASH_CHECK_ENABLED_ON_SERVER && !clientLastKnownServerHash) {
     console.warn(`[API /api/save] Client did not provide lastKnownServerHash. Proceeding with save, but this might be risky if client data is stale. User: ${userId}`, logContextBase);
-    // This could be an initial save or a "force save" scenario from the client.
-    // Depending on strictness, you might choose to reject here too if a hash is always expected after first sync.
   }
 
 
@@ -239,10 +224,8 @@ export async function POST(request: Request) {
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } }); // Clears owned reviews
-      // Note: SharedReview entries where this user IS THE OWNER are implicitly handled by cascade or need explicit logic if not cascading.
-      // For shared reviews where this user is a recipient, those are not cleared here.
-      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } }); // Clear shares initiated by this user
+      await tx.weeklyReview.deleteMany({ where: { userId } }); 
+      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } }); 
 
       // Create new data
       if (transactions.length > 0) await tx.transaction.createMany({ data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })) });
@@ -259,12 +242,10 @@ export async function POST(request: Request) {
           })),
         });
       }
-      // Save statement settings (start/end date, getting started)
       await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    // After successful save, the new server state hash is the hash of the data we just saved.
-    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; // This is the hash of the data that was just written.
+    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; 
     console.info(`[API /api/save] Prisma transaction committed. User: ${userId}. New server hash: ${newServerHashAfterSave}`, logContextBase);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}`, newServerHash: newServerHashAfterSave });
     return addCorsHeaders(response);
@@ -276,3 +257,5 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 }
+
+    
