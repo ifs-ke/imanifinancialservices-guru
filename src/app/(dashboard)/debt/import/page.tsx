@@ -31,7 +31,7 @@ const POSSIBLE_HEADERS: { [key: string]: keyof DebtItem | 'ignore' } = {
   'minimum payment (kes)': 'minPayment',
   'min payment (kes)': 'minPayment',
   'monthly payment': 'minPayment',
-  term: 'term', 
+  term: 'term',
   'loan term': 'term',
   'debt type': 'term',
 };
@@ -45,7 +45,7 @@ interface ParsedRow extends Record<string, string> {
 }
 
 interface MappedDebtItem extends Omit<DebtItem, 'id'> {
-    id?: string; 
+    id?: string;
     __originalData: ParsedRow;
     __parseError?: string;
     __duplicatePotential?: DebtItem;
@@ -80,7 +80,7 @@ export default function ImportDebtsPage() {
     const [importError, setImportError] = useState<string | null>(null);
     const [importedCount, setImportedCount] = useState(0);
     const [skippedCount, setSkippedCount] = useState(0);
-    const [lastImportedIds, setLastImportedIds] = useState<string[]>([]); 
+    const [lastImportedIds, setLastImportedIds] = useState<string[]>([]);
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
@@ -314,7 +314,7 @@ export default function ImportDebtsPage() {
         <Card>
             <CardHeader className="p-6">
                 <CardTitle className="text-lg flex items-center gap-2"><Coins className="h-5 w-5 text-primary" />Import Debts (Step 1/4)</CardTitle>
-                <CardDescription>Select a CSV file containing your debt information.</CardDescription>
+                <CardDescription>Select a CSV file containing your debt information. For best results and to avoid potential save/sync issues, we recommend importing files with fewer than 500-1000 debts at a time.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 p-6">
                 <div className="grid w-full items-center gap-1.5">
@@ -550,3 +550,4 @@ export default function ImportDebtsPage() {
         </div>
     );
 }
+

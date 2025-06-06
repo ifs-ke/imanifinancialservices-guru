@@ -1,3 +1,4 @@
+
 // src/app/(dashboard)/budget/import/page.tsx
 'use client'
 
@@ -53,7 +54,7 @@ export default function ImportBudgetPage() {
       resetState();
       return;
     }
-    
+
     if (!selectedFile.name.toLowerCase().endsWith('.csv')) {
       toast({
         title: "Invalid File Type",
@@ -63,7 +64,7 @@ export default function ImportBudgetPage() {
       resetState();
       return;
     }
-    
+
     setFile(selectedFile);
     setFileName(selectedFile.name);
     setStage('upload');
@@ -72,7 +73,7 @@ export default function ImportBudgetPage() {
 
   const handleParseFile = useCallback(() => {
     if (!file) return;
-    
+
     setIsParsing(true);
     setImportError(null);
 
@@ -81,22 +82,22 @@ export default function ImportBudgetPage() {
       skipEmptyLines: true,
       complete: (results: ParseResult<Record<string, string>>) => {
         setIsParsing(false);
-        
+
         if (results.errors.length > 0) {
           setImportError(`Error parsing CSV: ${results.errors[0].message}. Check file format.`);
           setStage('error');
           return;
         }
-        
+
         if (!results.data.length || !results.meta.fields?.length) {
           setImportError("CSV is empty or has no headers. Expected headers: category, description, amount.");
           setStage('error');
           return;
         }
-        
+
         const headers = results.meta.fields.map(h => h.toLowerCase());
         const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-        
+
         if (missingHeaders.length > 0) {
           setImportError(`Missing required CSV headers: ${missingHeaders.join(', ')}.`);
           setStage('error');
@@ -127,7 +128,7 @@ export default function ImportBudgetPage() {
         description: '',
         category: 'recurring-expense',
       };
-      
+
       let parseError = '';
       const rawCategory = row.category?.trim().toLowerCase();
       const rawDescription = row.description?.trim();
@@ -168,10 +169,10 @@ export default function ImportBudgetPage() {
         budgetItem.__parseError = parseError.trim();
         budgetItem.__toBeImported = false;
       }
-      
+
       return budgetItem as MappedBudgetItem;
     });
-    
+
     setMappedBudgetItems(mapped);
     setStage('preview');
   }, []);
@@ -185,21 +186,21 @@ export default function ImportBudgetPage() {
   const handleConfirmImport = useCallback(async () => {
     setStage('reconciling');
     setImportError(null);
-    
-    const itemsToImport = mappedBudgetItems.filter(item => 
+
+    const itemsToImport = mappedBudgetItems.filter(item =>
       item.__toBeImported && !item.__parseError
     );
-    
+
     const currentSkippedCount = mappedBudgetItems.length - itemsToImport.length;
     setSkippedCount(currentSkippedCount);
 
     if (itemsToImport.length === 0) {
       setImportedCount(0);
       setStage('complete');
-      toast({ 
-        title: "Import Complete", 
-        description: `No new budget items were imported. ${currentSkippedCount} rows skipped.`, 
-        variant: "default" 
+      toast({
+        title: "Import Complete",
+        description: `No new budget items were imported. ${currentSkippedCount} rows skipped.`,
+        variant: "default"
       });
       return;
     }
@@ -210,23 +211,23 @@ export default function ImportBudgetPage() {
         description: item.description!,
         amount: item.amount!,
       }));
-      
+
       const addedItems = importBudgetsBatch(newBudgetData);
       setImportedCount(addedItems.length);
       setStage('complete');
-      
-      toast({ 
-        title: "Import Successful", 
-        description: `${addedItems.length} budget items imported to period ${format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy')}. ${currentSkippedCount} rows skipped.`, 
-        variant: "default" 
+
+      toast({
+        title: "Import Successful",
+        description: `${addedItems.length} budget items imported to period ${format(parse(budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy')}. ${currentSkippedCount} rows skipped.`,
+        variant: "default"
       });
     } catch (error: any) {
       setImportError(`Failed to save budget items: ${error.message}`);
       setStage('error');
-      toast({ 
-        title: "Import Failed", 
-        description: "Could not save imported budget items.", 
-        variant: "destructive" 
+      toast({
+        title: "Import Failed",
+        description: "Could not save imported budget items.",
+        variant: "destructive"
       });
     }
   }, [mappedBudgetItems, budgetPeriod, importBudgetsBatch, toast]);
@@ -241,7 +242,7 @@ export default function ImportBudgetPage() {
     setImportError(null);
     setImportedCount(0);
     setSkippedCount(0);
-    
+
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
   }, []);
@@ -264,16 +265,17 @@ export default function ImportBudgetPage() {
         </CardTitle>
         <CardDescription>
           Select a CSV file with columns: category, description, amount.
+          For best results and to avoid potential save/sync issues, we recommend importing files with fewer than 500-1000 budget items at a time.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-6">
         <div className="grid w-full items-center gap-1.5">
           <Label htmlFor="file-upload">Choose CSV File</Label>
-          <Input 
-            id="file-upload" 
-            type="file" 
-            accept=".csv,text/csv" 
-            onChange={handleFileChange} 
+          <Input
+            id="file-upload"
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFileChange}
           />
         </div>
         {fileName && (

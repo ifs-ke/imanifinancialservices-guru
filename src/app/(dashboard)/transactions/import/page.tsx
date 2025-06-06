@@ -11,36 +11,36 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileCheck, RotateCcw, CheckCircle, AlertTriangle, XCircle, ArrowLeft, Loader2, ListChecks } from 'lucide-react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTransactionsStore } from '@/store/transactionsStore'; 
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types'; 
-import Papa, { type ParseResult } from 'papaparse'; 
-import Link from 'next/link'; 
-import { format } from 'date-fns'; 
-import { cn } from '@/lib/utils'; 
+import { useTransactionsStore } from '@/store/transactionsStore';
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability } from '@/lib/types';
+import Papa, { type ParseResult } from 'papaparse';
+import Link from 'next/link';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 
 const POSSIBLE_HEADERS: { [key: string]: keyof TransactionWithId | 'ignore' } = {
   date: 'date',
-  time: 'ignore', 
+  time: 'ignore',
   description: 'description',
   details: 'description',
   memo: 'description',
   payee: 'description',
   amount: 'amount',
-  debit: 'amount', 
-  credit: 'amount', 
+  debit: 'amount',
+  credit: 'amount',
   'payment mode': 'modeOfPayment',
   'payment method': 'modeOfPayment',
-  mode: 'modeOfPayment', 
-  type: 'ignore', 
-  category: 'ignore', 
+  mode: 'modeOfPayment',
+  type: 'ignore',
+  category: 'ignore',
   balance: 'ignore',
-  'transaction id': 'ignore', 
-  frequency: 'frequency', 
-  recurrence: 'frequency', 
-  variability: 'variability', 
-  'fixed/variable': 'variability', 
+  'transaction id': 'ignore',
+  frequency: 'frequency',
+  recurrence: 'frequency',
+  variability: 'variability',
+  'fixed/variable': 'variability',
 };
 
 // const TRANSACTION_FIELDS: (keyof TransactionWithId)[] = ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability']; // Unused
@@ -48,18 +48,18 @@ const POSSIBLE_HEADERS: { [key: string]: keyof TransactionWithId | 'ignore' } = 
 type ImportStage = 'upload' | 'mapping' | 'preview' | 'reconciling' | 'complete' | 'error';
 
 interface ParsedRow extends Record<string, string> {
-  __originalIndex: number; 
+  __originalIndex: number;
 }
 
 interface MappedTransaction extends Omit<TransactionWithId, 'id' | 'date'> {
-    id?: string; 
-    date: Date | null; 
-    frequency?: TransactionFrequency; 
-    variability?: TransactionVariability; 
+    id?: string;
+    date: Date | null;
+    frequency?: TransactionFrequency;
+    variability?: TransactionVariability;
     __originalData: ParsedRow;
     __parseError?: string;
-    __duplicatePotential?: TransactionWithId; 
-    __toBeImported: boolean; 
+    __duplicatePotential?: TransactionWithId;
+    __toBeImported: boolean;
 }
 
 const formatCurrency = (amount: number) => {
@@ -87,7 +87,7 @@ export default function ImportTransactionsPage() {
     const [importError, setImportError] = useState<string | null>(null);
     const [importedCount, setImportedCount] = useState(0);
     const [skippedCount, setSkippedCount] = useState(0);
-    const [lastImportedIds, setLastImportedIds] = useState<string[]>([]); 
+    const [lastImportedIds, setLastImportedIds] = useState<string[]>([]);
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
@@ -97,12 +97,12 @@ export default function ImportTransactionsPage() {
         }
         if (!selectedFile.name.toLowerCase().endsWith('.csv') && !selectedFile.type.includes('csv')) {
             toast({ title: "Invalid File Type", description: "Please select a CSV file.", variant: "destructive" });
-            resetState(); 
+            resetState();
             return;
         }
         setFile(selectedFile);
         setFileName(selectedFile.name);
-        setStage('upload'); 
+        setStage('upload');
         setImportError(null);
     };
 
@@ -115,7 +115,7 @@ export default function ImportTransactionsPage() {
             header: true,
             skipEmptyLines: true,
             complete: (results: ParseResult<Record<string, string>>) => {
-                setIsParsing(false); 
+                setIsParsing(false);
                 if (results.errors.length > 0) {
                     // console.error("CSV Parsing Errors:", results.errors); // Replaced by logger if needed
                     setImportError(`Error parsing CSV: ${results.errors[0].message}. Check file format.`);
@@ -136,7 +136,7 @@ export default function ImportTransactionsPage() {
 
                 setParsedHeaders(headers);
                 setParsedData(dataWithIndex);
-                autoMapColumns(headers); 
+                autoMapColumns(headers);
                 setStage('mapping');
             },
             error: (error: Error) => {
@@ -159,7 +159,7 @@ export default function ImportTransactionsPage() {
                 for (const possibleKey in POSSIBLE_HEADERS) {
                      if (lowerHeader.includes(possibleKey) && POSSIBLE_HEADERS[possibleKey] !== 'ignore') {
                         mappedField = POSSIBLE_HEADERS[possibleKey];
-                        break; 
+                        break;
                      }
                  }
             }
@@ -202,15 +202,15 @@ export default function ImportTransactionsPage() {
         if (!validateMapping()) return;
 
         const mapped: MappedTransaction[] = parsedData.map((row) => {
-            const transaction: Partial<MappedTransaction> & { amount?: number } = { 
+            const transaction: Partial<MappedTransaction> & { amount?: number } = {
                 __originalData: row,
-                __toBeImported: true, 
-                date: null, 
-                description: '', 
-                amount: undefined, 
-                modeOfPayment: 'Bank', 
-                frequency: undefined, 
-                variability: undefined, 
+                __toBeImported: true,
+                date: null,
+                description: '',
+                amount: undefined,
+                modeOfPayment: 'Bank',
+                frequency: undefined,
+                variability: undefined,
             };
             let parseError = '';
 
@@ -218,7 +218,7 @@ export default function ImportTransactionsPage() {
                 const field = columnMapping[header];
                 const rawValue = row[header]?.trim();
 
-                if (field === 'ignore' || rawValue === undefined || rawValue === '') continue; 
+                if (field === 'ignore' || rawValue === undefined || rawValue === '') continue;
 
 
                 try {
@@ -236,7 +236,7 @@ export default function ImportTransactionsPage() {
                             transaction.date = parsedDate;
                             break;
                         case 'description':
-                            transaction.description = (transaction.description ? transaction.description + " | " : "") + rawValue; 
+                            transaction.description = (transaction.description ? transaction.description + " | " : "") + rawValue;
                             break;
                         case 'amount':
                              let cleanedValue = rawValue.replace(/,/g, '').replace(/[^-0-9.]/g, '');
@@ -252,7 +252,7 @@ export default function ImportTransactionsPage() {
                              if (lowerHeader.includes('debit') && parsedAmount > 0) {
                                 transaction.amount = -parsedAmount;
                              } else if (lowerHeader.includes('credit') && parsedAmount < 0) {
-                                transaction.amount = Math.abs(parsedAmount); 
+                                transaction.amount = Math.abs(parsedAmount);
                              } else {
                                 if (transaction.amount === undefined || POSSIBLE_HEADERS[lowerHeader] === 'amount') {
                                     transaction.amount = parsedAmount;
@@ -282,21 +282,21 @@ export default function ImportTransactionsPage() {
             }
 
             if (!transaction.date || isNaN(transaction.date.getTime())) parseError += "Missing or invalid date. ";
-            if (!transaction.description) transaction.description = "Imported Transaction"; 
+            if (!transaction.description) transaction.description = "Imported Transaction";
             if (transaction.amount === undefined || transaction.amount === null || isNaN(transaction.amount)) parseError += "Missing or invalid amount. ";
 
              if (parseError) {
                  transaction.__parseError = parseError.trim();
-                 transaction.__toBeImported = false; 
+                 transaction.__toBeImported = false;
              }
 
             const finalTransaction: MappedTransaction = {
                 ...transaction,
-                amount: transaction.amount ?? 0, 
-                date: transaction.date, 
-                modeOfPayment: transaction.modeOfPayment!, 
-                frequency: transaction.frequency, 
-                variability: transaction.variability, 
+                amount: transaction.amount ?? 0,
+                date: transaction.date,
+                modeOfPayment: transaction.modeOfPayment!,
+                frequency: transaction.frequency,
+                variability: transaction.variability,
             };
 
             return finalTransaction;
@@ -318,7 +318,7 @@ export default function ImportTransactionsPage() {
 
         return existingTransactions.find(existing => {
              const existingDate = existing.date instanceof Date ? existing.date : new Date(existing.date);
-             if (isNaN(existingDate.getTime())) return false; 
+             if (isNaN(existingDate.getTime())) return false;
 
             const timeDiff = Math.abs(existingDate.getTime() - incomingTime);
             const amountMatch = existing.amount === amount;
@@ -329,7 +329,7 @@ export default function ImportTransactionsPage() {
      }, [existingTransactions]);
 
      useEffect(() => {
-         if (stage === 'preview' && mappedTransactions.length > 0) { 
+         if (stage === 'preview' && mappedTransactions.length > 0) {
              setMappedTransactions(prev =>
                  prev.map(tx => {
                      const duplicate = tx.__parseError ? undefined : findPotentialDuplicate(tx);
@@ -341,7 +341,7 @@ export default function ImportTransactionsPage() {
                  })
              );
          }
-     }, [stage, mappedTransactions.length, findPotentialDuplicate]); 
+     }, [stage, mappedTransactions.length, findPotentialDuplicate]);
 
      const toggleImportRow = (index: number) => {
         setMappedTransactions(prev => prev.map((tx, i) =>
@@ -357,7 +357,7 @@ export default function ImportTransactionsPage() {
             .filter(tx => tx.__toBeImported && !tx.__parseError);
 
         const currentSkippedCount = mappedTransactions.length - transactionsToImport.length;
-        setSkippedCount(currentSkippedCount); 
+        setSkippedCount(currentSkippedCount);
 
         if (transactionsToImport.length === 0) {
             setImportedCount(0);
@@ -367,12 +367,12 @@ export default function ImportTransactionsPage() {
         }
 
         const newTransactions: Omit<TransactionWithId, 'id'>[] = transactionsToImport.map(tx => ({
-            date: tx.date!, 
+            date: tx.date!,
             description: tx.description!,
             amount: tx.amount!,
             modeOfPayment: tx.modeOfPayment!,
-            frequency: tx.frequency, 
-            variability: tx.variability, 
+            frequency: tx.frequency,
+            variability: tx.variability,
         }));
 
 
@@ -380,15 +380,15 @@ export default function ImportTransactionsPage() {
             const addedTransactionsWithIds = importTransactionsBatch(newTransactions);
 
             setImportedCount(addedTransactionsWithIds.length);
-            setLastImportedIds(addedTransactionsWithIds.map(tx => tx.id)); 
+            setLastImportedIds(addedTransactionsWithIds.map(tx => tx.id));
             setStage('complete');
-            toast({ title: "Import Successful", description: `${addedTransactionsWithIds.length} transactions imported. ${skippedCount} rows skipped.`, variant: "default" }); 
+            toast({ title: "Import Successful", description: `${addedTransactionsWithIds.length} transactions imported. ${skippedCount} rows skipped.`, variant: "default" });
 
         } catch (error: any) {
             // console.error("Import Failed:", error); // Replaced by logger if needed
             setImportError(`Failed to save transactions: ${error.message}`);
             setStage('error');
-            setLastImportedIds([]); 
+            setLastImportedIds([]);
              toast({ title: "Import Failed", description: "Could not save imported transactions.", variant: "destructive" });
         }
     };
@@ -419,15 +419,15 @@ export default function ImportTransactionsPage() {
     const handleBack = () => {
         if (stage === 'mapping') setStage('upload');
         else if (stage === 'preview') setStage('mapping');
-         else if (stage === 'complete' || stage === 'error') resetState(); 
-        setImportError(null); 
+         else if (stage === 'complete' || stage === 'error') resetState();
+        setImportError(null);
     };
 
     const renderUploadStage = () => (
         <Card>
             <CardHeader>
                 <CardTitle>Import Transactions (Step 1/4)</CardTitle>
-                <CardDescription>Select a CSV file containing your financial transactions.</CardDescription>
+                <CardDescription>Select a CSV file containing your financial transactions. For best results and to avoid potential save/sync issues, we recommend importing files with fewer than 500-1000 transactions at a time.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="grid w-full items-center gap-1.5">
@@ -492,7 +492,7 @@ export default function ImportTransactionsPage() {
                                         </Select>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-xs truncate max-w-[200px]" title={parsedData[0]?.[header]}>
-                                        {parsedData[0]?.[header] || <span className='italic'>empty</span>} 
+                                        {parsedData[0]?.[header] || <span className='italic'>empty</span>}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -548,7 +548,7 @@ export default function ImportTransactionsPage() {
                                             type="checkbox"
                                             aria-label={`Select row ${index + 1} for import`}
                                             checked={tx.__toBeImported}
-                                            disabled={!!tx.__parseError} 
+                                            disabled={!!tx.__parseError}
                                             onChange={() => toggleImportRow(index)}
                                             className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                          />
@@ -662,5 +662,6 @@ export default function ImportTransactionsPage() {
         </div>
     );
 }
+
 
 
