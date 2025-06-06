@@ -31,7 +31,7 @@ import IconLoader from '@/components/IconLoader'; // Import IconLoader
 interface SidebarMenuItem {
   href: string;
   label: string;
-  iconName: string; 
+  iconName: string;
   adminOnly?: boolean;
 }
 
@@ -243,6 +243,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     ]);
 
     const sidebarActualState = isMobile ? "collapsed" : state;
+    const showConflictResolver = syncStatus === 'hash_mismatch' || isMismatchDialogOpen;
 
     return (
       <div
@@ -347,12 +348,12 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
                     "w-full justify-start text-sm h-9",
                     sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
                     "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "animate-pulse border-destructive ring-2 ring-destructive"
+                    showConflictResolver && "border-destructive ring-1 ring-destructive hover:bg-destructive/10" // Adjusted styling for conflict
                   )}
                   aria-label={syncTooltipText}
                   disabled={!isSyncButtonClickable && syncStatus !== 'error' && syncStatus !== 'hash_mismatch' && syncStatus !== 'error_local'}
                 >
-                  <IconLoader name={syncIconName} size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "text-destructive" )} />
+                  <IconLoader name={syncIconName} size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", showConflictResolver && "text-destructive" )} />
                   <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
                     {syncStatusText}
                   </span>
@@ -365,6 +366,34 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
               )}
             </Tooltip>
           </TooltipProvider>
+
+          {showConflictResolver && (
+             <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                        variant="destructive"
+                        onClick={() => setIsMismatchDialogOpen(true)}
+                        className={cn(
+                            "w-full justify-start text-sm h-9",
+                            sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9"
+                        )}
+                        aria-label="Resolve data conflict"
+                    >
+                        <IconLoader name="AlertTriangle" size={18} className="flex-shrink-0 text-destructive-foreground" />
+                        <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                            Resolve Conflict
+                        </span>
+                    </Button>
+                  </TooltipTrigger>
+                   {sidebarActualState === "collapsed" && (
+                    <TooltipContent side="right" align="center">
+                        Resolve Data Conflict
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+             </TooltipProvider>
+          )}
 
           <div className={cn(
               "flex items-center w-full",
