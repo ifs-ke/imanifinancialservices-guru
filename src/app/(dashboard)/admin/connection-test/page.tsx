@@ -30,12 +30,12 @@ import {
   performComprehensiveSaveTest,
 } from '@/app/actions/adminTestActions';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { 
-    TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save, 
-    Download, HashIcon, Server, Timer, Info, Eye, Copy as CopyIcon, 
-    Database, UserCircle2, ShieldCheck, ShieldAlert, FileSignature, 
+import {
+    TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save,
+    Download, HashIcon, Server, Timer, Info, Eye, Copy as CopyIcon,
+    Database, UserCircle2, ShieldCheck, ShieldAlert, FileSignature,
     Loader2, Settings, Layers, Users, Lock, Smartphone
-} from 'lucide-react'; 
+} from 'lucide-react';
 import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -96,7 +96,7 @@ const DetailViewerDialog: React.FC<DetailViewerProps> = ({ title, content, isOpe
             Detailed view of {typeof content === 'string' ? 'text' : 'object'} content
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full w-full pr-4">
             <pre className="text-xs p-4 bg-muted rounded-md">
@@ -209,10 +209,10 @@ const AdminConnectionTestPage: React.FC = () => {
       });
     } catch (error: any) {
       const message = error.message || "Unknown connection error";
-      setDbConnectionResult({ 
-        success: false, 
+      setDbConnectionResult({
+        success: false,
         message: `Client-side error: ${message}`,
-        duration: 0 
+        duration: 0
       });
       toast({
         title: "Connection Error",
@@ -293,7 +293,7 @@ const AdminConnectionTestPage: React.FC = () => {
       const startTime = performance.now();
       const serverResult = await verifyClientDataHashAction(integrityTestData, clientHash);
       const duration = performance.now() - startTime;
-      
+
       setIntegrityTestServerResult({
         ...serverResult,
         duration: Math.round(duration)
@@ -338,7 +338,7 @@ const AdminConnectionTestPage: React.FC = () => {
     try {
       const modifiedData = JSON.parse(currentMismatchModifiedDataString);
       const result = await simulateSaveWithPotentialMismatchAction(
-        { ...modifiedData }, 
+        { ...modifiedData },
         mismatchInitialHash
       );
       setMismatchSimulationResult(result);
@@ -370,7 +370,7 @@ const AdminConnectionTestPage: React.FC = () => {
       setIsSavingData(false);
     }
   };
-  
+
   const handleFetchTestData = async () => {
     setIsFetchingData(true); setFetchResult(null); setFetchedData(null);
     try {
@@ -418,7 +418,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("Attempting to delete all previous test entries...");
       const deleteAllRes = await deleteAllUserTestEntries();
-      if (!deleteAllRes.success && deleteAllRes.count === undefined) { 
+      if (!deleteAllRes.success && deleteAllRes.count === undefined) {
           throw new Error(`Failed to clear previous test entries: ${deleteAllRes.message}`);
       }
       log(`Cleared ${deleteAllRes.count ?? 'N/A'} entries`, 'success');
@@ -466,7 +466,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("\nDeleting all remaining test entries for user...");
       const finalDeleteRes = await deleteAllUserTestEntries();
-      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) { 
+      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) {
         throw new Error(`Failed to delete remaining entries. Expected 2, got ${finalDeleteRes.count ?? 0}. Result: ${finalDeleteRes.message}`);
       }
       const readAfterFinalDeleteRes = await readAllTestEntries();
@@ -540,9 +540,9 @@ const AdminConnectionTestPage: React.FC = () => {
       <PageHeader title="Admin Diagnostics & Tests" icon={TestTube} description="Verify core application functionalities and data integrity." />
 
       <div className="flex-1 px-4 md:px-6 lg:px-8 grid gap-6 md:grid-cols-2">
-        
+
         <SectionHeader title="Core System Checks" icon={Settings} description="Basic application health and persistence mechanisms." />
-        
+
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><DatabaseZap size={20} /> Database Connection</CardTitle><CardDescription>Tests connectivity to the database via Prisma.</CardDescription></CardHeader>
           <CardContent className="space-y-3">
@@ -563,7 +563,7 @@ const AdminConnectionTestPage: React.FC = () => {
         </Card>
 
         <SectionHeader title="Data Integrity & Hashing" icon={Lock} description="Verify data consistency algorithms and end-to-end integrity." />
-        
+
         <Card className="md:col-span-2">
           <CardHeader><CardTitle className="flex items-center gap-2"><HashIcon size={20}/> Hashing Algorithm Consistency</CardTitle><CardDescription>Tests hashing and data preparation logic consistency between client and server.</CardDescription></CardHeader>
           <CardContent className="space-y-6">
@@ -714,10 +714,10 @@ const AdminConnectionTestPage: React.FC = () => {
                  <p><strong>Client Provided (Stale) Hash:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.clientProvidedOriginalHash ? mismatchSimulationResult.clientProvidedOriginalHash.substring(0,20)+'...' : 'N/A'}</span></p>
                  <p><strong>Server Calculated Hash of Data Sent:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{mismatchSimulationResult.serverHashOfDataSent ? mismatchSimulationResult.serverHashOfDataSent.substring(0,20)+'...' : 'N/A'}</span></p>
                  <ResultBadge
-                    success={mismatchSimulationResult.mismatchDetected === false} 
+                    success={mismatchSimulationResult.mismatchDetected === false}
                     message={mismatchSimulationResult.message}
                     duration={mismatchSimulationResult.duration}
-                    icon={mismatchSimulationResult.mismatchDetected ? ShieldAlert : (mismatchSimulationResult.success ? ShieldCheck : AlertTriangle)} 
+                    icon={mismatchSimulationResult.mismatchDetected ? ShieldAlert : (mismatchSimulationResult.success ? ShieldCheck : AlertTriangle)}
                  />
                  {mismatchSimulationResult.mismatchDetected === false && !mismatchSimulationResult.success && (
                     <p className="text-destructive mt-1">Note: Mismatch was NOT detected, but the server action reported failure. Check server logs.</p>
@@ -729,25 +729,25 @@ const AdminConnectionTestPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
-        
-        <SectionHeader title="Database Operations" icon={Layers} description="Test fundamental CRUD operations on various data models." />
+
+        <SectionHeader title="Database Operations" icon={Database} description="Test fundamental CRUD operations on various data models." />
 
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><Save size={20} /> Simple DB Save (TestEntry)</CardTitle><CardDescription>Basic create operation on the TestEntry model.</CardDescription></CardHeader><CardContent className="space-y-3"><Input value={testDataInput} onChange={(e) => setTestDataInput(e.target.value)} placeholder="Enter data to save" /><Button onClick={handleSaveTestData} disabled={isSavingData || !testDataInput.trim()} className="w-full">
           {isSavingData ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Save Single Test Data'}
           </Button>{saveResult && <ResultBadge success={saveResult.success} message={saveResult.message} duration={saveResult.duration} />}</CardContent></Card>
-        
+
         <Card><CardHeader><CardTitle className="flex items-center gap-2"><Download size={20} /> Simple DB Fetch (TestEntry)</CardTitle><CardDescription>Basic read operation on the TestEntry model.</CardDescription></CardHeader><CardContent className="space-y-3">
           <Button onClick={handleFetchTestData} disabled={isFetchingData} className="w-full">
             {isFetchingData ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Fetch Latest Single Test Data'}
           </Button>
           {fetchResult && <ResultBadge success={fetchResult.success} message={fetchResult.message} duration={fetchResult.duration} /> }{fetchedData && (<div className="space-y-1 border p-3 rounded-md bg-muted/50 text-xs"><p><strong>ID:</strong> {fetchedData.id}</p><p><strong>Data:</strong> {fetchedData.data}</p><p><strong>Created:</strong> {isValid(new Date(fetchedData.createdAt)) ? format(new Date(fetchedData.createdAt), 'PPpp') : 'Invalid Date'}</p></div>)}</CardContent></Card>
-        
+
         <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><FileSignature size={20}/> Full CRUD Cycle (TestEntry)</CardTitle><CardDescription>Tests Create, Read, Update, Delete operations on `TestEntry` model, including cleanup.</CardDescription></CardHeader><CardContent className="space-y-3">
           <Button onClick={handleRunCrudTests} disabled={isCrudTesting} className="w-full">
             {isCrudTesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Run All CRUD Tests'}
           </Button>
           {crudTestLog.length > 0 && (<ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs">{crudTestLog.map((log, i) => <p key={i} className="font-mono whitespace-pre-wrap">{log}</p>)}</ScrollArea>)}</CardContent></Card>
-        
+
         <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><DatabaseZap size={20} /> Comprehensive Save & Cleanup Test</CardTitle><CardDescription>Tests transactional create and delete for core models (Transaction, Debt).</CardDescription></CardHeader><CardContent className="space-y-3">
             <Button onClick={handleComprehensiveSaveTest} disabled={isComprehensiveSaveTesting} className="w-full">
                 {isComprehensiveSaveTesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Run Comprehensive Save Test'}
@@ -763,13 +763,13 @@ const AdminConnectionTestPage: React.FC = () => {
         </CardContent></Card>
 
         <SectionHeader title="Authentication & User Info" icon={Users} description="Verify Clerk integration and user data retrieval." />
-        
+
         <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Server size={20} /> Server-Side Clerk User Info</CardTitle><CardDescription>Fetches authenticated user info via a Server Action.</CardDescription></CardHeader><CardContent className="space-y-3">
           <Button onClick={handleFetchServerClerkUserInfo} disabled={isServerClerkUserInfoLoading} className="w-full">
             {isServerClerkUserInfoLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Fetch Server Clerk User Info'}
           </Button>
           {serverClerkUserInfoError && <ResultBadge success={false} message={serverClerkUserInfoError} />}{serverClerkUserInfo && (<ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs"><pre>{JSON.stringify(serverClerkUserInfo, null, 2)}</pre></ScrollArea>)}</CardContent></Card>
-        
+
         <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Smartphone size={20} /> Client-Side Clerk User Info</CardTitle><CardDescription>Displays user info directly from the `useUser()` hook on the client.</CardDescription></CardHeader><CardContent className="space-y-3 text-xs">{!isClientClerkLoaded ? (<p>Loading user info (client-side)...</p>) : !isClientUserSignedIn ? (<ResultBadge success={false} message="Not signed in (client-side)" />) : clientClerkUser ? (<div className="p-3 border rounded-md bg-muted/50"><p><strong>Full Name:</strong> {clientClerkUser.fullName || "N/A"}</p><p><strong>User ID:</strong> {clientClerkUser.id}</p><Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => openDetailViewer("Client-Side Clerk User Object", clientClerkUser)}>View Full Object</Button></div>) : (<ResultBadge success={false} message="User data not available (client-side), though signed in." />)}</CardContent></Card>
 
       </div>
@@ -780,5 +780,3 @@ const AdminConnectionTestPage: React.FC = () => {
 
 export default AdminConnectionTestPage;
 
-
-    
