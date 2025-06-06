@@ -4,7 +4,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { encode, decode } from '@/lib/storage-utils';
 import type { WeeklyReviewData } from '@/lib/types'; 
 import { getISOWeek, getYear } from 'date-fns';
-import { logInfo, logWarn } from '@/lib/logger'; 
+import { logError, logInfo, logWarn } from '@/lib/logger'; 
 
 
 const createSessionStorageWithEncoding = (): StateStorage => {

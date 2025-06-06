@@ -6,7 +6,7 @@ import { logInfo, logWarn, logError } from '@/lib/logger';
 export type AppRole = 'admin' | 'user';
 
 /**
- * Checks if the given user has the specified role.
+ * Checks if the given user has the specified role based on privateMetadata.
  * This is a synchronous check performed on a User object.
  * @param roleToCheck The role to check for.
  * @param user The Clerk User object (or null if not authenticated).
@@ -14,7 +14,7 @@ export type AppRole = 'admin' | 'user';
  */
 export const hasRole = (roleToCheck: AppRole, user: User | null): boolean => {
   const userRole = user?.privateMetadata?.role as AppRole | undefined;
-  logInfo(`Role check for user: requested '${roleToCheck}', actual '${userRole || 'none'}'`, {
+  logInfo(`Role check for user: requested '${roleToCheck}', actual '${userRole || 'none'}' from privateMetadata`, {
     userId: user?.id || 'unauthenticated_or_null_user',
     requestedRole: roleToCheck,
     actualRole: userRole
@@ -23,7 +23,7 @@ export const hasRole = (roleToCheck: AppRole, user: User | null): boolean => {
 };
 
 /**
- * Sets a user's role using Clerk.
+ * Sets a user's role in their privateMetadata using Clerk.
  * Requires the calling user (admin) to have the 'admin' role.
  * @param userIdToUpdate The user ID to update.
  * @param role The role to assign.
@@ -73,7 +73,7 @@ export const setUserRole = async (userIdToUpdate: string, role: AppRole): Promis
 };
 
 /**
- * Gets a user's role using Clerk.
+ * Gets a user's role from their privateMetadata using Clerk.
  * @param userIdToQuery The user ID to query.
  * @returns Promise resolving to the user's role or undefined if not set.
  */
@@ -84,14 +84,14 @@ export const getUserRole = async (userIdToQuery: string): Promise<AppRole | unde
     const user = await clerkClient.users.getUser(userIdToQuery);
     const role = user.privateMetadata?.role as AppRole | undefined;
 
-    logInfo(`Retrieved role for ${userIdToQuery}`, {
+    logInfo(`Retrieved role for ${userIdToQuery} from privateMetadata`, {
       role,
       requestorId: requestor?.id || 'system_or_unauthenticated_requestor'
     });
 
     return role;
   } catch (error) {
-    logError("Failed to fetch user role via Clerk", error, {
+    logError("Failed to fetch user role via Clerk (privateMetadata)", error, {
       targetUser: userIdToQuery,
       requestorId: requestor?.id || 'system_or_unauthenticated_requestor'
     });

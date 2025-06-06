@@ -31,7 +31,7 @@ import IconLoader from '@/components/IconLoader'; // Import IconLoader
 interface SidebarMenuItem {
   href: string;
   label: string;
-  iconName: string; // Changed from icon: React.ReactNode
+  iconName: string; 
   adminOnly?: boolean;
 }
 
@@ -154,8 +154,6 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
     const { isSignedIn } = useAuth();
 
     const isUserAdmin = React.useMemo(() => {
-        // For prototype, show admin link if user has 'admin' in email.
-        // Replace with proper role check from user.publicMetadata or privateMetadata
         const role = user?.privateMetadata?.role as AppRole | undefined;
         return role === 'admin';
     }, [user]);

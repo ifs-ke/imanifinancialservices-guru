@@ -1,7 +1,6 @@
 
 // src/components/layout/PageHeader.tsx
 import React, { type ReactNode } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Card components are not typically used for a page header itself but are fine for this example structure if desired. Standard h1, p might be more semantic.
 import { cn } from '@/lib/utils';
 
 interface PageHeaderProps {

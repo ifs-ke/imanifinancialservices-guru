@@ -25,6 +25,8 @@ const sortBudgetItems = (items: BudgetItem[]): BudgetItem[] => {
         'one-time-expense': 3,
         'goal': 4,
         'debt': 5,
+        'unplanned-expense': 6,
+        'unbudgeted-income': 7
     };
     return [...items].sort((a, b) => {
         const periodDiff = (b.period || '').localeCompare(a.period || '');
