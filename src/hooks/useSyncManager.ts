@@ -1,3 +1,4 @@
+
 // src/hooks/useSyncManager.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/nextjs';
@@ -18,6 +19,7 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 const IS_FETCH_DISABLED = false;
 const HASH_CHECK_ENABLED = true;
 const API_TIMEOUT_MS = 60000;
+const AUTO_SAVE_DEBOUNCE_DELAY_MS = 3000; // 3 seconds
 
 interface SyncedData {
   transactions: TransactionWithId[];
@@ -52,8 +54,8 @@ interface SyncState {
   lastServerHash: string | null;
   isMismatchDialogOpen: boolean;
   gettingStartedDismissed: boolean;
-  conflictingLocalDataString: string | null; // Added
-  conflictingServerDataString: string | null; // Added
+  conflictingLocalDataString: string | null;
+  conflictingServerDataString: string | null;
 }
 
 export function useSyncManager() {
@@ -78,6 +80,8 @@ export function useSyncManager() {
   const previousUserIdRef = useRef<string | null | undefined>(null);
   const hasLocalChangesRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const autoSaveDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
 
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
@@ -98,7 +102,6 @@ export function useSyncManager() {
 
 
   const getCurrentLocalDataSnapshot = useCallback((): SyncedData => {
-    // This function now returns the full data structure expected by prepareDataForHashing
     return {
       transactions: getTransactionsState().transactions,
       debts: getDebtState().debts,
@@ -107,8 +110,8 @@ export function useSyncManager() {
       otherLiabilityItems: getStatementState().otherLiabilityItems,
       budgetItems: getBudgetState().budgetItems,
       ownedReviews: getWeeklyReviewState().ownedReviews,
-      sharedReviews: getWeeklyReviewState().sharedReviews, // Include for completeness, though not saved
-      notifications: getNotificationState().notifications, // Include for completeness, though not saved
+      sharedReviews: getWeeklyReviewState().sharedReviews,
+      notifications: getNotificationState().notifications,
       startDate: getStatementState().startDate?.toISOString(),
       endDate: getStatementState().endDate?.toISOString(),
       gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
@@ -124,6 +127,12 @@ export function useSyncManager() {
     }
     isClearingRef.current = true;
     logInfo('SyncManager: Clearing all local Zustand store data.', { userId: currentUserIdForLog }, currentUserIdForLog);
+
+    if (autoSaveDebounceTimerRef.current) {
+      clearTimeout(autoSaveDebounceTimerRef.current);
+      autoSaveDebounceTimerRef.current = null;
+    }
+
     try {
       getTransactionsState().clearTransactions();
       getDebtState().clearDebts();
@@ -221,7 +230,6 @@ export function useSyncManager() {
         return serverHash;
       }
 
-      // Check against last known good server hash (if available)
       const currentLocalSnapshotString = stringify(prepareDataForHashing(getCurrentLocalDataSnapshot()));
       if (HASH_CHECK_ENABLED && syncStateRef.current.lastServerHash && serverHash !== syncStateRef.current.lastServerHash && hasLocalChangesRef.current) {
         logError('CRITICAL: Server hash changed while local changes exist!',
@@ -231,7 +239,7 @@ export function useSyncManager() {
         );
         updateSyncState({
           status: 'hash_mismatch',
-          lastServerHash: serverHash, // Update to the new server hash for reference
+          lastServerHash: serverHash,
           isMismatchDialogOpen: true,
           conflictingLocalDataString: currentLocalSnapshotString,
           conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
@@ -246,7 +254,6 @@ export function useSyncManager() {
         return false;
       }
 
-
       if (HASH_CHECK_ENABLED) {
         const localHashOfLoadedData = await hashData(stringify(prepareDataForHashing(dataToLoad as any)));
         if (localHashOfLoadedData !== serverHash) {
@@ -259,8 +266,8 @@ export function useSyncManager() {
             status: 'hash_mismatch',
             lastServerHash: serverHash,
             isMismatchDialogOpen: true,
-            conflictingLocalDataString: currentLocalSnapshotString, // Current local data before trying to load the problematic fetched data
-            conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)), // The problematic data from server
+            conflictingLocalDataString: currentLocalSnapshotString,
+            conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
           });
           toast({
             title: 'Data Inconsistency Detected',
@@ -292,12 +299,12 @@ export function useSyncManager() {
         lastServerHash: serverHash,
         isMismatchDialogOpen: false,
         gettingStartedDismissed: dataToLoad.gettingStartedDismissed || false,
-        conflictingLocalDataString: null, // Clear conflict data
+        conflictingLocalDataString: null,
         conflictingServerDataString: null,
       });
       hasLocalChangesRef.current = false;
       logInfo('SyncManager: Data fetched and loaded successfully.', { userId: currentUserId, serverHash, durationMs: duration }, currentUserId);
-      if (syncStateRef.current.status !== 'syncing') { // Avoid double toast if already syncing
+      if (syncStateRef.current.status !== 'syncing') {
         toast({ title: 'Data Synced', description: `Latest data loaded from server. (Duration: ${duration.toFixed(0)}ms)` });
       }
       initialLoadDoneRef.current = true;
@@ -306,7 +313,7 @@ export function useSyncManager() {
       initialLoadDoneRef.current = true;
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown fetch error");
-      const stableCurrentUserId = currentUserId; // Capture currentUserId
+      const stableCurrentUserId = currentUserId;
 
       if (error.name === 'AbortError' && signal?.reason !== 'API call timed out') {
         logInfo(`Fetch aborted: ${signal?.reason || error.message}`, { userId: stableCurrentUserId }, stableCurrentUserId);
@@ -321,10 +328,9 @@ export function useSyncManager() {
           });
         }
       }
-      return false; // Explicitly return false on error
+      return false;
     } finally {
       isFetchingRef.current = false;
-      // Ensure AbortController is reset only if this specific fetch operation's signal was used
       if (!isPreCheck && signal === abortControllerRef.current?.signal) {
         abortControllerRef.current = null;
       }
@@ -346,6 +352,11 @@ export function useSyncManager() {
     updateSyncState({ status: 'syncing' });
     logInfo('SyncManager: Saving data to server...', { userId: currentUserId, force, hashCheckEnabled: HASH_CHECK_ENABLED }, currentUserId);
 
+    if (autoSaveDebounceTimerRef.current) {
+      clearTimeout(autoSaveDebounceTimerRef.current);
+      autoSaveDebounceTimerRef.current = null;
+    }
+
     const startTime = performance.now();
 
     const dataToSave: SyncedData = {
@@ -366,23 +377,39 @@ export function useSyncManager() {
     const preparedData = prepareDataForHashing(dataToSave);
     const clientDataHash = await hashData(stringify(preparedData));
 
-    const localAbortController = new AbortController(); // New AbortController for this save operation
+    const localAbortController = new AbortController();
     const timeoutId = setTimeout(() => localAbortController.abort('API call timed out'), API_TIMEOUT_MS);
 
     try {
       const response = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...preparedData, dataHash: clientDataHash }), // Send current data hash
+        body: JSON.stringify({ ...preparedData, dataHash: clientDataHash }),
         signal: localAbortController.signal,
       });
-      clearTimeout(timeoutId); // Clear timeout if response received
+      clearTimeout(timeoutId);
       const duration = performance.now() - startTime;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: `Server error during save: ${response.status} ${response.statusText}`.trim() }));
+        if (response.status === 409 && HASH_CHECK_ENABLED && (errorData.error as string || "").toLowerCase().includes("data is out of sync")) {
+          logError('Save rejected by server due to 409 Conflict (stale data). Client will show conflict dialog.',
+             new Error(errorData.error || 'Server indicated data is stale.'),
+             { userIdFromSaveScope: currentUserId, clientHash: clientDataHash, errorDetails: errorData.error, serverResponseStatus: response.status },
+             currentUserId
+          );
+          updateSyncState({
+             status: 'hash_mismatch',
+             isMismatchDialogOpen: true,
+             conflictingLocalDataString: stringify(preparedData), // Data client tried to save
+             conflictingServerDataString: null, // Server doesn't send its data on 409 for save
+          });
+          toast({ title: 'Save Failed: Data Conflict', description: errorData.error || 'Your data is out of sync with the server. Please sync again before saving.', variant: 'destructive', duration: Infinity });
+          return false;
+        }
         if (response.status === 400 && HASH_CHECK_ENABLED && (errorData.error as string || "").toLowerCase().includes("data integrity check failed")) {
-           logError('Save rejected by server due to data integrity check (hash mismatch). Client will now show conflict dialog.',
+           logError(
+             'Save rejected by server due to data integrity check (hash mismatch). Client will now show conflict dialog.',
              new Error(errorData.error || 'Server-side hash validation failed'),
              { userIdFromSaveScope: currentUserId, clientHash: clientDataHash, errorDetails: errorData.error, serverResponseStatus: response.status },
              currentUserId
@@ -390,9 +417,8 @@ export function useSyncManager() {
            updateSyncState({
              status: 'hash_mismatch',
              isMismatchDialogOpen: true,
-             lastServerHash: syncStateRef.current.lastServerHash, // Keep last known good server hash
-             conflictingLocalDataString: stringify(preparedData), // Data client tried to save
-             conflictingServerDataString: null, // Server doesn't send its data on save failure
+             conflictingLocalDataString: stringify(preparedData),
+             conflictingServerDataString: null,
            });
            toast({ title: 'Save Failed: Data Conflict', description: errorData.error || 'Your local data is out of sync with the server. Please resolve the conflict.', variant: 'destructive', duration: Infinity });
            return false;
@@ -401,25 +427,27 @@ export function useSyncManager() {
       }
 
       // Successful save
+      const saveResponseData = await response.json();
+      const newServerHash = saveResponseData.newServerHash || clientDataHash; // Prefer server's reported hash if available
+
       updateSyncState({
         status: 'synced',
         lastSaveTime: new Date(),
-        lastServerHash: clientDataHash, // Server accepted this hash
+        lastServerHash: newServerHash,
         isMismatchDialogOpen: false,
         conflictingLocalDataString: null,
         conflictingServerDataString: null,
       });
       hasLocalChangesRef.current = false;
-      logInfo('SyncManager: Data saved successfully.', { userId: currentUserId, newHash: clientDataHash, durationMs: duration }, currentUserId);
+      logInfo('SyncManager: Data saved successfully.', { userId: currentUserId, newHash: newServerHash, durationMs: duration }, currentUserId);
       toast({ title: 'Data Saved', description: `Changes saved to server. (Duration: ${duration.toFixed(0)}ms)` });
       return true;
     } catch (error: any) {
-      clearTimeout(timeoutId); // Clear timeout if an error occurred
+      clearTimeout(timeoutId);
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown save error");
-      const stableCurrentUserId = currentUserId; // Capture currentUserId
+      const stableCurrentUserId = currentUserId;
 
-      // Handle abort specifically
       if (error.name === 'AbortError' && localAbortController.signal.reason === 'API call timed out') {
         logWarn(`Save aborted: API call timed out after ${API_TIMEOUT_MS}ms.`, { userId: stableCurrentUserId }, stableCurrentUserId);
         toast({ title: 'Save Timed Out', description: 'Could not save data to the server in time.', variant: 'destructive' });
@@ -429,11 +457,11 @@ export function useSyncManager() {
         logError('Error saving data:', errorToLog, { userIdFromSaveScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
       }
 
-      updateSyncState({ status: 'error' }); // General error state
-      if (error.name !== 'AbortError' || localAbortController.signal.reason === 'API call timed out') { // Only show toast for non-manual aborts or timeouts
+      updateSyncState({ status: 'error' });
+      if (error.name !== 'AbortError' || localAbortController.signal.reason === 'API call timed out') {
         toast({ title: 'Save Failed', description: `${errorMessage || 'Could not save data to server.'}`, variant: 'destructive' });
       }
-      return false; // Explicitly return false on error
+      return false;
     } finally {
       isSavingRef.current = false;
     }
@@ -445,13 +473,19 @@ export function useSyncManager() {
       toast({ title: 'Not Signed In', description: 'Please sign in to sync your data.', variant: 'destructive' });
       return;
     }
+
+    if (autoSaveDebounceTimerRef.current) {
+      clearTimeout(autoSaveDebounceTimerRef.current);
+      autoSaveDebounceTimerRef.current = null;
+      logDebug("Manual sync initiated, cleared pending auto-save timer.", { userId: currentUserId }, currentUserId);
+    }
+
     logInfo('SyncManager: Manual sync triggered.', { currentStatus: syncStateRef.current.status, userId: currentUserId }, currentUserId);
     updateSyncState({ status: 'syncing' });
 
     if (IS_FETCH_DISABLED) {
       logInfo('Manual Sync: Fetch is disabled. Attempting to save local changes if any.', { userId: currentUserId }, currentUserId);
       if (hasLocalChangesRef.current) await saveData();
-      // Correctly set status to 'local' if fetch is disabled
       updateSyncState({ status: 'local' });
       toast({ title: 'Local Save Attempted', description: 'Cloud fetching is disabled. Data saved locally if changed.' });
       return;
@@ -459,7 +493,7 @@ export function useSyncManager() {
 
     if (HASH_CHECK_ENABLED && syncStateRef.current.isMismatchDialogOpen) {
         logWarn("Manual sync attempted while hash mismatch dialog is open. User needs to resolve first.", {userId: currentUserId}, currentUserId);
-        updateSyncState({ status: 'hash_mismatch' }); // Ensure status reflects the conflict
+        updateSyncState({ status: 'hash_mismatch' });
         toast({title: "Conflict Exists", description: "Please resolve the data conflict first.", variant: "destructive"});
         return;
     }
@@ -469,11 +503,10 @@ export function useSyncManager() {
       const saveSuccess = await saveData();
       if (saveSuccess) {
         logInfo('Manual Sync: Save successful. Now fetching latest from server.', { userId: currentUserId }, currentUserId);
-        await fetchData(); // Fetch after successful save
+        await fetchData();
       } else {
         logWarn('Manual Sync: saveData failed. Full fetch after save skipped.', { userId: currentUserId }, currentUserId);
-        // If save failed, status would be 'error' or 'hash_mismatch'. Re-check local changes status.
-        if(syncStateRef.current.status === 'syncing') { // if still syncing after failed save
+        if(syncStateRef.current.status === 'syncing') {
             updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'error' });
         }
       }
@@ -486,10 +519,8 @@ export function useSyncManager() {
   const forceSave = useCallback(async () => {
     const currentUserId = userId;
     logInfo("Force Save initiated by user from conflict dialog.", { userId: currentUserId }, currentUserId);
-    const success = await saveData(true); // Pass force=true if saveData supports it (not currently implemented that way)
+    const success = await saveData(true);
     if (success) {
-        // After successfully forcing a save, we might want to fetch to ensure client has the absolute latest from server
-        // Or assume the forced save is now the source of truth. For now, just mark as synced.
         updateSyncState({ isMismatchDialogOpen: false, conflictingLocalDataString: null, conflictingServerDataString: null });
     }
     return success;
@@ -503,21 +534,16 @@ export function useSyncManager() {
         updateSyncState({ isMismatchDialogOpen: false, status: 'local', conflictingLocalDataString: null, conflictingServerDataString: null });
         return false;
     }
-    // Important: Clear local data BEFORE fetching to ensure server state overwrites cleanly.
-    clearAllLocalStoreData(); // This will reset status to 'idle' and clear conflict strings
-    const fetchResult = await fetchData(); // fetchData will set status to 'synced' or 'error'
-    if (fetchResult !== false) { // fetchResult is serverHash or false
-      // Dialog is closed by fetchData on success through updateSyncState
-      // No need to call updateSyncState here if fetchData handles it.
+    clearAllLocalStoreData();
+    const fetchResult = await fetchData();
+    if (fetchResult !== false) {
       return true;
     }
-    // If fetch failed, fetchData would have set status to 'error'. Dialog closure handled by its own logic or here.
     updateSyncState({ isMismatchDialogOpen: false, conflictingLocalDataString: null, conflictingServerDataString: null });
     return false;
   }, [clearAllLocalStoreData, fetchData, updateSyncState, toast, userId]);
 
 
-  // Effect for user sign-in/sign-out and initial load
   useEffect(() => {
     const currentUserId = userId;
     const prevUserId = previousUserIdRef.current;
@@ -527,27 +553,23 @@ export function useSyncManager() {
       return;
     }
 
-    // User signed out
     if (!isSignedIn && !currentUserId && prevUserId) {
         logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
-        clearAllLocalStoreData(); // This also clears conflict strings
+        clearAllLocalStoreData();
         previousUserIdRef.current = null;
-        return; // Stop further processing for signed-out user
+        return;
     }
 
-    // User signed in or switched
     if (isSignedIn && currentUserId && (currentUserId !== prevUserId || !initialLoadDoneRef.current)) {
         if (currentUserId !== prevUserId) {
             logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Setting up for new user.`, { userId: currentUserId }, currentUserId);
-            // Clear data from previous user if applicable
             clearAllLocalStoreData();
             previousUserIdRef.current = currentUserId;
-            initialLoadDoneRef.current = false; // Force re-initialization for the new user
+            initialLoadDoneRef.current = false;
         }
 
         if (!initialLoadDoneRef.current) {
             logInfo(`SyncManager effect: Initializing for user ${currentUserId}. Current status: ${syncStateRef.current.status}`, { userId: currentUserId }, currentUserId);
-            // Load preferences which might include lastServerHash and gettingStartedDismissed
             const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
             let loadedLastServerHash = null;
             let loadedGettingStartedDismissed = false;
@@ -555,7 +577,7 @@ export function useSyncManager() {
                 try {
                     const prefs = JSON.parse(storedPrefsString);
                     loadedGettingStartedDismissed = prefs.gettingStartedDismissed || false;
-                    if(HASH_CHECK_ENABLED) { // Only load hash if check is enabled
+                    if(HASH_CHECK_ENABLED) {
                         loadedLastServerHash = prefs.lastServerHash || null;
                     }
                 } catch (e: any) {
@@ -564,51 +586,45 @@ export function useSyncManager() {
             }
 
             updateSyncState({
-                status: 'local', // Start with 'local' assuming data is loaded from session storage
+                status: 'local',
                 lastServerHash: loadedLastServerHash,
                 gettingStartedDismissed: loadedGettingStartedDismissed,
-                isMismatchDialogOpen: false, // Ensure dialog is closed on init
+                isMismatchDialogOpen: false,
                 conflictingLocalDataString: null,
                 conflictingServerDataString: null,
             });
-            initialLoadDoneRef.current = true; // Mark initial load as done
-            logInfo('SyncManager: User context established. App ready with local data. Awaiting manual sync or auto-sync trigger.', { userId: currentUserId, newStatus: 'local' }, currentUserId);
-            // Optionally, trigger an initial fetch here if desired for auto-sync on load
-            // manualSync(); // Or fetchData() if no local changes are expected initially
+            initialLoadDoneRef.current = true;
+            logInfo('SyncManager: User context established. App ready with local data. Triggering initial manual sync.', { userId: currentUserId, newStatus: 'local' }, currentUserId);
+            manualSync(); // Trigger initial sync after loading local data and preferences
         }
     } else if (isSignedIn && currentUserId && initialLoadDoneRef.current) {
-        // This block runs if user is still signed in, and initial load was already done.
-        // It's a good place for sanity checks if status regresses.
         logDebug('SyncManager effect: User signed in, initial setup previously done. Current status:', { status: syncStateRef.current.status, userId: currentUserId }, currentUserId);
         if (syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
             logWarn('SyncManager: Status regressed to idle/loading_local for an active user. Correcting.', { currentStatus: syncStateRef.current.status, hasLocalChanges: hasLocalChangesRef.current, userId: currentUserId }, currentUserId);
             updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'local' });
         }
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState]); // Dependencies for user change
+  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState, manualSync]);
 
 
-  // Effect to persist lastServerHash and gettingStartedDismissed to localStorage
   useEffect(() => {
     if (initialLoadDoneRef.current && isSignedIn && userId) {
       const stateToPersist = {
         gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
-        lastServerHash: HASH_CHECK_ENABLED ? syncStateRef.current.lastServerHash : undefined, // Only save if enabled
+        lastServerHash: HASH_CHECK_ENABLED ? syncStateRef.current.lastServerHash : undefined,
       };
       localStorage.setItem(`ifcGuru_uiPrefs_${userId}`, JSON.stringify(stateToPersist));
       logDebug('SyncManager: Persisted UI preferences & lastServerHash to localStorage.', { userId, preferences: stateToPersist, hashCheckEnabled: HASH_CHECK_ENABLED }, userId);
     }
-  }, [syncState.gettingStartedDismissed, syncState.lastServerHash, userId, isSignedIn]); // Depend on specific parts of syncState
+  }, [syncState.gettingStartedDismissed, syncState.lastServerHash, userId, isSignedIn]);
 
 
-  // Effect to listen to store changes and mark local_changes
   const handleStoreChange = useCallback(() => {
-    const currentUserId = userId; // Capture current userId
-    // Do not mark local changes if syncing, not yet initialized, or not signed in
+    const currentUserId = userId;
     if (syncStateRef.current.status === 'syncing' || !initialLoadDoneRef.current || !isSignedIn || !currentUserId) {
       return;
     }
-    if (!hasLocalChangesRef.current) { // Only log the first time it's marked
+    if (!hasLocalChangesRef.current) {
         logInfo("SyncManager: Local store change detected, marking hasLocalChangesRef.", { userId: currentUserId }, currentUserId);
     }
     hasLocalChangesRef.current = true;
@@ -616,7 +632,35 @@ export function useSyncManager() {
       updateSyncState({ status: 'local_changes' });
       logDebug("SyncManager: Status updated to 'local_changes' due to store modification.", { userId: currentUserId }, currentUserId);
     }
-  }, [updateSyncState, userId, isSignedIn]); // Dependencies
+
+    if (autoSaveDebounceTimerRef.current) {
+        clearTimeout(autoSaveDebounceTimerRef.current);
+    }
+    autoSaveDebounceTimerRef.current = setTimeout(() => {
+        const localUserId = userId; // Use userId captured at the time of setting the timeout
+        if (hasLocalChangesRef.current &&
+            isSignedIn && localUserId &&
+            initialLoadDoneRef.current &&
+            !isSavingRef.current && !isFetchingRef.current && !isClearingRef.current &&
+            syncStateRef.current.status !== 'syncing' && syncStateRef.current.status !== 'hash_mismatch'
+        ) {
+            logInfo("SyncManager: Auto-save triggered by debounce.", { userId: localUserId }, localUserId);
+            saveData();
+        } else {
+            logDebug("SyncManager: Auto-save debounce fired, but conditions not met for save.", {
+                userId: localUserId,
+                hasLocalChanges: hasLocalChangesRef.current,
+                isSignedIn,
+                initialLoadDone: initialLoadDoneRef.current,
+                isSaving: isSavingRef.current,
+                isFetching: isFetchingRef.current,
+                isClearing: isClearingRef.current,
+                currentStatus: syncStateRef.current.status,
+            }, localUserId);
+        }
+    }, AUTO_SAVE_DEBOUNCE_DELAY_MS);
+
+  }, [updateSyncState, userId, isSignedIn, saveData]);
 
   useEffect(() => {
     const storesToWatch = [
@@ -624,13 +668,20 @@ export function useSyncManager() {
       useBudgetStore, useWeeklyReviewStore, useInvestmentStore
     ];
     const unsubscribes = storesToWatch.map(store => store.subscribe(handleStoreChange));
-    return () => unsubscribes.forEach(unsubscribe => unsubscribe());
+    return () => {
+        unsubscribes.forEach(unsubscribe => unsubscribe());
+        if (autoSaveDebounceTimerRef.current) {
+            clearTimeout(autoSaveDebounceTimerRef.current);
+        }
+    };
   }, [handleStoreChange]);
 
-  // Cleanup for AbortController on unmount
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort('Component unmounting');
+       if (autoSaveDebounceTimerRef.current) {
+            clearTimeout(autoSaveDebounceTimerRef.current);
+      }
     };
   }, []);
 
@@ -653,31 +704,24 @@ export function useSyncManager() {
     setGettingStartedDismissed: (dismissed: boolean) => {
       const currentUserId = userId;
       updateSyncState({ gettingStartedDismissed: dismissed });
-      // If user is signed in and state allows, mark for local changes
       if (isSignedIn && currentUserId && (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local' || syncStateRef.current.status === 'local_changes')) {
-        hasLocalChangesRef.current = true; // This is a local change
-        if (syncStateRef.current.status !== 'local_changes') { // Update status if not already marked
+        if (!hasLocalChangesRef.current) {
+           logInfo("SyncManager: gettingStartedDismissed changed, marking for sync.", { userId: currentUserId, dismissed }, currentUserId);
+        }
+        hasLocalChangesRef.current = true;
+        if (syncStateRef.current.status !== 'local_changes') {
             updateSyncState({ status: 'local_changes' });
         }
-        logInfo("SyncManager: gettingStartedDismissed changed. Marked for next sync.", { userId: currentUserId, dismissed }, currentUserId);
+        // Trigger auto-save debounce
+        if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
+        autoSaveDebounceTimerRef.current = setTimeout(() => {
+            if (hasLocalChangesRef.current && isSignedIn && currentUserId && !isSavingRef.current && !isFetchingRef.current && syncStateRef.current.status !== 'syncing' && syncStateRef.current.status !== 'hash_mismatch') {
+                saveData();
+            }
+        }, AUTO_SAVE_DEBOUNCE_DELAY_MS);
       }
     },
     conflictingLocalDataString: syncState.conflictingLocalDataString,
     conflictingServerDataString: syncState.conflictingServerDataString,
   };
 }
-
-// Helper function to get a snapshot of current local data
-// const getCurrentLocalData = (): SyncedData => {
-// This would involve calling .getState() on all stores and assembling the SyncedData object.
-// Example:
-// return {
-//   transactions: useTransactionsStore.getState().transactions,
-//   debts: useDebtStore.getState().debts,
-//   // ... and so on for all other stores and fields
-//   startDate: useStatementStore.getState().startDate?.toISOString(),
-//   endDate: useStatementStore.getState().endDate?.toISOString(),
-//   gettingStartedDismissed: useSyncManager. // This part is tricky, avoid circular dependency
-// };
-// This helper is now replaced by getCurrentLocalDataSnapshot for better DI.
-// }
