@@ -200,7 +200,7 @@ export default function TransactionsPage() {
        <PageHeader
           title="Transactions"
           description="Manage your financial transactions."
-          icon={<ReceiptText className="h-6 w-6" />}
+          icon={ReceiptText}
         >
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Transaction</Button>
@@ -300,3 +300,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
