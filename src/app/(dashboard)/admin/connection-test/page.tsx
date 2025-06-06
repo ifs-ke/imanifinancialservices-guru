@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import { useUser } from "@clerk/nextjs";
 import { Separator } from '@/components/ui/separator';
+import type { TransactionWithId, DebtItem, BudgetItem } from '@/lib/types'; // For test data
 
 // Helper for section headers
 const SectionHeader: React.FC<{ title: string; description?: string; icon?: React.ElementType }> = ({ title, description, icon: IconComponent }) => (
@@ -119,6 +120,25 @@ const DetailViewerDialog: React.FC<DetailViewerProps> = ({ title, content, isOpe
   );
 };
 
+// Define distinct SyncDataInput structures for each hashing test
+const STRING_TEST_SYNC_DATA_INPUT = {
+  transactions: [{ id: 'tx_str_1', date: new Date(2023, 0, 15, 10, 0, 0).toISOString(), description: 'String Test Transaction Alpha', amount: 100.50, modeOfPayment: 'Cash' } as TransactionWithId],
+  gettingStartedDismissed: true,
+  startDate: new Date(2023,0,1).toISOString(),
+};
+
+const OBJECT_TEST_SYNC_DATA_INPUT = {
+  debts: [{ id: 'd_obj_1', description: 'Object Test Debt Bravo', principal: 2500.75, interestRate: 7.5, minPayment: 120, term: 'long' } as DebtItem],
+  gettingStartedDismissed: false,
+  endDate: new Date(2023,11,31).toISOString(),
+};
+
+const INTEGRITY_TEST_INITIAL_SYNC_DATA_INPUT = {
+  budgetItems: [{ id: 'b_int_1', description: 'Integrity Test Budget Charlie', amount: 300.00, category: 'goal', period: '2023-02' } as BudgetItem],
+  startDate: new Date(2023, 1, 1).toISOString(),
+  endDate: new Date(2023, 1, 28).toISOString(),
+};
+
 
 const AdminConnectionTestPage: React.FC = () => {
   const { toast } = useToast();
@@ -128,7 +148,8 @@ const AdminConnectionTestPage: React.FC = () => {
   const [dbConnectionResult, setDbConnectionResult] = useState<{ success: boolean; message: string; duration?: number } | null>(null);
   const [isDbConnectionTesting, setIsDbConnectionTesting] = useState(false);
 
-  const [csStringTestData] = useState<any>({ user: "testUser", id: 99, timestamp: new Date().toISOString(), items: [1, "a", true] });
+  // For String-to-Hash Consistency Test
+  const csStringTestData = STRING_TEST_SYNC_DATA_INPUT; // Use the constant
   const [csClientPreparedString, setCsClientPreparedString] = useState('');
   const [csClientCalculatedHash, setCsClientCalculatedHash] = useState('');
   const [csServerCalculatedHash, setCsServerCalculatedHash] = useState('');
@@ -137,7 +158,8 @@ const AdminConnectionTestPage: React.FC = () => {
   const [isCsStringHashTesting, setIsCsStringHashTesting] = useState(false);
   const [csStringHashError, setCsStringHashError] = useState<string | null>(null);
 
-  const [csObjectTestData] = useState<any>({ itemA: "valueA", itemB: 123, itemC: null, itemD: [1,2,3], date: new Date() });
+  // For Data Preparation & Hashing Consistency Test
+  const csObjectTestData = OBJECT_TEST_SYNC_DATA_INPUT; // Use the constant
   const [csObjClientPreparedString, setCsObjClientPreparedString] = useState('');
   const [csObjClientHash, setCsObjClientHash] = useState('');
   const [csObjServerPreparedString, setCsObjServerPreparedString] = useState('');
@@ -150,7 +172,7 @@ const AdminConnectionTestPage: React.FC = () => {
   const [verifyHashTestResults, setVerifyHashTestResults] = useState<Array<{ description: string, expected: boolean, actual: boolean, data?: string, hash?: string, stringToVerify?: string }>>([]);
 
   const [testDataInput, setTestDataInput] = useState('Sample test data for saving.');
-  const [saveResult, setSaveResult] = useState<{ success: boolean; message: string; duration?: number } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ success: boolean; message: string; entryId?: string; duration?: number } | null>(null);
   const [isSavingData, setIsSavingData] = useState(false);
 
   const [fetchedData, setFetchedData] = useState<any | null>(null);
@@ -164,19 +186,18 @@ const AdminConnectionTestPage: React.FC = () => {
   const [isServerClerkUserInfoLoading, setIsServerClerkUserInfoLoading] = useState(false);
   const [serverClerkUserInfoError, setServerClerkUserInfoError] = useState<string | null>(null);
 
-  const [integrityTestData, setIntegrityTestData] = useState<any>(
-    { id: "tx_1", date: new Date().toISOString(), description: "Coffee", amount: -3.50, type: "expense", items: [{id:1, qty:2}, {id:2, qty:1}] }
-  );
+  // States for End-to-End Hash Verification
+  const [integrityTestData, setIntegrityTestData] = useState<any>(INTEGRITY_TEST_INITIAL_SYNC_DATA_INPUT);
   const [integrityTestClientPreparedString, setIntegrityTestClientPreparedString] = useState('');
   const [integrityTestClientHash, setIntegrityTestClientHash] = useState('');
   const [integrityTestServerResult, setIntegrityTestServerResult] = useState<Awaited<ReturnType<typeof verifyClientDataHashAction>> | null>(null);
   const [isIntegrityTesting, setIsIntegrityTesting] = useState(false);
 
   // States for Stale Hash Simulation Test
-  const [staleHash_originalData, setStaleHash_originalData] = useState<any>(null); // Data used to generate the stale hash
-  const [staleHash_staleHash, setStaleHash_staleHash] = useState<string | null>(null); // The stale hash itself
-  const [staleHash_editableJSONString, setStaleHash_editableJSONString] = useState<string>(''); // Content of the textarea
-  const [staleHash_dataToSendToServer, setStaleHash_dataToSendToServer] = useState<any>(null); // Data payload for the "Attempt Save" step
+  const [staleHash_originalData, setStaleHash_originalData] = useState<any>(null);
+  const [staleHash_staleHash, setStaleHash_staleHash] = useState<string | null>(null);
+  const [staleHash_editableJSONString, setStaleHash_editableJSONString] = useState<string>('');
+  const [staleHash_dataToSendToServer, setStaleHash_dataToSendToServer] = useState<any>(null);
   const [staleHash_simulationResult, setStaleHash_simulationResult] = useState<Awaited<ReturnType<typeof simulateSaveWithPotentialMismatchAction>> | null>(null);
   const [isStaleHashSimulating, setIsStaleHashSimulating] = useState(false);
 
@@ -215,7 +236,7 @@ const AdminConnectionTestPage: React.FC = () => {
       setDbConnectionResult({
         success: false,
         message: `Client-side error: ${message}`,
-        duration: 0 
+        duration: 0
       });
       toast({
         title: "Connection Error",
@@ -230,12 +251,12 @@ const AdminConnectionTestPage: React.FC = () => {
   const handleCsStringHashTest = async () => {
     setIsCsStringHashTesting(true); setCsStringHashError(null); setCsClientCalculatedHash(''); setCsServerCalculatedHash(''); setCsServerHashingDuration(null); setCsHashMatchResult(null);
     try {
-      const preparedClientData = prepareDataForHashing(csStringTestData);
+      const preparedClientData = prepareDataForHashing(csStringTestData); // csStringTestData is now a SyncDataInput
       const clientString = stringify(preparedClientData);
       setCsClientPreparedString(clientString);
       const localClientHash = await hashData(clientString);
       setCsClientCalculatedHash(localClientHash);
-      const serverResult = await getHashForServerComparison(clientString);
+      const serverResult = await getHashForServerComparison(clientString); // Server gets the already prepared string
       if (serverResult.success && serverResult.serverHash) {
         setCsServerCalculatedHash(serverResult.serverHash);
         setCsServerHashingDuration(serverResult.duration || null);
@@ -248,13 +269,13 @@ const AdminConnectionTestPage: React.FC = () => {
   const handleCsObjectHashTest = async () => {
     setIsCsObjectHashTesting(true); setCsObjectHashError(null); setCsObjClientPreparedString(''); setCsObjClientHash(''); setCsObjServerPreparedString(''); setCsObjServerHash(''); setCsObjPrepMatch(null); setCsObjHashMatch(null);
     try {
-      const clientPreparedData = prepareDataForHashing(csObjectTestData);
+      const clientPreparedData = prepareDataForHashing(csObjectTestData); // csObjectTestData is now a SyncDataInput
       const clientPreparedString = stringify(clientPreparedData);
       setCsObjClientPreparedString(clientPreparedString);
       const clientHash = await hashData(clientPreparedString);
       setCsObjClientHash(clientHash);
 
-      const serverResult = await getHashForServerPreparedObject(csObjectTestData);
+      const serverResult = await getHashForServerPreparedObject(csObjectTestData); // Server gets raw object and prepares it
       if (serverResult.success && serverResult.serverPreparedString && serverResult.serverHash) {
         setCsObjServerPreparedString(serverResult.serverPreparedString);
         setCsObjServerHash(serverResult.serverHash);
@@ -285,16 +306,16 @@ const AdminConnectionTestPage: React.FC = () => {
     setIntegrityTestClientHash('');
     try {
       if (!integrityTestData || typeof integrityTestData !== 'object') {
-        throw new Error("Please provide valid test data in JSON format.");
+        throw new Error("Please provide valid test data in JSON format for integrity test.");
       }
-      const clientPreparedData = prepareDataForHashing(integrityTestData);
+      const clientPreparedData = prepareDataForHashing(integrityTestData); // integrityTestData is now a SyncDataInput
       const clientPreparedString = stringify(clientPreparedData);
       const clientHash = await hashData(clientPreparedString);
       setIntegrityTestClientPreparedString(clientPreparedString);
       setIntegrityTestClientHash(clientHash);
 
       const startTime = performance.now();
-      const serverResult = await verifyClientDataHashAction(integrityTestData, clientHash);
+      const serverResult = await verifyClientDataHashAction(integrityTestData, clientHash); // Server gets raw object and client hash
       const duration = performance.now() - startTime;
 
       setIntegrityTestServerResult({
@@ -307,7 +328,7 @@ const AdminConnectionTestPage: React.FC = () => {
         variant: serverResult.success && serverResult.clientHashMatches ? "default" : "destructive"
       });
     } catch (error: any) {
-      setIntegrityTestServerResult({ success: false, message: `Client-side error: ${error.message}`, duration: 0 }); 
+      setIntegrityTestServerResult({ success: false, message: `Client-side error: ${error.message}`, duration: 0 });
        toast({
         title: "Integrity Test Error",
         description: error.message,
@@ -319,12 +340,15 @@ const AdminConnectionTestPage: React.FC = () => {
   };
 
   const handleGenerateStaleHashData = async () => {
-    const initialData = { id: 'test-obj-1', value: 100, name: 'Initial Stale Test Object', timestamp: new Date().toISOString(), items: ['apple', 'banana'] };
+    const initialData = { // This should also be a SyncDataInput if simulateSaveWithPotentialMismatchAction expects it
+        transactions: [{ id: 'stale_tx_1', date: new Date(2023, 2, 10).toISOString(), description: 'Initial Stale Test TX', amount: 50.00, modeOfPayment: 'Bank' } as TransactionWithId],
+        gettingStartedDismissed: true
+    };
     setStaleHash_originalData(initialData);
-    const prepared = prepareDataForHashing(initialData as any);
+    const prepared = prepareDataForHashing(initialData as any); // Cast if not strictly SyncDataInput
     const hash = await hashData(stringify(prepared));
     setStaleHash_staleHash(hash);
-    setStaleHash_dataToSendToServer(initialData); // Current data to send starts as the original data
+    setStaleHash_dataToSendToServer(initialData);
     setStaleHash_editableJSONString(JSON.stringify(initialData, null, 2));
     setStaleHash_simulationResult(null);
     toast({ title: "Step 1 Complete", description: "Initial data & stale hash generated. Edit in Step 2." });
@@ -338,7 +362,6 @@ const AdminConnectionTestPage: React.FC = () => {
     try {
       const modifiedData = JSON.parse(staleHash_editableJSONString);
       setStaleHash_dataToSendToServer(modifiedData);
-      // Normalize the string in the editor by re-stringifying the parsed object
       setStaleHash_editableJSONString(JSON.stringify(modifiedData, null, 2));
       toast({ title: "Data Updated", description: "Editor changes applied to 'Modified Data' payload. Stale hash remains unchanged." });
     } catch (error: any) {
@@ -355,8 +378,8 @@ const AdminConnectionTestPage: React.FC = () => {
     setStaleHash_simulationResult(null);
     try {
       const result = await simulateSaveWithPotentialMismatchAction(
-        staleHash_dataToSendToServer, // Send the current data payload
-        staleHash_staleHash         // Send the original stale hash
+        staleHash_dataToSendToServer,
+        staleHash_staleHash
       );
       setStaleHash_simulationResult(result);
       toast({
@@ -365,7 +388,7 @@ const AdminConnectionTestPage: React.FC = () => {
         variant: result.mismatchDetected ? "default" : (result.success ? "destructive" : "destructive")
       });
     } catch (error: any) {
-      setStaleHash_simulationResult({ success: false, message: `Client-side error: ${error.message}.`, duration: 0 });
+      setStaleHash_simulationResult({ success: false, message: `Client-side error: ${error.message}.`, duration: 0, mismatchDetected: false });
        toast({ title: "Simulation Error", description: `Client-side error: ${error.message}.`, variant: "destructive"});
     } finally {
       setIsStaleHashSimulating(false);
@@ -436,7 +459,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("Attempting to delete all previous test entries...");
       const deleteAllRes = await deleteAllUserTestEntries();
-      if (!deleteAllRes.success && deleteAllRes.count === undefined) { 
+      if (!deleteAllRes.success && deleteAllRes.count === undefined) {
           throw new Error(`Failed to clear previous test entries: ${deleteAllRes.message}`);
       }
       log(`Cleared ${deleteAllRes.count ?? 'N/A'} entries`, 'success');
@@ -459,7 +482,7 @@ const AdminConnectionTestPage: React.FC = () => {
           throw new Error(`Entry count mismatch after create. Expected 3, got ${readRes.entries.length}.`);
       }
       const entryBExists = readRes.entries.find(e => e.id === idB && e.data === "Entry B");
-      if (!entryBExists) throw new Error(`Entry B (ID: ${idB}) not found or data mismatch after create.`);
+      if (!entryBExists) throw new Error(`Entry B (ID: ${idB}) not found or data mismatch after create. Found: ${JSON.stringify(readRes.entries.find(e => e.id === idB))}`);
       log("Initial entries verified.", 'success');
 
       log(`\nUpdating Entry B (ID: ${idB}) to "Entry B - Updated"...`);
@@ -484,7 +507,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
       log("\nDeleting all remaining test entries for user...");
       const finalDeleteRes = await deleteAllUserTestEntries();
-      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) { 
+      if (!finalDeleteRes.success || finalDeleteRes.count !== 2) {
         throw new Error(`Failed to delete remaining entries. Expected 2, got ${finalDeleteRes.count ?? 0}. Result: ${finalDeleteRes.message}`);
       }
       const readAfterFinalDeleteRes = await readAllTestEntries();
@@ -587,7 +610,7 @@ const AdminConnectionTestPage: React.FC = () => {
           <CardContent className="space-y-6">
             <div className="p-4 border rounded-md space-y-3 bg-card">
                 <h4 className="font-semibold text-sm">Test 1: String-to-Hash Consistency</h4>
-                <Textarea value={JSON.stringify(csStringTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" />
+                <Textarea value={JSON.stringify(csStringTestData.transactions[0], null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" title="Showing first transaction of test data" />
                 <Button onClick={handleCsStringHashTest} disabled={isCsStringHashTesting} className="w-full">
                     {isCsStringHashTesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Run String Hash Test'}
                 </Button>
@@ -630,7 +653,7 @@ const AdminConnectionTestPage: React.FC = () => {
 
             <div className="p-4 border rounded-md space-y-3 bg-card">
                 <h4 className="font-semibold text-sm">Test 2: Data Preparation & Hashing Consistency</h4>
-                <Textarea value={JSON.stringify(csObjectTestData, null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" />
+                <Textarea value={JSON.stringify(csObjectTestData.debts[0], null, 2).substring(0,100)+"..."} readOnly rows={1} className="text-xs bg-muted/50 font-mono" title="Showing first debt of test data" />
                 <Button onClick={handleCsObjectHashTest} disabled={isCsObjectHashTesting} className="w-full">
                     {isCsObjectHashTesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Run Data Prep & Hash Test'}
                 </Button>
@@ -680,7 +703,7 @@ const AdminConnectionTestPage: React.FC = () => {
           <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck size={20}/> End-to-End Hash Verification</CardTitle><CardDescription>Client prepares data, hashes it, sends both to server. Server re-prepares, re-hashes, and compares.</CardDescription></CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1">
-              <label htmlFor="integrity-data" className="text-xs font-medium">Test Data (JSON):</label>
+              <label htmlFor="integrity-data" className="text-xs font-medium">Test Data (JSON - entire SyncDataInput structure):</label>
               <Textarea id="integrity-data" value={JSON.stringify(integrityTestData, null, 2)} onChange={(e) => { try { setIntegrityTestData(JSON.parse(e.target.value)); } catch { /* ignore parse error while typing */ }}} rows={4} className="text-xs font-mono"/>
             </div>
             <Button onClick={handleRunIntegrityTest} disabled={isIntegrityTesting} className="w-full">
@@ -689,7 +712,7 @@ const AdminConnectionTestPage: React.FC = () => {
             {integrityTestServerResult && (
               <div className="space-y-2 mt-2 text-xs border p-3 rounded-md bg-muted/10">
                 <h5 className="font-semibold mb-1">Verification Result:</h5>
-                <p><strong>Client Prepared String (sent to server action):</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Integrity Test: Client Prepared String", integrityTestClientPreparedString)}>View</Button></p>
+                <p><strong>Client Prepared String (derived from Test Data):</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Integrity Test: Client Prepared String", integrityTestClientPreparedString)}>View</Button></p>
                   <Textarea value={integrityTestClientPreparedString.substring(0,100) + "..."} readOnly rows={1} className="bg-muted/50 font-mono"/>
                 <div className="flex justify-between items-center"><span><strong>Client Hash (sent to server):</strong> <span className="font-mono bg-muted/50 p-1 rounded">{integrityTestClientHash.substring(0,20)}...</span></span><Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => openDetailViewer("Integrity Test: Client Hash", integrityTestClientHash)}>Full</Button></div>
                 <p><strong>Server Calculated Hash:</strong> <span className="font-mono bg-muted/50 p-1 rounded">{integrityTestServerResult.serverCalculatedHash ? integrityTestServerResult.serverCalculatedHash.substring(0,20)+'...' : 'N/A'}</span>
@@ -709,7 +732,7 @@ const AdminConnectionTestPage: React.FC = () => {
                 <Button onClick={handleGenerateStaleHashData} size="sm" className="w-full">Generate Data & Stale Hash</Button>
                 {staleHash_originalData && staleHash_staleHash && (
                     <div className="text-xs mt-1 space-y-0.5">
-                        <p><strong>Initial Data (used for stale hash):</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Original Data", staleHash_originalData)}>View</Button></p>
+                        <p><strong>Initial Data (used for stale hash - SyncDataInput structure):</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Original Data", staleHash_originalData)}>View</Button></p>
                         <p><strong>Stale Hash (from original data):</strong> <span className="font-mono bg-muted/50 p-1 rounded">{staleHash_staleHash.substring(0,20)}...</span> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Stale Hash", staleHash_staleHash)}>Full</Button></p>
                     </div>
                 )}
@@ -719,14 +742,14 @@ const AdminConnectionTestPage: React.FC = () => {
                     <h5 className="font-medium text-sm">Step 2: Edit Data in Editor (this becomes 'Modified Data')</h5>
                     <Textarea value={staleHash_editableJSONString} onChange={(e) => setStaleHash_editableJSONString(e.target.value)} rows={5} className="text-xs font-mono" placeholder="Modify the JSON data here..." />
                      <p className="text-xs text-muted-foreground italic">
-                        Modify the JSON data above. Then, click "Apply Editor Changes" to update the data payload that will be sent in Step 3. The 'Stale Hash' from Step 1 will remain unchanged.
+                        Modify the JSON data above (e.g., change a description or amount). Then, click "Apply Editor Changes" to update the data payload that will be sent in Step 3. The 'Stale Hash' from Step 1 will remain unchanged.
                     </p>
                     <Button onClick={handleApplyEditorChangesToStaleTestData} size="sm" variant="secondary" className="w-full" disabled={!staleHash_editableJSONString.trim()}>
                       Apply Editor Changes as 'Modified Data' Payload
                     </Button>
                      {staleHash_dataToSendToServer && (
                         <div className="text-xs mt-1">
-                            <p><strong>Current 'Modified Data' to send:</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Current Data to Send", staleHash_dataToSendToServer)}>View</Button></p>
+                            <p><strong>Current 'Modified Data' to send (SyncDataInput structure):</strong> <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => openDetailViewer("Stale Hash Test: Current Data to Send", staleHash_dataToSendToServer)}>View</Button></p>
                         </div>
                      )}
                 </div>
