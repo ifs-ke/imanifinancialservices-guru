@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Coins, FileUp, FileDown, AlertTriangle, CalendarClock, CheckCircle, Info, XCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Coins, FileUp, FileDown, AlertTriangle, CalendarClock, CheckCircle, Info, XCircle, Trash2, AlertCircle } from 'lucide-react'; // Added AlertCircle
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore';
 import { useBudgetStore, selectTotalBudgetedDebt } from '@/store/budgetStore';
@@ -227,7 +227,7 @@ export default function DebtPage() {
       <PageHeader
         title="Manage Debts"
         description="Track debts, view amortization, and reconcile with your budget."
-        icon={<Coins />}
+        icon={Coins}
       >
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Debt</Button>
