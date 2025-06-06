@@ -47,21 +47,20 @@ export function prepareDataForHashing(data: SyncDataInput): any {
       return undefined;
     };
 
-    const toFixedIfNumber = (value: number | string | undefined | null, digits: number): string | undefined | null => {
-        if (value == null) { // Handles undefined and null correctly
-            return value;
+    const toFixedIfNumber = (value: number | string | undefined | null, digits: number): string | null => {
+        let numToProcess: number;
+        if (value == null) { // Handles undefined and null
+            numToProcess = 0; // Treat null/undefined as 0 for hashing consistency with Zod's server-side coercion of null to 0
+        } else {
+            const parsedNum = Number(value); // Coerces string numbers to actual numbers
+            if (isNaN(parsedNum)) {
+                // If 'value' was a non-numeric string or already NaN, Number(value) is NaN.
+                // Return null for these cases to distinguish from valid zero.
+                return null;
+            }
+            numToProcess = parsedNum;
         }
-        // Attempt to convert to number. This handles both actual numbers and numeric strings.
-        const num = Number(value);
-
-        if (isNaN(num)) {
-            // If conversion results in NaN (e.g., original was a non-numeric string, or already NaN)
-            // For hashing stability, it's important to have a consistent output.
-            // Schemas should ideally prevent non-numeric strings from getting this far.
-            // Return null if the value (even if a string) couldn't be parsed into a valid number.
-            return null;
-        }
-        return num.toFixed(digits);
+        return numToProcess.toFixed(digits);
     };
 
 
@@ -171,3 +170,4 @@ export function prepareDataForHashing(data: SyncDataInput): any {
         gettingStartedDismissed: data.gettingStartedDismissed ?? false,
     };
 }
+
