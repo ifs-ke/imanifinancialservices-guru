@@ -3,11 +3,19 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { TransactionWithId, TransactionFrequency, TransactionVariability, ModeOfPayment, TransactionFormData as SharedTransactionFormData } from '@/lib/types';
-import { encode, decode } from '@/lib/storage-utils'; 
-import { logInfo, logDebug, logWarn } from '@/lib/logger'; 
+import { encode, decode } from '@/lib/storage-utils';
+import { logInfo, logDebug, logWarn } from '@/lib/logger';
 import { isValid } from 'date-fns'; // Import isValid from date-fns
 
-const generateId = (): string => `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+const generateId = (): string => {
+  const prefix = 'tx';
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}_${crypto.randomUUID()}`;
+  } else {
+    // Fallback for environments without crypto.randomUUID
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+};
 
 const sortTransactions = (txs: TransactionWithId[]): TransactionWithId[] => {
     if (!Array.isArray(txs)) return [];
@@ -53,12 +61,12 @@ const createSessionStorageWithEncoding = (): StateStorage => {
             if (key === 'date' && typeof value === 'string') {
                 const parsedDate = new Date(value);
                 // Ensure rehydrated dates are valid Date objects
-                return isValid(parsedDate) ? parsedDate : ensureValidDate(null); 
+                return isValid(parsedDate) ? parsedDate : ensureValidDate(null);
             }
             return value;
         });
       } catch (e) {
-        logDebug(`Failed to decode/parse item "${name}" from sessionStorage.`, { error: e }); 
+        logDebug(`Failed to decode/parse item "${name}" from sessionStorage.`, { error: e });
         return null;
       }
     },
@@ -74,7 +82,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        logDebug(`Failed to encode/stringify and set item "${name}" for sessionStorage`, { error: e }); 
+        logDebug(`Failed to encode/stringify and set item "${name}" for sessionStorage`, { error: e });
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -83,13 +91,13 @@ const createSessionStorageWithEncoding = (): StateStorage => {
 
 export interface TransactionsState {
     transactions: TransactionWithId[];
-    isHydrated: boolean; 
+    isHydrated: boolean;
     setTransactions: (transactions: TransactionWithId[]) => void;
     addTransaction: (transactionData: Omit<TransactionWithId, 'id'>) => TransactionWithId;
     updateTransaction: (updatedTransaction: TransactionWithId) => void;
     deleteTransaction: (id: string) => void;
     importTransactionsBatch: (newTransactionsData: Omit<TransactionWithId, 'id'>[]) => TransactionWithId[];
-    clearTransactions: () => void; 
+    clearTransactions: () => void;
     deleteSelectedTransactions: (idsToDelete: string[]) => void;
     batchUpdateTransactions: (updates: Array<{ id: string; data: Partial<SharedTransactionFormData> }>) => void;
 }
@@ -119,7 +127,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                     categoryName: transactionData.categoryName || null,
                 };
                 set((state) => ({ transactions: sortTransactions([...state.transactions, newTransaction]) }));
-                return newTransaction; 
+                return newTransaction;
             },
             updateTransaction: (updatedTransaction) => {
                  const validatedDate = ensureValidDate(updatedTransaction.date);
@@ -130,7 +138,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                 }));
             },
             deleteTransaction: (id) => {
-                set((state) => ({ 
+                set((state) => ({
                     transactions: sortTransactions(state.transactions.filter(tx => tx.id !== id)),
                 }));
             },
@@ -142,11 +150,11 @@ export const useTransactionsStore = create<TransactionsState>()(
                      categoryName: txData.categoryName || null,
                  }));
                  set((state) => ({ transactions: sortTransactions([...state.transactions, ...newTransactionsWithIds]) }));
-                 return newTransactionsWithIds; 
+                 return newTransactionsWithIds;
             },
              clearTransactions: () => {
                  logInfo("TransactionsStore: Clearing transactions state.");
-                 set({ ...initialState, isHydrated: true }); 
+                 set({ ...initialState, isHydrated: true });
              },
              deleteSelectedTransactions: (idsToDelete) => {
                 set((state) => ({
@@ -164,12 +172,12 @@ export const useTransactionsStore = create<TransactionsState>()(
                             if (updateDataForTx.data.modeOfPayment !== undefined) newTxData.modeOfPayment = updateDataForTx.data.modeOfPayment;
                             if (updateDataForTx.data.frequency !== undefined) newTxData.frequency = updateDataForTx.data.frequency;
                             if (updateDataForTx.data.variability !== undefined) newTxData.variability = updateDataForTx.data.variability;
-                            
+
                             // Validate date only if it's part of the update
                             if (updateDataForTx.data.date !== undefined) {
                                 newTxData.date = ensureValidDate(updateDataForTx.data.date);
                             }
-                            
+
                             if (Object.prototype.hasOwnProperty.call(updateDataForTx.data, 'categoryName')) {
                                 newTxData.categoryName = updateDataForTx.data.categoryName === "" ? null : updateDataForTx.data.categoryName;
                             }
@@ -178,15 +186,15 @@ export const useTransactionsStore = create<TransactionsState>()(
                         }
                         return tx;
                     });
-                    return { 
+                    return {
                         transactions: sortTransactions(updatedTransactions),
                     };
                 });
              }
         }),
         {
-            name: 'ifcGuru_transactions', 
-            storage: createJSONStorage(createSessionStorageWithEncoding), 
+            name: 'ifcGuru_transactions',
+            storage: createJSONStorage(createSessionStorageWithEncoding),
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;

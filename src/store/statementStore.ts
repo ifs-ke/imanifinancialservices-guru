@@ -1,12 +1,19 @@
+
 // src/store/statementStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { StatementItem, OtherLiabilityItem } from '@/lib/types';
 import { startOfMonth, endOfMonth } from 'date-fns';
-import { encode, decode } from '@/lib/storage-utils'; 
+import { encode, decode } from '@/lib/storage-utils';
 import { logInfo } from '@/lib/logger'; // Import logger
 
-const generateId = (prefix: 'asset' | 'lia'): string => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+const generateId = (prefix: 'asset' | 'lia'): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}_${crypto.randomUUID()}`;
+  } else {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+};
 
 const sortItems = <T extends { description: string }>(items: T[]): T[] => {
     if (!Array.isArray(items)) return [];
@@ -34,7 +41,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
             return value;
         });
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e); 
+        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e);
         return null;
       }
     },
@@ -51,7 +58,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e); 
+        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e);
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -63,7 +70,7 @@ export interface StatementState {
     otherLiabilityItems: OtherLiabilityItem[];
     startDate: Date | undefined;
     endDate: Date | undefined;
-    isHydrated: boolean; 
+    isHydrated: boolean;
     setStartDate: (date: Date | undefined) => void;
     setEndDate: (date: Date | undefined) => void;
     setAssetItems: (items: StatementItem[]) => void;
@@ -74,7 +81,7 @@ export interface StatementState {
     updateOtherLiabilityItem: (updatedItem: OtherLiabilityItem) => void;
     deleteAssetItem: (id: string) => void;
     deleteOtherLiabilityItem: (id: string) => void;
-    clearStatementItems: () => void; 
+    clearStatementItems: () => void;
 }
 
 const initialState = {
@@ -119,12 +126,12 @@ export const useStatementStore = create<StatementState>()(
             },
             clearStatementItems: () => {
                  logInfo("StatementStore: Clearing statement items and dates state.");
-                 set({ ...initialState, isHydrated: true }); 
+                 set({ ...initialState, isHydrated: true });
              },
         }),
         {
-            name: 'ifcGuru_statementItems', 
-            storage: createJSONStorage(createSessionStorageWithEncoding), 
+            name: 'ifcGuru_statementItems',
+            storage: createJSONStorage(createSessionStorageWithEncoding),
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;

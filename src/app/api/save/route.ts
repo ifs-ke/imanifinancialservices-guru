@@ -100,7 +100,7 @@ async function getCurrentServerDataForUser(userId: string) {
         weekKey: review.weekKey,
       };
     });
-    
+
     return {
       transactions: transactions.map(t => ({...t, date: t.date || new Date(0), categoryName: t.categoryName || null })),
       debts: debts.map(d => ({...d})),
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
   }
 
   const userEmailForDb = user.primaryEmailAddress?.emailAddress;
-  const userNameForDb = user.fullName; // This can be null, ensureUserInDb handles it.
+  const userNameForDb = user.fullName;
 
   if (!userEmailForDb) {
     console.error(`[API /api/save] CRITICAL - Primary email not available from currentUser() for user ${userId}. This user may have an incomplete Clerk profile or there's an issue fetching it. Cannot proceed with save.`, logContextBase);
@@ -177,11 +177,10 @@ export async function POST(request: Request) {
 
   const payload = validationResult.data;
   const { payloadDataHash: clientProvidedPayloadHash, lastKnownServerHash: clientLastKnownServerHash, ...receivedDataForSave } = payload;
-  
+
   const preparedDataForSaving = prepareDataForHashing(receivedDataForSave as any);
   const serverCalculatedHashOfReceivedPayload = await hashData(stringify(preparedDataForSaving));
 
-  // 1. Payload Integrity Check
   if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedHashOfReceivedPayload !== clientProvidedPayloadHash) {
     console.error(`[API /api/save] PAYLOAD INTEGRITY CHECK FAILED! Client's payload hash (${clientProvidedPayloadHash}) does not match server's hash of received data (${serverCalculatedHashOfReceivedPayload}). User: ${userId}`, {
       error: new Error('Payload hash mismatch during save.'), ...logContextBase
@@ -191,7 +190,6 @@ export async function POST(request: Request) {
   }
   console.info(`[API /api/save] Payload integrity check passed. User: ${userId}`, { clientProvidedPayloadHash, ...logContextBase });
 
-  // 2. Stale Data Check (Only if client sent a lastKnownServerHash)
   if (HASH_CHECK_ENABLED_ON_SERVER && clientLastKnownServerHash) {
     const currentServerData = await getCurrentServerDataForUser(userId);
     const preparedCurrentServerData = prepareDataForHashing(currentServerData);
@@ -214,27 +212,52 @@ export async function POST(request: Request) {
         otherLiabilityItems = [], budgetItems = [],
         ownedReviews = {}, investmentItems = [],
         startDate, endDate, gettingStartedDismissed
-    } = preparedDataForSaving; // Use the data from preparedDataForSaving
+    } = preparedDataForSaving;
 
     await prisma.$transaction(async (tx) => {
-      // Clear existing data for the user. This is a "replace all" strategy.
       await tx.transaction.deleteMany({ where: { userId } });
       await tx.debt.deleteMany({ where: { userId } });
       await tx.investmentItem.deleteMany({where: {userId}});
       await tx.assetItem.deleteMany({ where: { userId } });
       await tx.otherLiabilityItem.deleteMany({ where: { userId } });
       await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } }); 
-      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } }); 
+      await tx.weeklyReview.deleteMany({ where: { userId } });
+      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } });
 
-      // Create new data
-      if (transactions.length > 0) await tx.transaction.createMany({ data: transactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })) });
-      if (debts.length > 0) await tx.debt.createMany({ data: debts.map((d:any) => ({ ...d, userId, principal: Number(d.principal), interestRate: Number(d.interestRate), minPayment: Number(d.minPayment) })) });
-      if (investmentItems.length > 0) await tx.investmentItem.createMany({ data: investmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate), quantity: Number(i.quantity), purchasePrice: Number(i.purchasePrice), currentValue: Number(i.currentValue) })) });
-      if (assetItems.length > 0) await tx.assetItem.createMany({ data: assetItems.map((a:any) => ({ ...a, userId, amount: Number(a.amount) })) });
-      if (otherLiabilityItems.length > 0) await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.map((l:any) => ({ ...l, userId, amount: Number(l.amount) })) });
-      if (budgetItems.length > 0) await tx.budgetItem.createMany({ data: budgetItems.map((b:any) => ({ ...b, userId, amount: Number(b.amount) })) });
-      
+      const deDuplicateAndPrepare = <T extends { id: string }>(items: T[], collectionName: string): T[] => {
+        const uniqueItemsMap = new Map<string, T>();
+        (items || []).forEach((item: T) => {
+            if (!item.id) {
+                console.warn(`[API /api/save] Item in '${collectionName}' for user ${userId} is missing an ID. Skipping.`);
+                return;
+            }
+            if (!uniqueItemsMap.has(item.id)) {
+                uniqueItemsMap.set(item.id, item);
+            } else {
+                console.warn(`[API /api/save] Duplicate ID '${item.id}' found in client payload for '${collectionName}' for user ${userId}. Using first instance.`);
+            }
+        });
+        return Array.from(uniqueItemsMap.values());
+      };
+
+      const uniqueTransactions = deDuplicateAndPrepare(transactions, 'transactions');
+      if (uniqueTransactions.length > 0) await tx.transaction.createMany({ data: uniqueTransactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })) });
+
+      const uniqueDebts = deDuplicateAndPrepare(debts, 'debts');
+      if (uniqueDebts.length > 0) await tx.debt.createMany({ data: uniqueDebts.map((d:any) => ({ ...d, userId, principal: Number(d.principal), interestRate: Number(d.interestRate), minPayment: Number(d.minPayment) })) });
+
+      const uniqueInvestmentItems = deDuplicateAndPrepare(investmentItems, 'investmentItems');
+      if (uniqueInvestmentItems.length > 0) await tx.investmentItem.createMany({ data: uniqueInvestmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate), quantity: Number(i.quantity), purchasePrice: Number(i.purchasePrice), currentValue: Number(i.currentValue) })) });
+
+      const uniqueAssetItems = deDuplicateAndPrepare(assetItems, 'assetItems');
+      if (uniqueAssetItems.length > 0) await tx.assetItem.createMany({ data: uniqueAssetItems.map((a:any) => ({ ...a, userId, amount: Number(a.amount) })) });
+
+      const uniqueOtherLiabilityItems = deDuplicateAndPrepare(otherLiabilityItems, 'otherLiabilityItems');
+      if (uniqueOtherLiabilityItems.length > 0) await tx.otherLiabilityItem.createMany({ data: uniqueOtherLiabilityItems.map((l:any) => ({ ...l, userId, amount: Number(l.amount) })) });
+
+      const uniqueBudgetItems = deDuplicateAndPrepare(budgetItems, 'budgetItems');
+      if (uniqueBudgetItems.length > 0) await tx.budgetItem.createMany({ data: uniqueBudgetItems.map((b:any) => ({ ...b, userId, amount: Number(b.amount) })) });
+
       if (Object.keys(ownedReviews).length > 0) {
         await tx.weeklyReview.createMany({
           data: Object.entries(ownedReviews).map(([weekKey, reviewData]: [string, any]) => ({
@@ -245,7 +268,7 @@ export async function POST(request: Request) {
       await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; 
+    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload;
     console.info(`[API /api/save] Prisma transaction committed. User: ${userId}. New server hash: ${newServerHashAfterSave}`, logContextBase);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}`, newServerHash: newServerHashAfterSave });
     return addCorsHeaders(response);
@@ -257,5 +280,3 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 }
-
-    

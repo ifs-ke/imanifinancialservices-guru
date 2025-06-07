@@ -1,3 +1,4 @@
+
 // src/store/debtStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
@@ -5,7 +6,14 @@ import type { DebtItem } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils';
 import { logInfo } from '@/lib/logger';
 
-const generateId = (): string => `debt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+const generateId = (): string => {
+  const prefix = 'debt';
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}_${crypto.randomUUID()}`;
+  } else {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+};
 
 // Helper to manage versioning for acknowledgements
 const incrementVersion = (currentVersion?: number): number => (currentVersion || 0) + 1;

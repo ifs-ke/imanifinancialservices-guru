@@ -1,3 +1,4 @@
+
 // src/store/investmentStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
@@ -6,7 +7,14 @@ import { encode, decode } from '@/lib/storage-utils';
 import { logInfo, logDebug } from '@/lib/logger';
 import { format, isValid as isDateValid } from 'date-fns';
 
-const generateId = (): string => `invest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+const generateId = (): string => {
+  const prefix = 'invest';
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}_${crypto.randomUUID()}`;
+  } else {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+};
 
 const sortInvestmentItems = (items: InvestmentItem[]): InvestmentItem[] => {
     if (!Array.isArray(items)) return [];
