@@ -198,7 +198,6 @@ export function useSyncManager() {
 
     const startTime = performance.now();
 
-    // Abort previous fetch if any, and set up new controller
     activeFetchControllerRef.current?.abort(NEW_REQUEST_ABORT_REASON);
     const currentFetchController = new AbortController();
     activeFetchControllerRef.current = currentFetchController;
@@ -209,15 +208,11 @@ export function useSyncManager() {
       clearTimeout(timeoutId);
       const duration = performance.now() - startTime;
 
-      // Check if this specific fetch was aborted
       if (currentFetchController.signal.aborted) {
-        isFetchingRef.current = false; // Reset before returning
+        isFetchingRef.current = false;
         const reason = currentFetchController.signal.reason || 'Fetch aborted';
-        if (reason === API_TIMEOUT_ABORT_REASON) {
-          logWarn(`Fetch aborted: API call timed out after ${API_TIMEOUT_MS}ms.`, { userId: currentUserId, isPreCheck }, currentUserId);
-          return FETCH_TIMEOUT_SYMBOL;
-        }
-        logInfo(`Fetch aborted: ${reason}`, { userId: currentUserId, reason, isPreCheck }, currentUserId);
+        logInfo(`Fetch aborted internally before processing response. Reason: ${reason}`, { userId: currentUserId, reason, isPreCheck }, currentUserId);
+        if (reason === API_TIMEOUT_ABORT_REASON) return FETCH_TIMEOUT_SYMBOL;
         return FETCH_ABORTED_BENIGNLY_SYMBOL;
       }
 
@@ -250,7 +245,8 @@ export function useSyncManager() {
           conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
         });
         isFetchingRef.current = false;
-        return false; // Indicates an error condition that needs dialog
+        initialLoadDoneRef.current = true; // Consider initial load attempt complete, even if it leads to mismatch
+        return false;
       }
 
       if (HASH_CHECK_ENABLED) {
@@ -269,7 +265,8 @@ export function useSyncManager() {
             conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
           });
           isFetchingRef.current = false;
-          return false; // Indicates an error condition
+          initialLoadDoneRef.current = true;
+          return false;
         }
       }
 
@@ -296,31 +293,32 @@ export function useSyncManager() {
       });
       hasLocalChangesRef.current = false;
       logInfo('SyncManager: Data fetched and loaded successfully.', { userId: currentUserId, serverHash, durationMs: duration }, currentUserId);
-      if (!isPreCheck) { // Avoid toast for pre-check
+      if (!isPreCheck) {
         toast({ title: 'Data Synced', description: `Latest data loaded from server. (Duration: ${duration.toFixed(0)}ms)` });
       }
       initialLoadDoneRef.current = true;
       return serverHash;
     } catch (error: any) {
-      clearTimeout(timeoutId); // Clear timeout on any error
+      clearTimeout(timeoutId);
       initialLoadDoneRef.current = true;
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown fetch error");
       const stableCurrentUserId = currentUserId;
 
-      if (error.name === 'AbortError') { // AbortErrors are already handled by the check on currentFetchController.signal.aborted
-        // This catch block primarily handles network/server errors
-        logDebug(`FetchData AbortError caught, but should have been handled by signal check. Reason: ${currentFetchController.signal.reason}`, {userId: stableCurrentUserId, error}, stableCurrentUserId);
-        if (currentFetchController.signal.reason === API_TIMEOUT_ABORT_REASON) return FETCH_TIMEOUT_SYMBOL;
-        return FETCH_ABORTED_BENIGNLY_SYMBOL;
-      } else {
-        logError(`Error fetching data (isPreCheck: ${isPreCheck}):`, errorToLog, { userIdFromFetchScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
-        return false; // General error
+      logError(`Error fetching data (isPreCheck: ${isPreCheck}):`, errorToLog, { userIdFromFetchScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
+      // If not an AbortError already handled by its specific symbol, this is a general fetch failure.
+      if (error.name !== 'AbortError') {
+        return false;
       }
+      // AbortErrors are now handled by specific symbols returned by the abort logic.
+      // This path should ideally not be hit for AbortErrors if handled above.
+      // But as a safeguard, return the appropriate symbol if an AbortError slips through.
+      if (currentFetchController.signal.reason === API_TIMEOUT_ABORT_REASON) return FETCH_TIMEOUT_SYMBOL;
+      return FETCH_ABORTED_BENIGNLY_SYMBOL;
     } finally {
       isFetchingRef.current = false;
       if (activeFetchControllerRef.current === currentFetchController) {
-        activeFetchControllerRef.current = null; // Clear if this was the controller that finished/errored
+        activeFetchControllerRef.current = null;
       }
     }
   }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState, getCurrentLocalDataSnapshot]);
@@ -441,21 +439,19 @@ export function useSyncManager() {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown save error");
       const stableCurrentUserId = currentUserId;
+      let finalStatus: SyncStatus = 'error';
 
       if (error.name === 'AbortError' && localAbortController.signal.reason === API_TIMEOUT_ABORT_REASON) {
         logWarn(`Save aborted: API call timed out after ${API_TIMEOUT_MS}ms.`, { userId: stableCurrentUserId }, stableCurrentUserId);
-        updateSyncState({ status: 'error' });
         toast({ title: 'Save Timed Out', description: 'Could not save data to the server in time.', variant: 'destructive' });
       } else if (error.name === 'AbortError') {
         logInfo(`Save aborted: ${localAbortController.signal.reason || error.message}`, { userId: stableCurrentUserId }, stableCurrentUserId);
-        if (syncStateRef.current.status === 'syncing') {
-          updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'local' });
-        }
+        finalStatus = hasLocalChangesRef.current ? 'local_changes' : 'local';
       } else {
         logError('Error saving data:', errorToLog, { userIdFromSaveScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
-        updateSyncState({ status: 'error' });
         toast({ title: 'Save Failed', description: `${errorMessage || 'Could not save data to server.'}`, variant: 'destructive' });
       }
+      updateSyncState({ status: finalStatus });
       return false;
     } finally {
       isSavingRef.current = false;
@@ -476,6 +472,18 @@ export function useSyncManager() {
     }
 
     logInfo('SyncManager: Manual sync triggered.', { currentStatus: syncStateRef.current.status, userId: currentUserId }, currentUserId);
+
+    if (HASH_CHECK_ENABLED && syncStateRef.current.isMismatchDialogOpen) {
+        logWarn("Manual sync: Dialog is open for hash_mismatch. User needs to resolve via dialog.", {userId: currentUserId}, currentUserId);
+        toast({title: "Conflict Exists", description: "Please resolve the data conflict using the dialog.", variant: "destructive"});
+        return;
+    }
+    if (HASH_CHECK_ENABLED && syncStateRef.current.status === 'hash_mismatch' && !syncStateRef.current.isMismatchDialogOpen) {
+        logWarn("Manual sync: hash_mismatch status but dialog not open. Re-opening dialog.", {userId: currentUserId}, currentUserId);
+        updateSyncState({ isMismatchDialogOpen: true });
+        return;
+    }
+
     updateSyncState({ status: 'syncing' });
 
     if (IS_FETCH_DISABLED) {
@@ -484,13 +492,6 @@ export function useSyncManager() {
       updateSyncState({ status: 'local' });
       toast({ title: 'Local Save Attempted', description: 'Cloud fetching is disabled. Data saved locally if changed.' });
       return;
-    }
-
-    if (HASH_CHECK_ENABLED && syncStateRef.current.isMismatchDialogOpen) {
-        logWarn("Manual sync attempted while hash mismatch dialog is open. User needs to resolve first.", {userId: currentUserId}, currentUserId);
-        updateSyncState({ status: 'hash_mismatch' }); // Ensure status reflects this if it somehow changed
-        toast({title: "Conflict Exists", description: "Please resolve the data conflict first.", variant: "destructive"});
-        return;
     }
 
     if (hasLocalChangesRef.current || syncStateRef.current.status === 'local_changes') {
@@ -504,11 +505,9 @@ export function useSyncManager() {
             updateSyncState({ status: 'error' });
             toast({ title: 'Sync Timed Out', description: 'Could not retrieve data from the server in time.', variant: 'destructive' });
         } else if (fetchResult === FETCH_ABORTED_BENIGNLY_SYMBOL) {
-            // Fetch was benignly aborted, status should already be 'synced' from save or will be from next fetch
             logInfo("Manual Sync: Fetch after save was benignly aborted.", { userId: currentUserId }, currentUserId);
-             if(syncStateRef.current.status === 'syncing') updateSyncState({ status: 'synced'}); // Ensure it's not stuck on syncing if save succeeded
+             if(syncStateRef.current.status === 'syncing') updateSyncState({ status: 'synced'});
         }
-        // If fetchResult is a hash string, fetchData itself handled status and toast
       } else {
         logWarn('Manual Sync: saveData failed. Full fetch after save skipped.', { userId: currentUserId }, currentUserId);
         if(syncStateRef.current.status === 'syncing') {
@@ -524,9 +523,8 @@ export function useSyncManager() {
            toast({ title: 'Sync Timed Out', description: 'Could not retrieve data from the server in time.', variant: 'destructive' });
        } else if (fetchResult === FETCH_ABORTED_BENIGNLY_SYMBOL) {
            logInfo("Manual Sync: Initial fetch was benignly aborted.", { userId: currentUserId }, currentUserId);
-            if(syncStateRef.current.status === 'syncing') updateSyncState({ status: 'local' }); // Not synced, but not an error
+            if(syncStateRef.current.status === 'syncing') updateSyncState({ status: 'local' });
        }
-       // If fetchResult is a hash string, fetchData itself handled status and toast
     }
   }, [userId, isClerkLoaded, isSignedIn, saveData, fetchData, toast, updateSyncState]);
 
@@ -548,17 +546,15 @@ export function useSyncManager() {
         updateSyncState({ isMismatchDialogOpen: false, status: 'local', conflictingLocalDataString: null, conflictingServerDataString: null });
         return false;
     }
-    clearAllLocalStoreData(); // This resets a lot of state, including initialLoadDoneRef indirectly.
-    initialLoadDoneRef.current = true; // Ensure we don't re-trigger full initial load logic after a force fetch clears stores
+    clearAllLocalStoreData();
+    initialLoadDoneRef.current = true;
     const fetchResult = await fetchData();
     if (fetchResult !== false && fetchResult !== FETCH_TIMEOUT_SYMBOL && fetchResult !== FETCH_ABORTED_BENIGNLY_SYMBOL) {
-      updateSyncState({ isMismatchDialogOpen: false, conflictingLocalDataString: null, conflictingServerDataString: null, status: 'synced' }); // Ensure status is synced
+      updateSyncState({ isMismatchDialogOpen: false, conflictingLocalDataString: null, conflictingServerDataString: null, status: 'synced' });
       return true;
     }
-    // If fetch failed or was aborted, it would have set its own error status.
-    // Ensure dialog is closed regardless.
     updateSyncState({ isMismatchDialogOpen: false, conflictingLocalDataString: null, conflictingServerDataString: null });
-    if(syncStateRef.current.status !== 'error') updateSyncState({status: 'local'}); // default to local if no specific error from fetch
+    if(syncStateRef.current.status !== 'error') updateSyncState({status: 'local'});
     return false;
   }, [clearAllLocalStoreData, fetchData, updateSyncState, toast, userId]);
 
@@ -582,11 +578,11 @@ export function useSyncManager() {
     if (isSignedIn && currentUserId && (currentUserId !== prevUserId || !initialLoadDoneRef.current)) {
         if (currentUserId !== prevUserId) {
             logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Setting up for new user.`, { userId: currentUserId }, currentUserId);
-            clearAllLocalStoreData(); // This resets initialLoadDoneRef to false
+            clearAllLocalStoreData();
             previousUserIdRef.current = currentUserId;
         }
 
-        if (!initialLoadDoneRef.current) { // This will now be true if clearAllLocalStoreData was just called
+        if (!initialLoadDoneRef.current) {
             logInfo(`SyncManager effect: Initializing for user ${currentUserId}. Current status: ${syncStateRef.current.status}`, { userId: currentUserId }, currentUserId);
             const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
             let loadedLastServerHash = null;
@@ -603,16 +599,15 @@ export function useSyncManager() {
                  }
             }
 
-            updateSyncState({ // This doesn't set initialLoadDoneRef, fetchData does.
-                status: 'loading_local', // Indicate that we are about to load/sync
+            updateSyncState({
+                status: 'loading_local',
                 lastServerHash: loadedLastServerHash,
                 gettingStartedDismissed: loadedGettingStartedDismissed,
                 isMismatchDialogOpen: false,
                 conflictingLocalDataString: null,
                 conflictingServerDataString: null,
             });
-            // initialLoadDoneRef will be set to true by fetchData
-            manualSync(); // This will call fetchData which sets initialLoadDoneRef.current = true
+            manualSync();
         }
     } else if (isSignedIn && currentUserId && initialLoadDoneRef.current) {
         logDebug('SyncManager effect: User signed in, initial setup previously done.', { status: syncStateRef.current.status, userId: currentUserId }, currentUserId);
@@ -713,8 +708,18 @@ export function useSyncManager() {
     hashMismatch: HASH_CHECK_ENABLED && syncState.status === 'hash_mismatch',
     isMismatchDialogOpen: syncState.isMismatchDialogOpen,
     setIsMismatchDialogOpen: (isOpen: boolean) => {
-        logDebug(`SyncManager: setIsMismatchDialogOpen called with ${isOpen}`, {currentStatus: syncStateRef.current.status, userId}, userId);
-        updateSyncState({ isMismatchDialogOpen: isOpen });
+        const currentUserId = userId; // Capture current userId for logging context
+        logDebug(`SyncManager: setIsMismatchDialogOpen called with ${isOpen}`, {currentStatus: syncStateRef.current.status, userId: currentUserId}, currentUserId);
+        if (!isOpen && syncStateRef.current.status === 'hash_mismatch') {
+            // Dialog is closing, and we were in a hash_mismatch state.
+            // Reset status to reflect that the immediate conflict UI is gone,
+            // but the underlying data situation (local changes, stale server hash) persists.
+            const nextStatus = hasLocalChangesRef.current ? 'local_changes' : 'local';
+            logInfo(`SyncManager: Mismatch dialog closed. Resetting status from 'hash_mismatch' to '${nextStatus}'.`, { userId: currentUserId }, currentUserId);
+            updateSyncState({ isMismatchDialogOpen: false, status: nextStatus }); // Keep conflicting data strings for reference if needed
+        } else {
+            updateSyncState({ isMismatchDialogOpen: isOpen });
+        }
     },
     lastSyncTime: syncState.lastFetchTime || syncState.lastSaveTime,
     gettingStartedDismissed: syncState.gettingStartedDismissed,
@@ -741,3 +746,4 @@ export function useSyncManager() {
     conflictingServerDataString: syncState.conflictingServerDataString,
   };
 }
+
