@@ -21,7 +21,6 @@ const HASH_CHECK_ENABLED = true;
 const API_TIMEOUT_MS = 60000;
 const AUTO_SAVE_DEBOUNCE_DELAY_MS = 3000; // 3 seconds
 
-// Specific Abort Reasons & Symbols for fetchData return
 const COMPONENT_UNMOUNTING_ABORT_REASON = 'ComponentUnmounting';
 const NEW_REQUEST_ABORT_REASON = 'NewFetchInitiated';
 const API_TIMEOUT_ABORT_REASON = 'APICallTimedOut';
@@ -160,7 +159,7 @@ export function useSyncManager() {
         conflictingServerDataString: null,
       });
       hasLocalChangesRef.current = false;
-      initialLoadDoneRef.current = false;
+      // initialLoadDoneRef is reset specifically on user sign-out or switch, not general clear.
       if (currentUserIdForLog !== 'unknown_user_at_clear') {
         localStorage.removeItem(`ifcGuru_uiPrefs_${currentUserIdForLog}`);
       }
@@ -177,19 +176,17 @@ export function useSyncManager() {
     const currentUserId = userId;
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
       if (!isPreCheck && syncStateRef.current.status !== 'idle') updateSyncState({ status: 'idle', conflictingLocalDataString: null, conflictingServerDataString: null });
-      initialLoadDoneRef.current = true; // Mark initial load as "done" for unauth state
       return false;
     }
     if (IS_FETCH_DISABLED && !isPreCheck) {
       logInfo('SyncManager: Fetching disabled, maintaining local state.', { userId: currentUserId }, currentUserId);
-      initialLoadDoneRef.current = true;
       updateSyncState({ status: 'local' });
       return false;
     }
 
     if ((isFetchingRef.current && !isPreCheck) || isClearingRef.current) {
       logDebug('Fetch aborted: another fetch/clear operation in progress.', { userId: currentUserId, isFetching: isFetchingRef.current, isClearing: isClearingRef.current, isPreCheck }, currentUserId);
-      return FETCH_ABORTED_BENIGNLY_SYMBOL; // Indicate it was superseded or prevented
+      return FETCH_ABORTED_BENIGNLY_SYMBOL;
     }
 
     isFetchingRef.current = true;
@@ -226,7 +223,6 @@ export function useSyncManager() {
       if (isPreCheck) {
         logInfo(`SyncManager: Pre-check fetch successful. Server hash: ${serverHash}`, { userId: currentUserId }, currentUserId);
         isFetchingRef.current = false;
-        initialLoadDoneRef.current = true;
         return serverHash;
       }
 
@@ -245,7 +241,6 @@ export function useSyncManager() {
           conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
         });
         isFetchingRef.current = false;
-        initialLoadDoneRef.current = true; // Consider initial load attempt complete, even if it leads to mismatch
         return false;
       }
 
@@ -265,7 +260,6 @@ export function useSyncManager() {
             conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
           });
           isFetchingRef.current = false;
-          initialLoadDoneRef.current = true;
           return false;
         }
       }
@@ -296,25 +290,22 @@ export function useSyncManager() {
       if (!isPreCheck) {
         toast({ title: 'Data Synced', description: `Latest data loaded from server. (Duration: ${duration.toFixed(0)}ms)` });
       }
-      initialLoadDoneRef.current = true;
       return serverHash;
     } catch (error: any) {
       clearTimeout(timeoutId);
-      initialLoadDoneRef.current = true;
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown fetch error");
       const stableCurrentUserId = currentUserId;
 
       logError(`Error fetching data (isPreCheck: ${isPreCheck}):`, errorToLog, { userIdFromFetchScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
-      // If not an AbortError already handled by its specific symbol, this is a general fetch failure.
-      if (error.name !== 'AbortError') {
-        return false;
+      
+      if (error.name === 'AbortError') {
+        const reason = currentFetchController.signal.reason || error.message;
+        logInfo(`Fetch aborted. Reason: ${reason}`, { userId: stableCurrentUserId, reason, isPreCheck }, stableCurrentUserId);
+        if (reason === API_TIMEOUT_ABORT_REASON) return FETCH_TIMEOUT_SYMBOL;
+        return FETCH_ABORTED_BENIGNLY_SYMBOL;
       }
-      // AbortErrors are now handled by specific symbols returned by the abort logic.
-      // This path should ideally not be hit for AbortErrors if handled above.
-      // But as a safeguard, return the appropriate symbol if an AbortError slips through.
-      if (currentFetchController.signal.reason === API_TIMEOUT_ABORT_REASON) return FETCH_TIMEOUT_SYMBOL;
-      return FETCH_ABORTED_BENIGNLY_SYMBOL;
+      return false;
     } finally {
       isFetchingRef.current = false;
       if (activeFetchControllerRef.current === currentFetchController) {
@@ -445,7 +436,8 @@ export function useSyncManager() {
         logWarn(`Save aborted: API call timed out after ${API_TIMEOUT_MS}ms.`, { userId: stableCurrentUserId }, stableCurrentUserId);
         toast({ title: 'Save Timed Out', description: 'Could not save data to the server in time.', variant: 'destructive' });
       } else if (error.name === 'AbortError') {
-        logInfo(`Save aborted: ${localAbortController.signal.reason || error.message}`, { userId: stableCurrentUserId }, stableCurrentUserId);
+        const reason = localAbortController.signal.reason || error.message;
+        logInfo(`Save aborted: ${reason}`, { userId: stableCurrentUserId, reason }, stableCurrentUserId);
         finalStatus = hasLocalChangesRef.current ? 'local_changes' : 'local';
       } else {
         logError('Error saving data:', errorToLog, { userIdFromSaveScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
@@ -547,7 +539,7 @@ export function useSyncManager() {
         return false;
     }
     clearAllLocalStoreData();
-    initialLoadDoneRef.current = true;
+    // initialLoadDoneRef.current = true; // This was moved to be set by the main useEffect now
     const fetchResult = await fetchData();
     if (fetchResult !== false && fetchResult !== FETCH_TIMEOUT_SYMBOL && fetchResult !== FETCH_ABORTED_BENIGNLY_SYMBOL) {
       updateSyncState({ isMismatchDialogOpen: false, conflictingLocalDataString: null, conflictingServerDataString: null, status: 'synced' });
@@ -568,55 +560,61 @@ export function useSyncManager() {
       return;
     }
 
+    // Handle User Sign Out
     if (!isSignedIn && !currentUserId && prevUserId) {
         logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
         clearAllLocalStoreData();
+        initialLoadDoneRef.current = false;
         previousUserIdRef.current = null;
         return;
     }
 
-    if (isSignedIn && currentUserId && (currentUserId !== prevUserId || !initialLoadDoneRef.current)) {
-        if (currentUserId !== prevUserId) {
-            logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Setting up for new user.`, { userId: currentUserId }, currentUserId);
-            clearAllLocalStoreData();
-            previousUserIdRef.current = currentUserId;
-        }
+    // Handle User Sign In or Switch
+    if (isSignedIn && currentUserId && (currentUserId !== prevUserId)) {
+        logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing for new user.`, { userId: currentUserId }, currentUserId);
+        clearAllLocalStoreData();
+        initialLoadDoneRef.current = false;
+        previousUserIdRef.current = currentUserId;
+    }
 
-        if (!initialLoadDoneRef.current) {
-            logInfo(`SyncManager effect: Initializing for user ${currentUserId}. Current status: ${syncStateRef.current.status}`, { userId: currentUserId }, currentUserId);
-            const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
-            let loadedLastServerHash = null;
-            let loadedGettingStartedDismissed = false;
-            if (storedPrefsString) {
-                try {
-                    const prefs = JSON.parse(storedPrefsString);
-                    loadedGettingStartedDismissed = prefs.gettingStartedDismissed || false;
-                    if(HASH_CHECK_ENABLED) {
-                        loadedLastServerHash = prefs.lastServerHash || null;
-                    }
-                } catch (e: any) {
-                    logError('Error parsing UI preferences from localStorage for user', e, { userId: currentUserId }, currentUserId);
-                 }
+    // Initial setup for a signed-in user if not already done for this session
+    if (isSignedIn && currentUserId && !initialLoadDoneRef.current) {
+        logInfo(`SyncManager: Initial setup for user ${currentUserId}. Loading preferences, not auto-syncing client stores.`, { userId: currentUserId }, currentUserId);
+        
+        const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
+        let loadedLastServerHash = null;
+        let loadedGettingStartedDismissed = false;
+        
+        if (storedPrefsString) {
+            try {
+                const prefs = JSON.parse(storedPrefsString);
+                loadedGettingStartedDismissed = prefs.gettingStartedDismissed || false;
+                if (HASH_CHECK_ENABLED) {
+                    loadedLastServerHash = prefs.lastServerHash || null;
+                }
+            } catch (e: any) {
+                logError('Error parsing UI preferences from localStorage for user', e, { userId: currentUserId }, currentUserId);
             }
-
-            updateSyncState({
-                status: 'loading_local',
-                lastServerHash: loadedLastServerHash,
-                gettingStartedDismissed: loadedGettingStartedDismissed,
-                isMismatchDialogOpen: false,
-                conflictingLocalDataString: null,
-                conflictingServerDataString: null,
-            });
-            manualSync();
         }
+
+        updateSyncState({
+            status: loadedLastServerHash ? 'local' : 'idle',
+            lastServerHash: loadedLastServerHash,
+            gettingStartedDismissed: loadedGettingStartedDismissed,
+            isMismatchDialogOpen: false,
+            conflictingLocalDataString: null,
+            conflictingServerDataString: null,
+        });
+        initialLoadDoneRef.current = true; 
+        logInfo(`SyncManager: Initial preferences loaded for ${currentUserId}. Status: ${syncStateRef.current.status}. Waiting for manual sync for stores. Dashboard uses server data.`, { userId: currentUserId, loadedLastServerHash, loadedGettingStartedDismissed }, currentUserId);
+        // DO NOT call manualSync() here automatically.
     } else if (isSignedIn && currentUserId && initialLoadDoneRef.current) {
-        logDebug('SyncManager effect: User signed in, initial setup previously done.', { status: syncStateRef.current.status, userId: currentUserId }, currentUserId);
         if (syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
-            logWarn('SyncManager: Status regressed to idle/loading_local for an active user. Correcting.', { currentStatus: syncStateRef.current.status, hasLocalChanges: hasLocalChangesRef.current, userId: currentUserId }, currentUserId);
-            updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'local' });
+            logWarn(`SyncManager: Status was ${syncStateRef.current.status} for an active user. Resetting.`, { currentStatus: syncStateRef.current.status, hasLocalChanges: hasLocalChangesRef.current, userId: currentUserId }, currentUserId);
+            updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : (syncStateRef.current.lastServerHash ? 'local' : 'idle') });
         }
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState, manualSync]);
+  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState /* removed manualSync */]);
 
 
   useEffect(() => {
@@ -640,7 +638,7 @@ export function useSyncManager() {
         logInfo("SyncManager: Local store change detected, marking hasLocalChangesRef.", { userId: currentUserId }, currentUserId);
     }
     hasLocalChangesRef.current = true;
-    if (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local') {
+    if (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local' || syncStateRef.current.status === 'idle') {
       updateSyncState({ status: 'local_changes' });
       logDebug("SyncManager: Status updated to 'local_changes' due to store modification.", { userId: currentUserId }, currentUserId);
     }
@@ -708,15 +706,12 @@ export function useSyncManager() {
     hashMismatch: HASH_CHECK_ENABLED && syncState.status === 'hash_mismatch',
     isMismatchDialogOpen: syncState.isMismatchDialogOpen,
     setIsMismatchDialogOpen: (isOpen: boolean) => {
-        const currentUserId = userId; // Capture current userId for logging context
+        const currentUserId = userId;
         logDebug(`SyncManager: setIsMismatchDialogOpen called with ${isOpen}`, {currentStatus: syncStateRef.current.status, userId: currentUserId}, currentUserId);
         if (!isOpen && syncStateRef.current.status === 'hash_mismatch') {
-            // Dialog is closing, and we were in a hash_mismatch state.
-            // Reset status to reflect that the immediate conflict UI is gone,
-            // but the underlying data situation (local changes, stale server hash) persists.
-            const nextStatus = hasLocalChangesRef.current ? 'local_changes' : 'local';
-            logInfo(`SyncManager: Mismatch dialog closed. Resetting status from 'hash_mismatch' to '${nextStatus}'.`, { userId: currentUserId }, currentUserId);
-            updateSyncState({ isMismatchDialogOpen: false, status: nextStatus }); // Keep conflicting data strings for reference if needed
+            const nextStatus = hasLocalChangesRef.current ? 'local_changes' : (syncStateRef.current.lastServerHash ? 'local' : 'idle');
+            logInfo(`SyncManager: Mismatch dialog closed without resolution. Resetting status from 'hash_mismatch' to '${nextStatus}'.`, { userId: currentUserId }, currentUserId);
+            updateSyncState({ isMismatchDialogOpen: false, status: nextStatus });
         } else {
             updateSyncState({ isMismatchDialogOpen: isOpen });
         }
@@ -726,7 +721,7 @@ export function useSyncManager() {
     setGettingStartedDismissed: (dismissed: boolean) => {
       const currentUserId = userId;
       updateSyncState({ gettingStartedDismissed: dismissed });
-      if (isSignedIn && currentUserId && (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local' || syncStateRef.current.status === 'local_changes')) {
+      if (isSignedIn && currentUserId && (syncStateRef.current.status === 'synced' || syncStateRef.current.status === 'local' || syncStateRef.current.status === 'local_changes' || syncStateRef.current.status === 'idle')) {
         if (!hasLocalChangesRef.current) {
            logInfo("SyncManager: gettingStartedDismissed changed, marking for sync.", { userId: currentUserId, dismissed }, currentUserId);
         }
