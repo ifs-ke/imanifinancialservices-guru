@@ -19,12 +19,11 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 const IS_FETCH_DISABLED = false;
 const HASH_CHECK_ENABLED = true;
 const API_TIMEOUT_MS = 60000;
-const AUTO_SAVE_DEBOUNCE_DELAY_MS = 3000; // 3 seconds
+const AUTO_SAVE_DEBOUNCE_DELAY_MS = 60000; // Updated to 1 minute (60000ms)
 
-const COMPONENT_UNMOUNTING_ABORT_REASON = 'ComponentUnmounting';
-const NEW_REQUEST_ABORT_REASON = 'NewFetchInitiated';
-const API_TIMEOUT_ABORT_REASON = 'APICallTimedOut';
-
+export const COMPONENT_UNMOUNTING_ABORT_REASON = 'ComponentUnmounting';
+export const NEW_REQUEST_ABORT_REASON = 'NewFetchInitiated';
+export const API_TIMEOUT_ABORT_REASON = 'APICallTimedOut';
 export const FETCH_TIMEOUT_SYMBOL = Symbol.for('FETCH_TIMEOUT');
 export const FETCH_ABORTED_BENIGNLY_SYMBOL = Symbol.for('FETCH_ABORTED_BENIGNLY');
 
@@ -159,7 +158,6 @@ export function useSyncManager() {
         conflictingServerDataString: null,
       });
       hasLocalChangesRef.current = false;
-      // initialLoadDoneRef is reset specifically on user sign-out or switch, not general clear.
       if (currentUserIdForLog !== 'unknown_user_at_clear') {
         localStorage.removeItem(`ifcGuru_uiPrefs_${currentUserIdForLog}`);
       }
@@ -296,13 +294,13 @@ export function useSyncManager() {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown fetch error");
       const stableCurrentUserId = currentUserId;
+      const abortReason = currentFetchController.signal.reason;
 
-      logError(`Error fetching data (isPreCheck: ${isPreCheck}):`, errorToLog, { userIdFromFetchScope: stableCurrentUserId, originalErrorDetails: String(error) }, stableCurrentUserId);
+      logError(`Error fetching data (isPreCheck: ${isPreCheck}):`, errorToLog, { userIdFromFetchScope: stableCurrentUserId, originalErrorDetails: String(error), abortReason }, stableCurrentUserId);
       
       if (error.name === 'AbortError') {
-        const reason = currentFetchController.signal.reason || error.message;
-        logInfo(`Fetch aborted. Reason: ${reason}`, { userId: stableCurrentUserId, reason, isPreCheck }, stableCurrentUserId);
-        if (reason === API_TIMEOUT_ABORT_REASON) return FETCH_TIMEOUT_SYMBOL;
+        isFetchingRef.current = false; // Ensure this is reset
+        if (abortReason === API_TIMEOUT_ABORT_REASON) return FETCH_TIMEOUT_SYMBOL;
         return FETCH_ABORTED_BENIGNLY_SYMBOL;
       }
       return false;
@@ -539,7 +537,6 @@ export function useSyncManager() {
         return false;
     }
     clearAllLocalStoreData();
-    // initialLoadDoneRef.current = true; // This was moved to be set by the main useEffect now
     const fetchResult = await fetchData();
     if (fetchResult !== false && fetchResult !== FETCH_TIMEOUT_SYMBOL && fetchResult !== FETCH_ABORTED_BENIGNLY_SYMBOL) {
       updateSyncState({ isMismatchDialogOpen: false, conflictingLocalDataString: null, conflictingServerDataString: null, status: 'synced' });
@@ -560,61 +557,58 @@ export function useSyncManager() {
       return;
     }
 
-    // Handle User Sign Out
-    if (!isSignedIn && !currentUserId && prevUserId) {
-        logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
-        clearAllLocalStoreData();
-        initialLoadDoneRef.current = false;
-        previousUserIdRef.current = null;
-        return;
+    if (!isSignedIn && prevUserId) { // User signed out
+      logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
+      clearAllLocalStoreData();
+      initialLoadDoneRef.current = false;
+      previousUserIdRef.current = null;
+      return;
     }
 
-    // Handle User Sign In or Switch
-    if (isSignedIn && currentUserId && (currentUserId !== prevUserId)) {
-        logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing for new user.`, { userId: currentUserId }, currentUserId);
-        clearAllLocalStoreData();
-        initialLoadDoneRef.current = false;
-        previousUserIdRef.current = currentUserId;
+    if (isSignedIn && currentUserId && (currentUserId !== prevUserId)) { // User signed in or switched
+      logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing for new user.`, { userId: currentUserId }, currentUserId);
+      clearAllLocalStoreData();
+      initialLoadDoneRef.current = false; // Reset for the new user
+      previousUserIdRef.current = currentUserId;
     }
 
-    // Initial setup for a signed-in user if not already done for this session
+    // Initial setup for a signed-in user IF NOT ALREADY DONE for this session
     if (isSignedIn && currentUserId && !initialLoadDoneRef.current) {
-        logInfo(`SyncManager: Initial setup for user ${currentUserId}. Loading preferences, not auto-syncing client stores.`, { userId: currentUserId }, currentUserId);
-        
-        const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
-        let loadedLastServerHash = null;
-        let loadedGettingStartedDismissed = false;
-        
-        if (storedPrefsString) {
-            try {
-                const prefs = JSON.parse(storedPrefsString);
-                loadedGettingStartedDismissed = prefs.gettingStartedDismissed || false;
-                if (HASH_CHECK_ENABLED) {
-                    loadedLastServerHash = prefs.lastServerHash || null;
-                }
-            } catch (e: any) {
-                logError('Error parsing UI preferences from localStorage for user', e, { userId: currentUserId }, currentUserId);
-            }
-        }
+      logInfo(`SyncManager: Initial setup for user ${currentUserId}. Loading preferences. Client stores will NOT be auto-synced on initial load.`, { userId: currentUserId }, currentUserId);
+      const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
+      let loadedLastServerHash = null;
+      let loadedGettingStartedDismissed = false;
 
-        updateSyncState({
-            status: loadedLastServerHash ? 'local' : 'idle',
-            lastServerHash: loadedLastServerHash,
-            gettingStartedDismissed: loadedGettingStartedDismissed,
-            isMismatchDialogOpen: false,
-            conflictingLocalDataString: null,
-            conflictingServerDataString: null,
-        });
-        initialLoadDoneRef.current = true; 
-        logInfo(`SyncManager: Initial preferences loaded for ${currentUserId}. Status: ${syncStateRef.current.status}. Waiting for manual sync for stores. Dashboard uses server data.`, { userId: currentUserId, loadedLastServerHash, loadedGettingStartedDismissed }, currentUserId);
-        // DO NOT call manualSync() here automatically.
-    } else if (isSignedIn && currentUserId && initialLoadDoneRef.current) {
-        if (syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
-            logWarn(`SyncManager: Status was ${syncStateRef.current.status} for an active user. Resetting.`, { currentStatus: syncStateRef.current.status, hasLocalChanges: hasLocalChangesRef.current, userId: currentUserId }, currentUserId);
-            updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : (syncStateRef.current.lastServerHash ? 'local' : 'idle') });
+      if (storedPrefsString) {
+        try {
+          const prefs = JSON.parse(storedPrefsString);
+          loadedGettingStartedDismissed = prefs.gettingStartedDismissed || false;
+          if (HASH_CHECK_ENABLED) {
+            loadedLastServerHash = prefs.lastServerHash || null;
+          }
+        } catch (e: any) {
+          logError('Error parsing UI preferences from localStorage for user', e, { userId: currentUserId }, currentUserId);
         }
+      }
+
+      updateSyncState({
+        status: loadedLastServerHash ? 'local' : 'idle',
+        lastServerHash: loadedLastServerHash,
+        gettingStartedDismissed: loadedGettingStartedDismissed,
+        isMismatchDialogOpen: false,
+        conflictingLocalDataString: null,
+        conflictingServerDataString: null,
+      });
+      initialLoadDoneRef.current = true;
+      logInfo(`SyncManager: Initial preferences loaded for ${currentUserId}. Status: ${syncStateRef.current.status}. Waiting for manual sync for stores. Dashboard uses server data.`, { userId: currentUserId, loadedLastServerHash, loadedGettingStartedDismissed }, currentUserId);
+    } else if (isSignedIn && currentUserId && initialLoadDoneRef.current) {
+      // If already initialized for this user, ensure status isn't stuck in 'idle' or 'loading_local'
+      if (syncStateRef.current.status === 'idle' || syncStateRef.current.status === 'loading_local') {
+          logWarn(`SyncManager: Status was ${syncStateRef.current.status} for an active user. Resetting.`, { currentStatus: syncStateRef.current.status, hasLocalChanges: hasLocalChangesRef.current, userId: currentUserId }, currentUserId);
+          updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : (syncStateRef.current.lastServerHash ? 'local' : 'idle') });
+      }
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState /* removed manualSync */]);
+  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState]);
 
 
   useEffect(() => {
