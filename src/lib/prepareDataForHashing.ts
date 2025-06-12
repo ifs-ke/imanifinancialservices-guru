@@ -47,18 +47,23 @@ export function prepareDataForHashing(data: SyncDataInput): any {
       return undefined;
     };
 
-    const toFixedIfNumber = (value: number | string | undefined | null, digits: number): string | null => {
+    const toFixedIfNumber = (value: number | string | undefined | null, digits: number): string => {
         let numToProcess: number;
-        if (value == null) { // Handles undefined and null
-            numToProcess = 0; // Treat null/undefined as 0 for hashing consistency with Zod's server-side coercion of null to 0
+        if (value === undefined || value === null || value === '') {
+            // Coerce undefined, null, or empty string to 0, mirroring z.coerce.number() behavior for these cases.
+            numToProcess = 0;
         } else {
-            const parsedNum = Number(value); // Coerces string numbers to actual numbers
+            const parsedNum = Number(value); // Attempt to convert string to number
             if (isNaN(parsedNum)) {
-                // If 'value' was a non-numeric string or already NaN, Number(value) is NaN.
-                // Return null for these cases to distinguish from valid zero.
-                return null;
+                // If parsing results in NaN (e.g., from an unparsable string like "abc"),
+                // coerce to 0. This assumes server-side Zod validation would either
+                // reject such an input or a .default(0) / .catch(0) would coerce it to 0.
+                // If Zod errors on NaN, this path won't be hit for valid server payloads.
+                numToProcess = 0;
+                // console.warn(`prepareDataForHashing: Encountered unparsable numeric value "${value}", coercing to 0 for hashing.`);
+            } else {
+                numToProcess = parsedNum;
             }
-            numToProcess = parsedNum;
         }
         return numToProcess.toFixed(digits);
     };
