@@ -41,14 +41,16 @@
    const isLoading = !isClerkLoaded;
     
    let spinnerMessage = "Authenticating...";
-   if (isClerkLoaded && syncManager.isInitialClientSyncPending && isSignedIn) {
-     spinnerMessage = "Awaiting initial sync...";
-   } else if (isClerkLoaded && syncManager.syncStatus === 'syncing') {
-     spinnerMessage = "Syncing data...";
-   } else if (isClerkLoaded && syncManager.syncStatus === 'loading_local') {
-     spinnerMessage = "Loading local data...";
-   } else if (isClerkLoaded) {
-     spinnerMessage = "Loading application...";
+   if (isClerkLoaded) {
+     if (syncManager.isInitialClientSyncPending && isSignedIn) {
+       spinnerMessage = "Preparing your data..."; 
+     } else if (syncManager.syncStatus === 'syncing') {
+       spinnerMessage = "Syncing data...";
+     } else if (syncManager.syncStatus === 'loading_local') {
+       spinnerMessage = "Loading local data...";
+     } else {
+       spinnerMessage = "Loading application...";
+     }
    }
 
 
@@ -99,3 +101,4 @@
      </div>
    );
  }
+

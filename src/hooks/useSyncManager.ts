@@ -570,7 +570,7 @@ export function useSyncManager() {
         updateSyncState({
           isPreviewingLocalChanges: true,
           localChangesPayloadPreview: payloadString,
-          status: 'local_changes', // Ensure status is 'local_changes' when previewing
+          status: 'local_changes', 
         });
       } catch (e: any) {
           logError("Error preparing payload for preview dialog in manualSync", e, { userId: currentUserId }, currentUserId);
@@ -679,7 +679,7 @@ export function useSyncManager() {
 
     if (!isSignedIn && prevUserId) {
       logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
-      clearAllLocalStoreData();
+      clearAllLocalStoreData(); 
       initialLoadDoneRef.current = false;
       previousUserIdRef.current = null;
       return;
@@ -687,14 +687,15 @@ export function useSyncManager() {
 
     if (isSignedIn && currentUserId && (currentUserId !== prevUserId)) {
       logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing for new user.`, { userId: currentUserId }, currentUserId);
-      clearAllLocalStoreData();
-      initialLoadDoneRef.current = false;
+      clearAllLocalStoreData(); 
+      initialLoadDoneRef.current = false; 
       previousUserIdRef.current = currentUserId;
     }
 
     if (isSignedIn && currentUserId && !initialLoadDoneRef.current) {
       initialLoadDoneRef.current = true;
-      logInfo(`SyncManager: Initial one-time setup for user ${currentUserId}. Loading preferences. isInitialClientSyncPending: ${syncStateRef.current.isInitialClientSyncPending}`, { userId: currentUserId }, currentUserId);
+      logInfo(`SyncManager: Initial setup for user ${currentUserId}. Loading preferences.`, { userId: currentUserId }, currentUserId);
+
       const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
       let loadedLastServerHash = null;
       let loadedGettingStartedDismissed = false;
@@ -710,7 +711,7 @@ export function useSyncManager() {
           logError('Error parsing UI preferences from localStorage for user', e, { userId: currentUserId }, currentUserId);
         }
       }
-
+      
       updateSyncState({
         status: loadedLastServerHash ? 'local' : 'idle',
         lastServerHash: loadedLastServerHash,
@@ -718,15 +719,17 @@ export function useSyncManager() {
         isMismatchDialogOpen: false,
         conflictingLocalDataString: null,
         conflictingServerDataString: null,
-        lastFetchTime: null,
+        lastFetchTime: null, 
         lastSaveTime: null,
-        isInitialClientSyncPending: true,
+        isInitialClientSyncPending: true, // Ensure this is true to trigger initial sync logic
         isPreviewingLocalChanges: false,
         localChangesPayloadPreview: null,
       });
-      logInfo(`SyncManager: Initial preferences loaded for ${currentUserId}. Status: ${syncStateRef.current.status}. isInitialClientSyncPending is ${syncStateRef.current.isInitialClientSyncPending}. Awaiting user action for first client data sync.`, { userId: currentUserId, loadedLastServerHash, loadedGettingStartedDismissed }, currentUserId);
+
+      logInfo(`SyncManager: Preferences loaded for ${currentUserId}. Status: ${syncStateRef.current.status}. isInitialClientSyncPending set to true. Triggering manualSync for initial data load.`, { userId: currentUserId, loadedLastServerHash, loadedGettingStartedDismissed }, currentUserId);
+      manualSync(); // Always call manualSync to let it decide next steps
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState]);
+  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState, manualSync]);
 
 
   useEffect(() => {
