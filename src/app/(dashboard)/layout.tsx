@@ -7,7 +7,7 @@
  import {
    Sidebar,
    SidebarInset,
- } from "@/components/ui/sidebar"; // Corrected import for AppSidebar components
+ } from "@/components/ui/sidebar";
  import { useSyncManager } from '@/hooks/useSyncManager';
  import FloatingChatButton from '@/components/layout/FloatingChatButton';
  import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
@@ -30,20 +30,17 @@
    useEffect(() => {
        if (!isClerkLoaded || !isSignedIn || !userId || !syncManager) return;
 
-       // Ensure dialog opens if hashMismatch is true and dialog is not already flagged to open
        if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
            logInfo("DashboardLayout: Hash mismatch detected. Opening dialog.", { userId });
-           syncManager.setIsMismatchDialogOpen(true); // This now comes from syncManager
+           syncManager.setIsMismatchDialogOpen(true);
        }
    }, [syncManager, isClerkLoaded, isSignedIn, userId]);
 
 
-   // Refined loading condition
    const isLoading = !isClerkLoaded ||
-                     !syncManager ||
-                     (syncManager.syncStatus === 'idle' && isSignedIn) ||
-                     ((syncManager.syncStatus === 'syncing' || syncManager.syncStatus === 'local' || syncManager.syncStatus === 'error') && isSignedIn && !syncManager.lastSyncTime) ||
-                     (syncManager.syncStatus === 'loading_local');
+                     (isSignedIn && syncManager.isInitialClientSyncPending) || // Use new flag
+                     syncManager.syncStatus === 'syncing' ||
+                     syncManager.syncStatus === 'loading_local';
 
    if (isLoading) {
      return (
@@ -52,7 +49,7 @@
              !isClerkLoaded ? "Authenticating..." :
              syncManager?.syncStatus === 'syncing' ? "Syncing data..." :
              syncManager?.syncStatus === 'loading_local' ? "Loading local data..." :
-             syncManager?.syncStatus === 'error' && !syncManager.lastSyncTime ? "Initial sync failed. Retrying..." :
+             (isSignedIn && syncManager.isInitialClientSyncPending) ? "Awaiting initial sync..." :
              "Initializing..."
          } />
        </div>
@@ -70,19 +67,16 @@
        <FloatingChatButton />
        <Toaster />
 
-        {/* Render dialog based on syncManager state */}
         {isSignedIn && syncManager.isMismatchDialogOpen && (
           <DataSyncMismatchDialog
             isOpen={syncManager.isMismatchDialogOpen}
             onClose={() => syncManager.setIsMismatchDialogOpen(false)}
             onForceSave={async () => {
               const success = await syncManager.forceSave();
-              // Dialog closure is now handled by forceSave if successful
               return success;
             }}
             onForceFetch={async () => {
               const success = await syncManager.forceFetch();
-              // Dialog closure is now handled by forceFetch if successful
               return success;
             }}
             localDataPreview={syncManager.conflictingLocalDataString}
