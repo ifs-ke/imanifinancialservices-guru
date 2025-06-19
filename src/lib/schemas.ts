@@ -186,20 +186,22 @@ const WeeklyReviewDataAPISchema = z.object({
 export type WeeklyReviewDataForAPIType = z.infer<typeof WeeklyReviewDataAPISchema>;
 
 // Schema for collection changes (created, updated, deletedIds)
+// The CollectionChanges object itself is REQUIRED if the top-level key (e.g., "transactions") is present.
+// The arrays within CollectionChanges are optional.
 const createCollectionChangesSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
   created: z.array(itemSchema).optional(),
   updated: z.array(itemSchema.extend({ id: z.string() })).optional(), // Ensure updated items have an ID
   deletedIds: z.array(z.string()).optional(),
-}).optional();
+});
 
 export const SaveDataPayloadSchema = z.object({
-  transactions: createCollectionChangesSchema(TransactionItemSchemaForAPI),
-  debts: createCollectionChangesSchema(DebtItemAPISchema),
-  assetItems: createCollectionChangesSchema(BaseItemSchemaForAPI),
-  otherLiabilityItems: createCollectionChangesSchema(BaseItemSchemaForAPI),
-  budgetItems: createCollectionChangesSchema(BudgetItemAPISchema),
-  ownedReviews: createCollectionChangesSchema(WeeklyReviewDataAPISchema.extend({ weekKey: z.string() })),
-  investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema), // Added investmentItems
+  transactions: createCollectionChangesSchema(TransactionItemSchemaForAPI).optional(), // Collections are optional in the payload
+  debts: createCollectionChangesSchema(DebtItemAPISchema).optional(),
+  assetItems: createCollectionChangesSchema(BaseItemSchemaForAPI).optional(),
+  otherLiabilityItems: createCollectionChangesSchema(BaseItemSchemaForAPI).optional(),
+  budgetItems: createCollectionChangesSchema(BudgetItemAPISchema).optional(),
+  ownedReviews: createCollectionChangesSchema(WeeklyReviewDataAPISchema.extend({ weekKey: z.string() })).optional(),
+  investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema).optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   gettingStartedDismissed: z.boolean().optional(),
@@ -214,15 +216,15 @@ export const SearchUserByEmailInputSchema = z.object({
 });
 
 export const ShareReviewInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const RevokeShareInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const GetSharedWithUsersInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
 });
