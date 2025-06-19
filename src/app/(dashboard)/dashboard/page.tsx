@@ -10,6 +10,7 @@ import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedDebt } from '@/store/budgetStore';
+import { useInvestmentStore } from '@/store/investmentStore';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, differenceInDays, parse, getDaysInMonth, isValid as isDateValid } from 'date-fns';
@@ -29,7 +30,7 @@ export default function DashboardPage() {
   const debts = useDebtStore(state => state.debts);
   const assetItems = useStatementStore(state => state.assetItems);
   const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
-  const investmentItems = useInvestmentStore(state => state.investmentItems); // Added
+  const investmentItems = useInvestmentStore(state => state.investmentItems);
   const storeStartDate = useStatementStore(state => state.startDate);
   const storeEndDate = useStatementStore(state => state.endDate);
 
@@ -69,7 +70,7 @@ export default function DashboardPage() {
       netWorth: netWorthValue,
       cashFlow: netActualAllTime,
       totalDebt: totalDebtValue,
-      totalAssets: netWorthTotalAssets, // This now includes investments
+      totalAssets: netWorthTotalAssets, 
       totalLiabilities: totalLiabilitiesValue,
       totalIncome: totalIncomeAllTime,
       totalExpenses: totalExpensesAllTime,
