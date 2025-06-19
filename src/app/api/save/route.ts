@@ -208,139 +208,203 @@ export async function POST(request: Request) {
 
   try {
     const {
-        transactions, debts, assetItems,
-        otherLiabilityItems, budgetItems,
-        ownedReviews, investmentItems,
+        transactions: transactionChanges,
+        debts: debtChanges,
+        assetItems: assetItemChanges,
+        otherLiabilityItems: otherLiabilityItemChanges,
+        budgetItems: budgetItemChanges,
+        ownedReviews: ownedReviewChanges,
+        investmentItems: investmentItemChanges,
         startDate, endDate, gettingStartedDismissed
     } = preparedDataForSaving; // preparedDataForSaving IS the new granular structure
 
     await prisma.$transaction(async (tx) => {
-      // Process Transactions
-      if (transactions) {
-        if (transactions.created && transactions.created.length > 0) {
-          await tx.transaction.createMany({ data: transactions.created.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+        // Process Transactions
+        if (transactionChanges) {
+            const isFullReplace = transactionChanges.created && transactionChanges.created.length > 0 && !transactionChanges.updated?.length && !transactionChanges.deletedIds?.length;
+            if (isFullReplace) {
+                await tx.transaction.deleteMany({ where: { userId } });
+                if (transactionChanges.created!.length > 0) { // Guard against empty array after delete
+                    await tx.transaction.createMany({ data: transactionChanges.created!.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+                }
+            } else {
+                if (transactionChanges.created && transactionChanges.created.length > 0) {
+                  await tx.transaction.createMany({ data: transactionChanges.created.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+                }
+                if (transactionChanges.updated && transactionChanges.updated.length > 0) {
+                  for (const item of transactionChanges.updated) {
+                    await tx.transaction.update({ where: { id: item.id, userId }, data: { ...item, date: new Date(item.date), userId } });
+                  }
+                }
+                if (transactionChanges.deletedIds && transactionChanges.deletedIds.length > 0) {
+                  await tx.transaction.deleteMany({ where: { id: { in: transactionChanges.deletedIds }, userId } });
+                }
+            }
         }
-        if (transactions.updated && transactions.updated.length > 0) {
-          for (const item of transactions.updated) {
-            await tx.transaction.update({ where: { id: item.id, userId }, data: { ...item, date: new Date(item.date), userId } });
-          }
-        }
-        if (transactions.deletedIds && transactions.deletedIds.length > 0) {
-          await tx.transaction.deleteMany({ where: { id: { in: transactions.deletedIds }, userId } });
-        }
-      }
 
-      // Process Debts
-      if (debts) {
-        if (debts.created && debts.created.length > 0) {
-          await tx.debt.createMany({ data: debts.created.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+        // Process Debts
+        if (debtChanges) {
+            const isFullReplace = debtChanges.created && debtChanges.created.length > 0 && !debtChanges.updated?.length && !debtChanges.deletedIds?.length;
+            if (isFullReplace) {
+                await tx.debt.deleteMany({ where: { userId } });
+                 if (debtChanges.created!.length > 0) {
+                    await tx.debt.createMany({ data: debtChanges.created!.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+                }
+            } else {
+                if (debtChanges.created && debtChanges.created.length > 0) {
+                  await tx.debt.createMany({ data: debtChanges.created.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+                }
+                if (debtChanges.updated && debtChanges.updated.length > 0) {
+                  for (const item of debtChanges.updated) {
+                    await tx.debt.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (debtChanges.deletedIds && debtChanges.deletedIds.length > 0) {
+                  await tx.debt.deleteMany({ where: { id: { in: debtChanges.deletedIds }, userId } });
+                }
+            }
         }
-        if (debts.updated && debts.updated.length > 0) {
-          for (const item of debts.updated) {
-            await tx.debt.update({ where: { id: item.id, userId }, data: { ...item, userId } });
-          }
-        }
-        if (debts.deletedIds && debts.deletedIds.length > 0) {
-          await tx.debt.deleteMany({ where: { id: { in: debts.deletedIds }, userId } });
-        }
-      }
 
-      // Process InvestmentItems
-      if (investmentItems) {
-        if (investmentItems.created && investmentItems.created.length > 0) {
-          await tx.investmentItem.createMany({ data: investmentItems.created.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+        // Process InvestmentItems
+        if (investmentItemChanges) {
+            const isFullReplace = investmentItemChanges.created && investmentItemChanges.created.length > 0 && !investmentItemChanges.updated?.length && !investmentItemChanges.deletedIds?.length;
+            if (isFullReplace) {
+                await tx.investmentItem.deleteMany({ where: { userId } });
+                if (investmentItemChanges.created!.length > 0) {
+                    await tx.investmentItem.createMany({ data: investmentItemChanges.created!.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+                }
+            } else {
+                if (investmentItemChanges.created && investmentItemChanges.created.length > 0) {
+                  await tx.investmentItem.createMany({ data: investmentItemChanges.created.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+                }
+                if (investmentItemChanges.updated && investmentItemChanges.updated.length > 0) {
+                  for (const item of investmentItemChanges.updated) {
+                    await tx.investmentItem.update({ where: { id: item.id, userId }, data: { ...item, purchaseDate: new Date(item.purchaseDate), userId } });
+                  }
+                }
+                if (investmentItemChanges.deletedIds && investmentItemChanges.deletedIds.length > 0) {
+                  await tx.investmentItem.deleteMany({ where: { id: { in: investmentItemChanges.deletedIds }, userId } });
+                }
+            }
         }
-        if (investmentItems.updated && investmentItems.updated.length > 0) {
-          for (const item of investmentItems.updated) {
-            await tx.investmentItem.update({ where: { id: item.id, userId }, data: { ...item, purchaseDate: new Date(item.purchaseDate), userId } });
-          }
-        }
-        if (investmentItems.deletedIds && investmentItems.deletedIds.length > 0) {
-          await tx.investmentItem.deleteMany({ where: { id: { in: investmentItems.deletedIds }, userId } });
-        }
-      }
 
-      // Process AssetItems
-      if (assetItems) {
-        if (assetItems.created && assetItems.created.length > 0) {
-          await tx.assetItem.createMany({ data: assetItems.created.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+        // Process AssetItems
+        if (assetItemChanges) {
+            const isFullReplace = assetItemChanges.created && assetItemChanges.created.length > 0 && !assetItemChanges.updated?.length && !assetItemChanges.deletedIds?.length;
+            if (isFullReplace) {
+                await tx.assetItem.deleteMany({ where: { userId } });
+                 if (assetItemChanges.created!.length > 0) {
+                    await tx.assetItem.createMany({ data: assetItemChanges.created!.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+                }
+            } else {
+                if (assetItemChanges.created && assetItemChanges.created.length > 0) {
+                  await tx.assetItem.createMany({ data: assetItemChanges.created.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+                }
+                if (assetItemChanges.updated && assetItemChanges.updated.length > 0) {
+                  for (const item of assetItemChanges.updated) {
+                    await tx.assetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (assetItemChanges.deletedIds && assetItemChanges.deletedIds.length > 0) {
+                  await tx.assetItem.deleteMany({ where: { id: { in: assetItemChanges.deletedIds }, userId } });
+                }
+            }
         }
-        if (assetItems.updated && assetItems.updated.length > 0) {
-          for (const item of assetItems.updated) {
-            await tx.assetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
-          }
-        }
-        if (assetItems.deletedIds && assetItems.deletedIds.length > 0) {
-          await tx.assetItem.deleteMany({ where: { id: { in: assetItems.deletedIds }, userId } });
-        }
-      }
 
-      // Process OtherLiabilityItems
-      if (otherLiabilityItems) {
-        if (otherLiabilityItems.created && otherLiabilityItems.created.length > 0) {
-          await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.created.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+        // Process OtherLiabilityItems
+        if (otherLiabilityItemChanges) {
+            const isFullReplace = otherLiabilityItemChanges.created && otherLiabilityItemChanges.created.length > 0 && !otherLiabilityItemChanges.updated?.length && !otherLiabilityItemChanges.deletedIds?.length;
+            if (isFullReplace) {
+                await tx.otherLiabilityItem.deleteMany({ where: { userId } });
+                if (otherLiabilityItemChanges.created!.length > 0) {
+                    await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created!.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+                }
+            } else {
+                if (otherLiabilityItemChanges.created && otherLiabilityItemChanges.created.length > 0) {
+                  await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+                }
+                if (otherLiabilityItemChanges.updated && otherLiabilityItemChanges.updated.length > 0) {
+                  for (const item of otherLiabilityItemChanges.updated) {
+                    await tx.otherLiabilityItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (otherLiabilityItemChanges.deletedIds && otherLiabilityItemChanges.deletedIds.length > 0) {
+                  await tx.otherLiabilityItem.deleteMany({ where: { id: { in: otherLiabilityItemChanges.deletedIds }, userId } });
+                }
+            }
         }
-        if (otherLiabilityItems.updated && otherLiabilityItems.updated.length > 0) {
-          for (const item of otherLiabilityItems.updated) {
-            await tx.otherLiabilityItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
-          }
-        }
-        if (otherLiabilityItems.deletedIds && otherLiabilityItems.deletedIds.length > 0) {
-          await tx.otherLiabilityItem.deleteMany({ where: { id: { in: otherLiabilityItems.deletedIds }, userId } });
-        }
-      }
 
-      // Process BudgetItems
-      if (budgetItems) {
-        if (budgetItems.created && budgetItems.created.length > 0) {
-          await tx.budgetItem.createMany({ data: budgetItems.created.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+        // Process BudgetItems
+        if (budgetItemChanges) {
+            const isFullReplace = budgetItemChanges.created && budgetItemChanges.created.length > 0 && !budgetItemChanges.updated?.length && !budgetItemChanges.deletedIds?.length;
+            if (isFullReplace) {
+                await tx.budgetItem.deleteMany({ where: { userId } });
+                 if (budgetItemChanges.created!.length > 0) {
+                    await tx.budgetItem.createMany({ data: budgetItemChanges.created!.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+                }
+            } else {
+                if (budgetItemChanges.created && budgetItemChanges.created.length > 0) {
+                  await tx.budgetItem.createMany({ data: budgetItemChanges.created.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+                }
+                if (budgetItemChanges.updated && budgetItemChanges.updated.length > 0) {
+                  for (const item of budgetItemChanges.updated) {
+                    await tx.budgetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (budgetItemChanges.deletedIds && budgetItemChanges.deletedIds.length > 0) {
+                  await tx.budgetItem.deleteMany({ where: { id: { in: budgetItemChanges.deletedIds }, userId } });
+                }
+            }
         }
-        if (budgetItems.updated && budgetItems.updated.length > 0) {
-          for (const item of budgetItems.updated) {
-            await tx.budgetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
-          }
-        }
-        if (budgetItems.deletedIds && budgetItems.deletedIds.length > 0) {
-          await tx.budgetItem.deleteMany({ where: { id: { in: budgetItems.deletedIds }, userId } });
-        }
-      }
 
-      // Process OwnedReviews
-      if (ownedReviews) {
-        if (ownedReviews.created && ownedReviews.created.length > 0) {
-          await tx.weeklyReview.createMany({
-            data: ownedReviews.created.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
-              userId,
-              weekKey: r.weekKey,
-              journal: r.journal,
-              transactionComments: r.transactionComments || undefined,
-            })),
-          });
+        // Process OwnedReviews
+        if (ownedReviewChanges) {
+            const isFullReplace = ownedReviewChanges.created && ownedReviewChanges.created.length > 0 && !ownedReviewChanges.updated?.length && !ownedReviewChanges.deletedIds?.length;
+            if (isFullReplace) {
+                await tx.weeklyReview.deleteMany({ where: { userId } });
+                 if (ownedReviewChanges.created!.length > 0) {
+                    await tx.weeklyReview.createMany({
+                        data: ownedReviewChanges.created!.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
+                          userId,
+                          weekKey: r.weekKey,
+                          journal: r.journal,
+                          transactionComments: r.transactionComments || undefined,
+                        })),
+                    });
+                 }
+            } else {
+                if (ownedReviewChanges.created && ownedReviewChanges.created.length > 0) {
+                  await tx.weeklyReview.createMany({
+                    data: ownedReviewChanges.created.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
+                      userId,
+                      weekKey: r.weekKey,
+                      journal: r.journal,
+                      transactionComments: r.transactionComments || undefined,
+                    })),
+                  });
+                }
+                if (ownedReviewChanges.updated && ownedReviewChanges.updated.length > 0) {
+                  for (const item of ownedReviewChanges.updated) {
+                    await tx.weeklyReview.update({
+                      where: { userId_weekKey: { userId, weekKey: item.weekKey } },
+                      data: {
+                        journal: item.journal,
+                        transactionComments: item.transactionComments || undefined,
+                      },
+                    });
+                  }
+                }
+                if (ownedReviewChanges.deletedIds && ownedReviewChanges.deletedIds.length > 0) {
+                  await tx.weeklyReview.deleteMany({ where: { weekKey: { in: ownedReviewChanges.deletedIds }, userId } });
+                  await tx.sharedReview.deleteMany({ where: { weekKey: { in: ownedReviewChanges.deletedIds }, reviewOwnerId: userId } });
+                }
+            }
         }
-        if (ownedReviews.updated && ownedReviews.updated.length > 0) {
-          for (const item of ownedReviews.updated) {
-            // WeeklyReview unique key is userId_weekKey, not 'id'
-            await tx.weeklyReview.update({
-              where: { userId_weekKey: { userId, weekKey: item.weekKey } },
-              data: {
-                journal: item.journal,
-                transactionComments: item.transactionComments || undefined,
-              },
-            });
-          }
-        }
-        if (ownedReviews.deletedIds && ownedReviews.deletedIds.length > 0) {
-          // deletedIds for reviews should be weekKeys
-          await tx.weeklyReview.deleteMany({ where: { weekKey: { in: ownedReviews.deletedIds }, userId } });
-          // Also remove any shares associated with these deleted reviews
-          await tx.sharedReview.deleteMany({ where: { weekKey: { in: ownedReviews.deletedIds }, reviewOwnerId: userId } });
-        }
-      }
 
-      await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
+        await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; // Hash of the payload that was successfully saved
+    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; 
     console.info(`[API /api/save] Prisma transaction committed for granular update. User: ${userId}. New server hash: ${newServerHashAfterSave}`, logContextBase);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}`, newServerHash: newServerHashAfterSave });
     return addCorsHeaders(response);

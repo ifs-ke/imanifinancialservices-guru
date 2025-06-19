@@ -11,6 +11,7 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { useInvestmentStore } from '@/store/investmentStore';
 import { useToast } from '@/hooks/use-toast';
 import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, NotificationItem, InvestmentItem } from '@/lib/types';
+import type { SaveDataPayload as SaveDataPayloadType, TransactionItemForAPIType, DebtItemForAPIType, BaseItemForAPIType, BudgetItemForAPIType, InvestmentItemForAPIType, WeeklyReviewDataForAPIType } from '@/lib/schemas';
 import { hashData } from '@/lib/storage-utils';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
@@ -19,7 +20,7 @@ import { logInfo, logWarn, logError, logDebug } from '@/lib/logger';
 const IS_FETCH_DISABLED = false;
 const HASH_CHECK_ENABLED = true;
 const API_TIMEOUT_MS = 60000;
-const AUTO_SAVE_DEBOUNCE_DELAY_MS = 60000; // 1 minute
+const AUTO_SAVE_DEBOUNCE_DELAY_MS = 60000; 
 
 export const COMPONENT_UNMOUNTING_ABORT_REASON = 'ComponentUnmounting';
 export const NEW_REQUEST_ABORT_REASON = 'NewFetchInitiated';
@@ -109,7 +110,7 @@ export function useSyncManager() {
   }, []);
 
 
-  const getCurrentLocalDataSnapshot = useCallback((): SyncedData => {
+  const getCurrentLocalDataForFullSnapshot = useCallback((): SyncedData => {
     return {
       transactions: getTransactionsState().transactions,
       debts: getDebtState().debts,
@@ -125,6 +126,37 @@ export function useSyncManager() {
       gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
     };
   }, [getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState]);
+
+  const getCurrentLocalDataForSave = useCallback((): Omit<SaveDataPayloadType, 'payloadDataHash' | 'lastKnownServerHash'> => {
+    // For this iteration, we send the full state as "created" items to match the new API contract,
+    // while the server is adapted to handle this as a "replace all".
+    // True granular tracking on the client is a future enhancement.
+    const transactions = getTransactionsState().transactions.map(t => ({...t, date: t.date.toISOString()})) as TransactionItemForAPIType[];
+    const debts = getDebtState().debts as DebtItemForAPIType[];
+    const investmentItems = getInvestmentState().investmentItems.map(i => ({...i, purchaseDate: i.purchaseDate.toISOString()})) as InvestmentItemForAPIType[];
+    const assetItems = getStatementState().assetItems as BaseItemForAPIType[];
+    const otherLiabilityItems = getStatementState().otherLiabilityItems as BaseItemForAPIType[];
+    const budgetItems = getBudgetState().budgetItems as BudgetItemForAPIType[];
+    const ownedReviews = Object.values(getWeeklyReviewState().ownedReviews).map(r => ({
+        ...r,
+        weekKey: r.weekKey!, // Assert weekKey exists for owned reviews being saved
+        transactionComments: r.transactionComments || {},
+    })) as (WeeklyReviewDataForAPIType & { weekKey: string })[];
+
+
+    return {
+      transactions: { created: transactions, updated: [], deletedIds: [] },
+      debts: { created: debts, updated: [], deletedIds: [] },
+      investmentItems: { created: investmentItems, updated: [], deletedIds: [] },
+      assetItems: { created: assetItems, updated: [], deletedIds: [] },
+      otherLiabilityItems: { created: otherLiabilityItems, updated: [], deletedIds: [] },
+      budgetItems: { created: budgetItems, updated: [], deletedIds: [] },
+      ownedReviews: { created: ownedReviews, updated: [], deletedIds: [] },
+      startDate: getStatementState().startDate?.toISOString() || null,
+      endDate: getStatementState().endDate?.toISOString() || null,
+      gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
+    };
+  }, [getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState]);
 
 
   const clearAllLocalStoreData = useCallback(() => {
@@ -158,7 +190,7 @@ export function useSyncManager() {
         isMismatchDialogOpen: false,
         conflictingLocalDataString: null,
         conflictingServerDataString: null,
-        isInitialClientSyncPending: true, // Critical: Reset for the next session
+        isInitialClientSyncPending: true, 
       });
       hasLocalChangesRef.current = false;
       if (currentUserIdForLog !== 'unknown_user_at_clear') {
@@ -212,12 +244,11 @@ export function useSyncManager() {
         const reason = currentFetchController.signal.reason || 'Fetch aborted';
         logInfo(`Fetch aborted internally before processing response. Reason: ${reason}`, { userId: currentUserId, reason, isPreCheck }, currentUserId);
         if (reason === API_TIMEOUT_ABORT_REASON) {
-          if (!isPreCheck) updateSyncState({ status: 'error', isInitialClientSyncPending: false });
+          if (!isPreCheck) updateSyncState({ status: 'error', isInitialClientSyncPending: false }); // Fetch attempt concluded
           return FETCH_TIMEOUT_SYMBOL;
         }
-        // If benignly aborted (e.g., new request or unmount) and was syncing, determine next state
         if (!isPreCheck && syncStateRef.current.status === 'syncing') {
-            updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'local', isInitialClientSyncPending: wasInitialClientSyncPending });
+            updateSyncState({ status: hasLocalChangesRef.current ? 'local_changes' : 'local', isInitialClientSyncPending: false }); // Fetch attempt concluded
         }
         return FETCH_ABORTED_BENIGNLY_SYMBOL;
       }
@@ -235,7 +266,7 @@ export function useSyncManager() {
         return serverHash;
       }
 
-      const currentLocalSnapshotString = stringify(prepareDataForHashing(getCurrentLocalDataSnapshot()));
+      const currentLocalSnapshotString = stringify(prepareDataForHashing(getCurrentLocalDataForFullSnapshot()));
       if (HASH_CHECK_ENABLED && syncStateRef.current.lastServerHash && serverHash !== syncStateRef.current.lastServerHash && hasLocalChangesRef.current) {
         logError('CRITICAL: Server hash changed while local changes exist! Forcing conflict dialog.',
           new Error('Server data changed unexpectedly while local edits pending.'),
@@ -248,7 +279,7 @@ export function useSyncManager() {
           isMismatchDialogOpen: true,
           conflictingLocalDataString: currentLocalSnapshotString,
           conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
-          isInitialClientSyncPending: wasInitialClientSyncPending,
+          isInitialClientSyncPending: false, // Fetch attempt concluded
         });
         isFetchingRef.current = false;
         return false;
@@ -268,7 +299,7 @@ export function useSyncManager() {
             isMismatchDialogOpen: true,
             conflictingLocalDataString: currentLocalSnapshotString,
             conflictingServerDataString: stringify(prepareDataForHashing(dataToLoad as any)),
-            isInitialClientSyncPending: wasInitialClientSyncPending,
+            isInitialClientSyncPending: false, // Fetch attempt concluded
           });
           isFetchingRef.current = false;
           return false;
@@ -295,7 +326,7 @@ export function useSyncManager() {
         gettingStartedDismissed: dataToLoad.gettingStartedDismissed || false,
         conflictingLocalDataString: null,
         conflictingServerDataString: null,
-        isInitialClientSyncPending: false, // First successful fetch for the session is done
+        isInitialClientSyncPending: false, 
       });
       hasLocalChangesRef.current = false;
       logInfo('SyncManager: Data fetched and loaded successfully.', { userId: currentUserId, serverHash, durationMs: duration }, currentUserId);
@@ -312,7 +343,7 @@ export function useSyncManager() {
 
       logError(`Error fetching data (isPreCheck: ${isPreCheck}):`, errorToLog, { userIdFromFetchScope: stableCurrentUserId, originalErrorDetails: String(error), abortReason }, stableCurrentUserId);
       
-      const nextIsInitialClientSyncPending = wasInitialClientSyncPending ? false : syncStateRef.current.isInitialClientSyncPending; // Only set to false if it was pending
+      const nextIsInitialClientSyncPending = false; // The first fetch attempt has concluded, successfully or not
 
       if (error.name === 'AbortError') {
         if (abortReason === API_TIMEOUT_ABORT_REASON) {
@@ -339,13 +370,11 @@ export function useSyncManager() {
         activeFetchControllerRef.current = null;
       }
     }
-  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState, getCurrentLocalDataSnapshot]);
+  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState, getCurrentLocalDataForFullSnapshot]);
 
 
   const saveData = useCallback(async (force = false): Promise<boolean> => {
     const currentUserId = userId;
-    const wasInitialClientSyncPending = syncStateRef.current.isInitialClientSyncPending;
-
     if (!isClerkLoaded || !isSignedIn || !currentUserId) {
       if (syncStateRef.current.status !== 'idle') updateSyncState({ status: 'idle', conflictingLocalDataString: null, conflictingServerDataString: null, isInitialClientSyncPending: true });
       return false;
@@ -365,17 +394,10 @@ export function useSyncManager() {
     }
 
     const startTime = performance.now();
+    const dataPayloadForSave = getCurrentLocalDataForSave();
 
-    // TODO: This part needs to be updated to construct the granular payload
-    // with created, updated, and deletedIds for each collection.
-    // For now, it still sends the full snapshot, which means the /api/save
-    // endpoint's new granular logic won't be fully utilized yet.
-    // This is a placeholder until client-side delta tracking is implemented.
-    const dataToSave: SyncedData = getCurrentLocalDataSnapshot();
-    // --- END OF TODO for granular payload construction ---
-
-    const preparedData = prepareDataForHashing(dataToSave);
-    const payloadDataHash = await hashData(stringify(preparedData));
+    const preparedDataForHashing = prepareDataForHashing(dataPayloadForSave as any);
+    const payloadDataHash = await hashData(stringify(preparedDataForHashing));
     const lastKnownServerHashForSave = force ? null : syncStateRef.current.lastServerHash;
 
     const localAbortController = new AbortController();
@@ -386,21 +408,7 @@ export function useSyncManager() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // If the server expects the new granular structure, `preparedData` needs to be that structure.
-          // If `prepareDataForHashing` was updated to expect the granular structure for hashing,
-          // and `dataToSave` is still the full snapshot, this will cause a hash mismatch on the server
-          // because the server will prepare the granular structure differently from the client's full snapshot.
-          // For this iteration, assuming prepareDataForHashing still works with full snapshot for client-side hash generation.
-          // And the server-side /api/save will receive `preparedData` (which is currently a full snapshot)
-          // and then its internal `prepareDataForHashing` will process that *specific structure it received* for its own verification hash.
-          // This setup is fragile if `prepareDataForHashing` has changed its internal logic for partial updates.
-          //
-          // Corrected approach (assuming /api/save now *expects* the granular structure):
-          // Client needs to send granular payload. For now, this line is illustrative if client was sending it:
-          // ...preparedData, // where preparedData is the NEW granular structure
-          //
-          // Since client isn't sending granular yet, we send the full snapshot:
-          ...preparedData, // This is the full snapshot, prepared for hashing as a full snapshot
+          ...dataPayloadForSave, // This now sends the granular-like structure
           payloadDataHash: payloadDataHash,
           lastKnownServerHash: lastKnownServerHashForSave
         }),
@@ -421,9 +429,9 @@ export function useSyncManager() {
           updateSyncState({
              status: 'hash_mismatch',
              isMismatchDialogOpen: true,
-             conflictingLocalDataString: stringify(preparedData),
+             conflictingLocalDataString: stringify(preparedDataForHashing),
              conflictingServerDataString: errorData.currentServerHash ? `Server Hash: ${errorData.currentServerHash}` : "Server data preview not available for this save conflict. Try fetching.",
-             isInitialClientSyncPending: wasInitialClientSyncPending,
+             isInitialClientSyncPending: false, // Save attempt means initial pending is over
           });
           toast({ title: 'Save Failed: Data Conflict', description: errorData.error || 'Your data is out of sync with the server. Please sync again before saving.', variant: 'destructive', duration: Infinity });
           return false;
@@ -438,9 +446,9 @@ export function useSyncManager() {
            updateSyncState({
              status: 'hash_mismatch',
              isMismatchDialogOpen: true,
-             conflictingLocalDataString: stringify(preparedData),
+             conflictingLocalDataString: stringify(preparedDataForHashing),
              conflictingServerDataString: "Server rejected payload due to its own hash check. This might indicate corruption in transit or a client/server hashing inconsistency.",
-             isInitialClientSyncPending: wasInitialClientSyncPending,
+             isInitialClientSyncPending: false, // Save attempt means initial pending is over
            });
            toast({ title: 'Save Failed: Data Integrity Issue', description: errorData.error || 'The server could not verify the integrity of the data sent. Please try syncing again or contact support.', variant: 'destructive', duration: Infinity });
            return false;
@@ -470,7 +478,7 @@ export function useSyncManager() {
       const errorToLog = error instanceof Error ? error : new Error(errorMessage || "Unknown save error");
       const stableCurrentUserId = currentUserId;
       let finalStatus: SyncStatus = 'error';
-      const nextIsInitialClientSyncPending = wasInitialClientSyncPending ? false : syncStateRef.current.isInitialClientSyncPending;
+      const nextIsInitialClientSyncPending = false; // Save attempt concluded
 
       if (error.name === 'AbortError' && localAbortController.signal.reason === API_TIMEOUT_ABORT_REASON) {
         logWarn(`Save aborted: API call timed out after ${API_TIMEOUT_MS}ms.`, { userId: stableCurrentUserId }, stableCurrentUserId);
@@ -488,7 +496,7 @@ export function useSyncManager() {
     } finally {
       isSavingRef.current = false;
     }
-  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, getCurrentLocalDataSnapshot]);
+  }, [userId, isClerkLoaded, isSignedIn, updateSyncState, toast, getCurrentLocalDataForSave]);
 
   const manualSync = useCallback(async () => {
     const currentUserId = userId;
@@ -537,7 +545,7 @@ export function useSyncManager() {
             toast({ title: 'Sync Timed Out', description: 'Could not retrieve data from the server in time.', variant: 'destructive' });
         } else if (fetchResult === FETCH_ABORTED_BENIGNLY_SYMBOL) {
             logInfo("Manual Sync: Fetch after save was benignly aborted.", { userId: currentUserId }, currentUserId);
-             if(syncStateRef.current.status === 'syncing') updateSyncState({ status: 'synced' }); // Assume synced if save was ok and fetch aborted benignly
+             if(syncStateRef.current.status === 'syncing') updateSyncState({ status: 'synced' }); 
         }
       } else {
         logWarn('Manual Sync: saveData failed. Status already set by saveData.', { userId: currentUserId }, currentUserId);
@@ -547,7 +555,7 @@ export function useSyncManager() {
       const fetchResult = await fetchData();
        if (fetchResult === false) { /* status set by fetchData */ }
        else if (fetchResult === FETCH_TIMEOUT_SYMBOL) {
-           updateSyncState({ status: 'error', isInitialClientSyncPending: false }); // Ensure pending is false after timeout
+           updateSyncState({ status: 'error', isInitialClientSyncPending: false }); 
            toast({ title: 'Sync Timed Out', description: 'Could not retrieve data from the server in time.', variant: 'destructive' });
        } else if (fetchResult === FETCH_ABORTED_BENIGNLY_SYMBOL) {
            logInfo("Manual Sync: Initial fetch was benignly aborted.", { userId: currentUserId }, currentUserId);
@@ -604,7 +612,7 @@ export function useSyncManager() {
     if (!isSignedIn && prevUserId) {
       logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
       clearAllLocalStoreData();
-      initialLoadDoneRef.current = false; // Critical: reset for next sign-in
+      initialLoadDoneRef.current = false;
       previousUserIdRef.current = null;
       return;
     }
@@ -612,12 +620,12 @@ export function useSyncManager() {
     if (isSignedIn && currentUserId && (currentUserId !== prevUserId)) {
       logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing for new user.`, { userId: currentUserId }, currentUserId);
       clearAllLocalStoreData();
-      initialLoadDoneRef.current = false; // Critical: reset for new user's session
+      initialLoadDoneRef.current = false;
       previousUserIdRef.current = currentUserId;
     }
 
     if (isSignedIn && currentUserId && !initialLoadDoneRef.current) {
-      initialLoadDoneRef.current = true; // Set immediately to prevent re-entry for this session
+      initialLoadDoneRef.current = true;
       logInfo(`SyncManager: Initial setup for user ${currentUserId}. Loading preferences.`, { userId: currentUserId }, currentUserId);
       const storedPrefsString = localStorage.getItem(`ifcGuru_uiPrefs_${currentUserId}`);
       let loadedLastServerHash = null;
@@ -642,12 +650,11 @@ export function useSyncManager() {
         isMismatchDialogOpen: false,
         conflictingLocalDataString: null,
         conflictingServerDataString: null,
-        lastFetchTime: null, // Ensure fresh state for new session
-        lastSaveTime: null,  // Ensure fresh state for new session
-        isInitialClientSyncPending: true, // This session's initial client sync is now pending
+        lastFetchTime: null, 
+        lastSaveTime: null,  
+        isInitialClientSyncPending: true, 
       });
-      logInfo(`SyncManager: Initial preferences loaded for ${currentUserId}. Status: ${syncStateRef.current.status}. isInitialClientSyncPending: ${syncStateRef.current.isInitialClientSyncPending}. Awaiting manual sync for client stores.`, { userId: currentUserId, loadedLastServerHash, loadedGettingStartedDismissed }, currentUserId);
-      // No automatic manualSync() call here, per user request.
+      logInfo(`SyncManager: Initial preferences loaded for ${currentUserId}. Status: ${syncStateRef.current.status}. Awaiting manual sync for client stores.`, { userId: currentUserId, loadedLastServerHash, loadedGettingStartedDismissed }, currentUserId);
     }
   }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState]);
 
