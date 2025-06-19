@@ -1,152 +1,161 @@
+
 // src/app/api/save/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import type { WeeklyReviewData, SaveDataPayload, Transaction, Debt, AssetItem, OtherLiabilityItem, BudgetItem, UserProfileUpdate } from '@/lib/types';
-import { prepareDataForHashing } from '@/lib/prepareDataForHashing'; 
-import stringify from 'fast-json-stable-stringify'; 
+import { currentUser, clerkClient } from '@clerk/nextjs/server';
+import prisma from '@/lib/prisma';
+import type { TransactionWithId, DebtItem, StatementItem, OtherLiabilityItem, BudgetItem, WeeklyReviewData, InvestmentItem } from '@/lib/types';
+import { hashData } from '@/lib/storage-utils';
+import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
+import stringify from 'fast-json-stable-stringify';
 import { Ratelimit } from '@upstash/ratelimit';
 import { kv } from '@vercel/kv';
-import { addCorsHeaders } from '@/lib/utils'; 
-import { logInfo, logWarn, logError, logDebug } from '@/lib/logger'; 
-import { SaveDataPayloadSchema } from '@/lib/schemas';
-import { hashData, verifyHash } from '@/lib/storage-utils';
+import { addCorsHeaders } from '@/lib/utils';
+import { SaveDataPayloadSchema, type TransactionItemForAPIType, type DebtItemForAPIType, type BaseItemForAPIType, type BudgetItemForAPIType, type InvestmentItemForAPIType, type WeeklyReviewDataForAPIType } from '@/lib/schemas';
+import { ensureUserInDb } from '@/app/actions/shareActions';
 
+const HASH_CHECK_ENABLED_ON_SERVER = true;
 
-const ratelimit = new Ratelimit({
-  redis: kv,
-  limiter: Ratelimit.slidingWindow(10, '10 s'), 
-});
+const ratelimit = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
+  ? new Ratelimit({
+      redis: kv,
+      limiter: Ratelimit.slidingWindow(20, '10 s'),
+    })
+  : null;
 
-async function replaceCollectionData<T>(db: Collection<T>, collectionName: string, userId: string, data: T[], session: ClientSession) {
-    const logContext = { userId, collectionName, operation: 'replaceCollectionData', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting replace for ${collectionName}`, logContext, userId);
-    try {
-        const collection: Collection = db.collection(collectionName);
-        const dataWithUserIdAndProcessed = (data || []).map(item => ({
-            ...item,
-            userId,
-            ...(item.date && typeof item.date === 'string' ? { date: new Date(item.date) } : {}),
-            ...(collectionName === 'budgetItems' && !item.period ? { period: 'unknown-period' } : {}), 
-            _id: item._id || undefined 
-        }));
-
-        const itemIdsToKeep = new Set(dataWithUserIdAndProcessed.map(d => d.id));
-        const deleteFilter = { userId, id: { $nin: Array.from(itemIdsToKeep) } };
-        logDebug(`Save API: Performing deleteMany for ${collectionName}`, logContext, {filter: deleteFilter}, userId);
-        await collection.deleteMany(deleteFilter, { session });
-
-        if (dataWithUserIdAndProcessed.length > 0) {
-            const bulkOps = dataWithUserIdAndProcessed.map(doc => ({
-                 updateOne: {
-                     filter: { userId: userId, id: doc.id },
-                     update: { $set: { ...doc, userId: userId } }, 
-                     upsert: true 
-                 }
-             }));
-             logDebug(`Save API: Performing bulkWrite for ${collectionName}`, logContext, {opCount: bulkOps.length}, userId);
-            await collection.bulkWrite(bulkOps, { session });
-        } else {
-             logDebug(`Save API: No data provided for ${collectionName}, deleted existing data.`, logContext, userId);
-        }
-        logInfo(`Save API: Successfully processed ${collectionName}`, logContext, userId);
-    } catch (error: any) {
-        logError(`Save API: DB Error replacing ${collectionName}`, error, logContext, userId);
- throw new Error(`Failed to save ${collectionName}: ${(error as Error).message}`);
-    }
-}
-
-async function saveOwnedWeeklyReviews(db: any, userId: string, ownedReviews: Record<string, WeeklyReviewData>, session: ClientSession) { 
-    const logContext = { userId, operation: 'saveOwnedWeeklyReviews', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting save for owned weekly reviews`, logContext, userId);
-    try {
-        const collection: Collection = db.collection('weeklyReviews');
-        const reviewKeys = Object.keys(ownedReviews || {});
-
-        if (reviewKeys.length === 0) {
-             logDebug(`Save API: No owned reviews provided to save.`, logContext, userId);
-             return;
-        }
-
-        const bulkOps = reviewKeys.map(weekKey => {
-            const reviewData = ownedReviews[weekKey];
-             if (!reviewData || reviewData.ownerId !== userId) {
-                 logWarn(`Save API: SECURITY WARNING: Attempted to save review ${weekKey} with mismatched ownerId (expected ${userId}, got ${reviewData?.ownerId}). Skipping.`, { ...logContext, expectedOwnerId: userId, actualOwnerId: reviewData?.ownerId }, userId);
-                 return null;
-             }
-            const cleanSharedWith = Array.isArray(reviewData.sharedWith) ? reviewData.sharedWith : undefined;
-
-            return {
-                 updateOne: {
-                     filter: { userId: userId, weekKey: weekKey }, 
-                     update: { $set: { ...reviewData, userId: userId, weekKey: weekKey, sharedWith: cleanSharedWith } }, 
-                     upsert: true
-                 }
-             };
-         }).filter(op => op !== null);
-
-
-        if (bulkOps.length > 0) {
-             logDebug(`Save API: Performing bulkWrite for owned weeklyReviews`, logContext, {opCount: bulkOps.length}, userId);
-             await collection.bulkWrite(bulkOps as any, { session }); 
-             logInfo(`Save API: Successfully saved/updated ${bulkOps.length} owned weeklyReviews`, logContext, userId);
-         } else {
-             logDebug(`Save API: No valid owned reviews to save.`, logContext, userId);
- }
-    } catch (error: any) {
-        logError(`Save API: DB Error saving owned weeklyReviews`, error, logContext, userId);
-        throw new Error(`Failed to save owned weekly reviews: ${error.message}`);
-    }
-}
-
-async function saveUserProfileData(db: Collection<UserProfileUpdate>, userId: string, startDate?: string, endDate?: string, gettingStartedDismissed?: boolean, session?: ClientSession) {
-    const logContext = { userId, operation: 'saveUserProfileData', apiRoute: '/api/save' };
-    logDebug(`Save API: Starting save for user profile data`, logContext, userId);
+async function upsertStatementSettings(tx: any, userId: string, startDate?: string | null, endDate?: string | null, gettingStartedDismissed?: boolean) {
+    const logContext = { userId, operation: 'upsertStatementSettings', apiRoute: '/api/save' };
+    console.debug(`[API /api/save] Save API: Starting upsert for StatementSettings. User: ${userId}`, logContext);
 
     if (startDate === undefined && endDate === undefined && gettingStartedDismissed === undefined) {
-        logDebug(`Save API: No user profile data fields provided. Skipping profile update.`, logContext, userId);
+        console.debug(`[API /api/save] Save API: No StatementSettings fields provided. Skipping update. User: ${userId}`, logContext);
         return;
     }
 
-    try {
-        const collection: Collection = db.collection('userProfiles');
-        const updateDoc: { [key: string]: any } = {};
+    const dataToUpdate: { statementStartDate?: Date | null, statementEndDate?: Date | null, gettingStartedDismissed?: boolean } = {};
 
-        if (startDate !== undefined) {
-            try { 
-                updateDoc.statementStartDate = startDate ? new Date(startDate) : null; 
-            } catch { 
-                updateDoc.statementStartDate = null; 
-                logWarn(`Save API: Invalid start date format received.`, { ...logContext, startDateValue: startDate }, userId); 
+    if (startDate !== undefined) {
+        if (startDate === null) {
+            dataToUpdate.statementStartDate = null;
+        } else {
+            const parsed = new Date(startDate);
+            if (isNaN(parsed.getTime())) {
+                console.warn(`[API /api/save] Invalid startDate string received in upsertStatementSettings. Setting to null. User: ${userId}`, { ...logContext, startDateValue: startDate });
+                dataToUpdate.statementStartDate = null;
+            } else {
+                dataToUpdate.statementStartDate = parsed;
             }
         }
-        if (endDate !== undefined) {
-            try { 
-                updateDoc.statementEndDate = endDate ? new Date(endDate) : null; 
-            } catch { 
-                updateDoc.statementEndDate = null; 
-                logWarn(`Save API: Invalid end date format received.`, { ...logContext, endDateValue: endDate }, userId); 
+    }
+    if (endDate !== undefined) {
+        if (endDate === null) {
+            dataToUpdate.statementEndDate = null;
+        } else {
+            const parsed = new Date(endDate);
+            if (isNaN(parsed.getTime())) {
+                console.warn(`[API /api/save] Invalid endDate string received in upsertStatementSettings. Setting to null. User: ${userId}`, { ...logContext, endDateValue: endDate });
+                dataToUpdate.statementEndDate = null;
+            } else {
+                dataToUpdate.statementEndDate = parsed;
             }
         }
-        if (gettingStartedDismissed !== undefined) {
-            updateDoc.gettingStartedDismissed = gettingStartedDismissed;
-        }
+    }
+    if (gettingStartedDismissed !== undefined) {
+        dataToUpdate.gettingStartedDismissed = gettingStartedDismissed;
+    }
 
-        if (Object.keys(updateDoc).length > 0) {
-             logDebug(`Save API: Updating user profile`, logContext, {updateData: updateDoc}, userId);
-             await collection.updateOne(
-                 { userId },
-                 { $set: updateDoc },
-                 session ? { upsert: true, session } : { upsert: true }
-             );
-             logInfo(`Save API: Successfully saved user profile data`, logContext, userId);
-         } else {
-              logDebug(`Save API: No valid user profile fields to update.`, logContext, userId);
-         }
-    } catch (error: any) {
-        logError(`Save API: DB Error saving user profile data`, error, logContext, userId);
-        throw new Error(`Failed to save user profile data: ${error.message}`);
+    if (Object.keys(dataToUpdate).length > 0) {
+        console.debug(`[API /api/save] Save API: Upserting StatementSettings with data. User: ${userId}`, { ...logContext, updateData: dataToUpdate });
+        await tx.statementSettings.upsert({
+            where: { userId },
+            update: dataToUpdate,
+            create: { userId, ...dataToUpdate },
+        });
+        console.info(`[API /api/save] Save API: Successfully saved/updated StatementSettings. User: ${userId}`, logContext);
+    } else {
+        console.debug(`[API /api/save] Save API: No valid StatementSettings fields to update. User: ${userId}`, logContext);
     }
 }
+
+// Helper function to get the current full server data for a user
+// Similar to what /api/sync does, but used internally after a save
+async function getCurrentServerDataForUser(userId: string): Promise<any> {
+    const [
+        transactions, debts, assetItems, otherLiabilityItems,
+        budgetItems, ownedReviewsPrisma, statementSettings, investmentItems, notifications
+    ] = await prisma.$transaction([
+        prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
+        prisma.debt.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+        prisma.assetItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+        prisma.otherLiabilityItem.findMany({ where: { userId }, orderBy: { description: 'asc' } }),
+        prisma.budgetItem.findMany({ where: { userId }, orderBy: [{ period: 'desc' }, { description: 'asc' }] }),
+        prisma.weeklyReview.findMany({ where: { userId } }),
+        prisma.statementSettings.findUnique({ where: { userId } }),
+        prisma.investmentItem.findMany({ where: { userId }, orderBy: { name: 'asc' } }),
+        prisma.notification.findMany({ where: { userId }, orderBy: { timestamp: 'desc' }, take: 50 }),
+    ]);
+
+    const ownedReviewsMap: Record<string, WeeklyReviewData> = {};
+    ownedReviewsPrisma.forEach(review => {
+      ownedReviewsMap[review.weekKey] = {
+        ownerId: review.userId, // Should be the same as input userId
+        journal: review.journal || "",
+        transactionComments: typeof review.transactionComments === 'object' && review.transactionComments !== null ? review.transactionComments as Record<string, string> : {},
+        weekKey: review.weekKey,
+      };
+    });
+    
+    // Fetch shared reviews - for completeness, though not directly modified by 'ownedReviews' changes
+    const sharedReviewsPrisma = await prisma.sharedReview.findMany({
+        where: { sharedWithId: userId },
+        include: { originalReview: true },
+    });
+
+    const sharedReviewsMap: Record<string, WeeklyReviewData> = {};
+    const ownerIdsOfSharedReviews = Array.from(new Set(sharedReviewsPrisma.map(sr => sr.originalReview.userId)));
+    let ownerUserDetails: Record<string, { name?: string | null, email?: string | null }> = {};
+
+    if (ownerIdsOfSharedReviews.length > 0) {
+        try {
+            const clerkOwnerUsers = await clerkClient.users.getUserList({ userId: ownerIdsOfSharedReviews });
+            clerkOwnerUsers.data.forEach(u => {
+                ownerUserDetails[u.id] = { name: u.fullName || u.firstName, email: u.primaryEmailAddress?.emailAddress };
+            });
+        } catch (clerkError: any) {
+            console.error(`[API /api/save] Error fetching Clerk user details for shared review owners post-save. User: ${userId}`, { error: clerkError });
+        }
+    }
+
+    sharedReviewsPrisma.forEach(share => {
+      const originalReview = share.originalReview;
+      if (originalReview) {
+        sharedReviewsMap[originalReview.weekKey] = {
+          ownerId: originalReview.userId,
+          ownerUsername: ownerUserDetails[originalReview.userId]?.name || ownerUserDetails[originalReview.userId]?.email || originalReview.userId,
+          journal: originalReview.journal || "",
+          transactionComments: typeof originalReview.transactionComments === 'object' && originalReview.transactionComments !== null ? originalReview.transactionComments as Record<string, string> : {},
+          weekKey: originalReview.weekKey,
+          sharedWith: [userId]
+        };
+      }
+    });
+
+
+    return {
+      transactions: transactions.map(t => ({...t, date: t.date || new Date(0), categoryName: t.categoryName || null })),
+      debts: debts.map(d => ({...d})),
+      assetItems: assetItems.map(a => ({...a})),
+      otherLiabilityItems: otherLiabilityItems.map(l => ({...l})),
+      budgetItems: budgetItems.map(b => ({...b})),
+      investmentItems: investmentItems.map(i => ({...i, purchaseDate: i.purchaseDate || new Date(0)})),
+      ownedReviews: ownedReviewsMap,
+      sharedReviews: sharedReviewsMap, // Include shared reviews for a complete snapshot
+      notifications: notifications.map(n => ({...n, timestamp: n.timestamp || new Date(0)})),
+      startDate: statementSettings?.statementStartDate?.toISOString(),
+      endDate: statementSettings?.statementEndDate?.toISOString(),
+      gettingStartedDismissed: statementSettings?.gettingStartedDismissed ?? false,
+    };
+}
+
 
 export async function OPTIONS() {
   const response = new NextResponse(null, { status: 200 });
@@ -155,98 +164,300 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: Request) {
-  const { userId } = auth();
-  
+  const user = await currentUser();
+  const userId = user?.id;
   const logContextBase = { userId: userId || 'unknown-save-post', operation: 'POST /api/save', apiRoute: '/api/save' };
 
-  if (!userId) {
-    logWarn('Save API: Unauthorized save attempt: User not logged in.', logContextBase, userId);
+  if (!user || !userId) {
+    console.warn(`[API /api/save] Save API: Unauthorized save attempt (no userId from currentUser).`, logContextBase);
     const response = NextResponse.json({ error: 'Unauthorized: User not logged in.' }, { status: 401 });
     return addCorsHeaders(response);
   }
 
-  const { success, limit, remaining, reset } = await ratelimit.limit(userId);
-  const logContextWithRateLimit = { ...logContextBase, rateLimit: { limit, remaining, reset } };
+  const userEmailForDb = user.primaryEmailAddress?.emailAddress;
+  const userNameForDb = user.fullName;
 
-  if (!success) {
-      logWarn('Save API: Rate limit exceeded.', logContextWithRateLimit, userId);
-       const response = NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
-       return addCorsHeaders(response);
+  if (!userEmailForDb) {
+    console.error(`[API /api/save] CRITICAL - Primary email not available from currentUser() for user ${userId}. This user may have an incomplete Clerk profile or there's an issue fetching it. Cannot proceed with save.`, logContextBase);
+    const response = NextResponse.json({ error: 'Essential user information (email) is missing. Cannot save.' }, { status: 500 });
+    return addCorsHeaders(response);
   }
-  logDebug('Save API: Rate limit check passed.', logContextWithRateLimit, userId);
+
+  try {
+    await ensureUserInDb(userId, userEmailForDb, userNameForDb);
+  } catch (dbError: any) {
+    console.error(`[API /api/save] Failed to ensure user in DB. User: ${userId}`, { error: dbError, ...logContextBase });
+    const response = NextResponse.json({ error: 'Database operation failed while verifying user.' }, { status: 500 });
+    return addCorsHeaders(response);
+  }
+
+  if (ratelimit) {
+    const { success, limit, remaining, reset } = await ratelimit.limit(userId);
+    if (!success) {
+        console.warn(`[API /api/save] Rate limit exceeded. User: ${userId}`, { ...logContextBase, rateLimit: { limit, remaining, reset } });
+        const response = NextResponse.json({ error: 'Too many requests.' }, { status: 429 });
+        return addCorsHeaders(response);
+    }
+  }
 
   let rawPayload: any;
-  try { 
+  try {
     rawPayload = await request.json();
   } catch (error: any) {
-    logError('Save API: Invalid request body - JSON parsing failed.', error, logContextWithRateLimit, userId);
+    console.error(`[API /api/save] JSON parsing failed. User: ${userId}`, { error, ...logContextBase });
     const response = NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     return addCorsHeaders(response);
   }
 
   const validationResult = SaveDataPayloadSchema.safeParse(rawPayload);
   if (!validationResult.success) {
-    logWarn('Save API: Invalid payload structure or data types.', { ...logContextWithRateLimit, errors: validationResult.error.flatten() }, userId);
+    console.warn(`[API /api/save] Invalid payload structure. User: ${userId}`, { ...logContextBase, errors: validationResult.error.flatten(), receivedPayload: rawPayload });
     const response = NextResponse.json({ error: 'Invalid payload structure or data types.', details: validationResult.error.flatten() }, { status: 400 });
     return addCorsHeaders(response);
   }
-  
+
   const payload = validationResult.data;
-  const { dataHash, ...receivedData }: SaveDataPayload = payload;
-  const preparedDataForVerification = prepareDataForHashing(receivedData as any); 
-  const dataString = stringify(preparedDataForVerification);
-  const calculatedServerHash = await hashData(dataString);
+  const { payloadDataHash: clientProvidedPayloadHash, lastKnownServerHash: clientLastKnownServerHash, ...receivedDataForSave } = payload;
 
-  logDebug(`Save API: Received hash: ${dataHash}, Calculated server hash: ${calculatedServerHash}`, logContextWithRateLimit, userId);
+  const preparedDataForSaving = prepareDataForHashing(receivedDataForSave as any);
+  const serverCalculatedHashOfReceivedPayload = await hashData(stringify(preparedDataForSaving));
 
-  const isValid = await verifyHash(dataString, dataHash);
-
-  if (!isValid) {
-    logError('Save API: Data integrity check failed!', { clientHash: dataHash, serverHash: calculatedServerHash, dataStringTruncated: dataString.substring(0, 300) + (dataString.length > 300 ? "..." : "") }, logContextWithRateLimit, userId);
-    const response = NextResponse.json({ error: 'Data integrity check failed. Save aborted.' }, { status: 400 });
+  if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedHashOfReceivedPayload !== clientProvidedPayloadHash) {
+    console.error(`[API /api/save] PAYLOAD INTEGRITY CHECK FAILED! Client's payload hash (${clientProvidedPayloadHash}) does not match server's hash of received data (${serverCalculatedHashOfReceivedPayload}). User: ${userId}`, {
+      error: new Error('Payload hash mismatch during save.'), ...logContextBase
+    });
+    const response = NextResponse.json({ error: 'Data integrity check failed. Your data may be out of sync or corrupted. Please try syncing again.' }, { status: 400 });
     return addCorsHeaders(response);
   }
-  logInfo('Save API: Data integrity check passed. Proceeding with save.', logContextWithRateLimit, userId);
+  console.info(`[API /api/save] Payload integrity check passed. User: ${userId}`, { clientProvidedPayloadHash, ...logContextBase });
 
-  const client = await connectToDatabase();
-  const db = client.db();
-  const session = client.startSession(); 
+  if (HASH_CHECK_ENABLED_ON_SERVER && clientLastKnownServerHash) {
+    const currentFullServerDataForComparison = await getCurrentServerDataForUser(userId);
+    const preparedCurrentFullServerData = prepareDataForHashing(currentFullServerDataForComparison);
+    const currentServerStateHash = await hashData(stringify(preparedCurrentFullServerData));
+
+    if (clientLastKnownServerHash !== currentServerStateHash) {
+        console.warn(`[API /api/save] STALE DATA DETECTED! Client's last known server hash (${clientLastKnownServerHash}) does not match current server state hash (${currentServerStateHash}). User: ${userId}`, { ...logContextBase, currentServerHash: currentServerStateHash });
+        const response = NextResponse.json({ error: "Your data is out of sync with the server. Please sync again before saving.", currentServerHash: currentServerStateHash }, { status: 409 }); // 409 Conflict
+        return addCorsHeaders(response);
+    }
+    console.info(`[API /api/save] Client's last known server hash matches current server state. Proceeding with save. User: ${userId}`, { clientLastKnownServerHash, currentServerStateHash, ...logContextBase });
+  } else if (HASH_CHECK_ENABLED_ON_SERVER && !clientLastKnownServerHash) {
+    console.warn(`[API /api/save] Client did not provide lastKnownServerHash. Proceeding with save, but this might be risky if client data is stale (e.g. force save scenario). User: ${userId}`, logContextBase);
+  }
+
 
   try {
-    logInfo('Save API: Starting MongoDB transaction.', logContextWithRateLimit, userId);
-    await session.withTransaction(async () => {
-        const {
-          transactions = [],
-          debts = [],
-          assetItems = [],
-          otherLiabilityItems = [],
-          budgetItems = [], 
-          ownedReviews = {}, 
-          startDate,
-          endDate,
-          gettingStartedDismissed
-        } = preparedDataForVerification; 
+    const {
+        transactions: transactionChanges,
+        debts: debtChanges,
+        assetItems: assetItemChanges,
+        otherLiabilityItems: otherLiabilityItemChanges,
+        budgetItems: budgetItemChanges,
+        ownedReviews: ownedReviewChanges,
+        investmentItems: investmentItemChanges,
+        startDate, endDate, gettingStartedDismissed
+    } = preparedDataForSaving;
 
-        await Promise.all([
-            replaceCollectionData(db.collection<Transaction>('transactions'), 'transactions', userId, transactions, session),
-            replaceCollectionData(db.collection<Debt>('debts'), 'debts', userId, debts, session),
-            replaceCollectionData(db.collection<AssetItem>('assetItems'), 'assetItems', userId, assetItems, session),
-            replaceCollectionData(db, 'otherLiabilityItems', userId, otherLiabilityItems, session),
-            replaceCollectionData(db, 'budgetItems', userId, budgetItems, session), 
-            saveOwnedWeeklyReviews(db, userId, ownedReviews, session),
-            saveUserProfileData(db, userId, startDate?.toString(), endDate?.toString(), gettingStartedDismissed, session)
-        ]);
+    await prisma.$transaction(async (tx) => {
+        const isFullReplaceScenario = (changes: any) => 
+            changes && changes.created && changes.created.length > 0 && !changes.updated?.length && !changes.deletedIds?.length;
+
+        // Process Transactions
+        if (transactionChanges) {
+            if (isFullReplaceScenario(transactionChanges)) {
+                await tx.transaction.deleteMany({ where: { userId } });
+                if (transactionChanges.created!.length > 0) {
+                    await tx.transaction.createMany({ data: transactionChanges.created!.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+                }
+            } else {
+                if (transactionChanges.created && transactionChanges.created.length > 0) {
+                  await tx.transaction.createMany({ data: transactionChanges.created.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+                }
+                if (transactionChanges.updated && transactionChanges.updated.length > 0) {
+                  for (const item of transactionChanges.updated) {
+                    await tx.transaction.update({ where: { id: item.id, userId }, data: { ...item, date: new Date(item.date), userId } });
+                  }
+                }
+                if (transactionChanges.deletedIds && transactionChanges.deletedIds.length > 0) {
+                  await tx.transaction.deleteMany({ where: { id: { in: transactionChanges.deletedIds }, userId } });
+                }
+            }
+        }
+
+        // Process Debts
+        if (debtChanges) {
+            if (isFullReplaceScenario(debtChanges)) {
+                await tx.debt.deleteMany({ where: { userId } });
+                 if (debtChanges.created!.length > 0) {
+                    await tx.debt.createMany({ data: debtChanges.created!.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+                }
+            } else {
+                if (debtChanges.created && debtChanges.created.length > 0) {
+                  await tx.debt.createMany({ data: debtChanges.created.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+                }
+                if (debtChanges.updated && debtChanges.updated.length > 0) {
+                  for (const item of debtChanges.updated) {
+                    await tx.debt.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (debtChanges.deletedIds && debtChanges.deletedIds.length > 0) {
+                  await tx.debt.deleteMany({ where: { id: { in: debtChanges.deletedIds }, userId } });
+                }
+            }
+        }
+
+        // Process InvestmentItems
+        if (investmentItemChanges) {
+            if (isFullReplaceScenario(investmentItemChanges)) {
+                await tx.investmentItem.deleteMany({ where: { userId } });
+                if (investmentItemChanges.created!.length > 0) {
+                    await tx.investmentItem.createMany({ data: investmentItemChanges.created!.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+                }
+            } else {
+                if (investmentItemChanges.created && investmentItemChanges.created.length > 0) {
+                  await tx.investmentItem.createMany({ data: investmentItemChanges.created.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+                }
+                if (investmentItemChanges.updated && investmentItemChanges.updated.length > 0) {
+                  for (const item of investmentItemChanges.updated) {
+                    await tx.investmentItem.update({ where: { id: item.id, userId }, data: { ...item, purchaseDate: new Date(item.purchaseDate), userId } });
+                  }
+                }
+                if (investmentItemChanges.deletedIds && investmentItemChanges.deletedIds.length > 0) {
+                  await tx.investmentItem.deleteMany({ where: { id: { in: investmentItemChanges.deletedIds }, userId } });
+                }
+            }
+        }
+
+        // Process AssetItems
+        if (assetItemChanges) {
+            if (isFullReplaceScenario(assetItemChanges)) {
+                await tx.assetItem.deleteMany({ where: { userId } });
+                 if (assetItemChanges.created!.length > 0) {
+                    await tx.assetItem.createMany({ data: assetItemChanges.created!.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+                }
+            } else {
+                if (assetItemChanges.created && assetItemChanges.created.length > 0) {
+                  await tx.assetItem.createMany({ data: assetItemChanges.created.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+                }
+                if (assetItemChanges.updated && assetItemChanges.updated.length > 0) {
+                  for (const item of assetItemChanges.updated) {
+                    await tx.assetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (assetItemChanges.deletedIds && assetItemChanges.deletedIds.length > 0) {
+                  await tx.assetItem.deleteMany({ where: { id: { in: assetItemChanges.deletedIds }, userId } });
+                }
+            }
+        }
+
+        // Process OtherLiabilityItems
+        if (otherLiabilityItemChanges) {
+            if (isFullReplaceScenario(otherLiabilityItemChanges)) {
+                await tx.otherLiabilityItem.deleteMany({ where: { userId } });
+                if (otherLiabilityItemChanges.created!.length > 0) {
+                    await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created!.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+                }
+            } else {
+                if (otherLiabilityItemChanges.created && otherLiabilityItemChanges.created.length > 0) {
+                  await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+                }
+                if (otherLiabilityItemChanges.updated && otherLiabilityItemChanges.updated.length > 0) {
+                  for (const item of otherLiabilityItemChanges.updated) {
+                    await tx.otherLiabilityItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (otherLiabilityItemChanges.deletedIds && otherLiabilityItemChanges.deletedIds.length > 0) {
+                  await tx.otherLiabilityItem.deleteMany({ where: { id: { in: otherLiabilityItemChanges.deletedIds }, userId } });
+                }
+            }
+        }
+
+        // Process BudgetItems
+        if (budgetItemChanges) {
+            if (isFullReplaceScenario(budgetItemChanges)) {
+                await tx.budgetItem.deleteMany({ where: { userId } });
+                 if (budgetItemChanges.created!.length > 0) {
+                    await tx.budgetItem.createMany({ data: budgetItemChanges.created!.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+                }
+            } else {
+                if (budgetItemChanges.created && budgetItemChanges.created.length > 0) {
+                  await tx.budgetItem.createMany({ data: budgetItemChanges.created.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+                }
+                if (budgetItemChanges.updated && budgetItemChanges.updated.length > 0) {
+                  for (const item of budgetItemChanges.updated) {
+                    await tx.budgetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+                  }
+                }
+                if (budgetItemChanges.deletedIds && budgetItemChanges.deletedIds.length > 0) {
+                  await tx.budgetItem.deleteMany({ where: { id: { in: budgetItemChanges.deletedIds }, userId } });
+                }
+            }
+        }
+
+        // Process OwnedReviews
+        if (ownedReviewChanges) {
+             if (isFullReplaceScenario(ownedReviewChanges)) {
+                await tx.weeklyReview.deleteMany({ where: { userId } });
+                // Also delete related shares initiated by this user for these reviews
+                if (ownedReviewChanges.created && ownedReviewChanges.created!.length > 0) {
+                    const weekKeysToDeleteSharesFor = ownedReviewChanges.created!.map(r => r.weekKey);
+                    await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId, weekKey: { in: weekKeysToDeleteSharesFor } } });
+                    await tx.weeklyReview.createMany({
+                        data: ownedReviewChanges.created!.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
+                          userId,
+                          weekKey: r.weekKey,
+                          journal: r.journal,
+                          transactionComments: r.transactionComments || undefined,
+                        })),
+                    });
+                }
+            } else {
+                if (ownedReviewChanges.created && ownedReviewChanges.created.length > 0) {
+                  await tx.weeklyReview.createMany({
+                    data: ownedReviewChanges.created.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
+                      userId,
+                      weekKey: r.weekKey,
+                      journal: r.journal,
+                      transactionComments: r.transactionComments || undefined,
+                    })),
+                  });
+                }
+                if (ownedReviewChanges.updated && ownedReviewChanges.updated.length > 0) {
+                  for (const item of ownedReviewChanges.updated) {
+                    await tx.weeklyReview.update({
+                      where: { userId_weekKey: { userId, weekKey: item.weekKey } },
+                      data: {
+                        journal: item.journal,
+                        transactionComments: item.transactionComments || undefined,
+                      },
+                    });
+                  }
+                }
+                if (ownedReviewChanges.deletedIds && ownedReviewChanges.deletedIds.length > 0) {
+                  await tx.weeklyReview.deleteMany({ where: { weekKey: { in: ownedReviewChanges.deletedIds }, userId } });
+                  await tx.sharedReview.deleteMany({ where: { weekKey: { in: ownedReviewChanges.deletedIds }, reviewOwnerId: userId } });
+                }
+            }
+        }
+
+        await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
-    logInfo('Save API: MongoDB transaction committed successfully.', logContextWithRateLimit, userId);
-     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}` });
-     return addCorsHeaders(response);
+
+    // After successful save, get the hash of the new full server state
+    const newFullServerData = await getCurrentServerDataForUser(userId);
+    const preparedNewFullServerData = prepareDataForHashing(newFullServerData);
+    const newServerHashAfterSave = await hashData(stringify(preparedNewFullServerData));
+
+    console.info(`[API /api/save] Prisma transaction committed. User: ${userId}. New server (full snapshot) hash: ${newServerHashAfterSave}`, logContextBase);
+    const response = NextResponse.json({ message: `Data saved successfully for user ${userId}`, newServerHash: newServerHashAfterSave });
+    return addCorsHeaders(response);
+
   } catch (error: any) {
-    logError('Save API: MongoDB transaction failed or aborted.', error as Error, logContextWithRateLimit, userId);
-    const errorMessage = error instanceof Error ? `Failed to save data: ${error.message}` : 'An unknown error occurred during save.';
-     const response = NextResponse.json({ error: errorMessage }, { status: 500 });
-     return addCorsHeaders(response);
-  } finally {
-     await session.endSession(); 
-     logDebug('Save API: MongoDB session ended.', logContextWithRateLimit, userId);
+    console.error(`[API /api/save] Prisma transaction failed. User: ${userId}`, { error, ...logContextBase });
+    const errorMessage = error.message || 'An unknown error occurred during save.';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    return addCorsHeaders(response);
   }
 }
+
