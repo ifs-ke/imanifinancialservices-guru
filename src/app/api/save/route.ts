@@ -76,6 +76,8 @@ async function upsertStatementSettings(tx: any, userId: string, startDate?: stri
     }
 }
 
+// Helper function to get the current full server data for a user
+// Similar to what /api/sync does, but used internally after a save
 async function getCurrentServerDataForUser(userId: string) {
     const [
         transactions, debts, assetItems, otherLiabilityItems,
@@ -175,11 +177,13 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 
-  const payload = validationResult.data;
-  const { payloadDataHash: clientProvidedPayloadHash, lastKnownServerHash: clientLastKnownServerHash, ...receivedDataForSave } = payload;
+  // payloadFromClient is the Zod-validated and coerced data. Numeric fields like 'amount' are numbers here.
+  const payloadFromClient = validationResult.data;
+  const { payloadDataHash: clientProvidedPayloadHash, lastKnownServerHash: clientLastKnownServerHash, ...dataForDbOperations } = payloadFromClient;
 
-  const preparedDataForSaving = prepareDataForHashing(receivedDataForSave as any);
-  const serverCalculatedHashOfReceivedPayload = await hashData(stringify(preparedDataForSaving));
+  // For hash integrity check, we prepare a canonical version of the dataForDbOperations
+  const dataForHashCheck = prepareDataForHashing(dataForDbOperations as any); // This will stringify numbers for consistent hashing
+  const serverCalculatedHashOfReceivedPayload = await hashData(stringify(dataForHashCheck));
 
   if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedHashOfReceivedPayload !== clientProvidedPayloadHash) {
     console.error(`[API /api/save] PAYLOAD INTEGRITY CHECK FAILED! Client's payload hash (${clientProvidedPayloadHash}) does not match server's hash of received data (${serverCalculatedHashOfReceivedPayload}). User: ${userId}`, {
@@ -191,9 +195,9 @@ export async function POST(request: Request) {
   console.info(`[API /api/save] Payload integrity check passed. User: ${userId}`, { clientProvidedPayloadHash, ...logContextBase });
 
   if (HASH_CHECK_ENABLED_ON_SERVER && clientLastKnownServerHash) {
-    const currentServerData = await getCurrentServerDataForUser(userId);
-    const preparedCurrentServerData = prepareDataForHashing(currentServerData);
-    const currentServerStateHash = await hashData(stringify(preparedCurrentServerData));
+    const currentServerDataForComparison = await getCurrentServerDataForUser(userId);
+    const preparedCurrentFullServerData = prepareDataForHashing(currentServerDataForComparison);
+    const currentServerStateHash = await hashData(stringify(preparedCurrentFullServerData));
 
     if (clientLastKnownServerHash !== currentServerStateHash) {
         console.warn(`[API /api/save] STALE DATA DETECTED! Client's last known server hash (${clientLastKnownServerHash}) does not match current server state hash (${currentServerStateHash}). User: ${userId}`, { ...logContextBase, currentServerHash: currentServerStateHash });
@@ -202,11 +206,12 @@ export async function POST(request: Request) {
     }
     console.info(`[API /api/save] Client's last known server hash matches current server state. Proceeding with save. User: ${userId}`, { clientLastKnownServerHash, currentServerStateHash, ...logContextBase });
   } else if (HASH_CHECK_ENABLED_ON_SERVER && !clientLastKnownServerHash) {
-    console.warn(`[API /api/save] Client did not provide lastKnownServerHash. Proceeding with save, but this might be risky if client data is stale. User: ${userId}`, logContextBase);
+    console.warn(`[API /api/save] Client did not provide lastKnownServerHash. Proceeding with save (force save scenario). User: ${userId}`, logContextBase);
   }
 
 
   try {
+    // Use dataForDbOperations for actual database writes, as amounts here are numbers.
     const {
         transactions: transactionChanges,
         debts: debtChanges,
@@ -216,7 +221,7 @@ export async function POST(request: Request) {
         ownedReviews: ownedReviewChanges,
         investmentItems: investmentItemChanges,
         startDate, endDate, gettingStartedDismissed
-    } = preparedDataForSaving; // preparedDataForSaving IS the new granular structure
+    } = dataForDbOperations;
 
     await prisma.$transaction(async (tx) => {
         // Process Transactions
@@ -224,12 +229,12 @@ export async function POST(request: Request) {
             const isFullReplace = transactionChanges.created && transactionChanges.created.length > 0 && !transactionChanges.updated?.length && !transactionChanges.deletedIds?.length;
             if (isFullReplace) {
                 await tx.transaction.deleteMany({ where: { userId } });
-                if (transactionChanges.created!.length > 0) { // Guard against empty array after delete
-                    await tx.transaction.createMany({ data: transactionChanges.created!.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+                if (transactionChanges.created!.length > 0) {
+                    await tx.transaction.createMany({ data: transactionChanges.created!.map((t) => ({ ...t, userId, date: new Date(t.date) })) });
                 }
             } else {
                 if (transactionChanges.created && transactionChanges.created.length > 0) {
-                  await tx.transaction.createMany({ data: transactionChanges.created.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+                  await tx.transaction.createMany({ data: transactionChanges.created.map((t) => ({ ...t, userId, date: new Date(t.date) })) });
                 }
                 if (transactionChanges.updated && transactionChanges.updated.length > 0) {
                   for (const item of transactionChanges.updated) {
@@ -248,11 +253,11 @@ export async function POST(request: Request) {
             if (isFullReplace) {
                 await tx.debt.deleteMany({ where: { userId } });
                  if (debtChanges.created!.length > 0) {
-                    await tx.debt.createMany({ data: debtChanges.created!.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+                    await tx.debt.createMany({ data: debtChanges.created!.map((d) => ({ ...d, userId })) });
                 }
             } else {
                 if (debtChanges.created && debtChanges.created.length > 0) {
-                  await tx.debt.createMany({ data: debtChanges.created.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+                  await tx.debt.createMany({ data: debtChanges.created.map((d) => ({ ...d, userId })) });
                 }
                 if (debtChanges.updated && debtChanges.updated.length > 0) {
                   for (const item of debtChanges.updated) {
@@ -271,11 +276,11 @@ export async function POST(request: Request) {
             if (isFullReplace) {
                 await tx.investmentItem.deleteMany({ where: { userId } });
                 if (investmentItemChanges.created!.length > 0) {
-                    await tx.investmentItem.createMany({ data: investmentItemChanges.created!.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+                    await tx.investmentItem.createMany({ data: investmentItemChanges.created!.map((i) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
                 }
             } else {
                 if (investmentItemChanges.created && investmentItemChanges.created.length > 0) {
-                  await tx.investmentItem.createMany({ data: investmentItemChanges.created.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+                  await tx.investmentItem.createMany({ data: investmentItemChanges.created.map((i) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
                 }
                 if (investmentItemChanges.updated && investmentItemChanges.updated.length > 0) {
                   for (const item of investmentItemChanges.updated) {
@@ -294,11 +299,11 @@ export async function POST(request: Request) {
             if (isFullReplace) {
                 await tx.assetItem.deleteMany({ where: { userId } });
                  if (assetItemChanges.created!.length > 0) {
-                    await tx.assetItem.createMany({ data: assetItemChanges.created!.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+                    await tx.assetItem.createMany({ data: assetItemChanges.created!.map((a) => ({ ...a, userId })) });
                 }
             } else {
                 if (assetItemChanges.created && assetItemChanges.created.length > 0) {
-                  await tx.assetItem.createMany({ data: assetItemChanges.created.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+                  await tx.assetItem.createMany({ data: assetItemChanges.created.map((a) => ({ ...a, userId })) });
                 }
                 if (assetItemChanges.updated && assetItemChanges.updated.length > 0) {
                   for (const item of assetItemChanges.updated) {
@@ -317,11 +322,11 @@ export async function POST(request: Request) {
             if (isFullReplace) {
                 await tx.otherLiabilityItem.deleteMany({ where: { userId } });
                 if (otherLiabilityItemChanges.created!.length > 0) {
-                    await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created!.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+                    await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created!.map((l) => ({ ...l, userId })) });
                 }
             } else {
                 if (otherLiabilityItemChanges.created && otherLiabilityItemChanges.created.length > 0) {
-                  await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+                  await tx.otherLiabilityItem.createMany({ data: otherLiabilityItemChanges.created.map((l) => ({ ...l, userId })) });
                 }
                 if (otherLiabilityItemChanges.updated && otherLiabilityItemChanges.updated.length > 0) {
                   for (const item of otherLiabilityItemChanges.updated) {
@@ -340,11 +345,11 @@ export async function POST(request: Request) {
             if (isFullReplace) {
                 await tx.budgetItem.deleteMany({ where: { userId } });
                  if (budgetItemChanges.created!.length > 0) {
-                    await tx.budgetItem.createMany({ data: budgetItemChanges.created!.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+                    await tx.budgetItem.createMany({ data: budgetItemChanges.created!.map((b) => ({ ...b, userId })) });
                 }
             } else {
                 if (budgetItemChanges.created && budgetItemChanges.created.length > 0) {
-                  await tx.budgetItem.createMany({ data: budgetItemChanges.created.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+                  await tx.budgetItem.createMany({ data: budgetItemChanges.created.map((b) => ({ ...b, userId })) });
                 }
                 if (budgetItemChanges.updated && budgetItemChanges.updated.length > 0) {
                   for (const item of budgetItemChanges.updated) {
@@ -359,23 +364,25 @@ export async function POST(request: Request) {
 
         // Process OwnedReviews
         if (ownedReviewChanges) {
-            const isFullReplace = ownedReviewChanges.created && ownedReviewChanges.created.length > 0 && !ownedReviewChanges.updated?.length && !ownedReviewChanges.deletedIds?.length;
-            if (isFullReplace) {
+             const isFullReplace = ownedReviewChanges.created && ownedReviewChanges.created.length > 0 && !ownedReviewChanges.updated?.length && !ownedReviewChanges.deletedIds?.length;
+             if (isFullReplace) {
                 await tx.weeklyReview.deleteMany({ where: { userId } });
-                 if (ownedReviewChanges.created!.length > 0) {
+                if (ownedReviewChanges.created && ownedReviewChanges.created!.length > 0) { // Guard against empty array after delete
+                    const weekKeysToDeleteSharesFor = ownedReviewChanges.created!.map(r => r.weekKey);
+                    await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId, weekKey: { in: weekKeysToDeleteSharesFor } } });
                     await tx.weeklyReview.createMany({
-                        data: ownedReviewChanges.created!.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
+                        data: ownedReviewChanges.created!.map((r) => ({
                           userId,
                           weekKey: r.weekKey,
                           journal: r.journal,
                           transactionComments: r.transactionComments || undefined,
                         })),
                     });
-                 }
+                }
             } else {
                 if (ownedReviewChanges.created && ownedReviewChanges.created.length > 0) {
                   await tx.weeklyReview.createMany({
-                    data: ownedReviewChanges.created.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
+                    data: ownedReviewChanges.created.map((r) => ({
                       userId,
                       weekKey: r.weekKey,
                       journal: r.journal,
@@ -404,15 +411,20 @@ export async function POST(request: Request) {
         await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; 
-    console.info(`[API /api/save] Prisma transaction committed for granular update. User: ${userId}. New server hash: ${newServerHashAfterSave}`, logContextBase);
+    // After successful save, get the hash of the new full server state
+    const newFullServerData = await getCurrentServerDataForUser(userId);
+    const preparedNewFullServerData = prepareDataForHashing(newFullServerData);
+    const newServerHashAfterSave = await hashData(stringify(preparedNewFullServerData));
+
+    console.info(`[API /api/save] Prisma transaction committed. User: ${userId}. New server (full snapshot) hash: ${newServerHashAfterSave}`, logContextBase);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}`, newServerHash: newServerHashAfterSave });
     return addCorsHeaders(response);
 
   } catch (error: any) {
-    console.error(`[API /api/save] Prisma transaction failed during granular update. User: ${userId}`, { error, ...logContextBase });
+    console.error(`[API /api/save] Prisma transaction failed. User: ${userId}`, { error, ...logContextBase });
     const errorMessage = error.message || 'An unknown error occurred during save.';
     const response = NextResponse.json({ error: errorMessage }, { status: 500 });
     return addCorsHeaders(response);
   }
 }
+
