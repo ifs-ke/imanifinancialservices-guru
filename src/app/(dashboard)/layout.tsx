@@ -38,20 +38,23 @@
 
 
    const isLoading = !isClerkLoaded ||
-                     (isSignedIn && syncManager.isInitialClientSyncPending) || // Use new flag
+                     (isSignedIn && !syncManager.isFetchDisabled && syncManager.isInitialClientSyncPending) ||
                      syncManager.syncStatus === 'syncing' ||
                      syncManager.syncStatus === 'loading_local';
+    
+   const spinnerMessage = !isClerkLoaded ? "Authenticating..." :
+                         syncManager.isFetchDisabled ? "Local Mode Active" :
+                         syncManager.isInitialClientSyncPending ? "Awaiting initial sync..." :
+                         syncManager.syncStatus === 'syncing' ? "Syncing data..." :
+                         syncManager.syncStatus === 'loading_local' ? "Loading local data..." :
+                         syncManager.syncStatus === 'error' && syncManager.isInitialClientSyncPending ? "Initial sync failed. Please retry." :
+                         "Initializing...";
+
 
    if (isLoading) {
      return (
        <div className="flex items-center justify-center min-h-screen w-full bg-background">
-         <LoadingSpinner size={48} text={
-             !isClerkLoaded ? "Authenticating..." :
-             syncManager?.syncStatus === 'syncing' ? "Syncing data..." :
-             syncManager?.syncStatus === 'loading_local' ? "Loading local data..." :
-             (isSignedIn && syncManager.isInitialClientSyncPending) ? "Awaiting initial sync..." :
-             "Initializing..."
-         } />
+         <LoadingSpinner size={48} text={spinnerMessage} />
        </div>
      );
    }
