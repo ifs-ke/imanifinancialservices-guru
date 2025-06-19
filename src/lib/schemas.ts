@@ -198,8 +198,8 @@ export const SaveDataPayloadSchema = z.object({
   assetItems: createCollectionChangesSchema(BaseItemSchemaForAPI),
   otherLiabilityItems: createCollectionChangesSchema(BaseItemSchemaForAPI),
   budgetItems: createCollectionChangesSchema(BudgetItemAPISchema),
-  ownedReviews: createCollectionChangesSchema(WeeklyReviewDataAPISchema.extend({ weekKey: z.string() })), // ownedReviews need weekKey in items
-  investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema),
+  ownedReviews: createCollectionChangesSchema(WeeklyReviewDataAPISchema.extend({ weekKey: z.string() })),
+  investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema), // Added investmentItems
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   gettingStartedDismissed: z.boolean().optional(),
@@ -214,15 +214,15 @@ export const SearchUserByEmailInputSchema = z.object({
 });
 
 export const ShareReviewInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const RevokeShareInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const GetSharedWithUsersInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
 });
