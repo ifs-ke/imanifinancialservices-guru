@@ -14,61 +14,69 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, differenceInDays, parse, getDaysInMonth, isValid as isDateValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
-import type { BudgetItem } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useSyncManager } from '@/hooks/useSyncManager';
-import { PageHeader } from '@/components/layout/PageHeader'; // Ensure this is imported
+import { PageHeader } from '@/components/layout/PageHeader';
+import { useUser } from "@clerk/nextjs";
 
-const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
-const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + item.principal, 0);
-const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + item.amount, 0);
+
+const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
+const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + (item.principal || 0), 0);
+const calculateOtherLiabilityTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
 
 export default function DashboardPage() {
   const allTransactions = useTransactionsStore(state => state.transactions);
   const debts = useDebtStore(state => state.debts);
   const assetItems = useStatementStore(state => state.assetItems);
   const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
-  const startDate = useStatementStore(state => state.startDate);
-  const endDate = useStatementStore(state => state.endDate);
-  
+  const investmentItems = useInvestmentStore(state => state.investmentItems); // Added
+  const storeStartDate = useStatementStore(state => state.startDate);
+  const storeEndDate = useStatementStore(state => state.endDate);
+
   const currentBudgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
 
   const { toast } = useToast();
-  const { gettingStartedDismissed, setGettingStartedDismissed } = useSyncManager();
+  const { gettingStartedDismissed, setGettingStartedDismissed: dismissGettingStartedCard } = useSyncManager();
+  const { user } = useUser();
 
    const filteredTransactions = useMemo(() => {
-       const start = startDate && isDateValid(startDate) ? startDate.getTime() : 0; 
-       const end = endDate && isDateValid(endDate) ? new Date(endDate).setHours(23, 59, 59, 999) : Date.now(); 
+       const start = storeStartDate && isDateValid(storeStartDate) ? storeStartDate.getTime() : 0;
+       const end = storeEndDate && isDateValid(storeEndDate) ? new Date(storeEndDate).setHours(23, 59, 59, 999) : Date.now();
        return allTransactions.filter(tx => {
            const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
            if (isNaN(txDate.getTime())) return false;
            const txTime = txDate.getTime();
            return txTime >= start && txTime <= end;
        });
-     }, [allTransactions, startDate, endDate]);
+     }, [allTransactions, storeStartDate, storeEndDate]);
 
   const financialData = useMemo(() => {
-    const totalAssets = calculateTotal(assetItems);
-    const totalDebt = calculateDebtTotal(debts);
-    const totalOtherLiabilities = calculateOtherLiabilityTotal(otherLiabilityItems);
-    const totalLiabilities = totalDebt + totalOtherLiabilities;
-    const netWorth = totalAssets - totalLiabilities;
+    const totalAssetsFromStatement = calculateTotal(assetItems);
+    const totalInvestmentValue = investmentItems.reduce((sum, item) => sum + (item.currentValue || 0), 0);
+    const netWorthTotalAssets = totalAssetsFromStatement + totalInvestmentValue;
+
+    const totalDebtValue = calculateDebtTotal(debts);
+    const totalOtherLiabilitiesValue = calculateOtherLiabilityTotal(otherLiabilityItems);
+    const totalLiabilitiesValue = totalDebtValue + totalOtherLiabilitiesValue;
+    const netWorthValue = netWorthTotalAssets - totalLiabilitiesValue;
+
     const totalIncomeAllTime = calculateTotal(allTransactions.filter(tx => tx.amount > 0));
     const totalExpensesAllTime = Math.abs(calculateTotal(allTransactions.filter(tx => tx.amount < 0)));
     const netActualAllTime = totalIncomeAllTime - totalExpensesAllTime;
 
     return {
-      netWorth,
+      netWorth: netWorthValue,
       cashFlow: netActualAllTime,
-      totalDebt,
-      totalAssets,
-      totalLiabilities,
+      totalDebt: totalDebtValue,
+      totalAssets: netWorthTotalAssets, // This now includes investments
+      totalLiabilities: totalLiabilitiesValue,
       totalIncome: totalIncomeAllTime,
       totalExpenses: totalExpensesAllTime,
-      totalOtherLiabilities,
+      totalOtherLiabilities: totalOtherLiabilitiesValue,
+      totalInvestmentValue: totalInvestmentValue,
     };
-  }, [allTransactions, debts, assetItems, otherLiabilityItems]);
+  }, [allTransactions, debts, assetItems, otherLiabilityItems, investmentItems]);
 
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<string>('N/A');
   const monthlyBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt);
@@ -100,7 +108,7 @@ export default function DashboardPage() {
 
     let currentDebts = debts.map(d => ({ ...d, principal: d.principal }));
     let months = 0;
-    const MAX_MONTHS = 720; 
+    const MAX_MONTHS = 720;
 
     while (currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01 && months < MAX_MONTHS) {
         months++;
@@ -121,10 +129,10 @@ export default function DashboardPage() {
                     debt.principal -= payment;
                     availablePayment -= payment;
                   }
-                  if(availablePayment <= 0.01) break; 
+                  if(availablePayment <= 0.01) break;
               }
          }
-         currentDebts = currentDebts.filter(debt => debt.principal > 0.01); 
+         currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
     }
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
@@ -137,7 +145,7 @@ export default function DashboardPage() {
         if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
         setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
      }
-   }, [debts, monthlyBudgetedDebtPayment]); 
+   }, [debts, monthlyBudgetedDebtPayment]);
 
   const budgetVariance = useMemo(() => {
     const actualIncomeForStatementPeriod = filteredTransactions
@@ -147,21 +155,21 @@ export default function DashboardPage() {
     const actualExpensesForStatementPeriod = filteredTransactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-    
+
     const budgetItemsForCurrentBudgetMonth = allBudgetItems.filter(item => item.period === currentBudgetPeriod);
 
-    const stmtStart = startDate && isDateValid(startDate) ? startDate : dfnsStartOfMonth(new Date());
-    const stmtEnd = endDate && isDateValid(endDate) ? endDate : dfnsEndOfMonth(new Date());
+    const stmtStart = storeStartDate && isDateValid(storeStartDate) ? storeStartDate : dfnsStartOfMonth(new Date());
+    const stmtEnd = storeEndDate && isDateValid(storeEndDate) ? storeEndDate : dfnsEndOfMonth(new Date());
     const daysInStatementPeriod = differenceInDays(stmtEnd, stmtStart) + 1;
-    
+
     const budgetMonthDate = parse(currentBudgetPeriod, 'yyyy-MM', new Date());
     const daysInActualBudgetMonth = isDateValid(budgetMonthDate) ? getDaysInMonth(budgetMonthDate) : 0;
-    
+
     let budgetMultiplier = 0;
     if (daysInStatementPeriod > 0 && daysInActualBudgetMonth > 0) {
         const budgetMonthStart = dfnsStartOfMonth(budgetMonthDate);
         const budgetMonthEnd = dfnsEndOfMonth(budgetMonthDate);
-        
+
         const overlapStart = stmtStart > budgetMonthStart ? stmtStart : budgetMonthStart;
         const overlapEnd = stmtEnd < budgetMonthEnd ? stmtEnd : budgetMonthEnd;
 
@@ -172,13 +180,13 @@ export default function DashboardPage() {
     }
 
     let proratedBudgetedIncome = 0;
-    let proratedBudgetedExpenses = 0; 
+    let proratedBudgetedExpenses = 0;
 
     budgetItemsForCurrentBudgetMonth.forEach(item => {
         const proratedAmount = item.amount * budgetMultiplier;
         if (item.category === 'income') {
             proratedBudgetedIncome += proratedAmount;
-        } else if (item.category !== 'unplanned-expense') { 
+        } else if (item.category !== 'unplanned-expense') {
             proratedBudgetedExpenses += proratedAmount;
         }
     });
@@ -186,29 +194,29 @@ export default function DashboardPage() {
     if (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && actualIncomeForStatementPeriod === 0 && actualExpensesForStatementPeriod === 0) {
        return { value: null, status: 'no-data' as const };
     }
-    
+
     const netBudgetedProrated = proratedBudgetedIncome - proratedBudgetedExpenses;
     const netActualForPeriod = actualIncomeForStatementPeriod - actualExpensesForStatementPeriod;
     const variance = netActualForPeriod - netBudgetedProrated;
-    
-    const threshold = Math.max(Math.abs(netBudgetedProrated * 0.05), 50); 
+
+    const threshold = Math.max(Math.abs(netBudgetedProrated * 0.05), 50);
     let status: 'on-track' | 'over-budget' | 'under-budget' | 'no-data' = 'no-data';
 
     if ( (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0) && (actualIncomeForStatementPeriod === 0 && actualExpensesForStatementPeriod === 0) ) {
         status = 'no-data';
     } else if (Math.abs(variance) <= threshold) {
         status = 'on-track';
-    } else if (variance > 0) { 
+    } else if (variance > 0) {
         status = 'under-budget';
-    } else { 
-        status = 'over-budget'; 
+    } else {
+        status = 'over-budget';
     }
 
     return { value: variance, status };
-  }, [filteredTransactions, allBudgetItems, currentBudgetPeriod, startDate, endDate]);
+  }, [filteredTransactions, allBudgetItems, currentBudgetPeriod, storeStartDate, storeEndDate]);
 
   const handleCloseGettingStarted = () => {
-      setGettingStartedDismissed(true); 
+      dismissGettingStartedCard(true);
       toast({
           title: "Getting Started Guide Dismissed",
           description: "You can always refer back to the documentation for help.",
@@ -216,7 +224,7 @@ export default function DashboardPage() {
   };
 
   const handleShowGettingStarted = () => {
-      setGettingStartedDismissed(false); 
+      dismissGettingStartedCard(false);
   };
 
   const cashFlowChartData = useMemo(() => [
@@ -272,10 +280,10 @@ export default function DashboardPage() {
           title="Executive Summary"
           description={
             <>
-              High-level overview. Budget Variance uses range:
-              {startDate || endDate ? (
+              High-level overview of your finances. Budget Variance uses range:
+              {storeStartDate || storeEndDate ? (
                 <span className='font-semibold ml-1'>
-                  {startDate && isDateValid(startDate) ? format(startDate, 'PP') : 'Start'} - {endDate && isDateValid(endDate) ? format(endDate, 'PP') : 'End'}
+                  {storeStartDate && isDateValid(storeStartDate) ? format(storeStartDate, 'PP') : 'Start'} - {storeEndDate && isDateValid(storeEndDate) ? format(storeEndDate, 'PP') : 'End'}
                 </span>
               ) : (
                 <span className='font-semibold ml-1'>All Time</span>
@@ -307,7 +315,7 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4 pt-4 p-4">
                     <p className="text-sm text-muted-foreground">
-                        Welcome to IFC - Guru! Here's a quick guide:
+                        Welcome to {user?.fullName ? `${user.fullName}'s` : 'your'} Financial Command Center! Here&apos;s a quick guide:
                     </p>
                     <ol className="list-decimal pl-5 space-y-2 text-sm">
                         <li>
@@ -377,7 +385,7 @@ export default function DashboardPage() {
                {formatCurrency(financialData.totalAssets)}
              </div>
              <p className="text-xs text-muted-foreground break-words">
-                Combined value of assets
+                Statement Assets + Investments ({formatCurrency(financialData.totalInvestmentValue)})
              </p>
              <Button asChild variant="link" size="sm" className="p-0 h-auto mt-1 text-xs">
                  <Link href="/statements">
@@ -467,15 +475,15 @@ export default function DashboardPage() {
           </Card>
        </div>
 
-       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-3 px-4 md:px-6 lg:px-8"> 
-         <Card className="md:col-span-2 shadow-sm"> 
+       <main className="flex-1 grid gap-4 sm:gap-6 md:grid-cols-3 px-4 md:px-6 lg:px-8">
+         <Card className="md:col-span-2 shadow-sm">
             <CardHeader className="p-4">
               <CardTitle className="text-base flex items-center gap-2">
                  <LineChartIcon className="h-4 w-4"/> Income/Expense Trend (Overall)
               </CardTitle>
               <CardDescription>Monthly income vs. expenses over time.</CardDescription>
             </CardHeader>
-            <CardContent className="pl-2 pr-6 pb-6"> 
+            <CardContent className="pl-2 pr-6 pb-6">
                  {trendChartData.length > 1 ? (
                      <ChartContainer config={trendChartConfig} className="h-[250px] w-full">
                          <LineChart accessibilityLayer data={trendChartData} margin={{ left: 10, right: 10, top: 10, bottom: 0 }}>
@@ -495,16 +503,16 @@ export default function DashboardPage() {
              </CardContent>
           </Card>
 
-          <Card className="md:col-span-1 shadow-sm"> 
+          <Card className="md:col-span-1 shadow-sm">
             <CardHeader className="p-4">
               <CardTitle className="text-base flex items-center gap-2">
                    <BarChart2 className="h-4 w-4" /> Cash Flow Summary (Overall)
               </CardTitle>
               <CardDescription>Total Income vs. Total Expenses</CardDescription>
             </CardHeader>
-            <CardContent className="flex items-center justify-center pt-4 p-4"> 
+            <CardContent className="flex items-center justify-center pt-4 p-4">
                {financialData.totalIncome > 0 || financialData.totalExpenses > 0 ? (
-                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full max-w-[250px]"> 
+                  <ChartContainer config={cashFlowChartConfig} className="h-[200px] w-full max-w-[250px]">
                     <BarChart accessibilityLayer data={cashFlowChartData} layout="vertical" margin={{left: 0, right: 10, top: 0, bottom: 0}}>
                          <XAxis type="number" hide />
                           <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} tickMargin={10} tick={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} width={60} />

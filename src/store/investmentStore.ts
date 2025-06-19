@@ -127,12 +127,12 @@ export const useInvestmentStore = create<InvestmentState>()(
             },
         }),
         {
-            name: 'ifcGuru_investmentItems',
+            name: 'ifcGuru_investmentItems_v2', // Version updated due to potential schema changes/defaults
             storage: createJSONStorage(createSessionStorageWithEncoding),
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
-                   logInfo("InvestmentStore: Rehydrated successfully.");
+                   logInfo("InvestmentStore: Rehydrated successfully (v2).");
                  }
              },
         }
