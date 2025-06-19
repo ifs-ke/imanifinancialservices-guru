@@ -37,18 +37,12 @@
    }, [syncManager, isClerkLoaded, isSignedIn, userId]);
 
 
-   const isLoading = !isClerkLoaded ||
-                     (isSignedIn && !syncManager.isFetchDisabled && syncManager.isInitialClientSyncPending) ||
-                     syncManager.syncStatus === 'syncing' ||
-                     syncManager.syncStatus === 'loading_local';
+   // isLoading now primarily depends on Clerk's loading state.
+   // The syncManager's status (like isInitialClientSyncPending or 'syncing')
+   // will be reflected in the sidebar sync indicator, not block the main layout.
+   const isLoading = !isClerkLoaded;
     
-   const spinnerMessage = !isClerkLoaded ? "Authenticating..." :
-                         syncManager.isFetchDisabled ? "Local Mode Active" :
-                         syncManager.isInitialClientSyncPending ? "Awaiting initial sync..." :
-                         syncManager.syncStatus === 'syncing' ? "Syncing data..." :
-                         syncManager.syncStatus === 'loading_local' ? "Loading local data..." :
-                         syncManager.syncStatus === 'error' && syncManager.isInitialClientSyncPending ? "Initial sync failed. Please retry." :
-                         "Initializing...";
+   const spinnerMessage = !isClerkLoaded ? "Authenticating..." : "Loading application...";
 
 
    if (isLoading) {
@@ -58,6 +52,11 @@
        </div>
      );
    }
+
+   // If Clerk is loaded but user is not signed in, Clerk's middleware should handle redirection.
+   // If we reach here and isSignedIn is false, it's an unexpected state for a protected layout.
+   // However, the content rendering is typically for signed-in users.
+   // ClerkProvider and auth().protect() in middleware are the primary guards.
 
    return (
      <div className="flex min-h-screen w-full bg-background">
