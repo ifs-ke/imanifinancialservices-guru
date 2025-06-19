@@ -11,8 +11,9 @@
  import { useSyncManager } from '@/hooks/useSyncManager';
  import FloatingChatButton from '@/components/layout/FloatingChatButton';
  import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
+ import LocalChangesPreviewDialog from '@/components/layout/LocalChangesPreviewDialog'; // Import the new dialog
  import { Toaster } from '@/components/ui/toaster';
- import { logInfo } from '@/lib/logger';
+ import { logInfo, logWarn, logError } from '@/lib/logger';
  import { LoadingSpinner } from '@/components/ui/loading-spinner';
  import { useAuth } from '@clerk/nextjs';
 
@@ -30,19 +31,25 @@
    useEffect(() => {
        if (!isClerkLoaded || !isSignedIn || !userId || !syncManager) return;
 
-       if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen) {
+       if (syncManager.hashMismatch && !syncManager.isMismatchDialogOpen && !syncManager.isPreviewingLocalChanges) {
            logInfo("DashboardLayout: Hash mismatch detected. Opening dialog.", { userId });
            syncManager.setIsMismatchDialogOpen(true);
        }
    }, [syncManager, isClerkLoaded, isSignedIn, userId]);
 
 
-   // isLoading now primarily depends on Clerk's loading state.
-   // The syncManager's status (like isInitialClientSyncPending or 'syncing')
-   // will be reflected in the sidebar sync indicator, not block the main layout.
    const isLoading = !isClerkLoaded;
     
-   const spinnerMessage = !isClerkLoaded ? "Authenticating..." : "Loading application...";
+   let spinnerMessage = "Authenticating...";
+   if (isClerkLoaded && syncManager.isInitialClientSyncPending && isSignedIn) {
+     spinnerMessage = "Awaiting initial sync...";
+   } else if (isClerkLoaded && syncManager.syncStatus === 'syncing') {
+     spinnerMessage = "Syncing data...";
+   } else if (isClerkLoaded && syncManager.syncStatus === 'loading_local') {
+     spinnerMessage = "Loading local data...";
+   } else if (isClerkLoaded) {
+     spinnerMessage = "Loading application...";
+   }
 
 
    if (isLoading) {
@@ -52,11 +59,6 @@
        </div>
      );
    }
-
-   // If Clerk is loaded but user is not signed in, Clerk's middleware should handle redirection.
-   // If we reach here and isSignedIn is false, it's an unexpected state for a protected layout.
-   // However, the content rendering is typically for signed-in users.
-   // ClerkProvider and auth().protect() in middleware are the primary guards.
 
    return (
      <div className="flex min-h-screen w-full bg-background">
@@ -83,6 +85,15 @@
             }}
             localDataPreview={syncManager.conflictingLocalDataString}
             serverDataPreview={syncManager.conflictingServerDataString}
+          />
+        )}
+
+        {isSignedIn && syncManager.isPreviewingLocalChanges && (
+          <LocalChangesPreviewDialog
+            isOpen={syncManager.isPreviewingLocalChanges}
+            payloadPreview={syncManager.localChangesPayloadPreview}
+            onConfirm={syncManager.confirmAndProceedWithSave}
+            onCancel={syncManager.cancelLocalChangesPreview}
           />
         )}
      </div>
