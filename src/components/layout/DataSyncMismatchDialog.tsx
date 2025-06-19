@@ -1,3 +1,4 @@
+
 // src/components/layout/DataSyncMismatchDialog.tsx
 'use client';
 
@@ -112,7 +113,7 @@ const DataSyncMismatchDialog: React.FC<DataSyncMismatchDialogProps> = ({
             <div className="mt-3 space-y-3 max-h-[40vh] overflow-y-auto">
               {localDataPreview && (
                 <div>
-                  <h4 className="text-xs font-semibold mb-1 text-muted-foreground">Local Data Snapshot (What client tried to save or current local state):</h4>
+                  <h4 className="text-xs font-semibold mb-1 text-muted-foreground">Local Data Snapshot (Payload that will be sent if &quot;Keep Local&quot; is chosen):</h4>
                   <ScrollArea className="h-32 w-full rounded-md border bg-muted/30">
                     <Textarea
                       readOnly
@@ -125,7 +126,7 @@ const DataSyncMismatchDialog: React.FC<DataSyncMismatchDialogProps> = ({
               )}
               {serverDataPreview ? (
                 <div>
-                  <h4 className="text-xs font-semibold mb-1 text-muted-foreground">Server Data Snapshot (What server has or sent):</h4>
+                  <h4 className="text-xs font-semibold mb-1 text-muted-foreground">Server Data Snapshot (Current data on the server):</h4>
                    <ScrollArea className="h-32 w-full rounded-md border bg-muted/30">
                     <Textarea
                       readOnly
@@ -136,9 +137,9 @@ const DataSyncMismatchDialog: React.FC<DataSyncMismatchDialogProps> = ({
                   </ScrollArea>
                 </div>
               ) : (
-                 localDataPreview && ( // Only show this message if local preview IS available but server isn't
+                 localDataPreview && ( 
                     <p className="text-xs text-muted-foreground text-center p-2 border rounded-md">
-                        Server data preview is not available for this type of conflict (e.g., a save conflict where the server doesn&apos;t return its full state).
+                        Server data preview not available for this type of conflict (e.g., a save conflict where the server doesn&apos;t return its full state or integrity check failure).
                     </p>
                  )
               )}
