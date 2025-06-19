@@ -129,8 +129,9 @@ export type ClientLogPayload = z.infer<typeof ClientLogPayloadSchema>;
 const BaseItemSchemaForAPI = z.object({
   id: z.string(),
   description: z.string(),
-  amount: z.coerce.number(),
+  amount: z.coerce.number(), // Use coerce for server-side parsing from stringified fixed-point
 });
+export type BaseItemForAPIType = z.infer<typeof BaseItemSchemaForAPI>;
 
 const TransactionItemSchemaForAPI = BaseItemSchemaForAPI.extend({
   date: z.string(), // ISO string
@@ -139,6 +140,7 @@ const TransactionItemSchemaForAPI = BaseItemSchemaForAPI.extend({
   variability: TransactionVariabilitySchema.nullable(),
   categoryName: z.string().optional().nullable(),
 });
+export type TransactionItemForAPIType = z.infer<typeof TransactionItemSchemaForAPI>;
 
 const DebtItemAPISchema = z.object({
   id: z.string(),
@@ -148,6 +150,8 @@ const DebtItemAPISchema = z.object({
   minPayment: z.coerce.number(),
   term: DebtTermSchema,
 });
+export type DebtItemForAPIType = z.infer<typeof DebtItemAPISchema>;
+
 
 const BudgetItemAPISchema = z.object({
   id: z.string(),
@@ -156,6 +160,7 @@ const BudgetItemAPISchema = z.object({
   category: BudgetItemCategorySchema,
   period: z.string(),
 });
+export type BudgetItemForAPIType = z.infer<typeof BudgetItemAPISchema>;
 
 const InvestmentItemAPISchema = z.object({
   id: z.string(),
@@ -168,6 +173,7 @@ const InvestmentItemAPISchema = z.object({
   currency: z.string(),
   notes: z.string().optional().nullable(),
 });
+export type InvestmentItemForAPIType = z.infer<typeof InvestmentItemAPISchema>;
 
 const WeeklyReviewDataAPISchema = z.object({
   ownerId: z.string(),
@@ -177,21 +183,28 @@ const WeeklyReviewDataAPISchema = z.object({
   sharedWith: z.array(z.string()).optional(),
   // weekKey is usually the key in the record, not a field within
 });
+export type WeeklyReviewDataForAPIType = z.infer<typeof WeeklyReviewDataAPISchema>;
 
+// Schema for collection changes (created, updated, deletedIds)
+const createCollectionChangesSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
+  created: z.array(itemSchema).optional(),
+  updated: z.array(itemSchema.extend({ id: z.string() })).optional(), // Ensure updated items have an ID
+  deletedIds: z.array(z.string()).optional(),
+}).optional();
 
 export const SaveDataPayloadSchema = z.object({
-  transactions: z.array(TransactionItemSchemaForAPI).optional().default([]),
-  debts: z.array(DebtItemAPISchema).optional().default([]),
-  assetItems: z.array(BaseItemSchemaForAPI).optional().default([]),
-  otherLiabilityItems: z.array(BaseItemSchemaForAPI).optional().default([]),
-  budgetItems: z.array(BudgetItemAPISchema).optional().default([]),
-  ownedReviews: z.record(WeeklyReviewDataAPISchema).optional().default({}),
-  investmentItems: z.array(InvestmentItemAPISchema).optional().default([]),
+  transactions: createCollectionChangesSchema(TransactionItemSchemaForAPI),
+  debts: createCollectionChangesSchema(DebtItemAPISchema),
+  assetItems: createCollectionChangesSchema(BaseItemSchemaForAPI),
+  otherLiabilityItems: createCollectionChangesSchema(BaseItemSchemaForAPI),
+  budgetItems: createCollectionChangesSchema(BudgetItemAPISchema),
+  ownedReviews: createCollectionChangesSchema(WeeklyReviewDataAPISchema.extend({ weekKey: z.string() })), // ownedReviews need weekKey in items
+  investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   gettingStartedDismissed: z.boolean().optional(),
-  payloadDataHash: z.string({ required_error: "Payload data hash is required" }), // Renamed from dataHash
-  lastKnownServerHash: z.string().nullable().optional(), // Added for stale data check
+  payloadDataHash: z.string({ required_error: "Payload data hash is required" }),
+  lastKnownServerHash: z.string().nullable().optional(),
 });
 export type SaveDataPayload = z.infer<typeof SaveDataPayloadSchema>;
 
@@ -201,15 +214,15 @@ export const SearchUserByEmailInputSchema = z.object({
 });
 
 export const ShareReviewInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex to allow 1 or 2 digits for week
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const RevokeShareInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
   targetUserId: z.string().min(1, "Target user ID is required."),
 });
 
 export const GetSharedWithUsersInputSchema = z.object({
-  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."), // Corrected regex
+  weekKey: z.string().regex(/^\d{4}-\d{2}$/, "Invalid weekKey format (YYYY-WW)."),
 });

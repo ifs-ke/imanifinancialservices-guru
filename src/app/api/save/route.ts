@@ -10,7 +10,7 @@ import stringify from 'fast-json-stable-stringify';
 import { Ratelimit } from '@upstash/ratelimit';
 import { kv } from '@vercel/kv';
 import { addCorsHeaders } from '@/lib/utils';
-import { SaveDataPayloadSchema } from '@/lib/schemas';
+import { SaveDataPayloadSchema, type TransactionItemForAPIType, type DebtItemForAPIType, type BaseItemForAPIType, type BudgetItemForAPIType, type InvestmentItemForAPIType, type WeeklyReviewDataForAPIType } from '@/lib/schemas';
 import { ensureUserInDb } from '@/app/actions/shareActions';
 
 const HASH_CHECK_ENABLED_ON_SERVER = true;
@@ -208,73 +208,145 @@ export async function POST(request: Request) {
 
   try {
     const {
-        transactions = [], debts = [], assetItems = [],
-        otherLiabilityItems = [], budgetItems = [],
-        ownedReviews = {}, investmentItems = [],
+        transactions, debts, assetItems,
+        otherLiabilityItems, budgetItems,
+        ownedReviews, investmentItems,
         startDate, endDate, gettingStartedDismissed
-    } = preparedDataForSaving;
+    } = preparedDataForSaving; // preparedDataForSaving IS the new granular structure
 
     await prisma.$transaction(async (tx) => {
-      await tx.transaction.deleteMany({ where: { userId } });
-      await tx.debt.deleteMany({ where: { userId } });
-      await tx.investmentItem.deleteMany({where: {userId}});
-      await tx.assetItem.deleteMany({ where: { userId } });
-      await tx.otherLiabilityItem.deleteMany({ where: { userId } });
-      await tx.budgetItem.deleteMany({ where: { userId } });
-      await tx.weeklyReview.deleteMany({ where: { userId } });
-      await tx.sharedReview.deleteMany({ where: { reviewOwnerId: userId } });
-
-      const deDuplicateAndPrepare = <T extends { id: string }>(items: T[], collectionName: string): T[] => {
-        const uniqueItemsMap = new Map<string, T>();
-        (items || []).forEach((item: T) => {
-            if (!item.id) {
-                console.warn(`[API /api/save] Item in '${collectionName}' for user ${userId} is missing an ID. Skipping.`);
-                return;
-            }
-            if (!uniqueItemsMap.has(item.id)) {
-                uniqueItemsMap.set(item.id, item);
-            } else {
-                console.warn(`[API /api/save] Duplicate ID '${item.id}' found in client payload for '${collectionName}' for user ${userId}. Using first instance.`);
-            }
-        });
-        return Array.from(uniqueItemsMap.values());
-      };
-
-      const uniqueTransactions = deDuplicateAndPrepare(transactions, 'transactions');
-      if (uniqueTransactions.length > 0) await tx.transaction.createMany({ data: uniqueTransactions.map((t:any) => ({ ...t, userId, date: new Date(t.date), amount: Number(t.amount) })) });
-
-      const uniqueDebts = deDuplicateAndPrepare(debts, 'debts');
-      if (uniqueDebts.length > 0) await tx.debt.createMany({ data: uniqueDebts.map((d:any) => ({ ...d, userId, principal: Number(d.principal), interestRate: Number(d.interestRate), minPayment: Number(d.minPayment) })) });
-
-      const uniqueInvestmentItems = deDuplicateAndPrepare(investmentItems, 'investmentItems');
-      if (uniqueInvestmentItems.length > 0) await tx.investmentItem.createMany({ data: uniqueInvestmentItems.map((i:any) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate), quantity: Number(i.quantity), purchasePrice: Number(i.purchasePrice), currentValue: Number(i.currentValue) })) });
-
-      const uniqueAssetItems = deDuplicateAndPrepare(assetItems, 'assetItems');
-      if (uniqueAssetItems.length > 0) await tx.assetItem.createMany({ data: uniqueAssetItems.map((a:any) => ({ ...a, userId, amount: Number(a.amount) })) });
-
-      const uniqueOtherLiabilityItems = deDuplicateAndPrepare(otherLiabilityItems, 'otherLiabilityItems');
-      if (uniqueOtherLiabilityItems.length > 0) await tx.otherLiabilityItem.createMany({ data: uniqueOtherLiabilityItems.map((l:any) => ({ ...l, userId, amount: Number(l.amount) })) });
-
-      const uniqueBudgetItems = deDuplicateAndPrepare(budgetItems, 'budgetItems');
-      if (uniqueBudgetItems.length > 0) await tx.budgetItem.createMany({ data: uniqueBudgetItems.map((b:any) => ({ ...b, userId, amount: Number(b.amount) })) });
-
-      if (Object.keys(ownedReviews).length > 0) {
-        await tx.weeklyReview.createMany({
-          data: Object.entries(ownedReviews).map(([weekKey, reviewData]: [string, any]) => ({
-            userId, weekKey, journal: reviewData.journal, transactionComments: reviewData.transactionComments || undefined,
-          })),
-        });
+      // Process Transactions
+      if (transactions) {
+        if (transactions.created && transactions.created.length > 0) {
+          await tx.transaction.createMany({ data: transactions.created.map((t: TransactionItemForAPIType) => ({ ...t, userId, date: new Date(t.date) })) });
+        }
+        if (transactions.updated && transactions.updated.length > 0) {
+          for (const item of transactions.updated) {
+            await tx.transaction.update({ where: { id: item.id, userId }, data: { ...item, date: new Date(item.date), userId } });
+          }
+        }
+        if (transactions.deletedIds && transactions.deletedIds.length > 0) {
+          await tx.transaction.deleteMany({ where: { id: { in: transactions.deletedIds }, userId } });
+        }
       }
+
+      // Process Debts
+      if (debts) {
+        if (debts.created && debts.created.length > 0) {
+          await tx.debt.createMany({ data: debts.created.map((d: DebtItemForAPIType) => ({ ...d, userId })) });
+        }
+        if (debts.updated && debts.updated.length > 0) {
+          for (const item of debts.updated) {
+            await tx.debt.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+          }
+        }
+        if (debts.deletedIds && debts.deletedIds.length > 0) {
+          await tx.debt.deleteMany({ where: { id: { in: debts.deletedIds }, userId } });
+        }
+      }
+
+      // Process InvestmentItems
+      if (investmentItems) {
+        if (investmentItems.created && investmentItems.created.length > 0) {
+          await tx.investmentItem.createMany({ data: investmentItems.created.map((i: InvestmentItemForAPIType) => ({ ...i, userId, purchaseDate: new Date(i.purchaseDate) })) });
+        }
+        if (investmentItems.updated && investmentItems.updated.length > 0) {
+          for (const item of investmentItems.updated) {
+            await tx.investmentItem.update({ where: { id: item.id, userId }, data: { ...item, purchaseDate: new Date(item.purchaseDate), userId } });
+          }
+        }
+        if (investmentItems.deletedIds && investmentItems.deletedIds.length > 0) {
+          await tx.investmentItem.deleteMany({ where: { id: { in: investmentItems.deletedIds }, userId } });
+        }
+      }
+
+      // Process AssetItems
+      if (assetItems) {
+        if (assetItems.created && assetItems.created.length > 0) {
+          await tx.assetItem.createMany({ data: assetItems.created.map((a: BaseItemForAPIType) => ({ ...a, userId })) });
+        }
+        if (assetItems.updated && assetItems.updated.length > 0) {
+          for (const item of assetItems.updated) {
+            await tx.assetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+          }
+        }
+        if (assetItems.deletedIds && assetItems.deletedIds.length > 0) {
+          await tx.assetItem.deleteMany({ where: { id: { in: assetItems.deletedIds }, userId } });
+        }
+      }
+
+      // Process OtherLiabilityItems
+      if (otherLiabilityItems) {
+        if (otherLiabilityItems.created && otherLiabilityItems.created.length > 0) {
+          await tx.otherLiabilityItem.createMany({ data: otherLiabilityItems.created.map((l: BaseItemForAPIType) => ({ ...l, userId })) });
+        }
+        if (otherLiabilityItems.updated && otherLiabilityItems.updated.length > 0) {
+          for (const item of otherLiabilityItems.updated) {
+            await tx.otherLiabilityItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+          }
+        }
+        if (otherLiabilityItems.deletedIds && otherLiabilityItems.deletedIds.length > 0) {
+          await tx.otherLiabilityItem.deleteMany({ where: { id: { in: otherLiabilityItems.deletedIds }, userId } });
+        }
+      }
+
+      // Process BudgetItems
+      if (budgetItems) {
+        if (budgetItems.created && budgetItems.created.length > 0) {
+          await tx.budgetItem.createMany({ data: budgetItems.created.map((b: BudgetItemForAPIType) => ({ ...b, userId })) });
+        }
+        if (budgetItems.updated && budgetItems.updated.length > 0) {
+          for (const item of budgetItems.updated) {
+            await tx.budgetItem.update({ where: { id: item.id, userId }, data: { ...item, userId } });
+          }
+        }
+        if (budgetItems.deletedIds && budgetItems.deletedIds.length > 0) {
+          await tx.budgetItem.deleteMany({ where: { id: { in: budgetItems.deletedIds }, userId } });
+        }
+      }
+
+      // Process OwnedReviews
+      if (ownedReviews) {
+        if (ownedReviews.created && ownedReviews.created.length > 0) {
+          await tx.weeklyReview.createMany({
+            data: ownedReviews.created.map((r: WeeklyReviewDataForAPIType & { weekKey: string }) => ({
+              userId,
+              weekKey: r.weekKey,
+              journal: r.journal,
+              transactionComments: r.transactionComments || undefined,
+            })),
+          });
+        }
+        if (ownedReviews.updated && ownedReviews.updated.length > 0) {
+          for (const item of ownedReviews.updated) {
+            // WeeklyReview unique key is userId_weekKey, not 'id'
+            await tx.weeklyReview.update({
+              where: { userId_weekKey: { userId, weekKey: item.weekKey } },
+              data: {
+                journal: item.journal,
+                transactionComments: item.transactionComments || undefined,
+              },
+            });
+          }
+        }
+        if (ownedReviews.deletedIds && ownedReviews.deletedIds.length > 0) {
+          // deletedIds for reviews should be weekKeys
+          await tx.weeklyReview.deleteMany({ where: { weekKey: { in: ownedReviews.deletedIds }, userId } });
+          // Also remove any shares associated with these deleted reviews
+          await tx.sharedReview.deleteMany({ where: { weekKey: { in: ownedReviews.deletedIds }, reviewOwnerId: userId } });
+        }
+      }
+
       await upsertStatementSettings(tx, userId, startDate, endDate, gettingStartedDismissed);
     });
 
-    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload;
-    console.info(`[API /api/save] Prisma transaction committed. User: ${userId}. New server hash: ${newServerHashAfterSave}`, logContextBase);
+    const newServerHashAfterSave = serverCalculatedHashOfReceivedPayload; // Hash of the payload that was successfully saved
+    console.info(`[API /api/save] Prisma transaction committed for granular update. User: ${userId}. New server hash: ${newServerHashAfterSave}`, logContextBase);
     const response = NextResponse.json({ message: `Data saved successfully for user ${userId}`, newServerHash: newServerHashAfterSave });
     return addCorsHeaders(response);
 
   } catch (error: any) {
-    console.error(`[API /api/save] Prisma transaction failed. User: ${userId}`, { error, ...logContextBase });
+    console.error(`[API /api/save] Prisma transaction failed during granular update. User: ${userId}`, { error, ...logContextBase });
     const errorMessage = error.message || 'An unknown error occurred during save.';
     const response = NextResponse.json({ error: errorMessage }, { status: 500 });
     return addCorsHeaders(response);
