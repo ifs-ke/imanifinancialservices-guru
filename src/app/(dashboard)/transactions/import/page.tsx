@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { useSyncManager } from '@/hooks/useSyncManager';
 
 
 const POSSIBLE_HEADERS: { [key: string]: keyof TransactionWithId | 'ignore' } = {
@@ -75,6 +76,7 @@ const formatCategoryBadge = (value: string | undefined) => {
 export default function ImportTransactionsPage() {
     const { transactions: existingTransactions, importTransactionsBatch } = useTransactionsStore();
     const { toast } = useToast();
+    const { syncStatus } = useSyncManager();
 
     const [stage, setStage] = useState<ImportStage>('upload');
     const [file, setFile] = useState<File | null>(null);
@@ -88,6 +90,8 @@ export default function ImportTransactionsPage() {
     const [importedCount, setImportedCount] = useState(0);
     const [skippedCount, setSkippedCount] = useState(0);
     const [lastImportedIds, setLastImportedIds] = useState<string[]>([]);
+    
+    const isSyncing = useMemo(() => syncStatus === 'syncing' || syncStatus === 'loading_local', [syncStatus]);
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = event.target.files?.[0];
@@ -432,10 +436,11 @@ export default function ImportTransactionsPage() {
             <CardContent className="space-y-4">
                 <div className="grid w-full items-center gap-1.5">
                     <Label htmlFor="file-upload">Choose CSV File</Label>
-                    <Input id="file-upload" type="file" accept=".csv,text/csv" onChange={handleFileChange} />
+                    <Input id="file-upload" type="file" accept=".csv,text/csv" onChange={handleFileChange} disabled={isSyncing} />
                 </div>
                 {fileName && <p className="text-sm text-muted-foreground">Selected: {fileName}</p>}
                 {importError && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle size={14} /> {importError}</p>}
+                {isSyncing && <p className="text-sm text-primary flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Data sync in progress. Please wait before importing.</p>}
             </CardContent>
             <CardFooter className="flex justify-between">
                  <Button variant="outline" asChild>
@@ -443,7 +448,7 @@ export default function ImportTransactionsPage() {
                         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Transactions
                     </Link>
                  </Button>
-                <Button onClick={handleParseFile} disabled={!file || isParsing}>
+                <Button onClick={handleParseFile} disabled={!file || isParsing || isSyncing}>
                      {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}
                      {isParsing ? 'Parsing...' : 'Parse & Map Columns'}
                  </Button>
@@ -459,6 +464,7 @@ export default function ImportTransactionsPage() {
              </CardHeader>
              <CardContent className="space-y-4">
                 {importError && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle size={14} /> {importError}</p>}
+                {isSyncing && <p className="text-sm text-primary flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Data sync in progress. Please wait before continuing.</p>}
                 <ScrollArea className="h-[400px] w-full">
                     <Table>
                         <TableHeader>
@@ -473,7 +479,7 @@ export default function ImportTransactionsPage() {
                                 <TableRow key={header}>
                                     <TableCell className="font-medium max-w-[200px] truncate" title={header}>{header}</TableCell>
                                     <TableCell>
-                                         <Select value={columnMapping[header] || 'ignore'} onValueChange={(value) => handleMappingChange(header, value)}>
+                                         <Select value={columnMapping[header] || 'ignore'} onValueChange={(value) => handleMappingChange(header, value)} disabled={isSyncing}>
                                             <SelectTrigger className="w-[180px] h-8">
                                                 <SelectValue placeholder="Select field..." />
                                             </SelectTrigger>
@@ -504,7 +510,7 @@ export default function ImportTransactionsPage() {
                  <Button variant="outline" onClick={handleBack}>
                      <ArrowLeft className="mr-2 h-4 w-4" /> Back
                  </Button>
-                 <Button onClick={proceedToPreview}>
+                 <Button onClick={proceedToPreview} disabled={isSyncing}>
                     <ListChecks className="mr-2 h-4 w-4" /> Preview & Reconcile
                  </Button>
             </CardFooter>
@@ -519,6 +525,7 @@ export default function ImportTransactionsPage() {
              </CardHeader>
              <CardContent>
                  {importError && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle size={14} /> {importError}</p>}
+                 {isSyncing && <p className="text-sm text-primary flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Data sync in progress. Please wait before importing.</p>}
                  <ScrollArea className="h-[500px] w-full">
                      <Table>
                          <TableHeader>
@@ -548,7 +555,7 @@ export default function ImportTransactionsPage() {
                                             type="checkbox"
                                             aria-label={`Select row ${index + 1} for import`}
                                             checked={tx.__toBeImported}
-                                            disabled={!!tx.__parseError}
+                                            disabled={!!tx.__parseError || isSyncing}
                                             onChange={() => toggleImportRow(index)}
                                             className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                          />
@@ -586,7 +593,7 @@ export default function ImportTransactionsPage() {
                  <div className='text-sm text-muted-foreground text-center sm:text-left'>
                     {mappedTransactions.filter(tx => tx.__toBeImported && !tx.__parseError).length} of {mappedTransactions.length} rows selected for import.
                  </div>
-                 <Button onClick={handleConfirmImport} disabled={mappedTransactions.filter(tx => tx.__toBeImported && !tx.__parseError).length === 0}>
+                 <Button onClick={handleConfirmImport} disabled={isSyncing || mappedTransactions.filter(tx => tx.__toBeImported && !tx.__parseError).length === 0}>
                     <Upload className="mr-2 h-4 w-4" /> Confirm Import
                  </Button>
              </CardFooter>
@@ -662,6 +669,3 @@ export default function ImportTransactionsPage() {
         </div>
     );
 }
-
-
-

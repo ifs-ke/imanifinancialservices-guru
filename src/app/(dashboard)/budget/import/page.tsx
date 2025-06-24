@@ -2,7 +2,7 @@
 // src/app/(dashboard)/budget/import/page.tsx
 'use client'
 
-import React, { useState, type ChangeEvent, useCallback } from 'react';
+import React, { useState, type ChangeEvent, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,7 @@ import Papa, { type ParseResult } from 'papaparse';
 import Link from 'next/link';
 import { cn, formatCurrency } from '@/lib/utils';
 import { format, parse } from 'date-fns';
+import { useSyncManager } from '@/hooks/useSyncManager';
 
 type ImportStage = 'upload' | 'preview' | 'reconciling' | 'complete' | 'error';
 
@@ -37,6 +38,7 @@ const requiredHeaders = ['category', 'description', 'amount'];
 export default function ImportBudgetPage() {
   const { importBudgetsBatch, budgetPeriod } = useBudgetStore();
   const { toast } = useToast();
+  const { syncStatus } = useSyncManager();
 
   const [stage, setStage] = useState<ImportStage>('upload');
   const [file, setFile] = useState<File | null>(null);
@@ -47,6 +49,8 @@ export default function ImportBudgetPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importedCount, setImportedCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
+
+  const isSyncing = useMemo(() => syncStatus === 'syncing' || syncStatus === 'loading_local', [syncStatus]);
 
   const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -276,6 +280,7 @@ export default function ImportBudgetPage() {
             type="file"
             accept=".csv,text/csv"
             onChange={handleFileChange}
+            disabled={isSyncing}
           />
         </div>
         {fileName && (
@@ -286,6 +291,7 @@ export default function ImportBudgetPage() {
             <AlertTriangle size={14} /> {importError}
           </p>
         )}
+        {isSyncing && <p className="text-sm text-primary flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Data sync in progress. Please wait before importing.</p>}
       </CardContent>
       <CardFooter className="flex justify-between p-6">
         <Button variant="outline" asChild>
@@ -293,7 +299,7 @@ export default function ImportBudgetPage() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Budget
           </Link>
         </Button>
-        <Button onClick={handleParseFile} disabled={!file || isParsing}>
+        <Button onClick={handleParseFile} disabled={!file || isParsing || isSyncing}>
           {isParsing ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
@@ -328,6 +334,7 @@ export default function ImportBudgetPage() {
               <AlertTriangle size={14} /> {importError}
             </p>
           )}
+          {isSyncing && <p className="text-sm text-primary flex items-center gap-1 px-6 pb-4"><Loader2 size={14} className="animate-spin" /> Data sync in progress. Please wait before continuing.</p>}
           <ScrollArea className="h-[500px] w-full">
             <Table>
               <TableHeader>
@@ -353,7 +360,7 @@ export default function ImportBudgetPage() {
                         type="checkbox"
                         aria-label={`Select row ${index + 1} for import`}
                         checked={item.__toBeImported}
-                        disabled={!!item.__parseError}
+                        disabled={!!item.__parseError || isSyncing}
                         onChange={() => toggleImportRow(index)}
                         className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                       />
@@ -402,7 +409,7 @@ export default function ImportBudgetPage() {
           </div>
           <Button
             onClick={handleConfirmImport}
-            disabled={itemsToImportCount === 0}
+            disabled={itemsToImportCount === 0 || isSyncing}
           >
             <Upload className="mr-2 h-4 w-4" /> Confirm Import
           </Button>
