@@ -93,6 +93,7 @@ export const useInvestmentStore = create<InvestmentState>()(
                      ...item,
                      purchaseDate: item.purchaseDate instanceof Date && !isNaN(item.purchaseDate.getTime()) ? item.purchaseDate : new Date(0),
                      currency: item.currency || 'KES', // Default currency
+                     notes: item.notes || null, // Normalize notes
                  }));
                  set({ investmentItems: sortInvestmentItems(validatedItems), isHydrated: true });
             },
@@ -102,6 +103,7 @@ export const useInvestmentStore = create<InvestmentState>()(
                     ...itemData,
                     purchaseDate: itemData.purchaseDate instanceof Date && !isNaN(itemData.purchaseDate.getTime()) ? itemData.purchaseDate : new Date(0),
                     currency: itemData.currency || 'KES',
+                    notes: itemData.notes || null, // Normalize notes on creation
                 };
                 set((state) => ({ investmentItems: sortInvestmentItems([...state.investmentItems, newItem]) }));
                 return newItem;
@@ -112,7 +114,7 @@ export const useInvestmentStore = create<InvestmentState>()(
                      : new Date(0);
                 set((state) => ({
                     investmentItems: sortInvestmentItems(
-                        state.investmentItems.map(item => item.id === updatedItem.id ? { ...updatedItem, purchaseDate: validatedDate, currency: updatedItem.currency || 'KES' } : item)
+                        state.investmentItems.map(item => item.id === updatedItem.id ? { ...updatedItem, purchaseDate: validatedDate, currency: updatedItem.currency || 'KES', notes: updatedItem.notes || null } : item)
                     )
                 }));
             },
@@ -127,11 +129,16 @@ export const useInvestmentStore = create<InvestmentState>()(
             },
         }),
         {
-            name: 'ifcGuru_investmentItems_v2', // Version updated due to potential schema changes/defaults
+            name: 'ifcGuru_investmentItems_v2',
             storage: createJSONStorage(createSessionStorageWithEncoding),
             onRehydrateStorage: () => (state) => {
                  if (state) {
                    state.isHydrated = true;
+                   if (Array.isArray(state.investmentItems)) {
+                       state.investmentItems.forEach(item => {
+                           item.notes = item.notes || null; // Normalize on rehydration
+                       });
+                   }
                    logInfo("InvestmentStore: Rehydrated successfully (v2).");
                  }
              },
