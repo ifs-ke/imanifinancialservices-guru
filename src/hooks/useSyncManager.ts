@@ -35,7 +35,6 @@ interface SyncedData {
   investmentItems: InvestmentItem[];
   startDate?: string;
   endDate?: string;
-  gettingStartedDismissed: boolean;
 }
 
 export type SyncStatus =
@@ -55,7 +54,6 @@ interface SyncState {
   lastSaveTime: Date | null;
   lastServerHash: string | null;
   isMismatchDialogOpen: boolean;
-  gettingStartedDismissed: boolean;
   conflictingLocalDataString: string | null;
   conflictingServerDataString: string | null;
   isInitialClientSyncPending: boolean;
@@ -78,7 +76,6 @@ export function useSyncManager() {
     lastSaveTime: null,
     lastServerHash: null,
     isMismatchDialogOpen: false,
-    gettingStartedDismissed: false,
     conflictingLocalDataString: null,
     conflictingServerDataString: null,
     isInitialClientSyncPending: true,
@@ -127,7 +124,6 @@ export function useSyncManager() {
       notifications: getNotificationState().notifications,
       startDate: getStatementState().startDate?.toISOString(),
       endDate: getStatementState().endDate?.toISOString(),
-      gettingStartedDismissed: syncStateRef.current.gettingStartedDismissed,
     };
   }, [getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState]);
 
@@ -165,7 +161,6 @@ export function useSyncManager() {
             ownedReviews: { created: reviewsToCreate.length > 0 ? reviewsToCreate : undefined },
             startDate: currentData.startDate ?? null,
             endDate: currentData.endDate ?? null,
-            gettingStartedDismissed: currentData.gettingStartedDismissed,
         };
         
         return initialPayload;
@@ -245,10 +240,6 @@ export function useSyncManager() {
         delta.endDate = currentData.endDate ?? null;
         hasChanges = true;
     }
-    if (currentData.gettingStartedDismissed !== previousData.gettingStartedDismissed) {
-        delta.gettingStartedDismissed = currentData.gettingStartedDismissed;
-        hasChanges = true;
-    }
 
     return hasChanges ? delta : null;
   }, [userId, getCurrentLocalDataForFullSnapshot]);
@@ -282,7 +273,6 @@ export function useSyncManager() {
         lastFetchTime: null,
         lastSaveTime: null,
         lastServerHash: null,
-        gettingStartedDismissed: false,
         isMismatchDialogOpen: false,
         conflictingLocalDataString: null,
         conflictingServerDataString: null,
@@ -391,7 +381,7 @@ export function useSyncManager() {
       
       updateSyncState({
           status: 'synced', lastFetchTime: new Date(), lastServerHash: serverHash,
-          isMismatchDialogOpen: false, gettingStartedDismissed: dataToLoad.gettingStartedDismissed || false,
+          isMismatchDialogOpen: false,
           conflictingLocalDataString: null, conflictingServerDataString: null, isInitialClientSyncPending: false,
       });
 
@@ -744,14 +734,6 @@ export function useSyncManager() {
     isMismatchDialogOpen: syncState.isMismatchDialogOpen,
     setIsMismatchDialogOpen: (isOpen: boolean) => updateSyncState({ isMismatchDialogOpen: isOpen }),
     lastSyncTime: syncState.lastFetchTime || syncState.lastSaveTime,
-    gettingStartedDismissed: syncState.gettingStartedDismissed,
-    setGettingStartedDismissed: (dismissed: boolean) => {
-      updateSyncState({ gettingStartedDismissed: dismissed });
-      hasLocalChangesRef.current = true;
-      if (syncStateRef.current.status !== 'local_changes') {
-          updateSyncState({ status: 'local_changes' });
-      }
-    },
     conflictingLocalDataString: syncState.conflictingLocalDataString,
     conflictingServerDataString: syncState.conflictingServerDataString,
     isInitialClientSyncPending: syncState.isInitialClientSyncPending,

@@ -204,7 +204,6 @@ export const SaveDataPayloadSchema = z.object({
   investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema).optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
-  gettingStartedDismissed: z.boolean().optional(),
   payloadDataHash: z.string({ required_error: "Payload data hash is required" }),
   lastKnownServerHash: z.string().nullable().optional(),
 });

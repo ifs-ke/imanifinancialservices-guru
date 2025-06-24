@@ -5,7 +5,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LayoutDashboard, ArrowRight, TrendingUp, TrendingDown, Scale, Coins, Banknote, LineChart as LineChartIcon, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, BookOpen, XCircle } from 'lucide-react';
+import { LayoutDashboard, ArrowRight, TrendingUp, TrendingDown, Scale, Coins, Banknote, LineChart as LineChartIcon, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, PartyPopper } from 'lucide-react';
 import Link from 'next/link';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
@@ -20,9 +20,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useSyncManager } from '@/hooks/useSyncManager';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useUser } from "@clerk/nextjs";
-
-const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
-const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + (item.principal || 0), 0);
 
 // --- Internal Components for Dashboard ---
 
@@ -120,7 +117,6 @@ export default function DashboardPage() {
   const storeEndDate = useStatementStore(state => state.endDate);
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
   const { toast } = useToast();
-  const { gettingStartedDismissed, setGettingStartedDismissed: dismissGettingStartedCard } = useSyncManager();
   const { user } = useUser();
 
   const filteredTransactions = useMemo(() => {
@@ -250,10 +246,8 @@ export default function DashboardPage() {
     expense: { label: "Expenses", color: "hsl(var(--destructive))" },
   } satisfies ChartConfig;
 
-  const handleCloseGettingStarted = () => {
-    dismissGettingStartedCard(true);
-    toast({ title: "Getting Started Guide Dismissed" });
-  };
+  const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + (item.principal || 0), 0);
 
   return (
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8 bg-background">
@@ -264,20 +258,12 @@ export default function DashboardPage() {
       />
 
       <main className="flex-1 grid gap-6 px-4 md:px-6 lg:px-8">
-        {!gettingStartedDismissed && (
-          <Alert>
-            <BookOpen className="h-4 w-4" />
+        <Alert>
+            <PartyPopper className="h-4 w-4" />
             <div className="flex-1">
               <AlertTitle>Welcome, {user?.firstName || 'User'}!</AlertTitle>
-              <AlertDescription>
-                Follow the links in the sidebar to add your transactions, manage debts, and set a budget to get started.
-              </AlertDescription>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleCloseGettingStarted} className="h-7 w-7 flex-shrink-0">
-                <XCircle className="h-4 w-4" /><span className="sr-only">Dismiss</span>
-            </Button>
-          </Alert>
-        )}
+        </Alert>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <MetricCard

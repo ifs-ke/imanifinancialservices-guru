@@ -21,7 +21,6 @@ interface SaveDataPayloadPartial {
   investmentItems?: CollectionChanges<InvestmentItemForAPIType>;
   startDate?: string | null; // Already string | null in SaveDataPayloadSchema
   endDate?: string | null;   // Already string | null in SaveDataPayloadSchema
-  gettingStartedDismissed?: boolean;
 }
 
 
@@ -36,7 +35,6 @@ interface FullSnapshotData {
   investmentItems?: InvestmentItem[];
   startDate?: Date | string;
   endDate?: Date | string;
-  gettingStartedDismissed?: boolean;
 }
 
 
@@ -206,7 +204,6 @@ export function prepareDataForHashing(data: SaveDataPayloadPartial | FullSnapsho
             investmentItems: prepareCollectionChanges(partialData.investmentItems, sortInvestmentItems),
             startDate: toISOStringOptional(partialData.startDate as string | Date | undefined), // Cast needed if original type was Date
             endDate: toISOStringOptional(partialData.endDate as string | Date | undefined),     // Cast needed
-            gettingStartedDismissed: partialData.gettingStartedDismissed ?? false,
         };
     } else {
         // Logic for full snapshot (used by /api/sync and client-side before granular save is implemented)
@@ -237,7 +234,6 @@ export function prepareDataForHashing(data: SaveDataPayloadPartial | FullSnapsho
             })),
             startDate: toISOStringOptional(fullData.startDate),
             endDate: toISOStringOptional(fullData.endDate),
-            gettingStartedDismissed: fullData.gettingStartedDismissed ?? false,
         };
     }
 }
