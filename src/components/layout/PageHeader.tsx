@@ -1,14 +1,13 @@
-
 // src/components/layout/PageHeader.tsx
 import React, { type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 interface PageHeaderProps {
   title: string;
-  description?: string;
-  icon?: React.ElementType; // Changed from ReactNode
+  description?: ReactNode;
+  icon?: React.ElementType;
   className?: string;
-  children?: ReactNode; // For action buttons or other elements
+  children?: ReactNode;
 }
 
 export function PageHeader({ title, description, icon: IconComponent, className, children }: PageHeaderProps) {
@@ -19,7 +18,7 @@ export function PageHeader({ title, description, icon: IconComponent, className,
           {IconComponent && <IconComponent className="h-6 w-6 text-primary" />}
           {title}
         </h1>
-        {description && <p className="text-muted-foreground text-sm">{description}</p>}
+        {description && <div className="text-muted-foreground text-sm">{description}</div>}
       </div>
       {children && <div className="flex gap-2 flex-wrap items-center">{children}</div>}
     </header>
