@@ -1,4 +1,3 @@
-
 // src/components/ui/sidebar.tsx
 "use client";
 
@@ -179,7 +178,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
 
 
     const syncManager = useSyncManager();
-    const { syncStatus, manualSync, isMismatchDialogOpen, isFetchDisabled } = syncManager;
+    const { syncStatus, manualSync, isMismatchDialogOpen, setIsMismatchDialogOpen } = syncManager;
 
     React.useEffect(() => {
       setHasMounted(true);
@@ -211,7 +210,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
         case 'local_changes': SyncIcon = UploadCloud; syncStatusText = 'Local Changes'; syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; iconColor = 'text-yellow-500'; break;
         case 'error': SyncIcon = AlertTriangle; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
-        case 'hash_mismatch': SyncIcon = AlertTriangle; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. Click to resolve.'; iconColor = 'text-destructive'; break;
+        case 'hash_mismatch': SyncIcon = AlertTriangle; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. A resolution is required.'; iconColor = 'text-destructive'; isSyncButtonClickable = false; break;
         case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'error_local': SyncIcon = AlertTriangle; syncStatusText = 'Local Error'; syncTooltipText = 'Error loading local data. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'local':
@@ -235,12 +234,13 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
         return;
       }
-      if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'hash_mismatch' || syncStatus === 'error_local') {
+      if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'error_local') {
         manualSync();
       }
     }, [isClerkLoaded, isSignedIn, user?.id, isSyncButtonClickable, syncStatus, manualSync]);
-
+    
     const sidebarActualState = isMobile ? "collapsed" : state;
+    const showDedicatedConflictResolverButton = syncStatus === 'hash_mismatch';
 
     return (
       <div
@@ -335,34 +335,64 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
         <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
           <ThemeToggle sidebarState={sidebarActualState} />
 
-          <TooltipProvider delayDuration={100}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  onClick={handleSyncClick}
-                  className={cn(
-                    "w-full justify-start text-sm h-9",
-                    sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
-                    "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "animate-pulse border-destructive ring-2 ring-destructive"
-                  )}
-                  aria-label={syncTooltipText}
-                  disabled={!isSyncButtonClickable && syncStatus !== 'error' && syncStatus !== 'hash_mismatch' && syncStatus !== 'error_local'}
-                >
-                  <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin", (syncStatus === 'hash_mismatch' || isMismatchDialogOpen) && "text-destructive" )} />
-                  <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
-                    {syncStatusText}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              {sidebarActualState === "collapsed" && (
-                <TooltipContent side="right" align="center">
-                  {syncTooltipText}
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          {showDedicatedConflictResolverButton ? (
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                        logInfo("Resolve Conflict button clicked. Setting isMismatchDialogOpen to true.", {userId: user?.id});
+                        setIsMismatchDialogOpen(true);
+                    }}
+                    className={cn(
+                        "w-full justify-start text-sm h-9",
+                        sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9"
+                    )}
+                    aria-label="Resolve data conflict"
+                  >
+                    <AlertTriangle size={18} className="flex-shrink-0 text-destructive-foreground" />
+                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                        Resolve Conflict
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                {sidebarActualState === "collapsed" && (
+                  <TooltipContent side="right" align="center">
+                      Resolve Data Conflict
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    onClick={handleSyncClick}
+                    className={cn(
+                      "w-full justify-start text-sm h-9",
+                      sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                      "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                    aria-label={syncTooltipText}
+                    disabled={!isSyncButtonClickable}
+                  >
+                    <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin")} />
+                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                      {syncStatusText}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                {sidebarActualState === "collapsed" && (
+                  <TooltipContent side="right" align="center">
+                    {syncTooltipText}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          )}
 
           <div className={cn(
               "flex items-center w-full",
@@ -469,5 +499,3 @@ export const SidebarInset = React.forwardRef<
  );
 });
 SidebarInset.displayName = "SidebarInset";
-
-    
