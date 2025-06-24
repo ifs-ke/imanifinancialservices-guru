@@ -14,7 +14,7 @@ import { useBudgetStore } from '@/store/budgetStore';
 import { useInvestmentStore } from '@/store/investmentStore';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, parse, isValid as isDateValid } from 'date-fns';
+import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, parse, isValid as isDateValid, getDaysInMonth } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useSyncManager } from '@/hooks/useSyncManager';
@@ -44,7 +44,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, icon: Icon, prima
       <CardTitle className="text-sm font-medium">{title}</CardTitle>
       <Icon className="h-4 w-4 text-muted-foreground" />
     </CardHeader>
-    <CardContent className="p-4">
+    <CardContent className="p-4 pt-0">
       <div className={cn("text-2xl font-bold", valueColorClass)}>
         {formatCurrency(value)}
       </div>
@@ -259,7 +259,7 @@ export default function DashboardPage() {
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8 bg-background">
       <PageHeader
         title="Dashboard"
-        description={<>High-level overview of your finances for period: <span className='font-semibold'>{storeStartDate && isDateValid(storeStartDate) ? format(storeStartDate, 'PP') : 'Start'} to {storeEndDate && isDateValid(storeEndDate) ? format(storeEndDate, 'PP') : 'End'}</span></>}
+        description={<>High-level overview of your finances. Date range is for analysis, not overall metrics.</>}
         icon={LayoutDashboard}
       />
 

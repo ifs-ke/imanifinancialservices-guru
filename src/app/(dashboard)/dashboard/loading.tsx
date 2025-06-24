@@ -20,12 +20,11 @@ export default function Loading() {
             <Card key={i} className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
                 <CardTitle className="text-sm font-medium"><Skeleton className="h-4 w-20" /></CardTitle>
-                <Skeleton className="h-4 w-4" />
+                <Skeleton className="h-4 w-4 rounded-full" />
               </CardHeader>
-              <CardContent className="p-4">
+              <CardContent className="p-4 pt-0">
                 <Skeleton className="h-8 w-3/4 mb-2" />
                 <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-4 w-24 mt-2" />
               </CardContent>
             </Card>
           ))}
@@ -43,7 +42,6 @@ export default function Loading() {
                             <Skeleton className="h-6 w-1/2" />
                         </div>
                         <Skeleton className="h-3 w-full mt-1" />
-                        <Skeleton className="h-4 w-28 mt-2" />
                     </CardContent>
                 </Card>
             ))}
@@ -52,8 +50,8 @@ export default function Loading() {
         <Card className="shadow-sm">
           <CardHeader className="p-4">
             <CardTitle className="text-base flex items-center gap-2">
-              <Skeleton className="h-4 w-4" />
-              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-5 w-5 rounded-full" />
+              <Skeleton className="h-5 w-48" />
             </CardTitle>
             <Skeleton className="h-3 w-1/2 mt-1" />
           </CardHeader>
