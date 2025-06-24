@@ -14,15 +14,15 @@ body {
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 198 77% 53%; /* Calm Blue */
+    --primary: 198 77% 53%; /* Calm Blue: #29ABE2 */
     --primary-foreground: 0 0% 100%; /* White text on primary */
     --secondary: 240 4.8% 95.9%; /* Light Gray */
     --secondary-foreground: 240 10% 3.9%; /* Dark Gray */
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%; /* Medium Gray */
-    --accent: 220 50% 50%; /* Adjusted Green */
+    --accent: 120 60% 34%; /* Green for progress: #228B22 */
     --accent-foreground: 0 0% 98%; /* Near White */
-    --destructive: 0 84.2% 60.2%; /* Red */
+    --destructive: 0 72% 51%; /* Softer Red */
     --destructive-foreground: 0 0% 98%; /* Near White */
     --border: 240 5.9% 90%; /* Light Gray Border */
     --input: 240 5.9% 90%;
@@ -31,7 +31,7 @@ body {
 
     /* Chart Colors (Light) */
     --chart-1: 198 77% 53%; /* Primary */
-    --chart-2: 120 60% 40%; /* Accent Green */
+    --chart-2: 120 60% 34%; /* Accent Green */
     --chart-3: 30 80% 55%;  /* Orange */
     --chart-4: 260 70% 60%; /* Purple */
     --chart-5: 0 70% 65%;   /* Coral */
@@ -60,7 +60,7 @@ body {
     --secondary-foreground: 0 0% 98%;
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%; /* Lighter Gray for muted text */
-    --accent: 220 50% 40%; /* Brighter Teal */
+    --accent: 120 50% 45%; /* Brighter Green */
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 50.6%; /* Brighter Red */
     --destructive-foreground: 0 0% 98%;
@@ -71,7 +71,7 @@ body {
 
     /* Chart Colors (Dark) */
     --chart-1: 198 77% 53%; /* Primary */
-    --chart-2: 120 60% 45%; /* Accent Green (Brighter) */
+    --chart-2: 120 50% 45%; /* Accent Green (Brighter) */
     --chart-3: 30 75% 60%;  /* Orange (Brighter) */
     --chart-4: 260 65% 65%; /* Purple (Brighter) */
     --chart-5: 0 65% 70%;   /* Coral (Brighter) */
