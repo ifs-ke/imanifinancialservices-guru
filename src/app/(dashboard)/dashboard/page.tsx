@@ -10,11 +10,11 @@ import Link from 'next/link';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
-import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedDebt } from '@/store/budgetStore';
+import { useBudgetStore } from '@/store/budgetStore';
 import { useInvestmentStore } from '@/store/investmentStore';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, differenceInDays, parse, getDaysInMonth, isValid as isDateValid } from 'date-fns';
+import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, parse, isValid as isDateValid } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useSyncManager } from '@/hooks/useSyncManager';
@@ -79,9 +79,9 @@ interface KpiCardProps {
 
 const KpiCard: React.FC<KpiCardProps> = ({ title, value, status, description, link }) => {
     const statusConfig = {
-        'on-track': { icon: CheckCircle, color: 'text-accent' },
-        'under-budget': { icon: CheckCircle, color: 'text-accent' },
-        'over-budget': { icon: AlertTriangleIcon, color: 'text-destructive' },
+        'on-track': { icon: CheckCircle, color: 'text-primary' },
+        'under-budget': { icon: CheckCircle, color: 'text-accent' }, // Favorable
+        'over-budget': { icon: AlertTriangleIcon, color: 'text-destructive' }, // Unfavorable
         'warning': { icon: AlertTriangleIcon, color: 'text-yellow-500' },
         'no-data': { icon: AlertTriangleIcon, color: 'text-muted-foreground' },
         'neutral': { icon: Scale, color: 'text-primary' },
@@ -118,7 +118,6 @@ export default function DashboardPage() {
   const investmentItems = useInvestmentStore(state => state.investmentItems);
   const storeStartDate = useStatementStore(state => state.startDate);
   const storeEndDate = useStatementStore(state => state.endDate);
-  const currentBudgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
   const { toast } = useToast();
   const { gettingStartedDismissed, setGettingStartedDismissed: dismissGettingStartedCard } = useSyncManager();
@@ -163,10 +162,16 @@ export default function DashboardPage() {
   }, [allTransactions, debts, assetItems, otherLiabilityItems, investmentItems]);
 
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<{value: string, status: KpiCardProps['status']}>({ value: "N/A", status: "no-data"});
-  const monthlyBudgetedDebtPayment = useBudgetStore(selectTotalBudgetedDebt);
+  
+  const currentMonthBudgetedDebtPayment = useMemo(() => {
+    const currentMonthKey = format(new Date(), 'yyyy-MM');
+    return allBudgetItems
+        .filter(item => item.period === currentMonthKey && item.category === 'debt')
+        .reduce((sum, item) => sum + item.amount, 0);
+  }, [allBudgetItems]);
 
   useEffect(() => {
-    const fundsForDebtPayment = monthlyBudgetedDebtPayment;
+    const fundsForDebtPayment = currentMonthBudgetedDebtPayment;
     const totalDebtPrincipal = financialData.totalDebt;
 
     if (totalDebtPrincipal <= 0) {
@@ -188,48 +193,45 @@ export default function DashboardPage() {
         if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
         setDebtPayoffTimeline({ value: `${timelineString || '< 1 month'}`, status: 'neutral' });
     }
-  }, [financialData.totalDebt, monthlyBudgetedDebtPayment]);
+  }, [financialData.totalDebt, currentMonthBudgetedDebtPayment]);
 
   const budgetVariance = useMemo(() => {
-    // This logic remains the same as it was already well-defined
     const actualIncome = filteredTransactions.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
     const actualExpenses = filteredTransactions.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-    const budgetItemsForPeriod = allBudgetItems.filter(item => item.period === currentBudgetPeriod);
-    
-    const stmtStart = storeStartDate || dfnsStartOfMonth(new Date());
-    const stmtEnd = storeEndDate || dfnsEndOfMonth(new Date());
-    const daysInStatement = differenceInDays(stmtEnd, stmtStart) + 1;
-    const budgetMonthDate = parse(currentBudgetPeriod, 'yyyy-MM', new Date());
-    const daysInBudgetMonth = isDateValid(budgetMonthDate) ? getDaysInMonth(budgetMonthDate) : 30;
-
-    let proratedBudgetedIncome = 0;
-    let proratedBudgetedExpenses = 0;
-    if (daysInBudgetMonth > 0) {
-        const budgetMultiplier = daysInStatement / daysInBudgetMonth;
-        budgetItemsForPeriod.forEach(item => {
-            if (item.category === 'income') proratedBudgetedIncome += item.amount * budgetMultiplier;
-            else if (item.category !== 'unplanned-expense') proratedBudgetedExpenses += item.amount * budgetMultiplier;
-        });
-    }
-
-    if (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0 && actualIncome === 0 && actualExpenses === 0) {
-        return { value: 0, status: 'no-data' as const };
-    }
-    const netBudgeted = proratedBudgetedIncome - proratedBudgetedExpenses;
     const netActual = actualIncome - actualExpenses;
+
+    const budgetPeriodForComparison = storeStartDate && isDateValid(storeStartDate)
+        ? format(storeStartDate, 'yyyy-MM')
+        : format(new Date(), 'yyyy-MM');
+
+    const budgetItemsForComparisonMonth = allBudgetItems.filter(item => item.period === budgetPeriodForComparison);
+
+    if (budgetItemsForComparisonMonth.length === 0) {
+        return { value: netActual, status: 'no-data' as const, budgetPeriod: budgetPeriodForComparison };
+    }
+
+    const totalBudgetedIncome = budgetItemsForComparisonMonth
+        .filter(i => i.category === 'income')
+        .reduce((sum, i) => sum + i.amount, 0);
+        
+    const totalBudgetedSpending = budgetItemsForComparisonMonth
+        .filter(i => i.category !== 'income' && i.category !== 'unplanned-expense')
+        .reduce((sum, i) => sum + i.amount, 0);
+
+    const netBudgeted = totalBudgetedIncome - totalBudgetedSpending;
     const variance = netActual - netBudgeted;
+
+    let status: KpiCardProps['status'] = 'neutral';
     const threshold = Math.max(Math.abs(netBudgeted * 0.05), 50);
-    let status: KpiCardProps['status'] = 'no-data';
-    if ( (proratedBudgetedIncome === 0 && proratedBudgetedExpenses === 0) && (actualIncome === 0 && actualExpenses === 0) ) status = 'no-data';
-    else if (Math.abs(variance) <= threshold) status = 'on-track';
+    
+    if (Math.abs(variance) <= threshold) status = 'on-track';
     else if (variance > 0) status = 'under-budget';
     else status = 'over-budget';
 
-    return { value: variance, status };
-  }, [filteredTransactions, allBudgetItems, currentBudgetPeriod, storeStartDate, storeEndDate]);
+    return { value: variance, status, budgetPeriod: budgetPeriodForComparison };
+  }, [filteredTransactions, allBudgetItems, storeStartDate]);
 
   const trendChartData = useMemo(() => {
-    // This logic also remains the same
     const monthlyData: { [key: string]: { month: string; income: number; expense: number } } = {};
     const sortedAllTransactions = [...allTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     sortedAllTransactions.forEach(tx => {
@@ -317,14 +319,18 @@ export default function DashboardPage() {
                 title="Budget Variance"
                 value={budgetVariance.status !== 'no-data' ? `${budgetVariance.value >= 0 ? '+' : ''}${formatCurrency(budgetVariance.value)}` : 'N/A'}
                 status={budgetVariance.status}
-                description={`vs. prorated budget for ${format(parse(currentBudgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy')}`}
-                link={{ href: '/statements', label: 'View Full Report' }}
+                description={
+                    budgetVariance.status === 'no-data'
+                    ? `No budget set for ${format(parse(budgetVariance.budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy')}`
+                    : `Net flow for period vs. full budget for ${format(parse(budgetVariance.budgetPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy')}`
+                }
+                link={{ href: '/budget', label: 'View Budget' }}
             />
              <KpiCard
                 title="Estimated Debt Payoff"
                 value={debtPayoffTimeline.value}
                 status={debtPayoffTimeline.status}
-                description="Based on Avalanche method & current budget"
+                description="Based on Avalanche method & current month's budget"
                 link={{ href: '/debt', label: 'Review Debts' }}
             />
         </div>
