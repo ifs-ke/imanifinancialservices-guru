@@ -1,3 +1,4 @@
+
 // src/hooks/useSyncManager.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/nextjs';
@@ -5,7 +6,7 @@ import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useBudgetStore } from '@/store/budgetStore';
-import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
+import { useWeeklyReviewStore, getWeekKey } from '@/store/weeklyReviewStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useInvestmentStore } from '@/store/investmentStore';
 import { useToast } from '@/hooks/use-toast';
@@ -131,12 +132,45 @@ export function useSyncManager() {
   }, [getTransactionsState, getDebtState, getInvestmentState, getStatementState, getBudgetState, getWeeklyReviewState, getNotificationState]);
 
   const computeDelta = useCallback((): Omit<SaveDataPayloadType, 'payloadDataHash' | 'lastKnownServerHash'> | null => {
+    const currentData = getCurrentLocalDataForFullSnapshot();
+
     if (!lastSyncedData.current) {
-        logWarn("computeDelta called but lastSyncedData is null. Cannot compute delta.", { userId }, userId);
-        return null;
+        logWarn("computeDelta: lastSyncedData is null. Treating all current local data as a 'created' delta for initial save.", { userId }, userId);
+
+        const hasAnyData = 
+            currentData.transactions.length > 0 ||
+            currentData.debts.length > 0 ||
+            currentData.investmentItems.length > 0 ||
+            currentData.assetItems.length > 0 ||
+            currentData.otherLiabilityItems.length > 0 ||
+            currentData.budgetItems.length > 0 ||
+            Object.keys(currentData.ownedReviews).length > 0;
+
+        if (!hasAnyData) {
+            return null; // Nothing to save.
+        }
+
+        const reviewsToCreate = Object.entries(currentData.ownedReviews).map(([weekKey, reviewData]) => ({
+            ...reviewData,
+            weekKey,
+        }));
+
+        const initialPayload: Omit<SaveDataPayloadType, 'payloadDataHash' | 'lastKnownServerHash'> = {
+            transactions: { created: currentData.transactions.length > 0 ? currentData.transactions : undefined },
+            debts: { created: currentData.debts.length > 0 ? currentData.debts : undefined },
+            investmentItems: { created: currentData.investmentItems.length > 0 ? currentData.investmentItems : undefined },
+            assetItems: { created: currentData.assetItems.length > 0 ? currentData.assetItems : undefined },
+            otherLiabilityItems: { created: currentData.otherLiabilityItems.length > 0 ? currentData.otherLiabilityItems : undefined },
+            budgetItems: { created: currentData.budgetItems.length > 0 ? currentData.budgetItems : undefined },
+            ownedReviews: { created: reviewsToCreate.length > 0 ? reviewsToCreate : undefined },
+            startDate: currentData.startDate ?? null,
+            endDate: currentData.endDate ?? null,
+            gettingStartedDismissed: currentData.gettingStartedDismissed,
+        };
+        
+        return initialPayload;
     }
     
-    const currentData = getCurrentLocalDataForFullSnapshot();
     const previousData = lastSyncedData.current;
     
     const delta: Omit<SaveDataPayloadType, 'payloadDataHash' | 'lastKnownServerHash'> = {};
@@ -553,7 +587,7 @@ export function useSyncManager() {
             });
             return;
         } else {
-             logInfo("Manual Sync: hasLocalChanges was true, but delta was null. Resetting state.", { userId: currentUserId }, currentUserId);
+             logInfo("Manual Sync: hasLocalChanges was true, but delta was null. Resetting state and attempting fetch.", { userId: currentUserId }, currentUserId);
              hasLocalChangesRef.current = false;
         }
       } catch (e: any) {
