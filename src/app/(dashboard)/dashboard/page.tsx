@@ -21,6 +21,10 @@ import { useSyncManager } from '@/hooks/useSyncManager';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useUser } from "@clerk/nextjs";
 
+// --- Helper Functions ---
+const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
+const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, debt) => sum + (debt.principal || 0), 0);
+
 // --- Internal Components for Dashboard ---
 
 interface MetricCardProps {
@@ -107,10 +111,6 @@ const KpiCard: React.FC<KpiCardProps> = ({ title, value, status, description, li
     );
 };
 
-// --- Helper Functions ---
-const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
-const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, debt) => sum + (debt.principal || 0), 0);
-
 export default function DashboardPage() {
   const allTransactions = useTransactionsStore(state => state.transactions);
   const debts = useDebtStore(state => state.debts);
@@ -135,31 +135,30 @@ export default function DashboardPage() {
   }, [allTransactions, storeStartDate, storeEndDate]);
 
   const financialData = useMemo(() => {
+    // Net Worth is a point-in-time calculation, so it uses all data.
     const totalAssetsFromStatement = calculateTotal(assetItems);
     const totalInvestmentValue = investmentItems.reduce((sum, item) => sum + (item.currentValue || 0), 0);
     const netWorthTotalAssets = totalAssetsFromStatement + totalInvestmentValue;
-
     const totalDebtValue = calculateDebtTotal(debts);
     const totalOtherLiabilitiesValue = calculateTotal(otherLiabilityItems);
     const totalLiabilitiesValue = totalDebtValue + totalOtherLiabilitiesValue;
     const netWorthValue = netWorthTotalAssets - totalLiabilitiesValue;
 
-    const totalIncomeAllTime = calculateTotal(allTransactions.filter(tx => tx.amount > 0));
-    const totalExpensesAllTime = Math.abs(calculateTotal(allTransactions.filter(tx => tx.amount < 0)));
-    const netCashFlowAllTime = totalIncomeAllTime - totalExpensesAllTime;
+    // Cash Flow is period-specific, so it uses filtered transactions.
+    const totalIncomeForPeriod = calculateTotal(filteredTransactions.filter(tx => tx.amount > 0));
+    const totalExpensesForPeriod = Math.abs(calculateTotal(filteredTransactions.filter(tx => tx.amount < 0)));
+    const cashFlowForPeriod = totalIncomeForPeriod - totalExpensesForPeriod;
 
     return {
       netWorth: netWorthValue,
-      cashFlow: netCashFlowAllTime,
+      cashFlowForPeriod,
       totalDebt: totalDebtValue,
       totalAssets: netWorthTotalAssets,
       totalLiabilities: totalLiabilitiesValue,
-      totalIncome: totalIncomeAllTime,
-      totalExpenses: totalExpensesAllTime,
       totalOtherLiabilities: totalOtherLiabilitiesValue,
       totalInvestmentValue: totalInvestmentValue,
     };
-  }, [allTransactions, debts, assetItems, otherLiabilityItems, investmentItems]);
+  }, [filteredTransactions, debts, assetItems, otherLiabilityItems, investmentItems]);
 
   const [debtPayoffTimeline, setDebtPayoffTimeline] = useState<{value: string, status: KpiCardProps['status']}>({ value: "N/A", status: "no-data"});
   
@@ -254,7 +253,7 @@ export default function DashboardPage() {
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8 bg-background">
       <PageHeader
         title="Dashboard"
-        description={<>High-level overview of your finances. Date range is for analysis, not overall metrics.</>}
+        description={<>High-level overview of your finances. Cash Flow & Budget Variance are based on the date range set in Statements.</>}
         icon={LayoutDashboard}
       />
 
@@ -276,12 +275,12 @@ export default function DashboardPage() {
             valueColorClass={financialData.netWorth >= 0 ? 'text-primary' : 'text-destructive'}
           />
           <MetricCard
-            title="Cash Flow (Overall)"
-            value={financialData.cashFlow}
-            icon={financialData.cashFlow >= 0 ? TrendingUp : TrendingDown}
-            primaryDescription="Total income minus total expenses"
+            title="Cash Flow (Period)"
+            value={financialData.cashFlowForPeriod}
+            icon={financialData.cashFlowForPeriod >= 0 ? TrendingUp : TrendingDown}
+            primaryDescription="Income minus expenses in date range"
             primaryLink={{ href: '/income-expenses', label: 'View Analysis' }}
-            valueColorClass={financialData.cashFlow >= 0 ? 'text-accent' : 'text-destructive'}
+            valueColorClass={financialData.cashFlowForPeriod >= 0 ? 'text-accent' : 'text-destructive'}
           />
           <MetricCard
             title="Total Assets"
