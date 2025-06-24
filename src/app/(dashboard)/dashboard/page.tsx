@@ -257,6 +257,7 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description={<>High-level overview of your finances for period: <span className='font-semibold'>{storeStartDate && isDateValid(storeStartDate) ? format(storeStartDate, 'PP') : 'Start'} to {storeEndDate && isDateValid(storeEndDate) ? format(storeEndDate, 'PP') : 'End'}</span></>}
+        icon={LayoutDashboard}
       />
 
       <main className="flex-1 grid gap-6 px-4 md:px-6 lg:px-8">
