@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ArrowRight, TrendingUp, TrendingDown, Scale, Coins, Banknote, LineChart as LineChartIcon, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, BookOpen, XCircle } from 'lucide-react';
+import { LayoutDashboard, ArrowRight, TrendingUp, TrendingDown, Scale, Coins, Banknote, LineChart as LineChartIcon, Target, CheckCircle, AlertTriangle as AlertTriangleIcon, BookOpen, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
