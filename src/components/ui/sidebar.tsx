@@ -208,7 +208,12 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
       switch (syncStatus) {
         case 'syncing': SyncIcon = RefreshCw; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
         case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
-        case 'local_changes': SyncIcon = UploadCloud; syncStatusText = 'Local Changes'; syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; iconColor = 'text-yellow-500'; break;
+        case 'local_changes': 
+          SyncIcon = UploadCloud; 
+          syncStatusText = 'Review & Sync'; 
+          syncTooltipText = 'You have unsaved changes. Click to review and sync.'; 
+          iconColor = 'text-yellow-500'; 
+          break;
         case 'error': SyncIcon = AlertTriangle; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
         case 'hash_mismatch': SyncIcon = AlertTriangle; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. A resolution is required.'; iconColor = 'text-destructive'; isSyncButtonClickable = false; break;
         case 'loading_local': SyncIcon = RefreshCw; syncStatusText = 'Loading...'; syncTooltipText = 'Loading local data...'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
