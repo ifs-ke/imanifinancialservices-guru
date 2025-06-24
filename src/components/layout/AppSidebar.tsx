@@ -1,4 +1,3 @@
-
 // src/components/layout/AppSidebar.tsx
 "use client";
 
@@ -125,14 +124,14 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
           syncTooltipText = 'Unsynced local changes. Click to save to cloud.'; 
           iconColor = 'text-yellow-500'; 
           break;
-        case 'local': // Data is loaded locally, fetch may or may not be active
+        case 'local':
           if (isFetchDisabled) {
             SyncIcon = Cloud; 
             syncStatusText = 'Local (Cloud Off)';
             syncTooltipText = 'Cloud fetching disabled. Data is local. Click to save local changes.';
             iconColor = 'text-primary';
           } else {
-            SyncIcon = Cloud; // Data is available locally, could be stale if fetch hasn't run
+            SyncIcon = Cloud;
             syncStatusText = 'Local Data';
             syncTooltipText = 'Local data active. Click to sync with server.';
             iconColor = 'text-primary';

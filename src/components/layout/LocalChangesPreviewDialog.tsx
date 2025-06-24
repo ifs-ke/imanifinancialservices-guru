@@ -1,4 +1,3 @@
-
 // src/components/layout/LocalChangesPreviewDialog.tsx
 'use client';
 
@@ -15,13 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Info, Save, XCircle, AlertTriangle, RotateCcw } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { Alert, AlertDescription as UIAlertDescription } from "@/components/ui/alert"; // Renamed AlertDescription to avoid conflict
-import type { SaveDataPayload } from '@/lib/schemas'; // For type casting
+import { Alert, AlertDescription as UIAlertDescription } from "@/components/ui/alert";
+import type { SaveDataPayload } from '@/lib/schemas';
 
 interface LocalChangesPreviewDialogProps {
   isOpen: boolean;
-  payloadPreview: string | null; // Initial stringified payload
-  onConfirm: (modifiedPayloadObject?: Record<string, any>) => Promise<void>; // Callback receives parsed object
+  payloadPreview: string | null;
+  onConfirm: (modifiedPayloadObject?: Record<string, any>) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -38,13 +37,12 @@ const LocalChangesPreviewDialog: React.FC<LocalChangesPreviewDialogProps> = ({
   useEffect(() => {
     if (isOpen && payloadPreview) {
       try {
-        // Format the initial payload for better readability
         const parsed = JSON.parse(payloadPreview);
         setEditablePayloadString(JSON.stringify(parsed, null, 2));
       } catch (e) {
-        setEditablePayloadString(payloadPreview); // Fallback to raw string if initial parse fails
+        setEditablePayloadString(payloadPreview);
       }
-      setParseError(null); // Clear previous errors
+      setParseError(null);
     }
   }, [isOpen, payloadPreview]);
 
@@ -53,16 +51,12 @@ const LocalChangesPreviewDialog: React.FC<LocalChangesPreviewDialogProps> = ({
     setParseError(null);
     try {
       const modifiedPayloadObject = JSON.parse(editablePayloadString);
-      // Type assertion for clarity, assuming SaveDataPayload is the expected structure
       await onConfirm(modifiedPayloadObject as SaveDataPayload);
-      // Dialog closure will be handled by useSyncManager setting isPreviewingLocalChanges to false
     } catch (e: any) {
       setParseError(`Invalid JSON: ${e.message}. Please correct it or reset.`);
+    } finally {
       setIsConfirming(false);
     }
-    // Do not call setIsConfirming(false) here if onConfirm handles dialog closure,
-    // but if onConfirm might fail and keep dialog open, then set it false in a finally block or on error.
-    // For now, assuming onConfirm leads to dialog close by parent state change.
   };
 
   const handleReset = () => {
@@ -84,32 +78,31 @@ const LocalChangesPreviewDialog: React.FC<LocalChangesPreviewDialogProps> = ({
       <DialogContent className="max-w-2xl lg:max-w-3xl xl:max-w-4xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Info className="h-5 w-5 text-primary" /> Preview & Modify Local Changes
+            <Info className="h-5 w-5 text-primary" /> Preview Changes to Sync
           </DialogTitle>
           <DialogDescription>
-            Review the local data payload below. You can make direct modifications to the JSON.
-            This action will attempt to save these (potentially modified) local changes to the cloud.
+            The following data represents the changes (created, updated, deleted) that will be sent to the server. You can review or modify this data before syncing.
           </DialogDescription>
         </DialogHeader>
 
         <Alert variant="destructive" className="mt-4">
           <AlertTriangle className="h-4 w-4" />
           <UIAlertDescription>
-            <strong>Warning:</strong> Editing raw JSON is powerful but risky. Ensure your changes maintain the correct data structure and types to avoid errors. Invalid JSON will prevent saving.
+            <strong>Warning:</strong> Editing raw JSON is an advanced feature. Ensure your changes maintain the correct data structure and types to avoid errors. Invalid JSON will prevent saving.
           </UIAlertDescription>
         </Alert>
 
         <div className="py-4 space-y-3 max-h-[60vh] flex flex-col">
-          <p className="text-sm font-medium">Local Data Payload (Editable JSON):</p>
+          <p className="text-sm font-medium">Local Data Changes (Editable JSON):</p>
           <ScrollArea className="flex-grow rounded-md border bg-background">
             <Textarea
               value={editablePayloadString}
               onChange={(e) => {
                 setEditablePayloadString(e.target.value);
-                setParseError(null); // Clear parse error on edit
+                setParseError(null);
               }}
               className="text-xs font-mono p-2 h-full min-h-[250px] resize-none"
-              placeholder="JSON payload data..."
+              placeholder="JSON payload of changes..."
             />
           </ScrollArea>
           {parseError && (
@@ -121,13 +114,13 @@ const LocalChangesPreviewDialog: React.FC<LocalChangesPreviewDialogProps> = ({
             <Button variant="outline" onClick={handleReset} disabled={isConfirming}>
                  <RotateCcw className="mr-2 h-4 w-4" /> Reset to Original
             </Button>
-            <div className="flex-grow"></div> {/* Spacer */}
+            <div className="flex-grow"></div>
             <Button variant="ghost" onClick={onCancel} disabled={isConfirming}>
                  <XCircle className="mr-2 h-4 w-4" /> Cancel Sync
             </Button>
             <Button onClick={handleConfirmClick} disabled={isConfirming || !editablePayloadString.trim() || !!parseError}>
               {isConfirming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              {isConfirming ? 'Syncing...' : 'Confirm & Proceed with Sync'}
+              {isConfirming ? 'Syncing...' : 'Confirm & Sync Changes'}
             </Button>
         </DialogFooter>
       </DialogContent>
