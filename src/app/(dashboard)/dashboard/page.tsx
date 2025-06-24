@@ -107,6 +107,10 @@ const KpiCard: React.FC<KpiCardProps> = ({ title, value, status, description, li
     );
 };
 
+// --- Helper Functions ---
+const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
+const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, debt) => sum + (debt.principal || 0), 0);
+
 export default function DashboardPage() {
   const allTransactions = useTransactionsStore(state => state.transactions);
   const debts = useDebtStore(state => state.debts);
@@ -245,9 +249,6 @@ export default function DashboardPage() {
     income: { label: "Income", color: "hsl(var(--accent))" },
     expense: { label: "Expenses", color: "hsl(var(--destructive))" },
   } satisfies ChartConfig;
-
-  const calculateTotal = (items: { amount: number }[]) => items.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const calculateDebtTotal = (items: { principal: number }[]) => items.reduce((sum, item) => sum + (item.principal || 0), 0);
 
   return (
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8 bg-background">
