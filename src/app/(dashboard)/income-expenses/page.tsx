@@ -127,10 +127,9 @@ export default function IncomeExpensesPage() {
         ...data
     }));
 
-    const topByAmount = [...categoriesArray].sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 3);
-    const topByFrequency = [...categoriesArray].sort((a, b) => b.count - a.count).slice(0, 3);
-
-    return { topByAmount, topByFrequency };
+    const topByAmount = [...categoriesArray].sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 5);
+    
+    return { topByAmount };
   }, [expenseTransactions]);
 
   const renderTransactionRow = (tx: TransactionWithId, isExpense = false) => (
@@ -224,11 +223,11 @@ export default function IncomeExpensesPage() {
             <h2 className="text-xl font-semibold flex items-center gap-2 mb-3">
                 <Award className="h-5 w-5 text-primary" /> Top Spending Areas
             </h2>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6">
                 <Card>
                     <CardHeader className="p-4">
-                        <CardTitle className="text-base">By Total Amount</CardTitle>
-                        <CardDescription className="text-xs">Highest spending categories by amount.</CardDescription>
+                        <CardTitle className="text-base">Top 5 by Total Amount Spent</CardTitle>
+                        <CardDescription className="text-xs">Your highest spending categories by amount.</CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
                         <div className="space-y-4">
@@ -242,28 +241,6 @@ export default function IncomeExpensesPage() {
                                 </div>
                             ))}
                             {topSpendingCategories.topByAmount.length === 0 && (
-                                <p className="text-sm text-muted-foreground text-center py-4">No categorized expenses found.</p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="text-base">By Transaction Count</CardTitle>
-                        <CardDescription className="text-xs">Most frequent spending categories.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0">
-                        <div className="space-y-4">
-                            {topSpendingCategories.topByFrequency.map((cat, index) => (
-                                <div key={index} className="flex justify-between items-center text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-muted-foreground w-6 text-center">#{index + 1}</span>
-                                        <span className="font-medium truncate" title={cat.name}>{cat.name}</span>
-                                    </div>
-                                    <span className="font-mono font-semibold">{cat.count} txns</span>
-                                </div>
-                            ))}
-                            {topSpendingCategories.topByFrequency.length === 0 && (
                                 <p className="text-sm text-muted-foreground text-center py-4">No categorized expenses found.</p>
                             )}
                         </div>
