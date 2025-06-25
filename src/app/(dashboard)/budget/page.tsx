@@ -296,30 +296,26 @@ export default function BudgetPage() {
             <CardTitle>Budget Summary for {formatPeriodForDisplay(budgetPeriod)}</CardTitle>
             <CardDescription>Overview of your planned budget for the selected month.</CardDescription>
         </CardHeader>
-         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 text-sm p-6">
-             <div className="flex flex-col p-3 rounded-md border bg-accent/10">
+         <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm p-6">
+            <div className="flex flex-col p-3 rounded-md border bg-accent/10">
                 <span className="text-muted-foreground mb-1">Total Income</span>
                 <span className="font-bold text-lg font-mono text-accent">{formatCurrency(totalIncome)}</span>
             </div>
-             <div className="flex flex-col p-3 rounded-md border bg-destructive/10">
-                <span className="text-muted-foreground mb-1">Total Expenses</span>
-                 <span className="font-bold text-lg font-mono text-destructive">{formatCurrency(totalExpenses)}</span>
-                 <span className="text-xs text-muted-foreground">(Recurring: {formatCurrency(totalRecurringExpenses)}, One-Time: {formatCurrency(totalOneTimeExpenses)})</span>
+            <div className="flex flex-col p-3 rounded-md border bg-destructive/10">
+                <span className="text-muted-foreground mb-1">Total Budgeted Spending</span>
+                <span className="font-bold text-lg font-mono text-destructive">{formatCurrency(totalExpenses)}</span>
+                <p className="text-xs text-muted-foreground mt-1">
+                    Expenses: {formatCurrency(totalRecurringExpenses + totalOneTimeExpenses)},
+                    Goals: {formatCurrency(totalGoals)},
+                    Debt: {formatCurrency(totalDebtAllocation)}
+                </p>
             </div>
-             <div className="flex flex-col p-3 rounded-md border bg-primary/10">
-                <span className="text-muted-foreground mb-1">Total Goals</span>
-                <span className="font-bold text-lg font-mono text-primary">{formatCurrency(totalGoals)}</span>
-            </div>
-            <div className="flex flex-col p-3 rounded-md border bg-destructive/5">
-                <span className="text-muted-foreground mb-1">Total Debt Allocation</span>
-                <span className="font-bold text-lg font-mono text-destructive/80">{formatCurrency(totalDebtAllocation)}</span>
-            </div>
-             <div className="flex flex-col p-3 rounded-md border bg-muted">
+            <div className="flex flex-col p-3 rounded-md border bg-muted">
                 <span className="text-muted-foreground mb-1">Expected Net</span>
-                 <span className={cn("font-bold text-lg font-mono", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>{formatCurrency(netBudgeted)}</span>
-                  {netBudgeted !== 0 && (<span className={cn("text-xs mt-1", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>{netBudgeted > 0 ? `${formatCurrency(netBudgeted)} Left Over` : `${formatCurrency(Math.abs(netBudgeted))} Shortfall`}</span>)}
-             </div>
-         </CardContent>
+                <span className={cn("font-bold text-lg font-mono", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>{formatCurrency(netBudgeted)}</span>
+                {netBudgeted !== 0 && (<span className={cn("text-xs mt-1", netBudgeted > 0 ? 'text-primary' : 'text-destructive')}>{netBudgeted > 0 ? `${formatCurrency(netBudgeted)} Left Over` : `${formatCurrency(Math.abs(netBudgeted))} Shortfall`}</span>)}
+            </div>
+        </CardContent>
       </Card>
 
       <main className="flex flex-col gap-4 px-4 md:px-6 lg:mx-8">

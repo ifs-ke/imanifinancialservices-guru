@@ -191,7 +191,10 @@ export const selectTotalBudgetedDebt = (state: BudgetState): number =>
     sumByCategoryAndPeriod(state.budgetItems, 'debt', state.budgetPeriod);
 
 export const selectTotalBudgetedExpenses = (state: BudgetState): number =>
-    selectTotalRecurringExpenses(state) + selectTotalOneTimeExpenses(state);
+    selectTotalRecurringExpenses(state) + 
+    selectTotalOneTimeExpenses(state) +
+    selectTotalGoals(state) +
+    selectTotalBudgetedDebt(state);
 
 export const selectNetBudgeted = (state: BudgetState): number =>
-    selectTotalBudgetedIncome(state) - selectTotalBudgetedExpenses(state) - selectTotalGoals(state) - selectTotalBudgetedDebt(state);
+    selectTotalBudgetedIncome(state) - selectTotalBudgetedExpenses(state);
