@@ -56,6 +56,7 @@ const AccordionTriggerWithActions = React.forwardRef<
     icon: React.ElementType;
     onAddClick: () => void;
     itemCount: number;
+    totalAmount: number;
     // Explicitly list props that might be passed to ShadAccordionTrigger from AccordionItem
     'data-state'?: 'open' | 'closed';
     'id'?: string;
@@ -64,20 +65,19 @@ const AccordionTriggerWithActions = React.forwardRef<
     'aria-disabled'?: boolean;
     'disabled'?: boolean;
   }
->(({ title, description, icon: Icon, onAddClick, itemCount, className, ...props }, ref) => { // Removed children as it's not used directly by outer div
+>(({ title, description, icon: Icon, onAddClick, itemCount, totalAmount, className, ...props }, ref) => {
   return (
     <div
       ref={ref}
       className={cn(
-        "flex items-center justify-between w-full hover:bg-muted/50", // Removed data-[state] dependent background here, applied by Shadcn trigger
-        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all", // data-state needs to be on the element Radix controls
-        props['data-state'] === 'open' ? 'rounded-b-none' : '', // Apply rounding based on explicit prop
+        "flex items-center justify-between w-full hover:bg-muted/50", 
+        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all", 
+        props['data-state'] === 'open' ? 'rounded-b-none' : '', 
         className
       )}
-      data-state={props['data-state']} // Pass data-state for styling based on Radix state
+      data-state={props['data-state']} 
     >
       <ShadAccordionTrigger
-        // Pass only valid props for ShadAccordionTrigger
         id={props.id}
         aria-controls={props['aria-controls']}
         aria-expanded={props['aria-expanded']}
@@ -86,7 +86,6 @@ const AccordionTriggerWithActions = React.forwardRef<
         data-state={props['data-state']}
         className={cn(
           "flex-grow p-4 hover:no-underline flex items-center gap-3 text-left",
-          // Apply background based on data-state here if needed, or let Shadcn handle it
            props['data-state'] === 'open' ? 'bg-muted/60' : ''
         )}
         onClick={(e) => {
@@ -100,7 +99,12 @@ const AccordionTriggerWithActions = React.forwardRef<
           <h3 className="text-base font-semibold">{title}</h3>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
-        {itemCount > 0 && <span className="text-sm text-muted-foreground ml-auto mr-3 flex-shrink-0">({itemCount} items)</span>}
+        {itemCount > 0 && (
+          <div className="text-right ml-auto mr-3 flex-shrink-0">
+            <p className="font-semibold text-base text-foreground">{formatCurrency(totalAmount)}</p>
+            <p className="text-xs text-muted-foreground">({itemCount} items)</p>
+          </div>
+        )}
       </ShadAccordionTrigger>
       <Button
           variant="ghost"
@@ -320,17 +324,21 @@ export default function BudgetPage() {
 
       <main className="flex flex-col gap-4 px-4 md:px-6 lg:mx-8">
         <Accordion type="multiple" className="w-full space-y-4">
-         {budgetCategories.map(({ name, key, icon: Icon, description }) => (
+         {budgetCategories.map(({ name, key, icon: Icon, description }) => {
+            const itemsForCategory = groupedBudgetItems[key as BudgetItemCategory] || [];
+            const totalForCategory = itemsForCategory.reduce((sum, item) => sum + (item.amount || 0), 0);
+            return (
              <AccordionItem value={key} key={key} className="border-none shadow-sm rounded-lg overflow-hidden bg-card">
                  <AccordionTriggerWithActions
                     title={name}
                     description={description}
                     icon={Icon}
                     onAddClick={() => handleAddClick(key as BudgetItemCategory)}
-                    itemCount={groupedBudgetItems[key as BudgetItemCategory]?.length || 0}
+                    itemCount={itemsForCategory.length}
+                    totalAmount={totalForCategory}
                   />
                   <AccordionContent className="p-0 border-t border-border">
-                      {(groupedBudgetItems[key as BudgetItemCategory]?.length || 0) > 0 ? (
+                      {(itemsForCategory.length) > 0 ? (
                         <ScrollArea className="h-[350px] w-full">
                             <Table>
                                 <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
@@ -341,7 +349,7 @@ export default function BudgetPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {groupedBudgetItems[key as BudgetItemCategory].map((item) => (
+                                    {itemsForCategory.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell className="font-medium max-w-[150px] truncate pl-4 pr-2" title={item.description}>{item.description}</TableCell>
                                             <TableCell className="text-right font-mono px-2">{formatCurrency(item.amount)}</TableCell>
@@ -374,7 +382,8 @@ export default function BudgetPage() {
                       )}
                   </AccordionContent>
              </AccordionItem>
-         ))}
+            );
+        })}
          </Accordion>
       </main>
 
