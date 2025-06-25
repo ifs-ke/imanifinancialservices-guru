@@ -231,14 +231,17 @@ export default function IncomeExpensesPage() {
                         <CardDescription className="text-xs">Your highest spending categories by amount.</CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             {topSpendingCategories.topByAmount.map((cat, index) => (
                                 <div key={index} className="flex justify-between items-center text-sm">
                                     <div className="flex items-center gap-2">
                                         <span className="font-semibold text-muted-foreground w-6 text-center">#{index + 1}</span>
                                         <span className="font-medium truncate" title={cat.name}>{cat.name}</span>
                                     </div>
-                                    <span className="font-mono font-semibold">{formatCurrency(cat.totalAmount)}</span>
+                                    <div className="text-right">
+                                        <p className="font-mono font-semibold">{formatCurrency(cat.totalAmount)}</p>
+                                        <p className="text-xs text-muted-foreground">{cat.count} transaction{cat.count > 1 ? 's' : ''}</p>
+                                    </div>
                                 </div>
                             ))}
                             {topSpendingCategories.topByAmount.length === 0 && (
