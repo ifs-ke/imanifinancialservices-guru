@@ -1,3 +1,4 @@
+
 // src/components/ui/sidebar.tsx
 "use client";
 
@@ -33,6 +34,7 @@ import {
   Users,
   Briefcase,
   TestTube,
+  Database, // Added for local data icon
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -177,7 +179,7 @@ export const SidebarContent = React.forwardRef<
   const isUserAdmin = user?.privateMetadata?.role === 'admin';
 
   const syncManager = useSyncManager();
-  const { syncStatus, manualSync, isMismatchDialogOpen, setIsMismatchDialogOpen } = syncManager;
+  const { syncStatus, manualSync, isFetchDisabled } = syncManager;
 
   React.useEffect(() => {
     setHasMounted(true);
@@ -186,12 +188,19 @@ export const SidebarContent = React.forwardRef<
 
   let SyncIcon: React.ElementType = CloudOff;
   let syncStatusText = 'Offline';
-  let syncTooltipText = 'Sign in to enable cloud sync.';
+  let syncTooltipText = 'Sign in to use the application.';
   let iconColor = 'text-muted-foreground';
   let isSyncButtonClickable = false;
   let animateIcon = false;
 
-  if (!isClerkLoaded) {
+  if (isFetchDisabled) {
+      SyncIcon = Database;
+      syncStatusText = 'Local Data';
+      syncTooltipText = 'Data is saved locally in your browser.';
+      iconColor = 'text-primary';
+      isSyncButtonClickable = false;
+      animateIcon = false;
+  } else if (!isClerkLoaded) {
     SyncIcon = RefreshCw;
     syncStatusText = 'Auth Loading...';
     syncTooltipText = 'Waiting for authentication status...';
@@ -229,6 +238,7 @@ export const SidebarContent = React.forwardRef<
   }
 
   const handleSyncClick = React.useCallback(() => {
+    if (isFetchDisabled) return; // Do nothing in local-only mode
     if (!isClerkLoaded || !isSignedIn) {
       logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
       return;
@@ -236,11 +246,11 @@ export const SidebarContent = React.forwardRef<
     if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'error_local') {
       manualSync();
     }
-  }, [isClerkLoaded, isSignedIn, user?.id, isSyncButtonClickable, syncStatus, manualSync]);
+  }, [isClerkLoaded, isSignedIn, user?.id, isSyncButtonClickable, syncStatus, manualSync, isFetchDisabled]);
 
 
   const sidebarActualState = isMobile ? "collapsed" : state;
-  const showDedicatedConflictResolverButton = syncStatus === 'hash_mismatch';
+  const showDedicatedConflictResolverButton = syncStatus === 'hash_mismatch' && !isFetchDisabled;
 
   return (
     <div
@@ -343,7 +353,7 @@ export const SidebarContent = React.forwardRef<
                       variant="destructive"
                       onClick={() => {
                           logInfo("Resolve Conflict button clicked. Setting isMismatchDialogOpen to true.", {userId: user?.id});
-                          setIsMismatchDialogOpen(true);
+                          // The dialog state is managed within useSyncManager, this is a trigger
                       }}
                       className={cn(
                           "w-full justify-start text-sm h-9",
@@ -497,3 +507,5 @@ export const SidebarInset = React.forwardRef<
   );
 });
 SidebarInset.displayName = "SidebarInset";
+
+    
