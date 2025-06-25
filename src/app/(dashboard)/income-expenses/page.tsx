@@ -128,8 +128,9 @@ export default function IncomeExpensesPage() {
     }));
 
     const topByAmount = [...categoriesArray].sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 5);
+    const topByCount = [...categoriesArray].sort((a, b) => b.count - a.count).slice(0, 5);
     
-    return { topByAmount };
+    return { topByAmount, topByCount };
   }, [expenseTransactions]);
 
   const renderTransactionRow = (tx: TransactionWithId, isExpense = false) => (
@@ -223,7 +224,7 @@ export default function IncomeExpensesPage() {
             <h2 className="text-xl font-semibold flex items-center gap-2 mb-3">
                 <Award className="h-5 w-5 text-primary" /> Top Spending Areas
             </h2>
-            <div className="grid gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                     <CardHeader className="p-4">
                         <CardTitle className="text-base">Top 5 by Total Amount Spent</CardTitle>
@@ -241,6 +242,31 @@ export default function IncomeExpensesPage() {
                                 </div>
                             ))}
                             {topSpendingCategories.topByAmount.length === 0 && (
+                                <p className="text-sm text-muted-foreground text-center py-4">No categorized expenses found.</p>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="p-4">
+                        <CardTitle className="text-base">Top 5 by Transaction Count</CardTitle>
+                        <CardDescription className="text-xs">Your most frequent spending categories.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        <div className="space-y-3">
+                            {topSpendingCategories.topByCount.map((cat, index) => (
+                                <div key={index} className="flex justify-between items-center text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-muted-foreground w-6 text-center">#{index + 1}</span>
+                                        <span className="font-medium truncate" title={cat.name}>{cat.name}</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="font-mono font-semibold">{formatCurrency(cat.totalAmount)}</p>
+                                      <p className="text-xs text-muted-foreground">{cat.count} transactions</p>
+                                    </div>
+                                </div>
+                            ))}
+                            {topSpendingCategories.topByCount.length === 0 && (
                                 <p className="text-sm text-muted-foreground text-center py-4">No categorized expenses found.</p>
                             )}
                         </div>
