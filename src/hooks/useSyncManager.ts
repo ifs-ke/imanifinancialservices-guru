@@ -301,41 +301,47 @@ export function useSyncManager() {
   }, [updateSyncState, isSignedIn]);
 
   useEffect(() => {
-    // This effect remains largely the same, as it handles user session changes,
-    // which is still relevant for clearing local data on sign-out.
     const currentUserId = userId;
     const prevUserId = previousUserIdRef.current;
 
     if (!isClerkLoaded) {
-      return;
+      return; // Wait until Clerk is ready to make decisions
     }
 
+    // Case 1: User has signed out.
+    // This triggers if we were signed in before (prevUserId is not null) and now we are not.
     if (!isSignedIn && prevUserId) {
-      logInfo(`SyncManager effect (user change): User SIGNED OUT. Was: ${prevUserId}. Clearing local data.`, { userId: prevUserId }, prevUserId);
-      clearAllLocalStoreData(); 
+      logInfo(`SyncManager: User signed out (was ${prevUserId}). Clearing local data.`, { userId: prevUserId }, prevUserId);
+      clearAllLocalStoreData();
       initialLoadDoneRef.current = false;
-      previousUserIdRef.current = null;
-      return;
+      previousUserIdRef.current = null; // Reset for next session
+      return; // Stop further processing
     }
-
-    if (isSignedIn && currentUserId && (currentUserId !== prevUserId)) {
-      logInfo(`SyncManager effect (user change): User signed IN or SWITCHED. New: ${currentUserId}, Old: ${prevUserId ?? 'none'}. Clearing for new user.`, { userId: currentUserId }, currentUserId);
-      clearAllLocalStoreData(); 
-      initialLoadDoneRef.current = false; 
-      previousUserIdRef.current = currentUserId;
+    
+    // Case 2: User has switched accounts.
+    // This triggers if we were signed in before, are still signed in, but the ID has changed.
+    if (isSignedIn && currentUserId && prevUserId && currentUserId !== prevUserId) {
+      logInfo(`SyncManager: User switched from ${prevUserId} to ${currentUserId}. Clearing previous user's local data.`, { prevUserId, currentUserId }, currentUserId);
+      clearAllLocalStoreData();
+      initialLoadDoneRef.current = false; // Reset for the new user's initial load
     }
-
+    
+    // Case 3: This is the first time we're setting up for this user in this session.
+    // This runs after initial sign-in or after an account switch (because initialLoadDoneRef was reset).
     if (isSignedIn && currentUserId && !initialLoadDoneRef.current) {
+      logInfo(`SyncManager: Initializing session for user ${currentUserId}.`, { userId: currentUserId }, currentUserId);
       initialLoadDoneRef.current = true;
-      logInfo(`SyncManager: Initial setup for user ${currentUserId}. Mode: ${IS_FETCH_DISABLED ? 'LOCAL-ONLY' : 'SERVER-SYNC'}.`, { userId: currentUserId }, currentUserId);
-      updateSyncState({
-        status: 'loading_local',
-        isInitialClientSyncPending: true,
-      });
-      // manualSync will correctly handle setting the status to 'local' in disabled mode.
+      updateSyncState({ status: 'loading_local', isInitialClientSyncPending: true });
+      // manualSync will correctly handle local mode and set status to 'local' after rehydration
       manualSync();
     }
+    
+    // Finally, update the ref for the next render AFTER all logic has run.
+    if (previousUserIdRef.current !== currentUserId) {
+        previousUserIdRef.current = currentUserId;
+    }
   }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState, manualSync]);
+
 
   return {
     syncStatus: syncState.status,
@@ -355,5 +361,3 @@ export function useSyncManager() {
     cancelLocalChangesPreview: () => {},
   };
 }
-
-    
