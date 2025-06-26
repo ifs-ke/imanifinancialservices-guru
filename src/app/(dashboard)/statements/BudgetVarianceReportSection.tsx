@@ -252,7 +252,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
     );
   };
 
-  const renderSection = (title: string, data: { description: string; budgeted: number; actual: number | null; }[], category: ExtendedBudgetItemCategory, totals: { budgeted: number; actual: number; variance: number; }, icon: React.ElementType, headerColor: string) => {
+  const renderSection = (title: string, data: { description: string; budgeted: number; actual: number | null; }[], category: ExtendedBudgetItemCategory, totals: { budgeted: number; actual: number; variance: number; }, Icon: React.ElementType, headerColor: string) => {
     if (data.length === 0) return null;
     return (
       <>
