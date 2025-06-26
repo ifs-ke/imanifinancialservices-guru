@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown, History, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown, History, Calendar as CalendarIcon, ChevronLeft, ChevronRight, ListCollapse, Send } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore';
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
@@ -30,6 +30,8 @@ const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.Ele
     { name: 'Goals', key: 'goal', icon: Target, description: "Allocate funds towards your financial goals." },
     { name: 'Debt Allocation', key: 'debt', icon: Coins, description: "Payments towards reducing outstanding debts." },
 ];
+const allCategoryKeys = budgetCategories.map(c => c.key);
+
 
 const formatPeriodForDisplay = (period: string): string => {
     try {
@@ -81,8 +83,7 @@ const AccordionTriggerWithActions = React.forwardRef<
         id={props.id}
         aria-controls={props['aria-controls']}
         aria-expanded={props['aria-expanded']}
-        aria-disabled={props['aria-disabled']}
-        disabled={props.disabled}
+        aria-disabled={props.disabled}
         data-state={props['data-state']}
         className={cn(
           "flex-grow p-4 hover:no-underline flex items-center gap-3 text-left",
@@ -153,6 +154,8 @@ export default function BudgetPage() {
     return parse(currentPeriod, 'yyyy-MM', new Date());
   });
 
+  const [openAccordions, setOpenAccordions] = useState<string[]>(allCategoryKeys);
+
 
   useEffect(() => {
       const initialPeriod = formatToPeriodKey(selectedMonthDate);
@@ -205,6 +208,14 @@ export default function BudgetPage() {
         handleMonthSelect(newDate);
     };
 
+    const toggleAllAccordions = () => {
+        if (openAccordions.length === allCategoryKeys.length) {
+            setOpenAccordions([]);
+        } else {
+            setOpenAccordions(allCategoryKeys);
+        }
+    };
+
   const groupedBudgetItems = useMemo(() => {
       const groups: Record<BudgetItemCategory, BudgetItem[]> = {
           income: [], 'recurring-expense': [], 'one-time-expense': [], goal: [], debt: [], 'unplanned-expense': [], 'unbudgeted-income': []
@@ -248,6 +259,13 @@ export default function BudgetPage() {
     });
   };
 
+  const handlePublish = () => {
+    toast({
+        title: "Publishing Budget...",
+        description: "This feature is for demonstration purposes. Your budget has been 'published'.",
+    });
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen w-full py-4 md:py-6 lg:py-8">
@@ -282,12 +300,19 @@ export default function BudgetPage() {
                  </Popover>
                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeMonth('next')}><ChevronRight size={16} /></Button>
              </div>
+             <Button onClick={toggleAllAccordions} variant="outline" size="sm">
+                <ListCollapse className="mr-2 h-4 w-4" />
+                {openAccordions.length === allCategoryKeys.length ? 'Collapse All' : 'Expand All'}
+             </Button>
              <Button asChild variant="outline" size="sm">
                 <Link href="/budget/import">
-                    <FileUp className="mr-2 h-4 w-4" /> Import CSV
+                    <FileUp className="mr-2 h-4 w-4" /> Import
                 </Link>
              </Button>
-              <Button onClick={handleExport} variant="secondary" size="sm" disabled={budgetItemsForPeriod.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
+              <Button onClick={handleExport} variant="secondary" size="sm" disabled={budgetItemsForPeriod.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export</Button>
+              <Button onClick={handlePublish} variant="default" size="sm">
+                 <Send className="mr-2 h-4 w-4" /> Publish
+              </Button>
          </div>
       </header>
 
@@ -319,7 +344,7 @@ export default function BudgetPage() {
       </Card>
 
       <main className="flex flex-col gap-4 px-4 md:px-6 lg:mx-8">
-        <Accordion type="multiple" className="w-full space-y-4">
+        <Accordion type="multiple" className="w-full space-y-4" value={openAccordions} onValueChange={setOpenAccordions}>
          {budgetCategories.map(({ name, key, icon: Icon, description }) => {
             const itemsForCategory = groupedBudgetItems[key as BudgetItemCategory] || [];
             const totalForCategory = itemsForCategory.reduce((sum, item) => sum + (item.amount || 0), 0);
