@@ -249,7 +249,7 @@ export const SidebarContent = React.forwardRef<
   }, [isClerkLoaded, isSignedIn, user?.id, isSyncButtonClickable, syncStatus, manualSync, isFetchDisabled]);
 
 
-  const sidebarActualState = isMobile ? "collapsed" : state;
+  const sidebarActualState = isMobile ? "expanded" : state;
   const showDedicatedConflictResolverButton = syncStatus === 'hash_mismatch' && !isFetchDisabled;
 
   return (
