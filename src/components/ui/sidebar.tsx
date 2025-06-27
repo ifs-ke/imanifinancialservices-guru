@@ -33,8 +33,9 @@ import {
   Users,
   Briefcase,
   TestTube,
-  Database, // Added for local data icon
-  Download, // Added for download button
+  Database,
+  Download,
+  Upload, // Import Upload icon
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -44,7 +45,7 @@ import { Badge } from "@/components/ui/badge";
 import { UserButton, useUser, useAuth } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
-import { logInfo, logWarn, logDebug, logError } from "@/lib/logger"; // Added logError
+import { logInfo, logWarn, logDebug, logError } from "@/lib/logger";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Import all stores to get their state for download
@@ -54,7 +55,10 @@ import { useInvestmentStore } from '@/store/investmentStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useBudgetStore } from '@/store/budgetStore';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
-import { useToast } from "@/hooks/use-toast"; // For download feedback
+import { useNotificationStore as useNotificationStateForDownload } from '@/store/notificationStore';
+import { useToast } from "@/hooks/use-toast";
+import DataImportDialog from "../layout/DataImportDialog"; // Import the new dialog
+import { Separator } from "./separator"; // Import Separator
 
 interface SidebarMenuItem {
   href: string;
@@ -182,6 +186,7 @@ export const SidebarContent = React.forwardRef<
   const unreadCount = useNotificationStore((state) => state.unreadCount());
   const [clientUnreadCount, setClientUnreadCount] = React.useState(0);
   const [hasMounted, setHasMounted] = React.useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
 
   const { user, isLoaded: isClerkLoaded } = useUser();
   const { isSignedIn } = useAuth();
@@ -190,14 +195,13 @@ export const SidebarContent = React.forwardRef<
   const syncManager = useSyncManager();
   const { syncStatus, manualSync, isFetchDisabled } = syncManager;
 
-  // Add store getters for download
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
   const getInvestmentState = useInvestmentStore.getState;
   const getStatementState = useStatementStore.getState;
   const getBudgetState = useBudgetStore.getState;
   const getWeeklyReviewState = useWeeklyReviewStore.getState;
-  const getNotificationState = useNotificationStore.getState;
+  const getNotificationState = useNotificationStateForDownload.getState;
   const { toast } = useToast();
 
   React.useEffect(() => {
@@ -323,225 +327,259 @@ export const SidebarContent = React.forwardRef<
   const showDedicatedConflictResolverButton = syncStatus === 'hash_mismatch' && !isFetchDisabled;
 
   return (
-    <div
-      ref={ref}
-      className={cn(
-        "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out border-r border-sidebar-border",
-        sidebarActualState === "expanded" ? "w-[var(--sidebar-width)]" : "w-[var(--sidebar-width-icon)]",
-        className
-      )}
-      {...props}
-    >
-      <div data-sidebar="header" className="flex-shrink-0 border-b border-sidebar-border p-2.5 h-14 flex items-center">
-      <div className={cn(
-            "flex items-center gap-2 overflow-hidden w-full",
-            sidebarActualState === 'collapsed'|| sidebarActualState === "expanded" && "justify-center"
-        )}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0"
-            onClick={toggleSidebar}
-            aria-label={sidebarActualState === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {sidebarActualState === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
-          </Button>
-          <span
-            className={cn(
-              "whitespace-nowrap text-base font-semibold transition-opacity duration-200",
-              sidebarActualState === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
-            )}
-          >
-            IFC - Guru
-          </span>
+    <>
+      <div
+        ref={ref}
+        className={cn(
+          "flex h-full flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out border-r border-sidebar-border",
+          sidebarActualState === "expanded" ? "w-[var(--sidebar-width)]" : "w-[var(--sidebar-width-icon)]",
+          className
+        )}
+        {...props}
+      >
+        <div data-sidebar="header" className="flex-shrink-0 border-b border-sidebar-border p-2.5 h-14 flex items-center">
+        <div className={cn(
+              "flex items-center gap-2 overflow-hidden w-full",
+              sidebarActualState === 'collapsed'|| sidebarActualState === "expanded" && "justify-center"
+          )}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0"
+              onClick={toggleSidebar}
+              aria-label={sidebarActualState === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarActualState === 'collapsed' ? <Menu size={20} /> : <PanelLeft size={20} />}
+            </Button>
+            <span
+              className={cn(
+                "whitespace-nowrap text-base font-semibold transition-opacity duration-200",
+                sidebarActualState === "collapsed" ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
+              )}
+            >
+              IFC - Guru
+            </span>
+          </div>
         </div>
-      </div>
 
-      <ScrollArea className="flex-grow">
-        <nav className="space-y-1 p-2.5">
-          {menuItems.filter(item => !item.adminOnly || (item.adminOnly && isUserAdmin)).map((item) => (
-            <TooltipProvider key={item.href} delayDuration={100}>
+        <ScrollArea className="flex-grow">
+          <nav className="space-y-1 p-2.5">
+            {menuItems.filter(item => !item.adminOnly || (item.adminOnly && isUserAdmin)).map((item) => (
+              <TooltipProvider key={item.href} delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={pathname === item.href ? "primary" : "ghost"}
+                      className={cn(
+                        "w-full justify-start text-sm h-9 relative",
+                        sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                        pathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      )}
+                      asChild
+                    >
+                      <Link href={item.href}>
+                        {React.cloneElement(item.icon as React.ReactElement, { size: 18, className: "flex-shrink-0" })}
+                        <span className={cn(
+                          "ml-2 truncate",
+                          sidebarActualState === "collapsed" && "hidden"
+                        )}>
+                          {item.label}
+                        </span>
+                        {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
+                          <>
+                            {sidebarActualState === 'expanded' && (
+                              <Badge variant="destructive" className="ml-auto">
+                                {clientUnreadCount}
+                              </Badge>
+                            )}
+                            {sidebarActualState === 'collapsed' && (
+                              <span className="absolute top-0.5 right-0.5 flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive"></span>
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </Link>
+                    </Button>
+                  </TooltipTrigger>
+                  {sidebarActualState === "collapsed" && (
+                    <TooltipContent side="right" align="center">
+                      {item.label}
+                      {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
+                        <span className="ml-1.5 text-xs">({clientUnreadCount})</span>
+                      )}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          </nav>
+        </ScrollArea>
+
+        <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
+            <div className={cn(sidebarActualState === 'expanded' ? "px-2 py-1 text-xs font-semibold text-muted-foreground" : "hidden")}>
+                Data Management
+            </div>
+            <TooltipProvider delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant={pathname === item.href ? "primary" : "ghost"}
+                    variant="ghost"
+                    onClick={() => setIsImportDialogOpen(true)}
                     className={cn(
-                      "w-full justify-start text-sm h-9 relative",
+                      "w-full justify-start text-sm h-9",
                       sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
-                      pathname === item.href ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
-                    asChild
+                    aria-label="Import data from file"
                   >
-                    <Link href={item.href}>
-                      {React.cloneElement(item.icon as React.ReactElement, { size: 18, className: "flex-shrink-0" })}
-                      <span className={cn(
-                        "ml-2 truncate",
-                        sidebarActualState === "collapsed" && "hidden"
-                      )}>
-                        {item.label}
-                      </span>
-                      {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
-                        <>
-                          {sidebarActualState === 'expanded' && (
-                            <Badge variant="destructive" className="ml-auto">
-                              {clientUnreadCount}
-                            </Badge>
-                          )}
-                          {sidebarActualState === 'collapsed' && (
-                            <span className="absolute top-0.5 right-0.5 flex h-2.5 w-2.5">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-destructive"></span>
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </Link>
+                    <Upload size={18} className="flex-shrink-0 text-muted-foreground" />
+                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                      Import Data
+                    </span>
                   </Button>
                 </TooltipTrigger>
                 {sidebarActualState === "collapsed" && (
                   <TooltipContent side="right" align="center">
-                    {item.label}
-                    {item.href === "/notifications" && hasMounted && clientUnreadCount > 0 && (
-                      <span className="ml-1.5 text-xs">({clientUnreadCount})</span>
-                    )}
+                    Import Data
                   </TooltipContent>
                 )}
               </Tooltip>
             </TooltipProvider>
-          ))}
-        </nav>
-      </ScrollArea>
 
-      <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
-        <TooltipProvider delayDuration={100}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                onClick={handleDownloadAllData}
-                className={cn(
-                  "w-full justify-start text-sm h-9",
-                  sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
-                  "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-                aria-label="Download all local data"
-              >
-                <Download size={18} className="flex-shrink-0 text-muted-foreground" />
-                <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
-                  Download Data
-                </span>
-              </Button>
-            </TooltipTrigger>
-            {sidebarActualState === "collapsed" && (
-              <TooltipContent side="right" align="center">
-                Download All Data
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
-
-        <ThemeToggle sidebarState={sidebarActualState} />
-
-        {showDedicatedConflictResolverButton ? (
-           <TooltipProvider delayDuration={100}>
+            <TooltipProvider delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                      variant="destructive"
-                      onClick={() => {
-                          logInfo("Resolve Conflict button clicked. Setting isMismatchDialogOpen to true.", {userId: user?.id});
-                          // The dialog state is managed within useSyncManager, this is a trigger
-                      }}
-                      className={cn(
-                          "w-full justify-start text-sm h-9",
-                          sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9"
-                      )}
-                      aria-label="Resolve data conflict"
+                    variant="ghost"
+                    onClick={handleDownloadAllData}
+                    className={cn(
+                      "w-full justify-start text-sm h-9",
+                      sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                      "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                    aria-label="Download all local data"
                   >
-                      <AlertTriangle size={18} className="flex-shrink-0 text-destructive-foreground" />
-                      <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
-                          Resolve Conflict
-                      </span>
+                    <Download size={18} className="flex-shrink-0 text-muted-foreground" />
+                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                      Download Data
+                    </span>
                   </Button>
                 </TooltipTrigger>
-                 {sidebarActualState === "collapsed" && (
+                {sidebarActualState === "collapsed" && (
                   <TooltipContent side="right" align="center">
-                      Resolve Data Conflict
+                    Download All Data
                   </TooltipContent>
                 )}
               </Tooltip>
-           </TooltipProvider>
-        ) : (
-          <TooltipProvider delayDuration={100}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  onClick={handleSyncClick}
-                  className={cn(
-                    "w-full justify-start text-sm h-9",
-                    sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
-                    "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
-                  aria-label={syncTooltipText}
-                  disabled={!isSyncButtonClickable}
-                >
-                  <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin")} />
-                  <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
-                    {syncStatusText}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              {sidebarActualState === "collapsed" && (
-                <TooltipContent side="right" align="center">
-                  {syncTooltipText}
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        )}
+            </TooltipProvider>
 
-        <div className={cn(
-            "flex items-center w-full",
-            sidebarActualState === 'collapsed' ? "justify-center py-1" : "p-1"
-        )}>
-          {isClerkLoaded ? (
-            isSignedIn && user ? (
-              <UserButton afterSignOutUrl="/" appearance={{
-                  elements: {
-                      userButtonAvatarBox: sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
-                      userButtonPopoverCard: "bg-popover border-border",
-                  }
-              }}/>
-            ) : (
-               <TooltipProvider delayDuration={100}>
-                 <Tooltip>
-                   <TooltipTrigger asChild>
-                     <Button variant="ghost" size="icon" className={cn("h-8 w-8", sidebarActualState === 'collapsed' && "h-7 w-7")} asChild>
-                       <Link href="/sign-in" aria-label="Sign In">
-                         <Users size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
-                       </Link>
-                     </Button>
-                   </TooltipTrigger>
+            <Separator className="my-2" />
+
+          <ThemeToggle sidebarState={sidebarActualState} />
+
+          {showDedicatedConflictResolverButton ? (
+             <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                        variant="destructive"
+                        onClick={() => {
+                            logInfo("Resolve Conflict button clicked. Setting isMismatchDialogOpen to true.", {userId: user?.id});
+                        }}
+                        className={cn(
+                            "w-full justify-start text-sm h-9",
+                            sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9"
+                        )}
+                        aria-label="Resolve data conflict"
+                    >
+                        <AlertTriangle size={18} className="flex-shrink-0 text-destructive-foreground" />
+                        <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                            Resolve Conflict
+                        </span>
+                    </Button>
+                  </TooltipTrigger>
                    {sidebarActualState === "collapsed" && (
-                     <TooltipContent side="right" align="center">
-                       Sign In
-                     </TooltipContent>
-                   )}
-                 </Tooltip>
-               </TooltipProvider>
-            )
+                    <TooltipContent side="right" align="center">
+                        Resolve Data Conflict
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+             </TooltipProvider>
           ) : (
-            <Skeleton className={cn("rounded-full", sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} />
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    onClick={handleSyncClick}
+                    className={cn(
+                      "w-full justify-start text-sm h-9",
+                      sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                      "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                    aria-label={syncTooltipText}
+                    disabled={!isSyncButtonClickable}
+                  >
+                    <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin")} />
+                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                      {syncStatusText}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                {sidebarActualState === "collapsed" && (
+                  <TooltipContent side="right" align="center">
+                    {syncTooltipText}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           )}
-          {sidebarActualState === 'expanded' && isClerkLoaded && isSignedIn && user && (
-            <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
-                {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
-            </span>
-          )}
+
+          <div className={cn(
+              "flex items-center w-full",
+              sidebarActualState === 'collapsed' ? "justify-center py-1" : "p-1"
+          )}>
+            {isClerkLoaded ? (
+              isSignedIn && user ? (
+                <UserButton afterSignOutUrl="/" appearance={{
+                    elements: {
+                        userButtonAvatarBox: sidebarActualState === 'collapsed' ? "w-7 h-7" : "w-8 h-8",
+                        userButtonPopoverCard: "bg-popover border-border",
+                    }
+                }}/>
+              ) : (
+                 <TooltipProvider delayDuration={100}>
+                   <Tooltip>
+                     <TooltipTrigger asChild>
+                       <Button variant="ghost" size="icon" className={cn("h-8 w-8", sidebarActualState === 'collapsed' && "h-7 w-7")} asChild>
+                         <Link href="/sign-in" aria-label="Sign In">
+                           <Users size={sidebarActualState === 'collapsed' ? 16 : 18} className="text-muted-foreground" />
+                         </Link>
+                       </Button>
+                     </TooltipTrigger>
+                     {sidebarActualState === "collapsed" && (
+                       <TooltipContent side="right" align="center">
+                         Sign In
+                       </TooltipContent>
+                     )}
+                   </Tooltip>
+                 </TooltipProvider>
+              )
+            ) : (
+              <Skeleton className={cn("rounded-full", sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} />
+            )}
+            {sidebarActualState === 'expanded' && isClerkLoaded && isSignedIn && user && (
+              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
+                  {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
+              </span>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+      <DataImportDialog isOpen={isImportDialogOpen} onClose={() => setIsImportDialogOpen(false)} />
+    </>
   );
 });
 SidebarContent.displayName = "SidebarContent";
