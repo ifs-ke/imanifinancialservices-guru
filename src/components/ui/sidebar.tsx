@@ -421,6 +421,38 @@ export const SidebarContent = React.forwardRef<
             <div className={cn(sidebarActualState === 'expanded' ? "px-2 py-1 text-xs font-semibold text-muted-foreground" : "hidden")}>
                 Data Management
             </div>
+            
+            {/* Sync Button */}
+             <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    onClick={handleSyncClick}
+                    className={cn(
+                      "w-full justify-start text-sm h-9",
+                      sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                      "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                      showDedicatedConflictResolverButton && "bg-destructive/10 text-destructive-foreground hover:bg-destructive/20"
+                    )}
+                    aria-label={syncTooltipText}
+                    disabled={!isSyncButtonClickable && !showDedicatedConflictResolverButton}
+                  >
+                    <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin")} />
+                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                      {syncStatusText}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                {sidebarActualState === "collapsed" && (
+                  <TooltipContent side="right" align="center">
+                    {syncTooltipText}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+
+            {/* Import Button */}
             <TooltipProvider delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -448,6 +480,7 @@ export const SidebarContent = React.forwardRef<
               </Tooltip>
             </TooltipProvider>
 
+            {/* Download Button */}
             <TooltipProvider delayDuration={100}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -478,64 +511,6 @@ export const SidebarContent = React.forwardRef<
             <Separator className="my-2" />
 
           <ThemeToggle sidebarState={sidebarActualState} />
-
-          {showDedicatedConflictResolverButton ? (
-             <TooltipProvider delayDuration={100}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                        variant="destructive"
-                        onClick={() => {
-                            logInfo("Resolve Conflict button clicked. Setting isMismatchDialogOpen to true.", {userId: user?.id});
-                        }}
-                        className={cn(
-                            "w-full justify-start text-sm h-9",
-                            sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9"
-                        )}
-                        aria-label="Resolve data conflict"
-                    >
-                        <AlertTriangle size={18} className="flex-shrink-0 text-destructive-foreground" />
-                        <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
-                            Resolve Conflict
-                        </span>
-                    </Button>
-                  </TooltipTrigger>
-                   {sidebarActualState === "collapsed" && (
-                    <TooltipContent side="right" align="center">
-                        Resolve Data Conflict
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-             </TooltipProvider>
-          ) : (
-            <TooltipProvider delayDuration={100}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    onClick={handleSyncClick}
-                    className={cn(
-                      "w-full justify-start text-sm h-9",
-                      sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
-                      "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    )}
-                    aria-label={syncTooltipText}
-                    disabled={!isSyncButtonClickable}
-                  >
-                    <SyncIcon size={18} className={cn("flex-shrink-0", iconColor, animateIcon && "animate-spin")} />
-                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
-                      {syncStatusText}
-                    </span>
-                  </Button>
-                </TooltipTrigger>
-                {sidebarActualState === "collapsed" && (
-                  <TooltipContent side="right" align="center">
-                    {syncTooltipText}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          )}
 
           <div className={cn(
               "flex items-center w-full",

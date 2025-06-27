@@ -144,6 +144,7 @@ export default function BudgetPage() {
   const [itemToDelete, setItemToDelete] = useState<BudgetItem | null>(null);
   const [viewingPublished, setViewingPublished] = useState<PublishedBudget | null>(null);
   const [publishedToDelete, setPublishedToDelete] = useState<PublishedBudget | null>(null);
+  const [categoryForNewItem, setCategoryForNewItem] = useState<BudgetItemCategory>('recurring-expense');
   
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(() => {
     const currentPeriod = useBudgetStore.getState().budgetPeriod;
