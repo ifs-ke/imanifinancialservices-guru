@@ -30,6 +30,10 @@ This is a Next.js personal finance management application built in Firebase Stud
         ```env
         GOOGLE_GENAI_API_KEY=YOUR_GOOGLE_GENAI_API_KEY
         ```
+    *   **Google Analytics (Optional for tracking):**
+        ```env
+        NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+        ```
     *   **Upstash Redis (Optional, for API Rate Limiting):**
         If you want to use API rate limiting for the save endpoint:
         ```env
@@ -105,4 +109,5 @@ This is a Next.js personal finance management application built in Firebase Stud
 - **Data Controller/Processor:** Depending on your deployment, you are the data controller.
 - **User Rights:** Users can view and manage their data through the application. Deletion requests would need to be handled.
 - **Transparency:** A clear privacy policy is essential, detailing data storage, processing, and user rights.
+
 

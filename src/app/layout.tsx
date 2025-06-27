@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { ClerkProvider } from '@clerk/nextjs';
+import GoogleAnalytics from '@/components/analytics/GoogleAnalytics';
 
 // Initialize Inter font for sans-serif
 const inter = Inter({
@@ -42,6 +43,9 @@ export default function RootLayout({
             roboto_mono.variable
           )}
         >
+          {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
+            <GoogleAnalytics />
+          )}
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
