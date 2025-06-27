@@ -100,6 +100,7 @@ export interface BudgetState {
     importBudgetsBatch: (newBudgetsData: Omit<BudgetItem, 'id' | 'period'>[]) => BudgetItem[];
     clearBudgetItems: () => void;
     publishCurrentBudget: () => void;
+    deletePublishedBudget: (id: string) => void;
 }
 
 const initialState = {
@@ -186,6 +187,13 @@ export const useBudgetStore = create<BudgetState>()(
                         [id]: newPublishedBudget
                     }
                 }));
+            },
+            deletePublishedBudget: (id) => {
+                set((state) => {
+                    const { [id]: _, ...remainingPublished } = state.publishedBudgets;
+                    logInfo(`BudgetStore: Deleting published budget with id: ${id}`);
+                    return { publishedBudgets: remainingPublished };
+                });
             },
             clearBudgetItems: () => {
                 logInfo("BudgetStore: Clearing budget items and period state.");

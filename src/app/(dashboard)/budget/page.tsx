@@ -129,7 +129,7 @@ export default function BudgetPage() {
   const budgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
   const setBudgetPeriod = useBudgetStore(state => state.setBudgetPeriod);
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
-  const { deleteBudgetItem, publishCurrentBudget, publishedBudgets } = useBudgetStore();
+  const { deleteBudgetItem, publishCurrentBudget, publishedBudgets, deletePublishedBudget } = useBudgetStore();
 
   const totalIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
@@ -142,8 +142,8 @@ export default function BudgetPage() {
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<BudgetItem | null>(null);
-  const [categoryForNewItem, setCategoryForNewItem] = useState<BudgetItemCategory>('recurring-expense');
   const [viewingPublished, setViewingPublished] = useState<PublishedBudget | null>(null);
+  const [publishedToDelete, setPublishedToDelete] = useState<PublishedBudget | null>(null);
   
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(() => {
     const currentPeriod = useBudgetStore.getState().budgetPeriod;
@@ -153,7 +153,7 @@ export default function BudgetPage() {
     return parse(currentPeriod, 'yyyy-MM', new Date());
   });
 
-  const [openAccordions, setOpenAccordions] = useState<string[]>(allCategoryKeys);
+  const [openAccordions, setOpenAccordions] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -192,6 +192,13 @@ export default function BudgetPage() {
       deleteBudgetItem(itemToDelete.id);
       setItemToDelete(null);
       toast({ title: 'Budget Item Deleted', description: 'Successfully removed item.' });
+  };
+  
+  const confirmDeletePublished = () => {
+      if (!publishedToDelete) return;
+      deletePublishedBudget(publishedToDelete.id);
+      setPublishedToDelete(null);
+      toast({ title: 'Published Budget Deleted' });
   };
 
    const handleMonthSelect = (date: Date | undefined) => {
@@ -429,9 +436,15 @@ export default function BudgetPage() {
                         <TableCell>{formatPeriodForDisplay(pb.period)}</TableCell>
                         <TableCell className={cn("font-mono", pb.net >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(pb.net)}</TableCell>
                         <TableCell className="text-right pr-6">
+                          <div className="flex items-center justify-end gap-1">
                             <Button variant="outline" size="sm" onClick={() => setViewingPublished(pb)}>
                                 Preview
                             </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setPublishedToDelete(pb)}>
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Delete published budget</span>
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -450,6 +463,23 @@ export default function BudgetPage() {
             onClose={() => setViewingPublished(null)}
             publishedBudget={viewingPublished}
         />
+
+        <AlertDialog open={!!publishedToDelete} onOpenChange={(open) => !open && setPublishedToDelete(null)}>
+            {publishedToDelete && (
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete the budget snapshot for <strong>{formatPeriodForDisplay(publishedToDelete.period)}</strong> published on <strong>{format(new Date(publishedToDelete.publishedAt), 'PP')}</strong>. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setPublishedToDelete(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmDeletePublished}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            )}
+        </AlertDialog>
     </div>
   );
 }
