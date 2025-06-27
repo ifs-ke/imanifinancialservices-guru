@@ -9,12 +9,14 @@ import type {
     ClientLogPayload as ClientLogPayloadZod,
     SaveDataPayload as SaveDataPayloadZod,
     InvestmentFormData as InvestmentFormDataZod,
+    IncomeCategory as IncomeCategoryZod,
 } from './schemas';
 
 
 export type ModeOfPayment = ModeOfPaymentZod;
 export type TransactionFrequency = TransactionFrequencyZod;
 export type TransactionVariability = TransactionVariabilityZod;
+export type IncomeCategory = IncomeCategoryZod;
 
 
 export interface TransactionWithId {
@@ -26,6 +28,7 @@ export interface TransactionWithId {
   frequency?: TransactionFrequency | null;
   variability?: TransactionVariability | null;
   categoryName?: string | null;
+  incomeCategory?: IncomeCategory | null;
 }
 
 

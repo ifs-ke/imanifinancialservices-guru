@@ -19,7 +19,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 import { useTransactionsStore } from '@/store/transactionsStore';
-import type { TransactionWithId, BudgetItem } from '@/lib/types';
+import type { TransactionWithId, BudgetItem, IncomeCategory } from '@/lib/types';
 import { TransactionFormDataSchema } from '@/lib/schemas';
 import type { TransactionFormData } from '@/lib/schemas';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -77,6 +77,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       frequency: undefined,
       variability: undefined,
       categoryName: NONE_CATEGORY_VALUE,
+      incomeCategory: undefined,
     },
   });
 
@@ -112,6 +113,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
           frequency: transaction.frequency || undefined,
           variability: transaction.variability || undefined,
           categoryName: transaction.categoryName || NONE_CATEGORY_VALUE,
+          incomeCategory: transaction.incomeCategory || undefined,
         });
       } else {
         form.reset({
@@ -122,6 +124,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
           frequency: undefined,
           variability: undefined,
           categoryName: NONE_CATEGORY_VALUE,
+          incomeCategory: undefined,
         });
       }
     }
@@ -138,6 +141,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         frequency: data.frequency,
         variability: data.variability,
         categoryName: processedCategoryName,
+        incomeCategory: data.incomeCategory,
       };
 
       if (transaction) {
@@ -262,6 +266,36 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                 </FormItem>
               )}
             />
+            {transactionAmount > 0 && (
+              <FormField
+                control={form.control}
+                name="incomeCategory"
+                render={({ field }) => (
+                  <FormItem className="grid grid-cols-4 items-center gap-4">
+                    <FormLabel className="text-right col-span-1">Income Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                      <FormControl className="col-span-3">
+                        <SelectTrigger>
+                          <SelectValue placeholder="Optional: Select income type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="earned">Earned</SelectItem>
+                        <SelectItem value="profit">Profit</SelectItem>
+                        <SelectItem value="interest">Interest</SelectItem>
+                        <SelectItem value="dividend">Dividend</SelectItem>
+                        <SelectItem value="rental">Rental</SelectItem>
+                        <SelectItem value="capital gains">Capital Gains</SelectItem>
+                        <SelectItem value="intellectual">Intellectual Property</SelectItem>
+                        <SelectItem value="savings">Savings / Transfer In</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="col-span-4 text-right" />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="frequency"
@@ -320,4 +354,3 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 };
 
 export default EditTransactionDialog;
-

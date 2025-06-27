@@ -18,7 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 import { useTransactionsStore } from '@/store/transactionsStore';
-import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem, TransactionFormData as SharedTransactionFormData } from '@/lib/types';
+import type { TransactionWithId, ModeOfPayment, TransactionFrequency, TransactionVariability, BudgetItem, TransactionFormData as SharedTransactionFormData, IncomeCategory } from '@/lib/types';
 import { BatchUpdateTransactionFormDataSchema, type BatchUpdateTransactionFormData } from '@/lib/schemas';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { format, parse, isValid } from 'date-fns';
@@ -52,6 +52,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
       frequency: LEAVE_UNCHANGED_VALUE as TransactionFrequency | typeof LEAVE_UNCHANGED_VALUE,
       variability: LEAVE_UNCHANGED_VALUE as TransactionVariability | typeof LEAVE_UNCHANGED_VALUE,
       categoryName: LEAVE_UNCHANGED_VALUE, 
+      incomeCategory: LEAVE_UNCHANGED_VALUE,
     },
   });
 
@@ -65,6 +66,7 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
         frequency: LEAVE_UNCHANGED_VALUE as TransactionFrequency | typeof LEAVE_UNCHANGED_VALUE,
         variability: LEAVE_UNCHANGED_VALUE as TransactionVariability | typeof LEAVE_UNCHANGED_VALUE,
         categoryName: LEAVE_UNCHANGED_VALUE,
+        incomeCategory: LEAVE_UNCHANGED_VALUE,
       });
 
       const selectedTransactions = allStoreTransactions.filter(tx => transactionIds.includes(tx.id));
@@ -115,6 +117,9 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
       
       if (data.categoryName !== LEAVE_UNCHANGED_VALUE) {
         updatesToApply.categoryName = data.categoryName === NONE_CATEGORY_VALUE ? null : data.categoryName;
+      }
+      if (data.incomeCategory !== LEAVE_UNCHANGED_VALUE) {
+        updatesToApply.incomeCategory = data.incomeCategory === NONE_CATEGORY_VALUE ? null : data.incomeCategory;
       }
 
       if (Object.keys(updatesToApply).length === 0) {
@@ -202,6 +207,37 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
                 </FormItem>
               )}
             />
+            {isIncomeBatch !== false && (
+              <FormField
+                control={form.control}
+                name="incomeCategory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Income Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || LEAVE_UNCHANGED_VALUE}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Leave unchanged" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={LEAVE_UNCHANGED_VALUE}>Leave unchanged</SelectItem>
+                        <SelectItem value={NONE_CATEGORY_VALUE}>None (Clear Type)</SelectItem>
+                        <SelectItem value="earned">Earned</SelectItem>
+                        <SelectItem value="profit">Profit</SelectItem>
+                        <SelectItem value="interest">Interest</SelectItem>
+                        <SelectItem value="dividend">Dividend</SelectItem>
+                        <SelectItem value="rental">Rental</SelectItem>
+                        <SelectItem value="capital gains">Capital Gains</SelectItem>
+                        <SelectItem value="intellectual">Intellectual Property</SelectItem>
+                        <SelectItem value="savings">Savings / Transfer In</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
              <FormField
               control={form.control}
               name="frequency"
@@ -262,4 +298,3 @@ const BatchUpdateTransactionDialog: React.FC<BatchUpdateTransactionDialogProps> 
 };
 
 export default BatchUpdateTransactionDialog;
-

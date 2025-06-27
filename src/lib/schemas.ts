@@ -1,6 +1,10 @@
 
 import { z } from 'zod';
 
+// --- New Income Category Schema ---
+export const IncomeCategorySchema = z.enum(['earned', 'profit', 'interest', 'dividend', 'rental', 'capital gains', 'intellectual', 'savings']);
+export type IncomeCategory = z.infer<typeof IncomeCategorySchema>;
+
 // --- Transaction Schemas ---
 export const ModeOfPaymentSchema = z.enum(['Cash', 'Bank', 'Mpesa']);
 export type ModeOfPayment = z.infer<typeof ModeOfPaymentSchema>;
@@ -27,16 +31,19 @@ export const TransactionFormDataSchema = z.object({
   frequency: TransactionFrequencySchema,
   variability: TransactionVariabilitySchema,
   categoryName: z.string().optional().nullable(),
+  incomeCategory: IncomeCategorySchema.optional().nullable(),
 });
 export type TransactionFormData = z.infer<typeof TransactionFormDataSchema>;
 
 const LEAVE_UNCHANGED_LITERAL = "__LEAVE_UNCHANGED__";
+const NONE_CATEGORY_VALUE = "__NONE_CATEGORY__";
 
 export const BatchUpdateTransactionFormDataSchema = z.object({
   modeOfPayment: z.union([ModeOfPaymentSchema, z.literal(LEAVE_UNCHANGED_LITERAL)]).optional(),
   frequency: z.union([z.enum(['recurring', 'one-time']), z.literal(LEAVE_UNCHANGED_LITERAL)]).optional().nullable(),
   variability: z.union([z.enum(['fixed', 'variable']), z.literal(LEAVE_UNCHANGED_LITERAL)]).optional().nullable(),
   categoryName: z.string().optional().nullable().or(z.literal(LEAVE_UNCHANGED_LITERAL)),
+  incomeCategory: z.union([IncomeCategorySchema, z.literal(LEAVE_UNCHANGED_LITERAL), z.literal(NONE_CATEGORY_VALUE)]).optional(),
 });
 export type BatchUpdateTransactionFormData = z.infer<typeof BatchUpdateTransactionFormDataSchema>;
 
@@ -139,6 +146,7 @@ const TransactionItemSchemaForAPI = BaseItemSchemaForAPI.extend({
   frequency: TransactionFrequencySchema.nullable(),
   variability: TransactionVariabilitySchema.nullable(),
   categoryName: z.string().optional().nullable(),
+  incomeCategory: z.string().optional().nullable(),
 });
 export type TransactionItemForAPIType = z.infer<typeof TransactionItemSchemaForAPI>;
 
@@ -204,6 +212,7 @@ export const SaveDataPayloadSchema = z.object({
   investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema).optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
+  gettingStartedDismissed: z.boolean().optional(),
   payloadDataHash: z.string({ required_error: "Payload data hash is required" }),
   lastKnownServerHash: z.string().nullable().optional(),
 });

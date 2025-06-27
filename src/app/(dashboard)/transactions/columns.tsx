@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { TransactionWithId } from '@/lib/types';
+import type { TransactionWithId, IncomeCategory } from '@/lib/types';
 import { format } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -100,6 +100,18 @@ export const getColumns = (
     cell: ({ row }) => {
         const categoryName = row.getValue('categoryName') as string | null;
         return categoryName ? <Badge variant="outline" className="text-xs">{categoryName}</Badge> : <span className="text-xs text-muted-foreground">N/A</span>;
+    },
+  },
+  {
+    accessorKey: 'incomeCategory',
+    header: 'Income Type',
+    cell: ({ row }) => {
+      const incomeCategory = row.original.incomeCategory;
+      const amount = row.original.amount;
+      if (amount < 0 || !incomeCategory) {
+        return null;
+      }
+      return <Badge variant="secondary" className="text-xs capitalize">{incomeCategory}</Badge>;
     },
   },
   {

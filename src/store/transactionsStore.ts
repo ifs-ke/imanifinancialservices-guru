@@ -116,6 +116,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                      ...tx,
                      date: ensureValidDate(tx.date),
                      categoryName: tx.categoryName || null,
+                     incomeCategory: tx.incomeCategory || null,
                  }));
                  set({ transactions: sortTransactions(validatedTransactions), isHydrated: true });
              },
@@ -125,6 +126,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                     ...transactionData,
                     date: ensureValidDate(transactionData.date),
                     categoryName: transactionData.categoryName || null,
+                    incomeCategory: transactionData.incomeCategory || null,
                 };
                 set((state) => ({ transactions: sortTransactions([...state.transactions, newTransaction]) }));
                 return newTransaction;
@@ -133,7 +135,7 @@ export const useTransactionsStore = create<TransactionsState>()(
                  const validatedDate = ensureValidDate(updatedTransaction.date);
                 set((state) => ({
                     transactions: sortTransactions(
-                        state.transactions.map(tx => tx.id === updatedTransaction.id ? { ...updatedTransaction, date: validatedDate, categoryName: updatedTransaction.categoryName || null } : tx)
+                        state.transactions.map(tx => tx.id === updatedTransaction.id ? { ...updatedTransaction, date: validatedDate, categoryName: updatedTransaction.categoryName || null, incomeCategory: updatedTransaction.incomeCategory || null } : tx)
                     )
                 }));
             },
@@ -172,6 +174,10 @@ export const useTransactionsStore = create<TransactionsState>()(
                             if (updateDataForTx.data.modeOfPayment !== undefined) newTxData.modeOfPayment = updateDataForTx.data.modeOfPayment;
                             if (updateDataForTx.data.frequency !== undefined) newTxData.frequency = updateDataForTx.data.frequency;
                             if (updateDataForTx.data.variability !== undefined) newTxData.variability = updateDataForTx.data.variability;
+
+                            if (Object.prototype.hasOwnProperty.call(updateDataForTx.data, 'incomeCategory')) {
+                                newTxData.incomeCategory = updateDataForTx.data.incomeCategory;
+                            }
 
                             // Validate date only if it's part of the update
                             if (updateDataForTx.data.date !== undefined) {
@@ -221,4 +227,3 @@ export const selectTotalExpenses = (state: TransactionsState): number =>
     state.transactions
         .filter(tx => tx.amount < 0)
         .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-
