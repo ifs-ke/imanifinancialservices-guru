@@ -35,7 +35,7 @@ import {
   TestTube,
   Database,
   Download,
-  Upload, // Import Upload icon
+  Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -57,28 +57,28 @@ import { useBudgetStore } from '@/store/budgetStore';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
 import { useNotificationStore as useNotificationStateForDownload } from '@/store/notificationStore';
 import { useToast } from "@/hooks/use-toast";
-import DataImportDialog from "../layout/DataImportDialog"; // Import the new dialog
-import { Separator } from "./separator"; // Import Separator
+import DataImportDialog from "../layout/DataImportDialog";
+import { Separator } from "./separator";
 
 interface SidebarMenuItem {
   href: string;
   label: string;
-  icon: React.ReactNode;
+  icon: React.ElementType; // Changed to ElementType for cleaner rendering
   adminOnly?: boolean;
 }
 
 const menuItems: SidebarMenuItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
-  { href: "/transactions", label: "Transactions", icon: <ReceiptText size={18} /> },
-  { href: "/income-expenses", label: "Income/Expenses", icon: <TrendingUp size={18} /> },
-  { href: "/debt", label: "Debts", icon: <Coins size={18} /> },
-  { href: "/investments", label: "Investments", icon: <Briefcase size={18} /> },
-  { href: "/statements", label: "Statements", icon: <FileText size={18} /> },
-  { href: "/budget", label: "Budget", icon: <PieChart size={18} /> },
-  { href: "/weekly-review", label: "Weekly Review", icon: <BookOpen size={18} /> },
-  { href: "/notifications", label: "Notifications", icon: <Bell size={18} /> },
-  { href: "/logger", label: "Logger", icon: <ClipboardList size={18} /> },
-  { href: "/admin/connection-test", label: "Admin Tests", icon: <TestTube size={18} />, adminOnly: true },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/transactions", label: "Transactions", icon: ReceiptText },
+  { href: "/income-expenses", label: "Income/Expenses", icon: TrendingUp },
+  { href: "/debt", label: "Debts", icon: Coins },
+  { href: "/investments", label: "Investments", icon: Briefcase },
+  { href: "/statements", label: "Statements", icon: FileText },
+  { href: "/budget", label: "Budget", icon: PieChart },
+  { href: "/weekly-review", label: "Weekly Review", icon: BookOpen },
+  { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/logger", label: "Logger", icon: ClipboardList },
+  { href: "/admin/connection-test", label: "Admin Tests", icon: TestTube, adminOnly: true },
 ];
 
 export type SidebarState = "collapsed" | "expanded";
@@ -364,7 +364,9 @@ export const SidebarContent = React.forwardRef<
 
         <ScrollArea className="flex-grow">
           <nav className="space-y-1 p-2.5">
-            {menuItems.filter(item => !item.adminOnly || (item.adminOnly && isUserAdmin)).map((item) => (
+            {menuItems.filter(item => !item.adminOnly || (item.adminOnly && isUserAdmin)).map((item) => {
+              const Icon = item.icon; // Get the component type
+              return (
               <TooltipProvider key={item.href} delayDuration={100}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -378,7 +380,7 @@ export const SidebarContent = React.forwardRef<
                       asChild
                     >
                       <Link href={item.href}>
-                        {React.cloneElement(item.icon as React.ReactElement, { size: 18, className: "flex-shrink-0" })}
+                        <Icon size={18} className="flex-shrink-0" />
                         <span className={cn(
                           "ml-2 truncate",
                           sidebarActualState === "collapsed" && "hidden"
@@ -413,7 +415,7 @@ export const SidebarContent = React.forwardRef<
                   )}
                 </Tooltip>
               </TooltipProvider>
-            ))}
+            )})}
           </nav>
         </ScrollArea>
 

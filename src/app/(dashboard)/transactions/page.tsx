@@ -40,6 +40,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { ReceiptText, PlusCircle, FileUp, FileDown, Edit3, XCircle, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/utils';
 
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
@@ -301,4 +302,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-
