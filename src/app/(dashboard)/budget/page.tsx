@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/budget/page.tsx
 'use client';
 
@@ -10,17 +9,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Edit, PieChart as PieChartIcon, PlusCircle, Trash2, DollarSign, TrendingDown, Target, MinusCircle, Coins, FileUp, FileDown, History, Calendar as CalendarIcon, ChevronLeft, ChevronRight, ListCollapse, Send } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedIncome, selectTotalRecurringExpenses, selectTotalOneTimeExpenses, selectTotalGoals, selectTotalBudgetedExpenses, selectNetBudgeted, selectTotalBudgetedDebt } from '@/store/budgetStore';
-import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
+import type { BudgetItem, BudgetItemCategory, PublishedBudget } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import BudgetItemFormSheet from './BudgetItemFormSheet';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-// Ensure all date-fns functions used are imported, including parse
 import { format, startOfMonth, addMonths, subMonths, parse, isValid as isDateValid } from 'date-fns';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger as ShadAccordionTrigger } from "@/components/ui/accordion";
+import PublishedBudgetPreviewDialog from './PublishedBudgetPreviewDialog';
 
 
 const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.ElementType; description: string; }[] = [
@@ -59,7 +58,6 @@ const AccordionTriggerWithActions = React.forwardRef<
     onAddClick: () => void;
     itemCount: number;
     totalAmount: number;
-    // Explicitly list props that might be passed to ShadAccordionTrigger from AccordionItem
     'data-state'?: 'open' | 'closed';
     'id'?: string;
     'aria-controls'?: string;
@@ -131,7 +129,7 @@ export default function BudgetPage() {
   const budgetPeriod = useBudgetStore(selectCurrentBudgetPeriod);
   const setBudgetPeriod = useBudgetStore(state => state.setBudgetPeriod);
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
-  const { deleteBudgetItem } = useBudgetStore();
+  const { deleteBudgetItem, publishCurrentBudget, publishedBudgets } = useBudgetStore();
 
   const totalIncome = useBudgetStore(selectTotalBudgetedIncome);
   const totalRecurringExpenses = useBudgetStore(selectTotalRecurringExpenses);
@@ -145,11 +143,12 @@ export default function BudgetPage() {
   const [editingItem, setEditingItem] = useState<BudgetItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<BudgetItem | null>(null);
   const [categoryForNewItem, setCategoryForNewItem] = useState<BudgetItemCategory>('recurring-expense');
+  const [viewingPublished, setViewingPublished] = useState<PublishedBudget | null>(null);
   
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(() => {
     const currentPeriod = useBudgetStore.getState().budgetPeriod;
-    if (!currentPeriod || !/^\d{4}-\d{2}$/.test(currentPeriod)) { // Add a guard for invalid period format
-        return new Date(); // Default to current date if period is invalid
+    if (!currentPeriod || !/^\d{4}-\d{2}$/.test(currentPeriod)) {
+        return new Date();
     }
     return parse(currentPeriod, 'yyyy-MM', new Date());
   });
@@ -260,9 +259,10 @@ export default function BudgetPage() {
   };
 
   const handlePublish = () => {
+    publishCurrentBudget();
     toast({
-        title: "Publishing Budget...",
-        description: "This feature is for demonstration purposes. Your budget has been 'published'.",
+        title: "Budget Published!",
+        description: `A snapshot of the budget for ${formatPeriodForDisplay(budgetPeriod)} has been saved to history.`,
     });
   };
 
@@ -310,7 +310,7 @@ export default function BudgetPage() {
                 </Link>
              </Button>
               <Button onClick={handleExport} variant="secondary" size="sm" disabled={budgetItemsForPeriod.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export</Button>
-              <Button onClick={handlePublish} variant="default" size="sm">
+              <Button onClick={handlePublish} variant="default" size="sm" disabled={budgetItemsForPeriod.length === 0}>
                  <Send className="mr-2 h-4 w-4" /> Publish
               </Button>
          </div>
@@ -410,12 +410,46 @@ export default function BudgetPage() {
 
         <Separator className="my-8 mx-4 md:mx-6 lg:mx-8" />
         <Card className="shadow-sm mx-4 md:mx-6 lg:mx-8">
-            <CardHeader className="p-6"><CardTitle className="text-lg flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Budget History</CardTitle><CardDescription>View snapshots of your saved budgets from previous months. (Feature coming soon)</CardDescription></CardHeader>
-            <CardContent className="p-6"><div className="text-center text-muted-foreground py-10"><p>Budget history snapshots will be listed here once saved.</p></div></CardContent>
+            <CardHeader className="p-6"><CardTitle className="text-lg flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Budget History</CardTitle><CardDescription>View snapshots of your saved budgets from previous months.</CardDescription></CardHeader>
+            <CardContent className="p-0">
+              {Object.keys(publishedBudgets).length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-6">Published Date</TableHead>
+                      <TableHead>Budget Period</TableHead>
+                      <TableHead>Net Amount</TableHead>
+                      <TableHead className="text-right pr-6">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.values(publishedBudgets).sort((a,b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).map(pb => (
+                      <TableRow key={pb.id}>
+                        <TableCell className="pl-6">{format(new Date(pb.publishedAt), 'PPpp')}</TableCell>
+                        <TableCell>{formatPeriodForDisplay(pb.period)}</TableCell>
+                        <TableCell className={cn("font-mono", pb.net >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(pb.net)}</TableCell>
+                        <TableCell className="text-right pr-6">
+                            <Button variant="outline" size="sm" onClick={() => setViewingPublished(pb)}>
+                                Preview
+                            </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center text-muted-foreground py-10 px-6"><p>Budget history snapshots will be listed here once saved.</p></div>
+              )}
+            </CardContent>
         </Card>
 
         <BudgetItemFormSheet isOpen={isFormSheetOpen} onClose={handleFormSheetClose} item={editingItem} initialCategory={categoryForNewItem} />
+
+        <PublishedBudgetPreviewDialog
+            isOpen={!!viewingPublished}
+            onClose={() => setViewingPublished(null)}
+            publishedBudget={viewingPublished}
+        />
     </div>
   );
 }
-    

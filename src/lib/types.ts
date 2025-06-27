@@ -8,7 +8,7 @@ import type {
     BudgetItemCategory as BudgetItemCategoryZodInternal,
     ClientLogPayload as ClientLogPayloadZod,
     SaveDataPayload as SaveDataPayloadZod,
-    InvestmentFormData as InvestmentFormDataZod, // Added
+    InvestmentFormData as InvestmentFormDataZod,
 } from './schemas';
 
 
@@ -63,6 +63,16 @@ export interface BudgetItem {
     amount: number;
     category: BudgetItemCategoryZodInternal;
     period: string;
+}
+
+export interface PublishedBudget {
+    id: string;
+    period: string;
+    items: BudgetItem[];
+    publishedAt: Date;
+    totalIncome: number;
+    totalSpending: number;
+    net: number;
 }
 
 export interface InvestmentItem {

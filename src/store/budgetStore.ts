@@ -1,19 +1,16 @@
-
 // src/store/budgetStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
-import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
+import type { BudgetItem, BudgetItemCategory, PublishedBudget } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils';
 import { format } from 'date-fns';
-import { logInfo } from '@/lib/logger'; // Import logger
-import { BudgetItemCategorySchema as BudgetItemCategoryValidationSchema } from '@/lib/schemas'; // For validation if needed
+import { logInfo, logWarn } from '@/lib/logger';
+import { BudgetItemCategorySchema as BudgetItemCategoryValidationSchema } from '@/lib/schemas';
 
-// Exporting the schema if it's intended to be used elsewhere for validation directly from this store module
 export { BudgetItemCategoryValidationSchema as BudgetItemCategorySchema };
 
 
-const generateId = (): string => {
-  const prefix = 'budget';
+const generateId = (prefix: 'budget' | 'pub'): string => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `${prefix}_${crypto.randomUUID()}`;
   } else {
@@ -61,20 +58,29 @@ const createSessionStorageWithEncoding = (): StateStorage => {
       if (!str) return null;
       try {
         const decodedStr = decode(str);
-        return JSON.parse(decodedStr);
+        return JSON.parse(decodedStr, (key, value) => {
+            if (key === 'publishedAt' && typeof value === 'string') {
+                const parsedDate = new Date(value);
+                return !isNaN(parsedDate.getTime()) ? parsedDate : new Date(0);
+            }
+            return value;
+        });
       } catch (e) {
-        // console.error(`Failed to decode/parse item "${name}" from sessionStorage.`, e);
         return null;
       }
     },
     setItem: (name, value) => {
       if (!storage) return;
       try {
-        const stringifiedValue = JSON.stringify(value);
+        const stringifiedValue = JSON.stringify(value, (key, val) => {
+            if (key === 'publishedAt' && val instanceof Date) {
+                return val.toISOString();
+            }
+            return val;
+        });
         const encodedValue = encode(stringifiedValue);
         storage.setItem(name, encodedValue);
       } catch (e) {
-        // console.error(`Failed to encode/stringify and set item "${name}" for sessionStorage`, e);
       }
     },
     removeItem: (name) => storage?.removeItem(name),
@@ -83,6 +89,7 @@ const createSessionStorageWithEncoding = (): StateStorage => {
 
 export interface BudgetState {
     budgetItems: BudgetItem[];
+    publishedBudgets: Record<string, PublishedBudget>;
     budgetPeriod: string;
     isHydrated: boolean;
     setBudgetItems: (items: BudgetItem[]) => void;
@@ -92,10 +99,12 @@ export interface BudgetState {
     deleteBudgetItem: (id: string) => void;
     importBudgetsBatch: (newBudgetsData: Omit<BudgetItem, 'id' | 'period'>[]) => BudgetItem[];
     clearBudgetItems: () => void;
+    publishCurrentBudget: () => void;
 }
 
 const initialState = {
     budgetItems: [],
+    publishedBudgets: {},
     budgetPeriod: getCurrentPeriodKey(),
     isHydrated: false,
 };
@@ -117,7 +126,7 @@ export const useBudgetStore = create<BudgetState>()(
             addBudgetItem: (itemData) => {
                 const currentPeriod = get().budgetPeriod;
                 const newItem: BudgetItem = {
-                    id: generateId(),
+                    id: generateId('budget'),
                     ...itemData,
                     period: currentPeriod,
                 };
@@ -126,7 +135,7 @@ export const useBudgetStore = create<BudgetState>()(
             },
             updateBudgetItem: (updatedItem) => {
                  if (!updatedItem.period) {
-                    // console.warn("Attempted to update budget item without a period. Update skipped.", updatedItem);
+                    logWarn("Attempted to update budget item without a period. Update skipped.", updatedItem);
                     return;
                  }
                 set((state) => ({
@@ -141,12 +150,42 @@ export const useBudgetStore = create<BudgetState>()(
             importBudgetsBatch: (newBudgetsData) => {
                  const currentPeriod = get().budgetPeriod;
                  const newBudgetsWithIdsAndPeriod = newBudgetsData.map(budgetData => ({
-                     id: generateId(),
+                     id: generateId('budget'),
                      ...budgetData,
                      period: currentPeriod,
                  }));
                  set((state) => ({ budgetItems: sortBudgetItems([...state.budgetItems, ...newBudgetsWithIdsAndPeriod]) }));
                  return newBudgetsWithIdsAndPeriod;
+            },
+            publishCurrentBudget: () => {
+                const { budgetPeriod, budgetItems } = get();
+                if (!budgetPeriod) return;
+
+                const itemsForPeriod = budgetItems.filter(item => item.period === budgetPeriod);
+                if (itemsForPeriod.length === 0) return;
+
+                const id = generateId('pub');
+
+                const totalIncome = itemsForPeriod.filter(i => i.category === 'income').reduce((sum, i) => sum + i.amount, 0);
+                const totalSpending = itemsForPeriod.filter(i => i.category !== 'income').reduce((sum, i) => sum + i.amount, 0);
+                const net = totalIncome - totalSpending;
+
+                const newPublishedBudget: PublishedBudget = {
+                    id,
+                    period: budgetPeriod,
+                    items: itemsForPeriod,
+                    publishedAt: new Date(),
+                    totalIncome,
+                    totalSpending,
+                    net,
+                };
+
+                set(state => ({
+                    publishedBudgets: {
+                        ...state.publishedBudgets,
+                        [id]: newPublishedBudget
+                    }
+                }));
             },
             clearBudgetItems: () => {
                 logInfo("BudgetStore: Clearing budget items and period state.");
@@ -154,7 +193,7 @@ export const useBudgetStore = create<BudgetState>()(
             },
         }),
         {
-            name: 'ifcGuru_budgetItems',
+            name: 'ifcGuru_budgetItems_v2', // New version for new shape
             storage: createJSONStorage(createSessionStorageWithEncoding),
             onRehydrateStorage: () => (state) => {
                  if (state) {
@@ -162,7 +201,10 @@ export const useBudgetStore = create<BudgetState>()(
                    if (!state.budgetPeriod || typeof state.budgetPeriod !== 'string' || !/^\d{4}-\d{2}$/.test(state.budgetPeriod)) {
                        state.budgetPeriod = getCurrentPeriodKey();
                    }
-                   logInfo("BudgetStore: Rehydrated successfully.");
+                   if (!state.publishedBudgets) {
+                       state.publishedBudgets = {};
+                   }
+                   logInfo("BudgetStore: Rehydrated successfully (v2).");
                  }
              },
         }
