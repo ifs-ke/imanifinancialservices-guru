@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/statements/BudgetVarianceReportSection.tsx
 'use client';
 
@@ -39,7 +38,6 @@ const formatDateForStatements = (date: Date | undefined, defaultText: string = "
 const getUniqueMonthsInRange = (start: Date, end: Date): string[] => {
     if (!isDateValid(start) || !isDateValid(end) || end < start) return [];
     const months = eachMonthOfInterval({ start, end });
-    // Ensure the end month is included if the end date is in that month, even if not the start of it.
     const endMonthStart = dfnsStartOfMonth(end);
     if (!months.find(m => isEqual(dfnsStartOfMonth(m), endMonthStart))) {
         months.push(endMonthStart);
@@ -64,38 +62,49 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
     });
   }, [transactions, startDate, endDate]);
 
-  const actualSpendingByDescriptionAndCategory = useMemo(() => {
-    const actuals: Record<string, { amount: number; count: number; category: ExtendedBudgetItemCategory }> = {};
+ const actualSpendingByDescriptionAndCategory = useMemo(() => {
+    const actuals: Record<string, { amount: number; count: number; category: ExtendedBudgetItemCategory; description: string }> = {};
+
+    const relevantBudgetMonths = (startDate && endDate) ? getUniqueMonthsInRange(startDate, endDate) : [];
+    const budgetCategoryMap: Record<string, InternalBudgetItemCategory> = {};
+    allBudgetItemsGlobal.forEach(item => {
+        if (relevantBudgetMonths.includes(item.period)) {
+            budgetCategoryMap[item.description] = item.category;
+        }
+    });
+
     filteredTransactions.forEach(tx => {
         if (tx.amount === 0) return;
-        const isIncomeTx = tx.amount > 0;
-        let matchedBudgetItemCategory: InternalBudgetItemCategory | undefined = undefined;
 
-        if (tx.categoryName) {
-            const matchedItem = allBudgetItemsGlobal.find(
-                bi => bi.description === tx.categoryName &&
-                      (isIncomeTx ? bi.category === 'income' : bi.category !== 'income')
-            );
-            if(matchedItem) matchedBudgetItemCategory = matchedItem.category;
+        const isIncomeTx = tx.amount > 0;
+        const amount = Math.abs(tx.amount);
+        const linkedBudgetItemDescription = tx.categoryName;
+
+        let key: string;
+        let category: ExtendedBudgetItemCategory;
+        let description: string;
+
+        // Check if transaction is linked to a budget item THAT EXISTS IN THE RELEVANT PERIODS
+        if (linkedBudgetItemDescription && budgetCategoryMap[linkedBudgetItemDescription]) {
+            key = linkedBudgetItemDescription;
+            category = budgetCategoryMap[linkedBudgetItemDescription];
+            description = linkedBudgetItemDescription;
+        } else {
+            // Treat as unplanned/unbudgeted
+            description = tx.description;
+            category = isIncomeTx ? 'unbudgeted-income' : 'unplanned-expense';
+            key = `${category}-${description.toLowerCase().trim()}`; // Unique key for unplanned items
         }
         
-        let effectiveCategory: ExtendedBudgetItemCategory = isIncomeTx ? 'unbudgeted-income' : 'unplanned-expense';
-        if(matchedBudgetItemCategory) {
-            effectiveCategory = matchedBudgetItemCategory;
+        if (!actuals[key]) {
+            actuals[key] = { amount: 0, count: 0, category: category, description: description };
         }
-
-        const keyDescription = tx.categoryName || tx.description;
-        const groupKey = `${effectiveCategory}-${keyDescription.toLowerCase().trim()}`;
-        const amount = Math.abs(tx.amount);
-
-        if (!actuals[groupKey]) {
-            actuals[groupKey] = { amount: 0, count: 0, category: effectiveCategory };
-        }
-        actuals[groupKey].amount += amount;
-        actuals[groupKey].count += 1;
+        actuals[key].amount += amount;
+        actuals[key].count += 1;
     });
+
     return actuals;
-  }, [filteredTransactions, allBudgetItemsGlobal]);
+  }, [filteredTransactions, allBudgetItemsGlobal, startDate, endDate]);
 
 
   const varianceDataByCategory = useMemo(() => {
@@ -106,66 +115,49 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 
     if (!startDate || !endDate || !isDateValid(startDate) || !isDateValid(endDate)) return varianceMap;
 
+    const actuals = actualSpendingByDescriptionAndCategory;
+    const processedActualKeys = new Set<string>();
+
     const relevantBudgetMonths = getUniqueMonthsInRange(startDate, endDate);
-    const allDescriptionsFromRelevantBudgets = Array.from(new Set(
-        allBudgetItemsGlobal
-            .filter(bi => relevantBudgetMonths.includes(bi.period))
-            .map(bi => bi.description)
-    ));
+    const relevantBudgetItems = allBudgetItemsGlobal.filter(item => relevantBudgetMonths.includes(item.period));
+    const uniqueBudgetItemDescriptions = Array.from(new Set(relevantBudgetItems.map(item => item.description)));
+    
+    // 1. Process all budgeted items and their matched actuals
+    uniqueBudgetItemDescriptions.forEach(description => {
+        const totalBudgeted = relevantBudgetItems
+            .filter(item => item.description === description)
+            .reduce((sum, item) => sum + item.amount, 0);
 
-    allDescriptionsFromRelevantBudgets.forEach(description => {
-        let totalBudgetForDesc = 0;
-        let categoryForDesc: InternalBudgetItemCategory | undefined = undefined;
-
-        relevantBudgetMonths.forEach(periodKey_yyyy_MM => {
-            const budgetItemForThisPeriod = allBudgetItemsGlobal.find(
-                bi => bi.period === periodKey_yyyy_MM && bi.description === description
-            );
-            if (budgetItemForThisPeriod) {
-                if (!categoryForDesc) {
-                    categoryForDesc = budgetItemForThisPeriod.category;
-                }
-                totalBudgetForDesc += budgetItemForThisPeriod.amount;
-            }
-        });
+        const category = relevantBudgetItems.find(item => item.description === description)!.category;
         
-        if (categoryForDesc) {
-            const actualGroupKey = `${categoryForDesc}-${description.toLowerCase().trim()}`;
-            const actualGroup = actualSpendingByDescriptionAndCategory[actualGroupKey];
-            const actualAmount = actualGroup ? actualGroup.amount : null;
-            const actualItemCount = actualGroup ? actualGroup.count : 0;
-            
-            varianceMap[categoryForDesc].push({
-                description: description,
-                budgeted: totalBudgetForDesc,
-                actual: actualAmount,
-                itemCount: actualItemCount
+        const actualData = actuals[description]; // Direct lookup by the budget item's description
+        
+        varianceMap[category].push({
+            description: description,
+            budgeted: totalBudgeted,
+            actual: actualData?.amount ?? null,
+            itemCount: actualData?.count ?? 0,
+        });
+
+        if (actualData) {
+            processedActualKeys.add(description); // Mark this actual as processed
+        }
+    });
+
+    // 2. Add any remaining actuals that were not matched to a budget item
+    Object.entries(actuals).forEach(([key, actualData]) => {
+        if (!processedActualKeys.has(key)) {
+            // This is an unplanned/unbudgeted item
+            varianceMap[actualData.category].push({
+                description: `* ${actualData.description}`,
+                budgeted: 0,
+                actual: actualData.amount,
+                itemCount: actualData.count,
             });
         }
     });
 
-    Object.entries(actualSpendingByDescriptionAndCategory).forEach(([groupKey, data]) => {
-        const [categoryStr, ...descParts] = groupKey.split('-');
-        const actualDescription = descParts.join('-').trim();
-        const actualCategory = categoryStr as ExtendedBudgetItemCategory;
-
-        const alreadyAccountedFor = varianceMap[actualCategory]?.some(
-          item => item.description.toLowerCase().trim() === actualDescription && item.actual !== null
-        );
-
-        if (!alreadyAccountedFor) {
-            const targetArray = varianceMap[data.category];
-            if (targetArray) {
-                targetArray.push({
-                    description: `* ${actualDescription}`,
-                    budgeted: 0,
-                    actual: data.amount,
-                    itemCount: data.count,
-                });
-            }
-        }
-    });
-
+    // Sort each category for display
     Object.keys(varianceMap).forEach(key => {
        const catKey = key as ExtendedBudgetItemCategory;
         if (varianceMap[catKey]) {
@@ -233,7 +225,6 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 
     let variance = isIncomeCategory ? actualValue - budgetedValue : budgetedValue - actualValue;
 
-    // Don't show variance if no actual and no budget
     if (actual === null && budgetedValue === 0 && !isUnbudgeted) {
         variance = 0;
     }
@@ -252,13 +243,13 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
     );
   };
 
-  const renderSection = (title: string, data: { description: string; budgeted: number; actual: number | null; }[], category: ExtendedBudgetItemCategory, totals: { budgeted: number; actual: number; variance: number; }, Icon: React.ElementType, headerColor: string) => {
+  const renderSection = (title: string, data: { description: string; budgeted: number; actual: number | null; }[], category: ExtendedBudgetItemCategory, totals: { budgeted: number; actual: number; variance: number; }, IconComponent: React.ElementType, headerColor: string) => {
     if (data.length === 0) return null;
     return (
       <>
         <TableRow className="bg-muted hover:bg-muted">
             <TableCell colSpan={4} className={cn("font-semibold flex items-center gap-2", headerColor)}>
-                <Icon className="h-4 w-4" /> {title}
+                <IconComponent className="h-4 w-4" /> {title}
             </TableCell>
         </TableRow>
         {data.map(item => renderDetailRow(category, item.description, item.budgeted, item.actual))}
@@ -396,5 +387,3 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
 };
 
 export default BudgetVarianceReportSection;
-
-    
