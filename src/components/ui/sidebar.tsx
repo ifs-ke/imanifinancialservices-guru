@@ -1,4 +1,3 @@
-
 // src/components/ui/sidebar.tsx
 "use client";
 
@@ -35,6 +34,7 @@ import {
   Briefcase,
   TestTube,
   Database, // Added for local data icon
+  Download, // Added for download button
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -44,8 +44,17 @@ import { Badge } from "@/components/ui/badge";
 import { UserButton, useUser, useAuth } from "@clerk/nextjs";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
-import { logInfo, logWarn, logDebug } from "@/lib/logger";
+import { logInfo, logWarn, logDebug, logError } from "@/lib/logger"; // Added logError
 import { Skeleton } from "@/components/ui/skeleton";
+
+// Import all stores to get their state for download
+import { useTransactionsStore } from '@/store/transactionsStore';
+import { useDebtStore } from '@/store/debtStore';
+import { useInvestmentStore } from '@/store/investmentStore';
+import { useStatementStore } from '@/store/statementStore';
+import { useBudgetStore } from '@/store/budgetStore';
+import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
+import { useToast } from "@/hooks/use-toast"; // For download feedback
 
 interface SidebarMenuItem {
   href: string;
@@ -181,10 +190,71 @@ export const SidebarContent = React.forwardRef<
   const syncManager = useSyncManager();
   const { syncStatus, manualSync, isFetchDisabled } = syncManager;
 
+  // Add store getters for download
+  const getTransactionsState = useTransactionsStore.getState;
+  const getDebtState = useDebtStore.getState;
+  const getInvestmentState = useInvestmentStore.getState;
+  const getStatementState = useStatementStore.getState;
+  const getBudgetState = useBudgetStore.getState;
+  const getWeeklyReviewState = useWeeklyReviewStore.getState;
+  const getNotificationState = useNotificationStore.getState;
+  const { toast } = useToast();
+
   React.useEffect(() => {
     setHasMounted(true);
     setClientUnreadCount(unreadCount);
   }, [unreadCount]);
+
+  const handleDownloadAllData = () => {
+    logInfo("User initiated full data download.", { userId: user?.id });
+
+    try {
+        const fullPayload = {
+            transactions: getTransactionsState().transactions,
+            debts: getDebtState().debts,
+            investmentItems: getInvestmentState().investmentItems,
+            assetItems: getStatementState().assetItems,
+            otherLiabilityItems: getStatementState().otherLiabilityItems,
+            budgetItems: getBudgetState().budgetItems,
+            publishedBudgets: getBudgetState().publishedBudgets,
+            ownedReviews: getWeeklyReviewState().ownedReviews,
+            sharedReviews: getWeeklyReviewState().sharedReviews,
+            notifications: getNotificationState().notifications,
+            acknowledgedPrincipals: getDebtState().acknowledgedPrincipals,
+            statementSettings: {
+                startDate: getStatementState().startDate?.toISOString(),
+                endDate: getStatementState().endDate?.toISOString(),
+            },
+            version: '1.0',
+            exportedAt: new Date().toISOString(),
+        };
+
+        const jsonString = JSON.stringify(fullPayload, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+        link.download = `ifc_guru_export_${timestamp}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        toast({
+            title: "Data Exported",
+            description: "Your full application data has been downloaded as a JSON file.",
+        });
+    } catch (error) {
+        logError("Failed to export all data.", error, { userId: user?.id });
+        toast({
+            title: "Export Failed",
+            description: "An unexpected error occurred while exporting your data.",
+            variant: "destructive",
+        });
+    }
+  };
+
 
   let SyncIcon: React.ElementType = CloudOff;
   let syncStatusText = 'Offline';
@@ -343,6 +413,33 @@ export const SidebarContent = React.forwardRef<
       </ScrollArea>
 
       <div className="mt-auto space-y-1 border-t border-sidebar-border p-2.5">
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={handleDownloadAllData}
+                className={cn(
+                  "w-full justify-start text-sm h-9",
+                  sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                  "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                aria-label="Download all local data"
+              >
+                <Download size={18} className="flex-shrink-0 text-muted-foreground" />
+                <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                  Download Data
+                </span>
+              </Button>
+            </TooltipTrigger>
+            {sidebarActualState === "collapsed" && (
+              <TooltipContent side="right" align="center">
+                Download All Data
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+
         <ThemeToggle sidebarState={sidebarActualState} />
 
         {showDedicatedConflictResolverButton ? (
@@ -507,5 +604,3 @@ export const SidebarInset = React.forwardRef<
   );
 });
 SidebarInset.displayName = "SidebarInset";
-
-    
