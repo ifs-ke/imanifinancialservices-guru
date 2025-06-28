@@ -1,4 +1,3 @@
-
 // src/app/(dashboard)/transactions/EditTransactionDialog.tsx
 'use client';
 
@@ -76,8 +75,8 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
       modeOfPayment: 'Bank',
       frequency: undefined,
       variability: undefined,
-      categoryName: NONE_CATEGORY_VALUE,
-      incomeCategory: undefined,
+      categoryName: null, // Use null to match schema
+      incomeCategory: null, // Use null to match schema
     },
   });
 
@@ -112,8 +111,8 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
           modeOfPayment: transaction.modeOfPayment,
           frequency: transaction.frequency || undefined,
           variability: transaction.variability || undefined,
-          categoryName: transaction.categoryName || NONE_CATEGORY_VALUE,
-          incomeCategory: transaction.incomeCategory || undefined,
+          categoryName: transaction.categoryName || null,
+          incomeCategory: transaction.incomeCategory || null,
         });
       } else {
         form.reset({
@@ -123,8 +122,8 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
           modeOfPayment: 'Bank',
           frequency: undefined,
           variability: undefined,
-          categoryName: NONE_CATEGORY_VALUE,
-          incomeCategory: undefined,
+          categoryName: null,
+          incomeCategory: null,
         });
       }
     }
@@ -132,7 +131,7 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
 
   const onSubmit = (data: TransactionFormData) => {
     try {
-      const processedCategoryName = data.categoryName === NONE_CATEGORY_VALUE ? null : data.categoryName;
+      // Data from the form now directly matches the schema for optional/nullable fields
       const transactionPayload = {
         date: parse(data.date, 'yyyy-MM-dd', new Date()), // data.date is validated by Zod to be 'yyyy-MM-dd'
         description: data.description,
@@ -140,8 +139,8 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
         modeOfPayment: data.modeOfPayment,
         frequency: data.frequency,
         variability: data.variability,
-        categoryName: processedCategoryName,
-        incomeCategory: data.incomeCategory,
+        categoryName: data.categoryName, // Directly use the value (it's null or a string)
+        incomeCategory: data.incomeCategory, // Directly use the value (it's null or a string)
       };
 
       if (transaction) {
@@ -241,7 +240,10 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
               render={({ field }) => (
                 <FormItem className="grid grid-cols-4 items-center gap-4">
                   <FormLabel className="text-right col-span-1">Budget Category</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || NONE_CATEGORY_VALUE}>
+                  <Select
+                    onValueChange={(value) => field.onChange(value === NONE_CATEGORY_VALUE ? null : value)}
+                    value={field.value || NONE_CATEGORY_VALUE}
+                  >
                     <FormControl className="col-span-3">
                       <SelectTrigger>
                         <SelectValue placeholder="Optional: Link to budget item" />
@@ -273,14 +275,17 @@ const EditTransactionDialog: React.FC<EditTransactionDialogProps> = ({
                 render={({ field }) => (
                   <FormItem className="grid grid-cols-4 items-center gap-4">
                     <FormLabel className="text-right col-span-1">Income Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                    <Select
+                      onValueChange={(value) => field.onChange(value === NONE_CATEGORY_VALUE ? null : value)}
+                      value={field.value || NONE_CATEGORY_VALUE}
+                    >
                       <FormControl className="col-span-3">
                         <SelectTrigger>
                           <SelectValue placeholder="Optional: Select income type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value={NONE_CATEGORY_VALUE}>None</SelectItem>
                         <SelectItem value="earned">Earned</SelectItem>
                         <SelectItem value="profit">Profit</SelectItem>
                         <SelectItem value="interest">Interest</SelectItem>
