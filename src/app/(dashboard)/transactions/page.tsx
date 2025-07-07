@@ -1,8 +1,7 @@
-
 // src/app/(dashboard)/transactions/page.tsx
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -35,36 +34,28 @@ import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog';
 import { DataTable } from '@/components/ui/data-table';
 import { getColumns } from './columns';
 import Papa from 'papaparse';
-import { format, parse, isValid as isDateValid } from 'date-fns';
+import { format, parse, isValid as isDateValid, startOfMonth, endOfMonth } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { ReceiptText, PlusCircle, FileUp, FileDown, Edit3, XCircle, Trash2, TrendingUp, TrendingDown, Scale } from 'lucide-react';
+import { ReceiptText, PlusCircle, FileUp, FileDown, Edit3, XCircle, Trash2, TrendingUp, TrendingDown, Scale, Calendar as CalendarIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { formatCurrency, cn } from '@/lib/utils';
+import { useStatementStore } from '@/store/statementStore';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 
-// Helper to format Date to YYYY-MM-DD for input[type=date]
-const formatDateForInput = (date: Date | string | undefined | null): string => {
-  if (date instanceof Date) {
-    if (isDateValid(date)) {
-      return format(date, 'yyyy-MM-dd');
-    }
-    return format(new Date(0), 'yyyy-MM-dd');
-  }
-  if (typeof date === 'string') {
-    let parsedDate = new Date(date);
-    if (isDateValid(parsedDate)) {
-        return format(parsedDate, 'yyyy-MM-dd');
-    }
-    // Attempt to parse if it's already in yyyy-MM-dd
-    parsedDate = parse(date, 'yyyy-MM-dd', new Date());
-    if (isDateValid(parsedDate)) {
-        return format(parsedDate, 'yyyy-MM-dd');
-    }
-    return format(new Date(0), 'yyyy-MM-dd');
-  }
-  return format(new Date(0), 'yyyy-MM-dd');
+// Helper for the date picker display
+const formatDateForPicker = (date: Date | undefined) => {
+    if (!date || !isDateValid(date)) return <span>Pick a date</span>;
+    return format(date, "LLL dd, y");
+};
+
+// Helper to ensure date is valid before formatting
+const ensureValidDate = (date: Date | string): Date => {
+    const d = date instanceof Date ? date : new Date(date);
+    return isDateValid(d) ? d : new Date();
 };
 
 
@@ -72,6 +63,15 @@ export default function TransactionsPage() {
   const { transactions, deleteTransaction, deleteSelectedTransactions, batchUpdateTransactions } = useTransactionsStore();
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
   const { toast } = useToast();
+
+  const {
+      startDate,
+      endDate,
+      setStartDate,
+      setEndDate,
+      isHydrated,
+  } = useStatementStore();
+
 
   const [isEditTransactionDialogOpen, setIsEditTransactionDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
@@ -85,12 +85,41 @@ export default function TransactionsPage() {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
 
+  // Effect to set default dates on initial load if they aren't already set
+  useEffect(() => {
+    if (isHydrated) {
+        if (!startDate) {
+            setStartDate(startOfMonth(new Date()));
+        }
+        if (!endDate) {
+            setEndDate(endOfMonth(new Date()));
+        }
+    }
+  }, [isHydrated, startDate, endDate, setStartDate, setEndDate]);
+
+  // Filter transactions based on the selected date range
+  const filteredTransactions = useMemo(() => {
+      if (!startDate || !endDate || !isHydrated) {
+          return [];
+      }
+      const start = startDate.getTime();
+      const end = new Date(endDate).setHours(23, 59, 59, 999);
+
+      return transactions.filter(tx => {
+          const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+          if (!isDateValid(txDate)) return false;
+          const txTime = txDate.getTime();
+          return txTime >= start && txTime <= end;
+      });
+  }, [transactions, startDate, endDate, isHydrated]);
+
+
   const metrics = useMemo(() => {
-    const totalIncome = transactions
+    const totalIncome = filteredTransactions // Use filtered transactions
       .filter((tx) => tx.amount > 0)
       .reduce((sum, tx) => sum + tx.amount, 0);
 
-    const totalExpenses = transactions
+    const totalExpenses = filteredTransactions // Use filtered transactions
       .filter((tx) => tx.amount < 0)
       .reduce((sum, tx) => sum + tx.amount, 0); // Keep it negative
 
@@ -101,7 +130,7 @@ export default function TransactionsPage() {
       totalExpenses: Math.abs(totalExpenses), // Make positive for display
       netFlow,
     };
-  }, [transactions]);
+  }, [filteredTransactions]); // Depend on filteredTransactions
 
   const handleAddClick = () => {
     setEditingTransaction(null);
@@ -132,7 +161,7 @@ export default function TransactionsPage() {
   const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), [handleEditClick, handleDeleteClick]);
 
   const table = useReactTable({
-    data: transactions,
+    data: filteredTransactions, // Use filtered data for the table
     columns,
     state: {
       sorting,
@@ -186,20 +215,21 @@ export default function TransactionsPage() {
 
 
   const handleExportCsv = useCallback(() => {
-    if (transactions.length === 0) {
+    const dataToExport = filteredTransactions.length > 0 ? filteredTransactions : transactions;
+    if (dataToExport.length === 0) {
       toast({ title: "No data to export" });
       return;
     }
 
-    const dataToExport = transactions.map(({ id, date, ...rest }) => ({
-      date: formatDateForInput(date),
+    const csvRows = dataToExport.map(({ id, date, ...rest }) => ({
+      date: format(ensureValidDate(date), 'yyyy-MM-dd'),
       ...rest,
       frequency: rest.frequency || '',
       variability: rest.variability || '',
       categoryName: rest.categoryName || '',
     }));
 
-    const csv = Papa.unparse(dataToExport, {
+    const csv = Papa.unparse(csvRows, {
         header: true,
         columns: ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability', 'categoryName']
     });
@@ -207,20 +237,23 @@ export default function TransactionsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'transactions_export.csv';
+    const fileName = filteredTransactions.length > 0 && startDate && endDate
+        ? `transactions_export_${format(startDate, 'yyyyMMdd')}-${format(endDate, 'yyyyMMdd')}.csv`
+        : 'transactions_export_all.csv';
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast({ title: "CSV Exported", description: "Transactions exported successfully." });
-  }, [transactions, toast]);
+    toast({ title: "CSV Exported", description: `${filteredTransactions.length > 0 ? 'Filtered transactions' : 'All transactions'} exported successfully.` });
+  }, [filteredTransactions, transactions, toast, startDate, endDate]);
 
 
   return (
     <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
        <PageHeader
           title="Transactions"
-          description="Manage your financial transactions."
+          description="View and manage your financial transactions. Use the date filter to narrow your view."
           icon={ReceiptText}
         >
           <div className="flex gap-2 flex-wrap">
@@ -230,30 +263,81 @@ export default function TransactionsPage() {
           </div>
         </PageHeader>
         
+        {/* Date Filter */}
+        <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 px-4 md:px-6 lg:px-8">
+          <Label className="font-semibold shrink-0">Filter Period:</Label>
+           <Popover>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant={"outline"}
+                        className={cn("w-full sm:w-auto justify-start text-left font-normal h-9 min-w-[150px]", !startDate && "text-muted-foreground")}
+                    >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formatDateForPicker(startDate)}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={(date) => {
+                            setStartDate(date);
+                            if (endDate && date && date > endDate) setEndDate(date);
+                        }}
+                        initialFocus
+                    />
+                </PopoverContent>
+           </Popover>
+           <span className="text-muted-foreground hidden sm:inline">-</span>
+           <Popover>
+                <PopoverTrigger asChild>
+                     <Button
+                        variant={"outline"}
+                        className={cn("w-full sm:w-auto justify-start text-left font-normal h-9 min-w-[150px] mt-2 sm:mt-0", !endDate && "text-muted-foreground")}
+                    >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formatDateForPicker(endDate)}
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={(date) => {
+                            setEndDate(date);
+                            if (startDate && date && date < startDate) setStartDate(date);
+                        }}
+                        disabled={(date) => startDate ? date < startDate : false}
+                        initialFocus
+                    />
+                </PopoverContent>
+           </Popover>
+        </div>
+
         <section className="mb-6 px-4 md:px-6 lg:px-8 grid gap-4 md:grid-cols-3">
             <Card className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                <CardTitle className="text-sm font-medium">Total Income</CardTitle>
+                <CardTitle className="text-sm font-medium">Income (Period)</CardTitle>
                 <TrendingUp className="h-4 w-4 text-accent" />
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="text-2xl font-bold text-accent">{formatCurrency(metrics.totalIncome)}</div>
-                <p className="text-xs text-muted-foreground">From all transactions</p>
+                <p className="text-xs text-muted-foreground">For selected date range</p>
               </CardContent>
             </Card>
             <Card className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+                <CardTitle className="text-sm font-medium">Expenses (Period)</CardTitle>
                 <TrendingDown className="h-4 w-4 text-destructive" />
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="text-2xl font-bold text-destructive">{formatCurrency(metrics.totalExpenses)}</div>
-                <p className="text-xs text-muted-foreground">From all transactions</p>
+                <p className="text-xs text-muted-foreground">For selected date range</p>
               </CardContent>
             </Card>
             <Card className="shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                <CardTitle className="text-sm font-medium">Net Flow</CardTitle>
+                <CardTitle className="text-sm font-medium">Net Flow (Period)</CardTitle>
                 <Scale className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="p-4 pt-0">
@@ -290,7 +374,7 @@ export default function TransactionsPage() {
           <CardContent className="p-4 md:p-6">
             <DataTable
               columns={columns}
-              data={transactions}
+              data={filteredTransactions}
               table={table}
               searchColumn="description"
               searchPlaceholder="Search descriptions..."
