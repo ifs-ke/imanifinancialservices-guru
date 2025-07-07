@@ -37,10 +37,11 @@ import { getColumns } from './columns';
 import Papa from 'papaparse';
 import { format, parse, isValid as isDateValid } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { ReceiptText, PlusCircle, FileUp, FileDown, Edit3, XCircle, Trash2 } from 'lucide-react';
+import { ReceiptText, PlusCircle, FileUp, FileDown, Edit3, XCircle, Trash2, TrendingUp, TrendingDown, Scale } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 
 // Helper to format Date to YYYY-MM-DD for input[type=date]
@@ -83,6 +84,24 @@ export default function TransactionsPage() {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+
+  const metrics = useMemo(() => {
+    const totalIncome = transactions
+      .filter((tx) => tx.amount > 0)
+      .reduce((sum, tx) => sum + tx.amount, 0);
+
+    const totalExpenses = transactions
+      .filter((tx) => tx.amount < 0)
+      .reduce((sum, tx) => sum + tx.amount, 0); // Keep it negative
+
+    const netFlow = totalIncome + totalExpenses;
+
+    return {
+      totalIncome,
+      totalExpenses: Math.abs(totalExpenses), // Make positive for display
+      netFlow,
+    };
+  }, [transactions]);
 
   const handleAddClick = () => {
     setEditingTransaction(null);
@@ -210,6 +229,41 @@ export default function TransactionsPage() {
             <Button variant="secondary" onClick={handleExportCsv} disabled={transactions.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
           </div>
         </PageHeader>
+        
+        <section className="mb-6 px-4 md:px-6 lg:px-8 grid gap-4 md:grid-cols-3">
+            <Card className="shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                <CardTitle className="text-sm font-medium">Total Income</CardTitle>
+                <TrendingUp className="h-4 w-4 text-accent" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-2xl font-bold text-accent">{formatCurrency(metrics.totalIncome)}</div>
+                <p className="text-xs text-muted-foreground">From all transactions</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+                <TrendingDown className="h-4 w-4 text-destructive" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-2xl font-bold text-destructive">{formatCurrency(metrics.totalExpenses)}</div>
+                <p className="text-xs text-muted-foreground">From all transactions</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
+                <CardTitle className="text-sm font-medium">Net Flow</CardTitle>
+                <Scale className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className={cn("text-2xl font-bold", metrics.netFlow >= 0 ? 'text-accent' : 'text-destructive')}>
+                  {formatCurrency(metrics.netFlow)}
+                </div>
+                <p className="text-xs text-muted-foreground">Income - Expenses</p>
+              </CardContent>
+            </Card>
+        </section>
 
       <main className="flex-1 px-4 md:px-6 lg:px-8">
         <Card className="shadow-sm">
