@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { useDebtStore } from '@/store/debtStore';
 import type { DebtItem } from '@/lib/types';
@@ -209,6 +209,7 @@ export default function DebtFormPopover({ isOpen, onClose, debt, trigger }: Debt
     return (
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
         <DialogContent className="w-[90%] sm:max-w-[400px] p-4 rounded-xl border border-border/60 bg-background shadow-lg z-50">
+          <DialogTitle className="sr-only">Edit Debt Details</DialogTitle>
           {renderFormFields()}
         </DialogContent>
       </Dialog>

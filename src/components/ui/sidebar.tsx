@@ -36,6 +36,7 @@ import {
   Database,
   Download,
   Upload,
+  BarChart,
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
@@ -71,14 +72,14 @@ interface SidebarMenuItem {
 const menuItems: SidebarMenuItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/transactions", label: "Transactions", icon: ReceiptText },
-  { href: "/income-expenses", label: "Income/Expenses", icon: TrendingUp },
   { href: "/debt", label: "Debts", icon: Coins },
   { href: "/investments", label: "Investments", icon: Briefcase },
   { href: "/statements", label: "Statements", icon: FileText },
+  { href: "/reports", label: "Reports", icon: BarChart },
   { href: "/budget", label: "Budget", icon: PieChart },
   { href: "/weekly-review", label: "Weekly Review", icon: BookOpen },
   { href: "/notifications", label: "Notifications", icon: Bell },
-  { href: "/logger", label: "Logger", icon: ClipboardList },
+  { href: "/logger", label: "Logger", icon: ClipboardList, adminOnly: true },
   { href: "/admin/connection-test", label: "Admin Tests", icon: TestTube, adminOnly: true },
 ];
 

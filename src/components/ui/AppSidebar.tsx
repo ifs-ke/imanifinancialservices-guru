@@ -43,10 +43,11 @@ const menuItems: SidebarMenuItem[] = [
   { href: "/debt", label: "Debts", iconName: "Coins" },
   { href: "/investments", label: "Investments", iconName: "Briefcase" },
   { href: "/statements", label: "Statements", iconName: "FileText" },
+  { href: "/reports", label: "Reports", iconName: "BarChart" },
   { href: "/budget", label: "Budget", iconName: "PieChart" },
   { href: "/weekly-review", label: "Weekly Review", iconName: "BookOpen" },
   { href: "/notifications", label: "Notifications", iconName: "Bell" },
-  { href: '/logger', label: 'Logger', iconName: "ClipboardList" },
+  { href: '/logger', label: 'Logger', iconName: "ClipboardList", adminOnly: true },
   { href: '/admin/connection-test', label: 'Admin Tests', iconName: "TestTube", adminOnly: true },
 ];
 
@@ -430,9 +431,16 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.HTMLAttribu
               <Skeleton className={cn("rounded-full", sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} />
             )}
             {sidebarActualState === 'expanded' && isClerkLoaded && isSignedIn && user && (
-              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
-                  {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
-              </span>
+              <div className="flex flex-col ml-2 truncate max-w-[calc(100%-2.5rem)]">
+                <span className="text-xs text-sidebar-muted-foreground truncate" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
+                    {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
+                </span>
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-0.5">
+                  <Link href="/privacy" className="hover:underline">Privacy</Link>
+                  <span>•</span>
+                  <Link href="/terms" className="hover:underline">Terms</Link>
+                </div>
+              </div>
             )}
           </div>
         </div>

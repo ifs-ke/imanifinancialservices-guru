@@ -16,6 +16,7 @@ import BudgetItemFormSheet from './BudgetItemFormSheet';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Badge } from '@/components/ui/badge';
 import { format, startOfMonth, addMonths, subMonths, parse, isValid as isDateValid } from 'date-fns';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger as ShadAccordionTrigger } from "@/components/ui/accordion";
@@ -70,9 +71,8 @@ const AccordionTriggerWithActions = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "flex items-center justify-between w-full hover:bg-muted/50", 
-        "rounded-t-lg data-[state=closed]:rounded-b-lg transition-all", 
-        props['data-state'] === 'open' ? 'rounded-b-none' : '', 
+        "flex items-center justify-between w-full hover:bg-muted/10 transition-all border-b border-border/40", 
+        props['data-state'] === 'open' ? 'bg-muted/5' : '', 
         className
       )}
       data-state={props['data-state']} 
@@ -83,40 +83,39 @@ const AccordionTriggerWithActions = React.forwardRef<
         aria-expanded={props['aria-expanded']}
         aria-disabled={props.disabled}
         data-state={props['data-state']}
-        className={cn(
-          "flex-grow p-4 hover:no-underline flex items-center gap-3 text-left",
-           props['data-state'] === 'open' ? 'bg-muted/60' : ''
-        )}
+        className="flex-grow py-3 px-4 hover:no-underline flex items-center gap-3 text-left"
         onClick={(e) => {
           if ((e.target as HTMLElement).closest('[data-add-button]')) {
             e.preventDefault(); 
           }
         }}
       >
-        <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-        <div className="flex-grow">
-          <h3 className="text-base font-semibold">{title}</h3>
-          <p className="text-xs text-muted-foreground">{description}</p>
+        <div className="p-1.5 rounded-lg bg-primary/5 text-primary shrink-0">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="flex-grow min-w-0">
+          <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+          <p className="text-[11px] text-muted-foreground truncate max-w-[200px] sm:max-w-xs">{description}</p>
         </div>
         {itemCount > 0 && (
-          <div className="text-right ml-auto mr-3 flex-shrink-0">
-            <p className="font-semibold text-base text-foreground">{formatCurrency(totalAmount)}</p>
-            <p className="text-xs text-muted-foreground">({itemCount} items)</p>
+          <div className="text-right ml-auto mr-3 shrink-0">
+            <p className="font-bold text-sm font-mono text-foreground">{formatCurrency(totalAmount)}</p>
+            <p className="text-[10px] text-muted-foreground font-semibold">({itemCount} items)</p>
           </div>
         )}
       </ShadAccordionTrigger>
       <Button
-          variant="ghost"
-          size="sm"
+          variant="outline"
+          size="xs"
           onClick={(e) => {
             e.stopPropagation(); 
             onAddClick();
           }}
-          className="h-7 px-2 mr-3 flex-shrink-0"
+          className="h-7 px-2.5 mr-4 shrink-0 rounded-lg border-border/50 bg-background hover:bg-muted/20 text-xs font-bold"
           data-add-button 
           aria-label={`Add new ${title.replace(/s$/, '')} item`}
         >
-        <PlusCircle className="mr-1 h-3.5 w-3.5" />Add
+        <PlusCircle className="mr-1 h-3 w-3 text-primary" />Add
       </Button>
     </div>
   );
@@ -145,6 +144,7 @@ export default function BudgetPage() {
   const [viewingPublished, setViewingPublished] = useState<PublishedBudget | null>(null);
   const [publishedToDelete, setPublishedToDelete] = useState<PublishedBudget | null>(null);
   const [categoryForNewItem, setCategoryForNewItem] = useState<BudgetItemCategory>('recurring-expense');
+  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
   
   const [selectedMonthDate, setSelectedMonthDate] = useState<Date>(() => {
     const currentPeriod = useBudgetStore.getState().budgetPeriod;
@@ -155,7 +155,6 @@ export default function BudgetPage() {
   });
 
   const [openAccordions, setOpenAccordions] = useState<string[]>([]);
-
 
   useEffect(() => {
       const initialPeriod = formatToPeriodKey(selectedMonthDate);
@@ -274,91 +273,201 @@ export default function BudgetPage() {
     });
   };
 
+  const expensePercentageOfIncome = totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0;
 
   return (
-    <div className="flex flex-col min-h-screen w-full py-4 md:py-6 lg:py-8">
-      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="flex flex-col min-h-screen w-full py-4 md:py-6 lg:py-8 space-y-6">
+      {/* HEADER SECTION */}
+      <header className="px-4 md:px-6 lg:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <PieChartIcon className="h-6 w-6 text-primary" /> Budget Management
-            </h1>
-             <p className="text-sm text-muted-foreground">Plan your finances for a specific month.</p>
+          <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <PieChartIcon className="h-5 w-5 text-primary" /> Budget Management
+          </h1>
+          <p className="text-xs text-muted-foreground">Formulate, optimize, and archive your target monthly allocations.</p>
         </div>
-         <div className="flex gap-2 items-center flex-wrap">
-             <div className="flex items-center gap-1 border rounded-md px-2 py-1">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeMonth('prev')}><ChevronLeft size={16} /></Button>
-                 <Popover>
-                     <PopoverTrigger asChild>
-                         <Button variant="ghost" className="h-7 px-2 text-sm font-semibold">
-                             <CalendarIcon className="mr-2 h-4 w-4" />
-                             {formatPeriodForDisplay(budgetPeriod)}
-                         </Button>
-                     </PopoverTrigger>
-                     <PopoverContent className="w-auto p-0">
-                         <Calendar
-                             mode="single"
-                             selected={selectedMonthDate}
-                             onSelect={handleMonthSelect}
-                             captionLayout="dropdown-buttons"
-                             fromYear={new Date().getFullYear() - 5}
-                             toYear={new Date().getFullYear() + 5}
-                             initialFocus
-                         />
-                     </PopoverContent>
-                 </Popover>
-                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeMonth('next')}><ChevronRight size={16} /></Button>
-             </div>
-             <Button onClick={toggleAllAccordions} variant="outline" size="sm">
-                <ListCollapse className="mr-2 h-4 w-4" />
-                {openAccordions.length === allCategoryKeys.length ? 'Collapse All' : 'Expand All'}
-             </Button>
-             <Button asChild variant="outline" size="sm">
-                <Link href="/budget/import">
-                    <FileUp className="mr-2 h-4 w-4" /> Import
-                </Link>
-             </Button>
-              <Button onClick={handleExport} variant="secondary" size="sm" disabled={budgetItemsForPeriod.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export</Button>
-              <Button onClick={handlePublish} variant="default" size="sm" disabled={budgetItemsForPeriod.length === 0}>
-                 <Send className="mr-2 h-4 w-4" /> Publish
-              </Button>
-         </div>
+
+        <div className="flex items-center gap-2 flex-wrap md:self-end">
+          {/* MONTH SELECTOR */}
+          <div className="flex items-center gap-1 border border-border/60 bg-card rounded-lg p-0.5 shadow-sm">
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-muted" onClick={() => changeMonth('prev')}>
+              <ChevronLeft size={14} className="text-muted-foreground" />
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" className="h-7 px-2.5 text-xs font-bold hover:bg-muted flex items-center gap-1.5">
+                  <CalendarIcon className="h-3.5 w-3.5 text-primary" />
+                  {formatPeriodForDisplay(budgetPeriod)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 rounded-xl border shadow-lg z-50">
+                <Calendar
+                  mode="single"
+                  selected={selectedMonthDate}
+                  onSelect={handleMonthSelect}
+                  captionLayout="dropdown-buttons"
+                  fromYear={new Date().getFullYear() - 5}
+                  toYear={new Date().getFullYear() + 5}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-muted" onClick={() => changeMonth('next')}>
+              <ChevronRight size={14} className="text-muted-foreground" />
+            </Button>
+          </div>
+
+          <Button onClick={toggleAllAccordions} variant="outline" size="xs" className="h-8 text-xs font-semibold rounded-lg border-border/60 bg-card hover:bg-muted/10">
+            <ListCollapse className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
+            {openAccordions.length === allCategoryKeys.length ? 'Collapse All' : 'Expand All'}
+          </Button>
+
+          <Button asChild variant="outline" size="xs" className="h-8 text-xs font-semibold rounded-lg border-border/60 bg-card hover:bg-muted/10">
+            <Link href="/budget/import">
+              <FileUp className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" /> Import
+            </Link>
+          </Button>
+
+          <Button onClick={handleExport} variant="outline" size="xs" disabled={budgetItemsForPeriod.length === 0} className="h-8 text-xs font-semibold rounded-lg border-border/60 bg-card hover:bg-muted/10">
+            <FileDown className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" /> Export
+          </Button>
+
+          <AlertDialog open={isPublishConfirmOpen} onOpenChange={setIsPublishConfirmOpen}>
+            <Button 
+              onClick={() => setIsPublishConfirmOpen(true)} 
+              variant="default" 
+              size="xs" 
+              disabled={budgetItemsForPeriod.length === 0} 
+              className="h-8 text-xs font-semibold rounded-lg shadow-sm bg-[#10b981] hover:bg-[#059669] text-white border-none shrink-0 flex items-center transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+            >
+              <Send className="mr-1.5 h-3.5 w-3.5 text-white/90" /> Publish Snap
+            </Button>
+            <AlertDialogContent className="rounded-2xl border border-border/60 bg-background max-w-md p-5 shadow-lg">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-base font-bold flex items-center gap-2">
+                  <Send className="h-5 w-5 text-emerald-500 animate-pulse-subtle" /> Publish Budget Snapshot?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-xs leading-relaxed text-muted-foreground mt-1.5">
+                  This will capture a static snapshot of your monthly target allocations for <strong className="text-foreground">{formatPeriodForDisplay(budgetPeriod)}</strong>.
+                  <br /><br />
+                  The snapshot will be archived in the snapshot history ledger below and can be previewed or audited at any time.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="mt-4 gap-2">
+                <AlertDialogCancel className="rounded-xl text-xs h-9 font-semibold border-border/60" onClick={() => setIsPublishConfirmOpen(false)}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction 
+                  className="rounded-xl text-xs h-9 font-bold bg-[#10b981] hover:bg-[#059669] text-white border-none shadow-sm"
+                  onClick={() => {
+                    handlePublish();
+                    setIsPublishConfirmOpen(false);
+                  }}
+                >
+                  Confirm & Save Snapshot
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </header>
 
-      <Card className="mb-6 mx-4 md:mx-6 lg:mx-8 shadow-md">
-        <CardHeader className="p-6">
-            <CardTitle>Budget Summary for {formatPeriodForDisplay(budgetPeriod)}</CardTitle>
-            <CardDescription>Overview of your planned budget for the selected month.</CardDescription>
-        </CardHeader>
-         <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm p-6">
-            <div className="flex flex-col p-3 rounded-md border bg-accent/10">
-                <span className="text-muted-foreground mb-1">Total Income</span>
-                <span className="font-bold text-lg font-mono text-accent">{formatCurrency(totalIncome)}</span>
-            </div>
-            <div className="flex flex-col p-3 rounded-md border bg-destructive/10">
-                <span className="text-muted-foreground mb-1">Total Budgeted Spending</span>
-                <span className="font-bold text-lg font-mono text-destructive">{formatCurrency(totalExpenses)}</span>
-                <p className="text-xs text-muted-foreground mt-1">
-                    Expenses: {formatCurrency(totalRecurringExpenses + totalOneTimeExpenses)},
-                    Goals: {formatCurrency(totalGoals)},
-                    Debt: {formatCurrency(totalDebtAllocation)}
-                </p>
-            </div>
-            <div className="flex flex-col p-3 rounded-md border bg-muted">
-                <span className="text-muted-foreground mb-1">Expected Net</span>
-                <span className={cn("font-bold text-lg font-mono", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>{formatCurrency(netBudgeted)}</span>
-                {netBudgeted !== 0 && (<span className={cn("text-xs mt-1", netBudgeted > 0 ? 'text-primary' : 'text-destructive')}>{netBudgeted > 0 ? `${formatCurrency(netBudgeted)} Left Over` : `${formatCurrency(Math.abs(netBudgeted))} Shortfall`}</span>)}
-            </div>
-        </CardContent>
-      </Card>
+      {/* BENTO GRID SUMMARY CARDS */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 md:px-6 lg:px-8">
+        {/* TOTAL INCOME CARD */}
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Budgeted Monthly Inflows</span>
+            <span className="p-1.5 rounded-lg bg-primary/5 text-primary border border-primary/10">
+              <DollarSign className="h-3.5 w-3.5" />
+            </span>
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold font-mono tracking-tight text-foreground">{formatCurrency(totalIncome)}</h3>
+            <p className="text-[11px] text-muted-foreground mt-1">Sum of all expected salary, investments, and dividend inflows.</p>
+          </div>
+          <div className="pt-2 border-t border-border/40 flex items-center gap-1.5 text-xs font-semibold text-foreground bg-foreground/[0.02] p-1.5 rounded-lg">
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground shrink-0 animate-pulse" />
+            100% Allocation Capacity Available
+          </div>
+        </div>
 
-      <main className="flex flex-col gap-4 px-4 md:px-6 lg:mx-8">
+        {/* TOTAL BUDGETED EXPENSES */}
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm flex flex-col justify-between space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Target Outflows</span>
+            <span className="p-1.5 rounded-lg bg-foreground/5 text-foreground border border-border">
+              <TrendingDown className="h-3.5 w-3.5" />
+            </span>
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold font-mono tracking-tight text-foreground">{formatCurrency(totalExpenses)}</h3>
+            <div className="flex flex-wrap gap-x-2 text-[10px] text-muted-foreground mt-1 font-semibold">
+              <span>Exp: {formatCurrency(totalRecurringExpenses + totalOneTimeExpenses)}</span>
+              <span>•</span>
+              <span>Goals: {formatCurrency(totalGoals)}</span>
+              <span>•</span>
+              <span>Debt: {formatCurrency(totalDebtAllocation)}</span>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-border/40 flex flex-col space-y-1">
+            <div className="flex justify-between text-[10px] font-bold text-muted-foreground">
+              <span>Income Consumed:</span>
+              <span>{expensePercentageOfIncome.toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+              <div 
+                className={cn("h-full transition-all duration-500 rounded-full", expensePercentageOfIncome > 100 ? "bg-destructive" : "bg-primary")}
+                style={{ width: `${Math.min(expensePercentageOfIncome, 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* NET EXPECTED */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <div className="p-4 rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Projected Net Balance</span>
+                <Badge variant={netBudgeted >= 0 ? 'outline' : 'secondary'} className={cn(
+                  "text-[9px] font-bold px-1.5 py-0.5 border/50 uppercase",
+                  netBudgeted >= 0 ? "bg-primary/5 text-primary border-primary/15" : "bg-destructive/5 text-destructive border-destructive/15"
+                )}>
+                  {netBudgeted >= 0 ? 'Surplus' : 'Shortfall'}
+                </Badge>
+              </div>
+              <div>
+                <h3 className={cn("text-2xl font-bold font-mono tracking-tight", netBudgeted >= 0 ? 'text-primary' : 'text-destructive')}>{formatCurrency(netBudgeted)}</h3>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {netBudgeted > 0 ? `${formatCurrency(netBudgeted)} left to allocate.` : netBudgeted < 0 ? `${formatCurrency(Math.abs(netBudgeted))} over-budgeted!` : 'Perfect zero-based budget.'}
+                </p>
+              </div>
+              <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <span className="flex items-center gap-1 hover:text-primary">
+                  Click for insights
+                </span>
+                <span className="text-[10px] uppercase font-bold text-primary">Zero-Based Goal</span>
+              </div>
+            </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-4 rounded-xl border shadow-lg z-50">
+            <h4 className="font-bold text-sm text-foreground mb-1">Zero-Based Budget Tip</h4>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Aim for exactly <strong className="font-mono text-primary">0.00</strong>. This means every single shilling of your income has a designated purpose, whether spent, saved in your goals, or paid towards debts.
+            </p>
+          </PopoverContent>
+        </Popover>
+      </section>
+
+      {/* ACCORDION CATEGORIES */}
+      <main className="px-4 md:px-6 lg:px-8 space-y-4">
         <Accordion type="multiple" className="w-full space-y-4" value={openAccordions} onValueChange={setOpenAccordions}>
          {budgetCategories.map(({ name, key, icon: Icon, description }) => {
             const itemsForCategory = groupedBudgetItems[key as BudgetItemCategory] || [];
             const totalForCategory = itemsForCategory.reduce((sum, item) => sum + (item.amount || 0), 0);
             return (
-             <AccordionItem value={key} key={key} className="border-none shadow-sm rounded-lg overflow-hidden bg-card">
-                 <AccordionTriggerWithActions
+              <AccordionItem value={key} key={key} className="border border-border shadow-sm rounded-2xl overflow-hidden bg-card">
+                  <AccordionTriggerWithActions
                     title={name}
                     description={description}
                     icon={Icon}
@@ -366,121 +475,143 @@ export default function BudgetPage() {
                     itemCount={itemsForCategory.length}
                     totalAmount={totalForCategory}
                   />
-                  <AccordionContent className="p-0 border-t border-border">
-                      {(itemsForCategory.length) > 0 ? (
-                        <ScrollArea className="h-[350px] w-full">
-                            <Table>
-                                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
-                                    <TableRow>
-                                        <TableHead className="pl-4 pr-2">Description</TableHead>
-                                        <TableHead className="text-right px-2">Amount (KES)</TableHead>
-                                        <TableHead className="w-[60px] pr-4 pl-2"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {itemsForCategory.map((item) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell className="font-medium max-w-[150px] truncate pl-4 pr-2" title={item.description}>{item.description}</TableCell>
-                                            <TableCell className="text-right font-mono px-2">{formatCurrency(item.amount)}</TableCell>
-                                            <TableCell className="text-right pr-4 pl-2 py-1">
-                                                <div className="flex justify-end items-center gap-0.5">
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditClick(item)}><Edit className="h-3 w-3" /><span className="sr-only">Edit</span></Button>
-                                                    <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
-                                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-6 w-6" onClick={() => handleDeleteClick(item)}>
-                                                            <Trash2 className="h-3 w-3" /><span className="sr-only">Delete</span>
-                                                        </Button>
-                                                        {itemToDelete && itemToDelete.id === item.id && (
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                                    <AlertDialogDescription>Delete: <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong> for {formatPeriodForDisplay(itemToDelete.period)}?</AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter><AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteItem}>Delete</AlertDialogAction></AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        )}
-                                                    </AlertDialog>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </ScrollArea>
+                  <AccordionContent className="p-0 border-t border-border/40">
+                      {itemsForCategory.length > 0 ? (
+                        <div className="divide-y divide-border/30 max-h-[300px] overflow-y-auto">
+                          {itemsForCategory.map((item) => (
+                            <div key={item.id} className="flex items-center justify-between p-3 px-4 hover:bg-muted/10 transition-all">
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-foreground truncate max-w-[180px] sm:max-w-md" title={item.description}>
+                                  {item.description}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">{formatPeriodForDisplay(item.period)}</p>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="font-bold font-mono text-xs text-foreground">{formatCurrency(item.amount)}</span>
+                                <div className="flex items-center gap-1.5 border-l border-border/40 pl-3">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-muted" onClick={() => handleEditClick(item)}>
+                                    <Edit className="h-3 w-3 text-muted-foreground" />
+                                    <span className="sr-only">Edit</span>
+                                  </Button>
+                                  
+                                  <AlertDialog open={itemToDelete?.id === item.id} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7 rounded-lg hover:bg-destructive/10" onClick={() => handleDeleteClick(item)}>
+                                      <Trash2 className="h-3 w-3" />
+                                      <span className="sr-only">Delete</span>
+                                    </Button>
+                                    {itemToDelete && itemToDelete.id === item.id && (
+                                        <AlertDialogContent className="rounded-2xl">
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle className="text-base font-bold">Delete allocation item?</AlertDialogTitle>
+                                                <AlertDialogDescription className="text-xs">
+                                                  Delete <strong>{itemToDelete.description} ({formatCurrency(itemToDelete.amount)})</strong> for {formatPeriodForDisplay(itemToDelete.period)}? This action is permanent.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                              <AlertDialogCancel className="rounded-lg text-xs" onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+                                              <AlertDialogAction className="rounded-lg text-xs" onClick={confirmDeleteItem}>Delete</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    )}
+                                  </AlertDialog>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
-                        <p className="text-center text-muted-foreground py-10 text-sm">No {name.toLowerCase()} items budgeted for {formatPeriodForDisplay(budgetPeriod)}.</p>
+                        <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+                          <p className="text-xs text-muted-foreground font-semibold">No target allocations structured for {formatPeriodForDisplay(budgetPeriod)} yet.</p>
+                          <Button variant="link" size="xs" onClick={() => handleAddClick(key as BudgetItemCategory)} className="text-[11px] font-bold mt-1 text-primary">
+                            Add custom item row →
+                          </Button>
+                        </div>
                       )}
                   </AccordionContent>
-             </AccordionItem>
+              </AccordionItem>
             );
         })}
          </Accordion>
       </main>
 
-        <Separator className="my-8 mx-4 md:mx-6 lg:mx-8" />
-        <Card className="shadow-sm mx-4 md:mx-6 lg:mx-8">
-            <CardHeader className="p-6"><CardTitle className="text-lg flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Budget History</CardTitle><CardDescription>View snapshots of your saved budgets from previous months.</CardDescription></CardHeader>
-            <CardContent className="p-0">
-              {Object.keys(publishedBudgets).length > 0 ? (
+      {/* BUDGET SNAPSHOT LEDGER (HISTORY) */}
+      <section className="px-4 md:px-6 lg:px-8">
+        <Card className="shadow-sm rounded-2xl border border-border overflow-hidden">
+          <CardHeader className="p-5 border-b border-border/40">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" /> Budget snapshot ledger
+            </CardTitle>
+            <CardDescription className="text-[11px]">Audit and review snapshots archived from previous fiscal months.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {Object.keys(publishedBudgets).length > 0 ? (
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="pl-6">Published Date</TableHead>
-                      <TableHead>Budget Period</TableHead>
-                      <TableHead>Net Amount</TableHead>
-                      <TableHead className="text-right pr-6">Action</TableHead>
+                    <TableRow className="border-b border-border/40 hover:bg-transparent bg-muted/5">
+                      <TableHead className="pl-6 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Published Snap Date</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Budget Month</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Projected Net Snap</TableHead>
+                      <TableHead className="text-right pr-6 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Action</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
+                  <TableBody className="divide-y divide-border/30">
                     {Object.values(publishedBudgets).sort((a,b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()).map(pb => (
-                      <TableRow key={pb.id}>
-                        <TableCell className="pl-6">{format(new Date(pb.publishedAt), 'PPpp')}</TableCell>
-                        <TableCell>{formatPeriodForDisplay(pb.period)}</TableCell>
-                        <TableCell className={cn("font-mono", pb.net >= 0 ? 'text-accent' : 'text-destructive')}>{formatCurrency(pb.net)}</TableCell>
-                        <TableCell className="text-right pr-6">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button variant="outline" size="sm" onClick={() => setViewingPublished(pb)}>
-                                Preview
+                      <TableRow key={pb.id} className="hover:bg-muted/5">
+                        <TableCell className="pl-6 font-semibold text-xs text-foreground">{format(new Date(pb.publishedAt), 'PPpp')}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-semibold">{formatPeriodForDisplay(pb.period)}</TableCell>
+                        <TableCell className={cn("font-bold font-mono text-xs", pb.net >= 0 ? 'text-primary' : 'text-destructive')}>{formatCurrency(pb.net)}</TableCell>
+                        <TableCell className="text-right pr-6 py-2">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button variant="outline" size="xs" onClick={() => setViewingPublished(pb)} className="h-7 text-[10px] font-bold rounded-lg border-border/50 hover:bg-muted/15">
+                              Preview
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setPublishedToDelete(pb)}>
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Delete published budget</span>
-                            </Button>
+                            
+                            <AlertDialog open={publishedToDelete?.id === pb.id} onOpenChange={(open) => !open && setPublishedToDelete(null)}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setPublishedToDelete(pb)}>
+                                <Trash2 className="h-3 w-3" />
+                                <span className="sr-only">Delete snap</span>
+                              </Button>
+                              {publishedToDelete && publishedToDelete.id === pb.id && (
+                                  <AlertDialogContent className="rounded-2xl">
+                                      <AlertDialogHeader>
+                                          <AlertDialogTitle className="text-base font-bold">Delete published snapshot?</AlertDialogTitle>
+                                          <AlertDialogDescription className="text-xs leading-relaxed">
+                                              This will permanently delete the budget snapshot for <strong>{formatPeriodForDisplay(publishedToDelete.period)}</strong> published on <strong>{format(new Date(publishedToDelete.publishedAt), 'PP')}</strong>. This action cannot be reversed.
+                                          </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                          <AlertDialogCancel className="rounded-lg text-xs" onClick={() => setPublishedToDelete(null)}>Cancel</AlertDialogCancel>
+                                          <AlertDialogAction className="rounded-lg text-xs" onClick={confirmDeletePublished}>Delete Snapshot</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                  </AlertDialogContent>
+                              )}
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              ) : (
-                <div className="text-center text-muted-foreground py-10 px-6"><p>Budget history snapshots will be listed here once saved.</p></div>
-              )}
-            </CardContent>
-        </Card>
-
-        <BudgetItemFormSheet isOpen={isFormSheetOpen} onClose={handleFormSheetClose} item={editingItem} initialCategory={categoryForNewItem} />
-
-        <PublishedBudgetPreviewDialog
-            isOpen={!!viewingPublished}
-            onClose={() => setViewingPublished(null)}
-            publishedBudget={viewingPublished}
-        />
-
-        <AlertDialog open={!!publishedToDelete} onOpenChange={(open) => !open && setPublishedToDelete(null)}>
-            {publishedToDelete && (
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will permanently delete the budget snapshot for <strong>{formatPeriodForDisplay(publishedToDelete.period)}</strong> published on <strong>{format(new Date(publishedToDelete.publishedAt), 'PP')}</strong>. This action cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setPublishedToDelete(null)}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmDeletePublished}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-12 px-6">
+                <History className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs font-semibold">No saved snapshots registered in budget history ledger.</p>
+              </div>
             )}
-        </AlertDialog>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* SLIDE PANELS & FORM ACTIONS */}
+      <BudgetItemFormSheet isOpen={isFormSheetOpen} onClose={handleFormSheetClose} item={editingItem} initialCategory={categoryForNewItem} />
+
+      <PublishedBudgetPreviewDialog
+          isOpen={!!viewingPublished}
+          onClose={() => setViewingPublished(null)}
+          publishedBudget={viewingPublished}
+      />
     </div>
   );
 }

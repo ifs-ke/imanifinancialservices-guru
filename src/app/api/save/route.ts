@@ -233,36 +233,60 @@ export async function POST(request: Request) {
         ...(transactionChanges.updated || []),
       ];
     }
+    if (transactionChanges?.deletedIds?.length) {
+      firestorePayload.deletedTransactions = transactionChanges.deletedIds;
+    }
+
     if (debtChanges?.created?.length || debtChanges?.updated?.length) {
       firestorePayload.debts = [
         ...(debtChanges.created || []),
         ...(debtChanges.updated || []),
       ];
     }
+    if (debtChanges?.deletedIds?.length) {
+      firestorePayload.deletedDebts = debtChanges.deletedIds;
+    }
+
     if (assetItemChanges?.created?.length || assetItemChanges?.updated?.length) {
       firestorePayload.assetItems = [
         ...(assetItemChanges.created || []),
         ...(assetItemChanges.updated || []),
       ];
     }
+    if (assetItemChanges?.deletedIds?.length) {
+      firestorePayload.deletedAssetItems = assetItemChanges.deletedIds;
+    }
+
     if (otherLiabilityItemChanges?.created?.length || otherLiabilityItemChanges?.updated?.length) {
       firestorePayload.otherLiabilityItems = [
         ...(otherLiabilityItemChanges.created || []),
         ...(otherLiabilityItemChanges.updated || []),
       ];
     }
+    if (otherLiabilityItemChanges?.deletedIds?.length) {
+      firestorePayload.deletedOtherLiabilityItems = otherLiabilityItemChanges.deletedIds;
+    }
+
     if (budgetItemChanges?.created?.length || budgetItemChanges?.updated?.length) {
       firestorePayload.budgetItems = [
         ...(budgetItemChanges.created || []),
         ...(budgetItemChanges.updated || []),
       ];
     }
+    if (budgetItemChanges?.deletedIds?.length) {
+      firestorePayload.deletedBudgetItems = budgetItemChanges.deletedIds;
+    }
+
     if (investmentItemChanges?.created?.length || investmentItemChanges?.updated?.length) {
       firestorePayload.investmentItems = [
         ...(investmentItemChanges.created || []),
         ...(investmentItemChanges.updated || []),
       ];
     }
+    if (investmentItemChanges?.deletedIds?.length) {
+      firestorePayload.deletedInvestmentItems = investmentItemChanges.deletedIds;
+    }
+
     if (ownedReviewChanges?.created?.length || ownedReviewChanges?.updated?.length) {
       const reviewMap: Record<string, any> = {};
       [...(ownedReviewChanges.created || []), ...(ownedReviewChanges.updated || [])].forEach((r) => {
@@ -270,6 +294,10 @@ export async function POST(request: Request) {
       });
       firestorePayload.weeklyReviews = reviewMap;
     }
+    if (ownedReviewChanges?.deletedIds?.length) {
+      firestorePayload.deletedWeeklyReviews = ownedReviewChanges.deletedIds;
+    }
+
     if (startDate !== undefined) firestorePayload.startDate = startDate;
     if (endDate !== undefined) firestorePayload.endDate = endDate;
     if (gettingStartedDismissed !== undefined) firestorePayload.gettingStartedDismissed = gettingStartedDismissed;

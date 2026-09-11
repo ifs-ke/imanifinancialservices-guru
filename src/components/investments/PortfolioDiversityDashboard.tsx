@@ -47,13 +47,13 @@ const PRESET_ALLOCATIONS: Record<string, Record<string, number>> = {
 };
 
 const CLASS_COLORS: Record<string, string> = {
-  'Equities / Stocks': '#2563eb',     // Blue
-  'Fixed Income / Bonds': '#10b981',   // Emerald
-  'Real Estate': '#f59e0b',           // Amber
-  'Mutual Funds / ETFs': '#8b5cf6',   // Purple
-  'Crypto': '#ec4899',                // Pink
-  'Cash / Cash Equivalents': '#06b6d4', // Cyan
-  'Alternatives': '#64748b',          // Slate
+  'Equities / Stocks': '#171717',     // Pure Off-Black
+  'Fixed Income / Bonds': '#404040',   // Deep Charcoal
+  'Real Estate': '#737373',           // Medium Slate Gray
+  'Mutual Funds / ETFs': '#a3a3a3',   // Soft Silver Gray
+  'Crypto': '#d4d4d4',                // Light Gray Accent
+  'Cash / Cash Equivalents': '#e5e5e5', // High Contrast Pale Gray
+  'Alternatives': '#262626',          // Warm Off-Black
 };
 
 // Robust helper to map arbitrary/custom inputs back to standard asset classes

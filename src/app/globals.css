@@ -47,83 +47,83 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* White */
-    --foreground: 240 10% 3.9%; /* Dark Gray */
+    --background: 0 0% 100%; /* Pure White */
+    --foreground: 0 0% 9%; /* Charcoal Black */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 0 0% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 198 77% 53%; /* Calm Blue: #29ABE2 */
-    --primary-foreground: 0 0% 100%; /* White text on primary */
-    --secondary: 240 4.8% 95.9%; /* Light Gray */
-    --secondary-foreground: 240 10% 3.9%; /* Dark Gray */
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%; /* Medium Gray */
-    --accent: 120 60% 34%; /* Green for progress: #228B22 */
-    --accent-foreground: 0 0% 98%; /* Near White */
-    --destructive: 0 72% 51%; /* Softer Red */
-    --destructive-foreground: 0 0% 98%; /* Near White */
-    --border: 240 5.9% 90%; /* Light Gray Border */
-    --input: 240 5.9% 90%;
-    --ring: 198 77% 53%; /* Primary Blue */
+    --popover-foreground: 0 0% 9%;
+    --primary: 0 0% 9%; /* Solid Black */
+    --primary-foreground: 0 0% 98%; /* White text */
+    --secondary: 0 0% 96.1%; /* Near White/Light Gray */
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%; /* Medium Slate Gray */
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%; /* Subtle danger red */
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 83.1%; /* Solid Neutral-300 border */
+    --input: 0 0% 83.1%;
+    --ring: 0 0% 9%;
     --radius: 0.5rem;
 
-    /* Chart Colors (Light) */
-    --chart-1: 198 77% 53%; /* Primary */
-    --chart-2: 120 60% 34%; /* Accent Green */
-    --chart-3: 30 80% 55%;  /* Orange */
-    --chart-4: 260 70% 60%; /* Purple */
-    --chart-5: 0 70% 65%;   /* Coral */
+    /* Monochrome Chart Colors (Light) */
+    --chart-1: 0 0% 9%;
+    --chart-2: 0 0% 30%;
+    --chart-3: 0 0% 50%;
+    --chart-4: 0 0% 70%;
+    --chart-5: 0 0% 85%;
 
-    /* Sidebar specific theme (Light) - Refined */
-    --sidebar-background: 240 4.8% 97.9%; /* Light Gray Background */
-    --sidebar-foreground: 240 10% 15%; /* Darker Gray Foreground for better contrast */
-    --sidebar-primary: 198 77% 48%; /* Slightly darker primary for active state */
-    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
-    --sidebar-accent: 240 5.9% 92%; /* Lighter Gray for Hover/Accent */
-    --sidebar-accent-foreground: 240 10% 3.9%; /* Dark Gray text on hover */
-    --sidebar-border: 240 5.9% 88%; /* Subtle border */
-    --sidebar-ring: 198 77% 53%; /* Primary color for focus rings */
+    /* Sidebar Monochrome Theme (Light) */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 15%;
+    --sidebar-primary: 0 0% 9%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 0 0% 92%;
+    --sidebar-ring: 0 0% 9%;
   }
 
   .dark {
-    --background: 240 10% 3.9%; /* Very Dark Blue/Gray */
-    --foreground: 0 0% 98%; /* Near White */
-    --card: 240 4% 10%; /* Darker Card */
+    --background: 0 0% 3.9%; /* Rich Pure Near-Black */
+    --foreground: 0 0% 98%; /* High contrast soft white */
+    --card: 0 0% 6.5%; /* Card offset slightly lighter */
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 0 0% 6.5%;
     --popover-foreground: 0 0% 98%;
-    --primary: 198 77% 53%; /* Keep Primary Blue */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 3.7% 15.9%; /* Dark Gray */
+    --primary: 0 0% 98%; /* Crisp White */
+    --primary-foreground: 0 0% 9%; /* Dark text on white */
+    --secondary: 0 0% 14.9%; /* Charcoal Gray */
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%; /* Lighter Gray for muted text */
-    --accent: 120 50% 45%; /* Brighter Green */
+    --muted: 0 0% 12.9%;
+    --muted-foreground: 0 0% 63.9%; /* Mid gray */
+    --accent: 0 0% 14.9%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 50.6%; /* Brighter Red */
+    --destructive: 0 62.8% 40.6%; /* Pure clean warning */
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%; /* Dark Border */
-    --input: 240 3.7% 15.9%;
-    --ring: 198 77% 53%; /* Keep Ring Blue */
+    --border: 0 0% 20%; /* More visible dark border */
+    --input: 0 0% 20%;
+    --ring: 0 0% 83.1%;
     --radius: 0.5rem;
 
-    /* Chart Colors (Dark) */
-    --chart-1: 198 77% 53%; /* Primary */
-    --chart-2: 120 50% 45%; /* Accent Green (Brighter) */
-    --chart-3: 30 75% 60%;  /* Orange (Brighter) */
-    --chart-4: 260 65% 65%; /* Purple (Brighter) */
-    --chart-5: 0 65% 70%;   /* Coral (Brighter) */
+    /* Monochrome Chart Colors (Dark) */
+    --chart-1: 0 0% 98%;
+    --chart-2: 0 0% 80%;
+    --chart-3: 0 0% 60%;
+    --chart-4: 0 0% 40%;
+    --chart-5: 0 0% 20%;
 
-     /* Sidebar specific theme (Dark) - Refined */
-    --sidebar-background: 240 6% 8%; /* Dark Background */
-    --sidebar-foreground: 0 0% 95%; /* Light Gray Foreground */
-    --sidebar-primary: 198 77% 53%; /* Primary color for active state */
-    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
-    --sidebar-accent: 240 3.7% 18%; /* Slightly Lighter Dark for Hover/Accent */
-    --sidebar-accent-foreground: 0 0% 98%; /* Near White text on hover */
-    --sidebar-border: 240 3.7% 13%; /* Darker Subtle Border */
-    --sidebar-ring: 198 77% 53%; /* Primary color for focus rings */
+    /* Sidebar Monochrome Theme (Dark) */
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 9%;
+    --sidebar-accent: 0 0% 11%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 10%;
+    --sidebar-ring: 0 0% 83.1%;
   }
 }
 
@@ -148,5 +148,42 @@ body {
   }
   .animate-pulse-subtle {
     animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+/* HIGH FIDELITY STANDALONE BALANCE SHEET PRINT OVERRIDES */
+@media print {
+  body.print-single-variance-active {
+    background: white !important;
+    color: black !important;
+  }
+  body.print-single-variance-active * {
+    visibility: hidden !important;
+  }
+  body.print-single-variance-active .print-variance-sheet,
+  body.print-single-variance-active .print-variance-sheet * {
+    visibility: visible !important;
+  }
+  body.print-single-variance-active .print-variance-sheet {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    height: auto !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 15px !important;
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  body.print-single-variance-active .print-variance-sheet [class*="ScrollArea"],
+  body.print-single-variance-active .print-variance-sheet [class*="scroll-area"] {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
   }
 }

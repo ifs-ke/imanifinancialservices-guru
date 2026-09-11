@@ -12,6 +12,7 @@ const DebtImportPage = lazy(() => import('@/app/(dashboard)/debt/import/page'));
 const InvestmentsPage = lazy(() => import('@/app/(dashboard)/investments/page'));
 const IncomeExpensesPage = lazy(() => import('@/app/(dashboard)/income-expenses/page'));
 const StatementsPage = lazy(() => import('@/app/(dashboard)/statements/page'));
+const ReportsPage = lazy(() => import('@/app/(dashboard)/reports/page'));
 const BudgetPage = lazy(() => import('@/app/(dashboard)/budget/page'));
 const BudgetImportPage = lazy(() => import('@/app/(dashboard)/budget/import/page'));
 const WeeklyReviewPage = lazy(() => import('@/app/(dashboard)/weekly-review/page'));
@@ -161,6 +162,16 @@ export default function App() {
           <DashboardLayout>
             <Suspense fallback={<PageFallback />}>
               <StatementsPage />
+            </Suspense>
+          </DashboardLayout>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <DashboardLayout>
+            <Suspense fallback={<PageFallback />}>
+              <ReportsPage />
             </Suspense>
           </DashboardLayout>
         }

@@ -137,6 +137,16 @@ export interface WeeklyReviewData {
   weekKey?: string;
 }
 
+export interface ReviewChatMessage {
+  id: string;
+  shareId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'owner' | 'reviewer' | 'assistant';
+  message: string;
+  timestamp: string;
+}
+
 
 export interface UserShareInfo {
     userId: string;

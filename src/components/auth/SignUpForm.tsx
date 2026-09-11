@@ -172,6 +172,13 @@ export function SignUpForm() {
               required
             />
           </div>
+
+          <div className="text-[11px] text-muted-foreground leading-relaxed pt-1">
+            By creating an account, you consent to the processing of your personal data in compliance with <span className="font-semibold text-foreground">Kenya&apos;s Data Protection Act, 2019</span>. Review our{' '}
+            <Link href="/privacy" className="text-primary underline hover:text-primary/80 font-medium">Privacy Policy</Link> and{' '}
+            <Link href="/terms" className="text-primary underline hover:text-primary/80 font-medium">Terms & Conditions</Link>.
+          </div>
+
           <Button type="submit" className="w-full" disabled={loading} id="email-signup-btn">
             {loading ? (
               <>

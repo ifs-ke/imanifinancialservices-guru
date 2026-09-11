@@ -1,178 +1,225 @@
-
 // src/app/(dashboard)/statements/page.tsx
 'use client';
 
-import React, { useState, useEffect, ChangeEvent, useMemo } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Save, XCircle, Calendar as CalendarIcon, FileText } from 'lucide-react';
+import { Calendar as CalendarIcon, FileText, Check, Settings, Sparkles, TrendingUp, HelpCircle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, isValid as isDateValid } from 'date-fns';
+import { format, startOfMonth as dfnsStartOfMonth, endOfMonth as dfnsEndOfMonth, subMonths, startOfYear, endOfYear, isValid as isDateValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useStatementStore } from '@/store/statementStore';
 import NetWorthStatementSection from './NetWorthStatementSection';
 import CashFlowStatementSection from './CashFlowStatementSection';
 import BudgetVarianceReportSection from './BudgetVarianceReportSection';
 import { logDebug } from '@/lib/logger';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { Badge } from '@/components/ui/badge';
 
-const formatDateForStatements = (date: Date | undefined) => {
-    if (!date || !isDateValid(date)) return <span>Pick a date</span>;
-    return format(date, "LLL dd, y");
+const formatDateForStatements = (date: Date | undefined, isStart: boolean) => {
+  if (!date || !isDateValid(date)) return <span className="text-muted-foreground/60">{isStart ? "All Time (Start)" : "All Time (End)"}</span>;
+  return format(date, "LLL dd, yyyy");
 };
 
 export default function StatementsPage() {
   const {
-      startDate, endDate, setStartDate, setEndDate,
-      assetItems, otherLiabilityItems,
-      setAssetItems, setOtherLiabilityItems, // To pass down for editing
+    startDate, endDate, setStartDate, setEndDate,
+    assetItems, otherLiabilityItems,
+    setAssetItems, setOtherLiabilityItems,
   } = useStatementStore();
 
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Ensure initial dates are set after hydration if they are undefined
   useEffect(() => {
-    if (!startDate && isHydrated) {
-      setStartDate(dfnsStartOfMonth(new Date()));
-      logDebug("StatementsPage: Default start date set on hydration.", { currentUserId: 'mock_user' });
-    }
-    if (!endDate && isHydrated) {
-      setEndDate(dfnsEndOfMonth(new Date()));
-      logDebug("StatementsPage: Default end date set on hydration.", { currentUserId: 'mock_user' });
-    }
     setIsHydrated(true);
-  }, [isHydrated, startDate, endDate, setStartDate, setEndDate]);
-
+  }, []);
 
   const handleEditToggle = () => {
     setIsEditing(!isEditing);
-    if (isEditing) { // Was editing, now finishing
-        // Save logic is handled within NetWorthStatementSection
-        // This toggle is just for the button state on this page
-        toast({ title: 'Edit Mode Ended', description: 'Changes (if any) should be saved within the Net Worth section.' });
+    if (!isEditing) {
+      toast({ 
+        title: 'Edit Mode Enabled', 
+        description: 'You can now manage Assets and Liabilities directly within the Net Worth card.',
+        className: "bg-primary text-primary-foreground border-none"
+      });
     } else {
-        toast({ title: 'Edit Mode Enabled', description: 'You can now edit Assets and Other Liabilities in the Net Worth statement.' });
+      toast({ 
+        title: 'Edit Mode Saved', 
+        description: 'Statement balances are fully synchronized with local persistence.' 
+      });
     }
   };
 
-  // This is a simplified save, actual saving of assets/liabilities happens in NetWorthStatementSection
-  const handleSaveChanges = () => {
-    // This function might become more relevant if global save for the page is needed
-    // For now, individual sections handle their saves
-    setIsEditing(false);
-    toast({ title: 'Changes Saved', description: 'Assets and Other Liabilities have been updated if changed.' });
+  const handlePresetSelect = (preset: 'this-month' | 'last-month' | 'last-3-months' | 'ytd' | 'all') => {
+    const today = new Date();
+    switch (preset) {
+      case 'this-month':
+        setStartDate(dfnsStartOfMonth(today));
+        setEndDate(dfnsEndOfMonth(today));
+        break;
+      case 'last-month':
+        const lm = subMonths(today, 1);
+        setStartDate(dfnsStartOfMonth(lm));
+        setEndDate(dfnsEndOfMonth(lm));
+        break;
+      case 'last-3-months':
+        setStartDate(dfnsStartOfMonth(subMonths(today, 2)));
+        setEndDate(dfnsEndOfMonth(today));
+        break;
+      case 'ytd':
+        setStartDate(startOfYear(today));
+        setEndDate(dfnsEndOfMonth(today));
+        break;
+      case 'all':
+        setStartDate(undefined);
+        setEndDate(undefined);
+        break;
+    }
+    toast({
+      title: "Filter Period Updated",
+      description: "Statements successfully filtered for the selected preset interval.",
+    });
   };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    // Potentially revert changes if NetWorthStatementSection doesn't handle it internally on cancel
-    toast({ title: 'Edit Cancelled', description: 'No changes were saved.', variant: 'default' });
-  };
-
 
   if (!isHydrated) {
     return (
-        <div className="flex h-full w-full items-center justify-center p-4 md:p-6 lg:p-8">
-            <p>Loading statement data...</p>
+      <div className="flex h-[80vh] w-full items-center justify-center p-6 bg-background">
+        <div className="flex flex-col items-center gap-2">
+          <FileText className="h-8 w-8 text-primary animate-bounce" />
+          <p className="text-sm font-semibold text-muted-foreground">Hydrating your ledger data...</p>
         </div>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
-      <header className="mb-6 px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                <FileText className="h-6 w-6 text-primary"/> Financial Statements
-            </h1>
-            <p className="text-muted-foreground text-sm">Review your financial position and performance.</p>
-        </div>
-         <div className="flex gap-2 flex-wrap">
-            {isEditing ? (
-                <>
-                    <Button variant="outline" onClick={handleCancelEdit} size="sm">
-                        <XCircle className="mr-2 h-4 w-4" /> Cancel Edit
-                    </Button>
-                    {/* Save button in NetWorthStatementSection now handles actual save */}
-                </>
-            ) : (
-                <Button onClick={handleEditToggle} size="sm">
-                    Edit Assets/Liabilities
-                </Button>
+    <div className="flex flex-col w-full min-h-screen py-6 md:py-8 bg-background/50">
+      
+      {/* HEADER ROW */}
+      <PageHeader
+        title="Financial Statements"
+        description="Review audit-ready ledger statements across assets, liabilities, and monthly expense variances."
+        icon={FileText}
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button 
+            variant={isEditing ? "outline" : "default"} 
+            onClick={handleEditToggle} 
+            size="sm"
+            className={cn(
+              "h-9 text-xs font-semibold rounded-lg shadow-sm shrink-0",
+              isEditing && "border-primary text-primary bg-primary/5 hover:bg-primary/10"
             )}
-         </div>
-      </header>
+          >
+            {isEditing ? (
+              <>
+                <Check className="mr-1.5 h-4 w-4" /> Save Modifications
+              </>
+            ) : (
+              <>
+                <Settings className="mr-1.5 h-4 w-4" /> Configure Positions
+              </>
+            )}
+          </Button>
+        </div>
+      </PageHeader>
 
-       <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 p-4 mx-4 md:mx-6 lg:px-8 border rounded-lg bg-card shadow-sm">
-          <Label className="font-semibold shrink-0">Statement Period:</Label>
-           <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant={"outline"}
-                        className={cn("w-full sm:w-auto justify-start text-left font-normal h-9 min-w-[150px]", !startDate && "text-muted-foreground")}
-                    >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatDateForStatements(startDate)}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={(date) => {
-                            setStartDate(date);
-                            if (endDate && date && date > endDate) setEndDate(date);
-                        }}
-                        initialFocus
-                    />
-                </PopoverContent>
-           </Popover>
-           <span className="text-muted-foreground hidden sm:inline">-</span>
-           <Popover>
-                <PopoverTrigger asChild>
-                     <Button
-                        variant={"outline"}
-                        className={cn("w-full sm:w-auto justify-start text-left font-normal h-9 min-w-[150px] mt-2 sm:mt-0", !endDate && "text-muted-foreground")}
-                    >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatDateForStatements(endDate)}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={(date) => {
-                            setEndDate(date);
-                            if (startDate && date && date < startDate) setStartDate(date);
-                        }}
-                        disabled={(date) => startDate ? date < startDate : false}
-                        initialFocus
-                    />
-                </PopoverContent>
-           </Popover>
-       </div>
+      {/* FILTER & PERIOD SELECTOR BAR */}
+      <div className="mx-4 md:mx-6 lg:mx-8 mb-6 p-4 rounded-2xl border border-border/60 bg-card shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Label className="text-xs font-bold text-foreground shrink-0 uppercase tracking-wider">Statement Period:</Label>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full sm:w-auto justify-start text-left font-semibold text-xs h-9 min-w-[160px] border-border/60 rounded-lg shadow-sm hover:bg-muted/10",
+                    !startDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  {formatDateForStatements(startDate, true)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 rounded-xl border border-border/60 shadow-lg z-50" align="start">
+                <Calendar
+                  mode="single"
+                  selected={startDate}
+                  onSelect={(date) => {
+                    setStartDate(date);
+                    if (endDate && date && date > endDate) setEndDate(date);
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
 
-      <main className="flex-1 grid gap-6 lg:grid-cols-2 px-4 md:px-6 lg:px-8">
+            <span className="text-muted-foreground hidden sm:inline font-semibold">-</span>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full sm:w-auto justify-start text-left font-semibold text-xs h-9 min-w-[160px] border-border/60 rounded-lg shadow-sm hover:bg-muted/10",
+                    !endDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  {formatDateForStatements(endDate, false)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 rounded-xl border border-border/60 shadow-lg z-50" align="start">
+                <Calendar
+                  mode="single"
+                  selected={endDate}
+                  onSelect={(date) => {
+                    setEndDate(date);
+                    if (startDate && date && date < startDate) setStartDate(date);
+                  }}
+                  disabled={(date) => startDate ? date < startDate : false}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        {/* PERIOD PRESET INLINE SHORTCUTS */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mr-1">Presets:</span>
+          <Button variant="outline" size="xs" onClick={() => handlePresetSelect('this-month')} className="h-7 text-[11px] font-semibold rounded-lg border-border/60">This Month</Button>
+          <Button variant="outline" size="xs" onClick={() => handlePresetSelect('last-month')} className="h-7 text-[11px] font-semibold rounded-lg border-border/60">Last Month</Button>
+          <Button variant="outline" size="xs" onClick={() => handlePresetSelect('last-3-months')} className="h-7 text-[11px] font-semibold rounded-lg border-border/60">3 Months</Button>
+          <Button variant="outline" size="xs" onClick={() => handlePresetSelect('ytd')} className="h-7 text-[11px] font-semibold rounded-lg border-border/60">YTD</Button>
+          <Button variant="outline" size="xs" onClick={() => handlePresetSelect('all')} className="h-7 text-[11px] font-semibold rounded-lg border-border/60">All</Button>
+        </div>
+      </div>
+
+      {/* MAIN LAYOUT GRID */}
+      <main className="flex-1 grid gap-6 lg:grid-cols-2 px-4 md:px-6 lg:px-8 items-start">
         <CashFlowStatementSection 
-            startDate={startDate}
-            endDate={endDate}
+          startDate={startDate}
+          endDate={endDate}
         />
+        
         <NetWorthStatementSection 
-            isEditingAssetsLiabilities={isEditing}
-            onSaveEdits={handleSaveChanges} // Or pass specific save handlers from here
-            assetItems={assetItems} // Pass state down
-            otherLiabilityItems={otherLiabilityItems} // Pass state down
-            setAssetItems={setAssetItems} // Pass setters down
-            setOtherLiabilityItems={setOtherLiabilityItems} // Pass setters down
+          isEditingAssetsLiabilities={isEditing}
+          onSaveEdits={() => setIsEditing(false)}
+          assetItems={assetItems}
+          otherLiabilityItems={otherLiabilityItems}
+          setAssetItems={setAssetItems}
+          setOtherLiabilityItems={setOtherLiabilityItems}
         />
+
         <BudgetVarianceReportSection
-            startDate={startDate}
-            endDate={endDate}
+          startDate={startDate}
+          endDate={endDate}
         />
       </main>
     </div>

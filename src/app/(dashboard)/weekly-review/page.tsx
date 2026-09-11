@@ -71,6 +71,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShareReviewDialog } from './ShareReviewDialog';
+import { ReviewChat } from '@/components/weekly-review/ReviewChat';
 import {
   Dialog,
   DialogContent,
@@ -284,6 +285,25 @@ export default function WeeklyReviewPage() {
   const currentOwnedReview = useMemo(() => {
     return ownedReviews[currentPeriodKey];
   }, [currentPeriodKey, ownedReviews]);
+
+  const activeOwnedSharedRecord = useMemo(() => {
+    if (!userId) return null;
+    return ownerShares.find(s => s.periodKey === currentPeriodKey && s.ownerId === userId) || null;
+  }, [ownerShares, currentPeriodKey, userId]);
+
+  const commentsCountForCurrentPeriod = useMemo(() => {
+    let count = 0;
+    if (activeTab === 'shared' && activeSharedRecord?.comments) {
+      Object.values(activeSharedRecord.comments).forEach((commentsList) => {
+        if (Array.isArray(commentsList)) count += commentsList.length;
+      });
+    } else if (currentOwnedReview?.collaboratorComments) {
+      Object.values(currentOwnedReview.collaboratorComments).forEach((commentsList) => {
+        if (Array.isArray(commentsList)) count += commentsList.length;
+      });
+    }
+    return count;
+  }, [activeTab, activeSharedRecord, currentOwnedReview]);
 
   // Filtered transactions for current period
   const scopedTransactions = useMemo(() => {
@@ -1069,6 +1089,18 @@ export default function WeeklyReviewPage() {
                   <strong className="text-foreground font-medium">Privacy Guaranteed:</strong> Invited peers receive comment-only review permissions. Your raw financial data cannot be edited by reviewers.
                 </div>
               </div>
+
+              {/* Live Share Chat & AI Advisor */}
+              <ReviewChat
+                shareRecord={activeOwnedSharedRecord}
+                currentUserId={userId || 'local_user'}
+                currentUserName={user?.fullName || user?.email?.split('@')[0] || 'Owner'}
+                currentUserRole="owner"
+                transactionsCount={scopedTransactions.length}
+                commentsCount={commentsCountForCurrentPeriod}
+                journalNotes={journalEntry}
+                onCommentsUpdated={loadOwnerShares}
+              />
             </div>
           </div>
         </TabsContent>
@@ -1205,7 +1237,7 @@ export default function WeeklyReviewPage() {
                 </div>
 
                 {/* Shared Journal View (Read-Only) */}
-                <div className="lg:col-span-5">
+                <div className="lg:col-span-5 space-y-4">
                   <Card className="border border-border/60 shadow-xs bg-card">
                     <CardHeader className="p-3.5 border-b border-border/40 bg-muted/20">
                       <CardTitle className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -1224,6 +1256,18 @@ export default function WeeklyReviewPage() {
                       />
                     </CardContent>
                   </Card>
+
+                  {/* Shared Review Chat */}
+                  <ReviewChat
+                    shareRecord={activeSharedRecord}
+                    currentUserId={userId || 'local_user'}
+                    currentUserName={user?.fullName || user?.email?.split('@')[0] || 'Reviewer'}
+                    currentUserRole="reviewer"
+                    transactionsCount={scopedTransactions.length}
+                    commentsCount={commentsCountForCurrentPeriod}
+                    journalNotes={journalEntry}
+                    onCommentsUpdated={loadSharedWithMe}
+                  />
                 </div>
               </div>
             </div>

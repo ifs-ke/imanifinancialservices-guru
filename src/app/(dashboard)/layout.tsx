@@ -9,7 +9,6 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { useSyncManager } from '@/hooks/useSyncManager';
-import FloatingChatButton from '@/components/layout/FloatingChatButton';
 import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog';
 import LocalChangesPreviewDialog from '@/components/layout/LocalChangesPreviewDialog';
 import { Toaster } from '@/components/ui/toaster';
@@ -68,7 +67,6 @@ export default function DashboardLayout({
             {children}
           </main>
         </SidebarInset>
-        <FloatingChatButton />
         <Toaster />
 
         {isSignedIn && syncManager.isMismatchDialogOpen && (

@@ -74,6 +74,103 @@ const HASH_CHECK_ENABLED = true;
 const API_TIMEOUT_MS = 30000;
 const AUTO_SAVE_DEBOUNCE_DELAY_MS = 2500;
 
+/**
+ * Compares current local state against the last known synced snapshot of objects
+ * to compute incremental changes (created, updated, deleted).
+ * 
+ * @template T - The structure of the entity containing an id string property.
+ * @param {T[]} current - The active local copy of the data.
+ * @param {T[] | null | undefined} lastSynced - The cached baseline of the last successful sync.
+ * @returns {{ created: T[]; updated: T[]; deletedIds: string[] }} The itemized delta arrays.
+ */
+function calculateCollectionChanges<T extends { id: string }>(
+  current: T[],
+  lastSynced: T[] | null | undefined
+): { created: T[]; updated: T[]; deletedIds: string[] } {
+  if (!lastSynced) {
+    return {
+      created: current,
+      updated: [],
+      deletedIds: [],
+    };
+  }
+
+  const lastSyncedMap = new Map<string, T>();
+  lastSynced.forEach((item) => lastSyncedMap.set(item.id, item));
+
+  const currentMap = new Map<string, T>();
+  current.forEach((item) => currentMap.set(item.id, item));
+
+  const created: T[] = [];
+  const updated: T[] = [];
+  const deletedIds: string[] = [];
+
+  current.forEach((item) => {
+    const syncedItem = lastSyncedMap.get(item.id);
+    if (!syncedItem) {
+      created.push(item);
+    } else {
+      const isDifferent = JSON.stringify(item) !== JSON.stringify(syncedItem);
+      if (isDifferent) {
+        updated.push(item);
+      }
+    }
+  });
+
+  lastSynced.forEach((item) => {
+    if (!currentMap.has(item.id)) {
+      deletedIds.push(item.id);
+    }
+  });
+
+  return { created, updated, deletedIds };
+}
+
+/**
+ * Compares current local Weekly Review states against the last known synced snapshot
+ * to compute incremental journal and comment adjustments.
+ * 
+ * @param {Record<string, WeeklyReviewData>} current - The active local copy of review records.
+ * @param {Record<string, WeeklyReviewData> | null | undefined} lastSynced - The baseline of the last successful sync.
+ * @returns {{ created: any[]; updated: any[]; deletedIds: string[] }} The itemized delta arrays.
+ */
+function calculateReviewChanges(
+  current: Record<string, WeeklyReviewData>,
+  lastSynced: Record<string, WeeklyReviewData> | null | undefined
+): { created: any[]; updated: any[]; deletedIds: string[] } {
+  if (!lastSynced) {
+    return {
+      created: Object.entries(current).map(([weekKey, item]) => ({ ...item, weekKey })),
+      updated: [],
+      deletedIds: [],
+    };
+  }
+
+  const created: any[] = [];
+  const updated: any[] = [];
+  const deletedIds: string[] = [];
+
+  Object.entries(current).forEach(([weekKey, item]) => {
+    const syncedItem = lastSynced[weekKey];
+    if (!syncedItem) {
+      created.push({ ...item, weekKey });
+    } else {
+      const isDifferent = JSON.stringify(item) !== JSON.stringify(syncedItem);
+      if (isDifferent) {
+        updated.push({ ...item, weekKey });
+      }
+    }
+  });
+
+  Object.keys(lastSynced).forEach((weekKey) => {
+    if (!current[weekKey]) {
+      deletedIds.push(weekKey);
+    }
+  });
+
+  return { created, updated, deletedIds };
+}
+
 export function useSyncManager() {
   const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth();
   const { toast } = useToast();
@@ -147,43 +244,24 @@ export function useSyncManager() {
     'payloadDataHash' | 'lastKnownServerHash'
   > => {
     const current = getCurrentLocalDataForFullSnapshot();
-    // Return full snapshot format for robust idempotent Firestore syncing
+    const last = lastSyncedData.current;
+
+    const txChanges = calculateCollectionChanges(current.transactions, last?.transactions);
+    const debtChanges = calculateCollectionChanges(current.debts, last?.debts);
+    const investmentChanges = calculateCollectionChanges(current.investmentItems, last?.investmentItems);
+    const assetChanges = calculateCollectionChanges(current.assetItems, last?.assetItems);
+    const otherLiabilityChanges = calculateCollectionChanges(current.otherLiabilityItems, last?.otherLiabilityItems);
+    const budgetChanges = calculateCollectionChanges(current.budgetItems, last?.budgetItems);
+    const reviewChanges = calculateReviewChanges(current.ownedReviews, last?.ownedReviews);
+
     return {
-      transactions: {
-        created: current.transactions,
-        updated: [],
-        deletedIds: [],
-      },
-      debts: {
-        created: current.debts,
-        updated: [],
-        deletedIds: [],
-      },
-      investmentItems: {
-        created: current.investmentItems,
-        updated: [],
-        deletedIds: [],
-      },
-      assetItems: {
-        created: current.assetItems,
-        updated: [],
-        deletedIds: [],
-      },
-      otherLiabilityItems: {
-        created: current.otherLiabilityItems,
-        updated: [],
-        deletedIds: [],
-      },
-      budgetItems: {
-        created: current.budgetItems,
-        updated: [],
-        deletedIds: [],
-      },
-      ownedReviews: {
-        created: Object.values(current.ownedReviews),
-        updated: [],
-        deletedIds: [],
-      },
+      transactions: txChanges,
+      debts: debtChanges,
+      investmentItems: investmentChanges,
+      assetItems: assetChanges,
+      otherLiabilityItems: otherLiabilityChanges,
+      budgetItems: budgetChanges,
+      ownedReviews: reviewChanges,
       startDate: current.startDate || null,
       endDate: current.endDate || null,
       gettingStartedDismissed: false,

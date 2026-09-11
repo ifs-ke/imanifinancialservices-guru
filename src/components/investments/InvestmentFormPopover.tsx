@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { useInvestmentStore } from '@/store/investmentStore';
 import type { InvestmentItem } from '@/lib/types';
@@ -298,6 +298,7 @@ export default function InvestmentFormPopover({ isOpen, onClose, item, trigger }
     return (
       <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
         <DialogContent className="w-[90%] sm:max-w-[420px] p-4 rounded-xl border border-border/60 bg-background shadow-lg z-50">
+          <DialogTitle className="sr-only">Edit Asset Details</DialogTitle>
           {renderFormFields()}
         </DialogContent>
       </Dialog>

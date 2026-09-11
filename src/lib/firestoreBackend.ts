@@ -254,12 +254,19 @@ export async function saveUserDataToFirestore(
   userId: string,
   payload: {
     transactions?: any[];
+    deletedTransactions?: string[];
     debts?: any[];
+    deletedDebts?: string[];
     assetItems?: any[];
+    deletedAssetItems?: string[];
     otherLiabilityItems?: any[];
+    deletedOtherLiabilityItems?: string[];
     budgetItems?: any[];
+    deletedBudgetItems?: string[];
     investmentItems?: any[];
+    deletedInvestmentItems?: string[];
     weeklyReviews?: Record<string, any>;
+    deletedWeeklyReviews?: string[];
     startDate?: string | null;
     endDate?: string | null;
     gettingStartedDismissed?: boolean;
@@ -267,109 +274,177 @@ export async function saveUserDataToFirestore(
 ): Promise<void> {
   if (!userId) throw new Error('User ID is required');
   try {
-    const batch = writeBatch(db);
+    const batchList: any[] = [];
+    let currentBatch = writeBatch(db);
+    let opCount = 0;
 
-    // 1. Transactions
+    const addOperation = (operationFn: (b: any) => void) => {
+      if (opCount >= 400) {
+        batchList.push(currentBatch);
+        currentBatch = writeBatch(db);
+        opCount = 0;
+      }
+      operationFn(currentBatch);
+      opCount++;
+    };
+
+    // 1. Transactions - Set
     if (payload.transactions && Array.isArray(payload.transactions)) {
       payload.transactions.forEach((tx) => {
         if (!tx.id) return;
         const txRef = doc(db, 'users', userId, 'transactions', tx.id);
-        batch.set(txRef, {
+        addOperation((b) => b.set(txRef, {
           ...tx,
           userId,
           amount: Number(tx.amount) || 0,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        }, { merge: true }));
       });
     }
 
-    // 2. Debts
+    // 1b. Transactions - Delete
+    if (payload.deletedTransactions && Array.isArray(payload.deletedTransactions)) {
+      payload.deletedTransactions.forEach((id) => {
+        const txRef = doc(db, 'users', userId, 'transactions', id);
+        addOperation((b) => b.delete(txRef));
+      });
+    }
+
+    // 2. Debts - Set
     if (payload.debts && Array.isArray(payload.debts)) {
       payload.debts.forEach((debt) => {
         if (!debt.id) return;
         const debtRef = doc(db, 'users', userId, 'debts', debt.id);
-        batch.set(debtRef, {
+        addOperation((b) => b.set(debtRef, {
           ...debt,
           userId,
           principal: Number(debt.principal) || 0,
           interestRate: Number(debt.interestRate) || 0,
           minPayment: Number(debt.minPayment) || 0,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        }, { merge: true }));
       });
     }
 
-    // 3. Asset Items
+    // 2b. Debts - Delete
+    if (payload.deletedDebts && Array.isArray(payload.deletedDebts)) {
+      payload.deletedDebts.forEach((id) => {
+        const debtRef = doc(db, 'users', userId, 'debts', id);
+        addOperation((b) => b.delete(debtRef));
+      });
+    }
+
+    // 3. Asset Items - Set
     if (payload.assetItems && Array.isArray(payload.assetItems)) {
       payload.assetItems.forEach((asset) => {
         if (!asset.id) return;
         const assetRef = doc(db, 'users', userId, 'assetItems', asset.id);
-        batch.set(assetRef, {
+        addOperation((b) => b.set(assetRef, {
           ...asset,
           userId,
-          value: Number(asset.value) || 0,
+          value: Number(asset.value) || Number(asset.amount) || 0,
           isAsset: true,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        }, { merge: true }));
       });
     }
 
-    // 4. Other Liabilities
+    // 3b. Asset Items - Delete
+    if (payload.deletedAssetItems && Array.isArray(payload.deletedAssetItems)) {
+      payload.deletedAssetItems.forEach((id) => {
+        const assetRef = doc(db, 'users', userId, 'assetItems', id);
+        addOperation((b) => b.delete(assetRef));
+      });
+    }
+
+    // 4. Other Liabilities - Set
     if (payload.otherLiabilityItems && Array.isArray(payload.otherLiabilityItems)) {
       payload.otherLiabilityItems.forEach((liab) => {
         if (!liab.id) return;
         const liabRef = doc(db, 'users', userId, 'otherLiabilityItems', liab.id);
-        batch.set(liabRef, {
+        addOperation((b) => b.set(liabRef, {
           ...liab,
           userId,
-          value: Number(liab.value) || 0,
+          value: Number(liab.value) || Number(liab.amount) || 0,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        }, { merge: true }));
       });
     }
 
-    // 5. Budget Items
+    // 4b. Other Liabilities - Delete
+    if (payload.deletedOtherLiabilityItems && Array.isArray(payload.deletedOtherLiabilityItems)) {
+      payload.deletedOtherLiabilityItems.forEach((id) => {
+        const liabRef = doc(db, 'users', userId, 'otherLiabilityItems', id);
+        addOperation((b) => b.delete(liabRef));
+      });
+    }
+
+    // 5. Budget Items - Set
     if (payload.budgetItems && Array.isArray(payload.budgetItems)) {
       payload.budgetItems.forEach((item) => {
         if (!item.id) return;
         const bRef = doc(db, 'users', userId, 'budgetItems', item.id);
-        batch.set(bRef, {
+        addOperation((b) => b.set(bRef, {
           ...item,
           userId,
-          budgetedAmount: Number(item.budgetedAmount) || 0,
+          budgetedAmount: Number(item.budgetedAmount) || Number(item.amount) || 0,
           actualAmount: Number(item.actualAmount) || 0,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        }, { merge: true }));
       });
     }
 
-    // 6. Investments
+    // 5b. Budget Items - Delete
+    if (payload.deletedBudgetItems && Array.isArray(payload.deletedBudgetItems)) {
+      payload.deletedBudgetItems.forEach((id) => {
+        const bRef = doc(db, 'users', userId, 'budgetItems', id);
+        addOperation((b) => b.delete(bRef));
+      });
+    }
+
+    // 6. Investments - Set
     if (payload.investmentItems && Array.isArray(payload.investmentItems)) {
       payload.investmentItems.forEach((inv) => {
         if (!inv.id) return;
         const invRef = doc(db, 'users', userId, 'investmentItems', inv.id);
-        batch.set(invRef, {
+        addOperation((b) => b.set(invRef, {
           ...inv,
           userId,
-          amountInvested: Number(inv.amountInvested) || 0,
+          amountInvested: Number(inv.amountInvested) || Number(inv.purchasePrice) * Number(inv.quantity) || 0,
           currentValue: Number(inv.currentValue) || 0,
           allocation: Number(inv.allocation) || 0,
           returns: Number(inv.returns) || 0,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        }, { merge: true }));
       });
     }
 
-    // 7. Weekly Reviews
+    // 6b. Investments - Delete
+    if (payload.deletedInvestmentItems && Array.isArray(payload.deletedInvestmentItems)) {
+      payload.deletedInvestmentItems.forEach((id) => {
+        const invRef = doc(db, 'users', userId, 'investmentItems', id);
+        addOperation((b) => b.delete(invRef));
+      });
+    }
+
+    // 7. Weekly Reviews - Set
     if (payload.weeklyReviews && typeof payload.weeklyReviews === 'object') {
       Object.entries(payload.weeklyReviews).forEach(([weekKey, review]) => {
         const revRef = doc(db, 'users', userId, 'weeklyReviews', weekKey);
-        batch.set(revRef, {
+        addOperation((b) => b.set(revRef, {
           ...review,
           userId,
           weekKey,
           updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        }, { merge: true }));
+      });
+    }
+
+    // 7b. Weekly Reviews - Delete
+    if (payload.deletedWeeklyReviews && Array.isArray(payload.deletedWeeklyReviews)) {
+      payload.deletedWeeklyReviews.forEach((weekKey) => {
+        const revRef = doc(db, 'users', userId, 'weeklyReviews', weekKey);
+        addOperation((b) => b.delete(revRef));
       });
     }
 
@@ -385,10 +460,16 @@ export async function saveUserDataToFirestore(
       if (payload.endDate !== undefined) settingsUpdate.endDate = payload.endDate;
       if (payload.gettingStartedDismissed !== undefined)
         settingsUpdate.gettingStartedDismissed = payload.gettingStartedDismissed;
-      batch.set(settingsRef, settingsUpdate, { merge: true });
+      addOperation((b) => b.set(settingsRef, settingsUpdate, { merge: true }));
     }
 
-    await batch.commit();
+    if (opCount > 0) {
+      batchList.push(currentBatch);
+    }
+
+    for (const b of batchList) {
+      await b.commit();
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `users/${userId}`);
   }

@@ -36,6 +36,21 @@
         "timestamp": { "type": "string", "format": "date-time", "description": "Log timestamp" }
       },
       "required": ["id", "action", "timestamp"]
+    },
+    "ReviewChatMessage": {
+      "title": "ReviewChatMessage",
+      "description": "Real-time chat message exchanged within a shared review session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique message ID" },
+        "shareId": { "type": "string", "description": "ID of the parent shared review" },
+        "senderId": { "type": "string", "description": "Auth UID of the sender" },
+        "senderName": { "type": "string", "description": "Display name of the sender" },
+        "senderRole": { "type": "string", "enum": ["owner", "reviewer", "assistant"], "description": "Role of the sender" },
+        "message": { "type": "string", "description": "Chat message text content" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Message creation timestamp" }
+      },
+      "required": ["id", "shareId", "senderId", "senderName", "senderRole", "message", "timestamp"]
     }
   },
   "firestore": {
@@ -50,6 +65,10 @@
     "/auditLogs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
       "description": "Security and operational audit trail"
+    },
+    "/sharedReviews/{shareId}/chats/{messageId}": {
+      "schema": { "$ref": "#/entities/ReviewChatMessage" },
+      "description": "Scalable discussion feed messages for shared reviews"
     }
   }
 }

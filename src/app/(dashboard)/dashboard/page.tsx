@@ -651,7 +651,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
 
         {/* Tile 1: Total net worth */}
-        <Card className="lg:col-span-4 border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+        <Card className="lg:col-span-4 border border-border shadow-xs bg-card flex flex-col justify-between">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
             <div>
               <div className="text-xs font-medium text-muted-foreground">
@@ -667,8 +667,8 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
             <div className={cn(
-              "text-2xl lg:text-3xl font-bold font-mono tracking-tight",
-              financialMetrics.netWorth >= 0 ? "text-foreground" : "text-destructive"
+               "text-2xl lg:text-3xl font-bold font-mono tracking-tight",
+               financialMetrics.netWorth >= 0 ? "text-foreground" : "text-destructive"
             )}>
               {formatCurrency(financialMetrics.netWorth)}
             </div>
@@ -680,7 +680,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Tile 2: Income with dynamic duration */}
-        <Card className="lg:col-span-4 border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+        <Card className="lg:col-span-4 border border-border shadow-xs bg-card flex flex-col justify-between">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
             <div>
               <div className="text-xs font-medium text-muted-foreground">
@@ -708,7 +708,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Tile 3: Expenses with dynamic duration */}
-        <Card className="lg:col-span-4 border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+        <Card className="lg:col-span-4 border border-border shadow-xs bg-card flex flex-col justify-between">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
             <div>
               <div className="text-xs font-medium text-muted-foreground">
@@ -739,7 +739,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Bento Centerpiece: Cash flow chart dynamically synced to selected date range (8 cols) */}
-        <Card className="lg:col-span-8 border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+        <Card className="lg:col-span-8 border border-border shadow-xs bg-card flex flex-col justify-between">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-sm font-semibold text-foreground">
@@ -751,10 +751,10 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
               <span className="flex items-center gap-1.5 text-foreground">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Income
+                <span className="w-2.5 h-2.5 rounded-full bg-[#10b981]" /> Income
               </span>
               <span className="flex items-center gap-1.5 text-foreground">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Expenses
+                <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" /> Expenses
               </span>
             </div>
           </CardHeader>
@@ -822,7 +822,7 @@ export default function DashboardPage() {
         {/* Bento Side Stack: Asset allocation + Liquidity ratio (4 cols) */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           {/* Card A: Asset allocation */}
-          <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <Card className="border border-border shadow-xs bg-card flex flex-col justify-between">
             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm font-semibold text-foreground">
                 Asset allocation
@@ -880,7 +880,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Card B: Liquidity ratio */}
-          <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <Card className="border border-border shadow-xs bg-card flex flex-col justify-between">
             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-sm font-semibold text-foreground">
@@ -931,7 +931,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Bento Bottom Tile: Recent transactions (12 cols) */}
-        <Card className="lg:col-span-12 border border-border/60 shadow-xs bg-card">
+        <Card className="lg:col-span-12 border border-border shadow-xs bg-card">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-sm font-semibold text-foreground">
