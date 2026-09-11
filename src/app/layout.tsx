@@ -1,12 +1,12 @@
 
-import type { Metadata } from 'next/server'; // Keep for server-side metadata
+import type { Metadata } from 'next';
 import { Inter, Roboto_Mono } from 'next/font/google';
 import './globals.css';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/components/providers/theme-provider';
-import { ClerkProvider } from '@clerk/nextjs';
+import { AuthProvider } from '@/context/AuthContext';
 import GoogleAnalytics from '@/components/analytics/GoogleAnalytics';
 
 // Initialize Inter font for sans-serif
@@ -25,7 +25,7 @@ const roboto_mono = Roboto_Mono({
 
 export const metadata: Metadata = {
   title: 'IFC - Guru',
-  description: 'Take control of your finances and conquer your debt.',
+  description: 'Take control of your finances and conquer your debt with personal finance dashboards and amortization tools.',
 };
 
 export default function RootLayout({
@@ -34,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+    <AuthProvider>
       <html lang="en" suppressHydrationWarning={true}>
         <body
           className={cn(
@@ -59,6 +59,6 @@ export default function RootLayout({
           </ThemeProvider>
         </body>
       </html>
-    </ClerkProvider>
+    </AuthProvider>
   );
 }

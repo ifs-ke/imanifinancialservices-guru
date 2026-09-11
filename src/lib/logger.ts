@@ -3,7 +3,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useAuth } from '@clerk/nextjs'; // Ensure only client-side useAuth is imported here
+import { useAuth } from '@/context/AuthContext';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log';
 type LogContext = Record<string, unknown>;

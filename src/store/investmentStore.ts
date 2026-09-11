@@ -71,16 +71,29 @@ const createSessionStorageWithEncoding = (): StateStorage => {
 
 export interface InvestmentState {
     investmentItems: InvestmentItem[];
+    targetAllocations: Record<string, number>;
     isHydrated: boolean;
     setInvestmentItems: (items: InvestmentItem[]) => void;
     addInvestmentItem: (itemData: Omit<InvestmentItem, 'id'>) => InvestmentItem;
     updateInvestmentItem: (updatedItem: InvestmentItem) => void;
     deleteInvestmentItem: (id: string) => void;
+    setTargetAllocations: (targets: Record<string, number>) => void;
     clearInvestmentItems: () => void;
 }
 
+const defaultTargets: Record<string, number> = {
+  'Equities / Stocks': 40,
+  'Fixed Income / Bonds': 30,
+  'Real Estate': 15,
+  'Mutual Funds / ETFs': 10,
+  'Crypto': 5,
+  'Cash / Cash Equivalents': 0,
+  'Alternatives': 0,
+};
+
 const initialState = {
     investmentItems: [],
+    targetAllocations: defaultTargets,
     isHydrated: false,
 };
 
@@ -122,6 +135,9 @@ export const useInvestmentStore = create<InvestmentState>()(
                 set((state) => ({
                     investmentItems: sortInvestmentItems(state.investmentItems.filter(item => item.id !== id)),
                 }));
+            },
+            setTargetAllocations: (targets) => {
+                set({ targetAllocations: targets });
             },
             clearInvestmentItems: () => {
                 logInfo("InvestmentStore: Clearing investment items state.");

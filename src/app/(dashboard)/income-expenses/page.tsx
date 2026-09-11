@@ -1,306 +1,599 @@
 // src/app/(dashboard)/income-expenses/page.tsx
 'use client';
 
-import React, { useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import React, { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  Scale, 
+  ArrowRight, 
+  Lock, 
+  Sparkles,
+  Building2,
+  ShoppingBag
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Accordion, 
+  AccordionContent, 
+  AccordionItem, 
+  AccordionTrigger 
+} from '@/components/ui/accordion';
+import { 
+  format, 
+  subMonths, 
+  subDays, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfDay, 
+  endOfDay, 
+  isWithinInterval, 
+  isValid 
+} from 'date-fns';
+import { cn, formatCurrency } from '@/lib/utils';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import type { TransactionWithId } from '@/lib/types';
-import { Badge } from '@/components/ui/badge';
-import { Coins, TrendingDown, TrendingUp, Tag, Scale, Award } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
-import { cn, formatCurrency } from '@/lib/utils'; 
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; 
 
-const formatDate = (date: Date | string) => {
-     const dateObj = typeof date === 'string' ? new Date(date) : date;
-      if (isNaN(dateObj.getTime())) return 'Invalid Date';
-    return dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-};
-
-const formatCategoryBadge = (value: string | undefined) => {
-    if (!value) return null;
-    const variant: "secondary" | "outline" = value === 'recurring' || value === 'fixed' ? 'secondary' : 'outline';
-    const text = value.charAt(0).toUpperCase() + value.slice(1);
-    return <Badge variant={variant} className="text-xs font-normal">{text}</Badge>;
-}
-
-const AccordionTriggerWithSum = React.forwardRef<
-  HTMLButtonElement,
-  React.ComponentProps<typeof AccordionTrigger> & { label: string; sum: number; description?: string; count: number }
->(({ label, sum, description, count, children, ...props }, ref) => {
-  return (
-      <AccordionTrigger ref={ref} {...props} className='hover:no-underline py-3 px-4 data-[state=open]:border-b'>
-        <div className="flex justify-between items-center w-full">
-            <div className='flex flex-col items-start text-left'>
-                 <span className="flex items-center gap-2 text-base font-semibold">
-                    {label}
-                 </span>
-                 {description && <p className='text-xs text-muted-foreground font-normal mt-0.5'>{description}</p>}
-            </div>
-            {count > 0 && (
-                <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">({count} items)</span>
-                    <span className="font-semibold font-mono text-base">{formatCurrency(sum)}</span>
-                </div>
-            )}
-        </div>
-      </AccordionTrigger>
-  );
-});
-AccordionTriggerWithSum.displayName = "AccordionTriggerWithSum";
-
+export type SimpleDatePreset = 'all' | 'this-month' | 'last-30' | 'last-90';
 
 export default function IncomeExpensesPage() {
   const { transactions } = useTransactionsStore();
 
-  const incomeTransactions = useMemo(() => transactions.filter(tx => tx.amount > 0), [transactions]);
-  const expenseTransactions = useMemo(() => transactions.filter(tx => tx.amount < 0), [transactions]);
+  // Selected date preset
+  const [datePreset, setDatePreset] = useState<SimpleDatePreset>('all');
 
-  const categorizeTransactions = (txs: TransactionWithId[]) => {
-    const categories = {
-      recurringFixed: [] as TransactionWithId[],
-      recurringVariable: [] as TransactionWithId[],
-      oneTimeFixed: [] as TransactionWithId[],
-      oneTimeVariable: [] as TransactionWithId[],
-      uncategorized: [] as TransactionWithId[],
-    };
-    txs.forEach(tx => {
-      if (tx.frequency === 'recurring' && tx.variability === 'fixed') categories.recurringFixed.push(tx);
-      else if (tx.frequency === 'recurring' && tx.variability === 'variable') categories.recurringVariable.push(tx);
-      else if (tx.frequency === 'one-time' && tx.variability === 'fixed') categories.oneTimeFixed.push(tx);
-      else if (tx.frequency === 'one-time' && tx.variability === 'variable') categories.oneTimeVariable.push(tx);
-      else categories.uncategorized.push(tx);
-    });
-    for (const key in categories) {
-        categories[key as keyof typeof categories].sort((a, b) => {
-            const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-            const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-            if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
-            return dateB.getTime() - dateA.getTime();
-         });
+  // Date range calculation
+  const { dateRange, durationLabel } = useMemo(() => {
+    const now = new Date();
+    let start: Date;
+    let end: Date = endOfDay(now);
+    let label = 'all time';
+
+    switch (datePreset) {
+      case 'this-month':
+        start = startOfMonth(now);
+        end = endOfMonth(now);
+        label = format(now, 'MMMM yyyy');
+        break;
+      case 'last-30':
+        start = startOfDay(subDays(now, 30));
+        end = endOfDay(now);
+        label = 'last 30 days';
+        break;
+      case 'last-90':
+        start = startOfDay(subDays(now, 90));
+        end = endOfDay(now);
+        label = 'last 90 days';
+        break;
+      case 'all':
+      default: {
+        let earliestDate = subMonths(now, 12);
+        transactions.forEach(t => {
+          const d = t.date instanceof Date ? t.date : new Date(t.date);
+          if (isValid(d) && d < earliestDate) {
+            earliestDate = d;
+          }
+        });
+        start = startOfDay(earliestDate);
+        end = endOfDay(now);
+        label = 'all records';
+      }
     }
-    return categories;
-  };
 
-  const categorizedIncome = useMemo(() => categorizeTransactions(incomeTransactions), [incomeTransactions]);
-  const categorizedExpenses = useMemo(() => categorizeTransactions(expenseTransactions), [expenseTransactions]);
+    return { dateRange: { start, end }, durationLabel: label };
+  }, [datePreset, transactions]);
 
-  const calculateTotal = (items: TransactionWithId[], absValue = false) =>
-    items.reduce((sum, item) => sum + (absValue ? Math.abs(item.amount) : item.amount), 0);
+  // Filter transactions within active interval
+  const periodTransactions = useMemo(() => {
+    return transactions.filter(tx => {
+      const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+      if (!isValid(txDate)) return false;
+      return isWithinInterval(txDate, { start: dateRange.start, end: dateRange.end });
+    });
+  }, [transactions, dateRange]);
 
-  const incomeTotals = useMemo(() => ({
-    recurringFixed: calculateTotal(categorizedIncome.recurringFixed),
-    recurringVariable: calculateTotal(categorizedIncome.recurringVariable),
-    oneTimeFixed: calculateTotal(categorizedIncome.oneTimeFixed),
-    oneTimeVariable: calculateTotal(categorizedIncome.oneTimeVariable),
-    uncategorized: calculateTotal(categorizedIncome.uncategorized),
-    grandTotal: calculateTotal(incomeTransactions),
-  }), [categorizedIncome, incomeTransactions]);
+  // Segmented transaction lists & summaries
+  const segments = useMemo(() => {
+    const recurringIncome: TransactionWithId[] = [];
+    const oneTimeIncome: TransactionWithId[] = [];
+    const fixedExpenses: TransactionWithId[] = [];
+    const variableExpenses: TransactionWithId[] = [];
 
-  const expenseTotals = useMemo(() => ({
-    recurringFixed: calculateTotal(categorizedExpenses.recurringFixed, true),
-    recurringVariable: calculateTotal(categorizedExpenses.recurringVariable, true),
-    oneTimeFixed: calculateTotal(categorizedExpenses.oneTimeFixed, true),
-    oneTimeVariable: calculateTotal(categorizedExpenses.oneTimeVariable, true),
-    uncategorized: calculateTotal(categorizedExpenses.uncategorized, true),
-    grandTotal: calculateTotal(expenseTransactions, true),
-  }), [categorizedExpenses, expenseTransactions]);
+    let recIncTotal = 0;
+    let oneIncTotal = 0;
+    let fixExpTotal = 0;
+    let varExpTotal = 0;
 
-  const netIncome = incomeTotals.grandTotal - expenseTotals.grandTotal;
+    periodTransactions.forEach(tx => {
+      const isInc = tx.amount > 0;
+      const amount = Math.abs(tx.amount);
 
-  const topSpendingCategories = useMemo(() => {
-    const spendingByCategory: Record<string, { totalAmount: number; count: number }> = {};
-
-    expenseTransactions.forEach(tx => {
-        const category = tx.categoryName || 'Uncategorized';
-        if (!spendingByCategory[category]) {
-            spendingByCategory[category] = { totalAmount: 0, count: 0 };
+      if (isInc) {
+        if (tx.frequency === 'recurring') {
+          recurringIncome.push(tx);
+          recIncTotal += amount;
+        } else {
+          oneTimeIncome.push(tx);
+          oneIncTotal += amount;
         }
-        spendingByCategory[category].totalAmount += Math.abs(tx.amount);
-        spendingByCategory[category].count += 1;
+      } else {
+        if (tx.frequency === 'recurring' || tx.variability === 'fixed') {
+          fixedExpenses.push(tx);
+          fixExpTotal += amount;
+        } else {
+          variableExpenses.push(tx);
+          varExpTotal += amount;
+        }
+      }
     });
 
-    const categoriesArray = Object.entries(spendingByCategory).map(([name, data]) => ({
-        name,
-        ...data
-    }));
+    // Sort items newest first
+    const sortNewest = (a: TransactionWithId, b: TransactionWithId) => {
+      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+      return dateB.getTime() - dateA.getTime();
+    };
 
-    const topByAmount = [...categoriesArray].sort((a, b) => b.totalAmount - a.totalAmount).slice(0, 5);
-    const topByCount = [...categoriesArray].sort((a, b) => b.count - a.count).slice(0, 5);
-    
-    return { topByAmount, topByCount };
-  }, [expenseTransactions]);
+    return {
+      recurringIncome: { items: recurringIncome.sort(sortNewest), total: recIncTotal },
+      oneTimeIncome: { items: oneTimeIncome.sort(sortNewest), total: oneIncTotal },
+      fixedExpenses: { items: fixedExpenses.sort(sortNewest), total: fixExpTotal },
+      variableExpenses: { items: variableExpenses.sort(sortNewest), total: varExpTotal },
+    };
+  }, [periodTransactions]);
 
-  const renderTransactionRow = (tx: TransactionWithId, isExpense = false) => (
-    <TableRow key={tx.id}>
-      <TableCell className="font-medium w-[100px] pl-4 pr-2">{formatDate(tx.date)}</TableCell>
-      <TableCell className="max-w-[200px] sm:max-w-[250px] truncate px-2" title={tx.description}>{tx.description}</TableCell>
-      <TableCell className="w-[90px] px-2">{tx.modeOfPayment}</TableCell>
-      <TableCell className="text-right font-mono w-[140px] pr-4 pl-2">{formatCurrency(isExpense ? Math.abs(tx.amount) : tx.amount)}</TableCell>
-    </TableRow>
-  );
-
-  const renderCategorySection = (
-    value: string, 
-    title: string,
-    description: string,
-    transactions: TransactionWithId[],
-    total: number,
-    isExpense = false
-  ) => (
-    <AccordionItem value={value} className="border-b-0 mb-2 rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden">
-        <AccordionTriggerWithSum label={title} sum={total} description={description} count={transactions.length} />
-        <AccordionContent className="p-0">
-            {transactions.length > 0 ? (
-                 <ScrollArea className={cn("w-full", transactions.length > 8 ? "h-[350px]" : "h-auto")}>
-                    <Table>
-                        <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[100px] pl-4 pr-2">Date</TableHead>
-                            <TableHead className="px-2">Description</TableHead>
-                            <TableHead className="w-[90px] px-2">Mode</TableHead>
-                            <TableHead className="text-right w-[140px] pr-4 pl-2">Amount (KES)</TableHead>
-                        </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {transactions.map(tx => renderTransactionRow(tx, isExpense))}
-                        </TableBody>
-                    </Table>
-                </ScrollArea>
-            ) : (
-                 <p className="text-center text-muted-foreground py-4 text-sm px-4">No transactions in this category.</p>
-            )}
-        </AccordionContent>
-    </AccordionItem>
-  );
+  // High-level calculations
+  const totalIncome = segments.recurringIncome.total + segments.oneTimeIncome.total;
+  const totalExpenses = segments.fixedExpenses.total + segments.variableExpenses.total;
+  const netCashFlow = totalIncome - totalExpenses;
+  const retentionRate = totalIncome > 0 ? (netCashFlow / totalIncome) * 100 : 0;
 
   return (
-    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
-      <header className="mb-6 px-4 md:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <TrendingUp className="text-primary" /> Income & Expense Analysis
-        </h1>
-        <p className="text-muted-foreground">Breakdown based on recurrence and variability.</p>
-      </header>
+    <div className="flex flex-col w-full min-h-screen p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* ========================================================= */}
+      {/* 🧭 HEADER & PERIOD FILTER */}
+      {/* ========================================================= */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-2 border-b border-border/40">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Income & expense analysis
+          </h1>
+          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+            A visual overview of your cash flow categorized by commitment types with collapsible details.
+          </p>
+        </div>
 
-       <section className="mb-8 px-4 md:px-6 lg:px-8 grid gap-4 md:grid-cols-3">
-           <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                 <CardTitle className="text-sm font-medium">Total Income</CardTitle>
-                 <TrendingUp className="h-4 w-4 text-accent" />
-               </CardHeader>
-               <CardContent className="p-4">
-                 <div className="text-2xl font-bold text-accent">{formatCurrency(incomeTotals.grandTotal)}</div>
-                 <p className="text-xs text-muted-foreground">Across all categories</p>
-               </CardContent>
-           </Card>
-           <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                 <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-                 <TrendingDown className="h-4 w-4 text-destructive" />
-               </CardHeader>
-               <CardContent className="p-4">
-                 <div className="text-2xl font-bold text-destructive">{formatCurrency(expenseTotals.grandTotal)}</div>
-                 <p className="text-xs text-muted-foreground">Across all categories</p>
-               </CardContent>
-           </Card>
-           <Card className="shadow-md">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                 <CardTitle className="text-sm font-medium">Net Income</CardTitle>
-                 <Scale className="h-4 w-4 text-muted-foreground" />
-               </CardHeader>
-               <CardContent className="p-4">
-                  <div className={cn("text-2xl font-bold", netIncome >= 0 ? 'text-accent' : 'text-destructive')}>
-                      {formatCurrency(netIncome)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Total Income - Total Expenses</p>
-               </CardContent>
-           </Card>
-       </section>
-       
-       <section className="mb-8 px-4 md:px-6 lg:px-8">
-            <h2 className="text-xl font-semibold flex items-center gap-2 mb-3">
-                <Award className="h-5 w-5 text-primary" /> Top Spending Areas
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="text-base">Top 5 by Total Amount Spent</CardTitle>
-                        <CardDescription className="text-xs">Your highest spending categories by amount.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0">
-                        <div className="space-y-3">
-                            {topSpendingCategories.topByAmount.map((cat, index) => (
-                                <div key={index} className="flex justify-between items-center text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-muted-foreground w-6 text-center">#{index + 1}</span>
-                                        <span className="font-medium truncate" title={cat.name}>{cat.name}</span>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="font-mono font-semibold">{formatCurrency(cat.totalAmount)}</p>
-                                        <p className="text-xs text-muted-foreground">{cat.count} transaction{cat.count > 1 ? 's' : ''}</p>
-                                    </div>
-                                </div>
-                            ))}
-                            {topSpendingCategories.topByAmount.length === 0 && (
-                                <p className="text-sm text-muted-foreground text-center py-4">No categorized expenses found.</p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="text-base">Top 5 by Transaction Count</CardTitle>
-                        <CardDescription className="text-xs">Your most frequent spending categories.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0">
-                        <div className="space-y-3">
-                            {topSpendingCategories.topByCount.map((cat, index) => (
-                                <div key={index} className="flex justify-between items-center text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-muted-foreground w-6 text-center">#{index + 1}</span>
-                                        <span className="font-medium truncate" title={cat.name}>{cat.name}</span>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="font-mono font-semibold">{formatCurrency(cat.totalAmount)}</p>
-                                      <p className="text-xs text-muted-foreground">{cat.count} transactions</p>
-                                    </div>
-                                </div>
-                            ))}
-                            {topSpendingCategories.topByCount.length === 0 && (
-                                <p className="text-sm text-muted-foreground text-center py-4">No categorized expenses found.</p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
+        {/* Date presets selection aligned perfectly with Dashboard style button selectors */}
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center p-1 bg-muted/60 rounded-xl border border-border/50 text-xs">
+            <button
+              type="button"
+              onClick={() => setDatePreset('all')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
+                datePreset === 'all' 
+                  ? "bg-background text-foreground shadow-xs font-semibold" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All records
+            </button>
+            <button
+              type="button"
+              onClick={() => setDatePreset('this-month')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
+                datePreset === 'this-month' 
+                  ? "bg-background text-foreground shadow-xs font-semibold" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              This month
+            </button>
+            <button
+              type="button"
+              onClick={() => setDatePreset('last-30')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
+                datePreset === 'last-30' 
+                  ? "bg-background text-foreground shadow-xs font-semibold" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              30 days
+            </button>
+            <button
+              type="button"
+              onClick={() => setDatePreset('last-90')}
+              className={cn(
+                "px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
+                datePreset === 'last-90' 
+                  ? "bg-background text-foreground shadow-xs font-semibold" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              90 days
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* 📊 SUMMARY PANEL (Parent Component Summaries) */}
+      {/* ========================================================= */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total Income */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block">Total income</span>
+              <span className="text-[10px] text-muted-foreground capitalize font-mono">
+                {durationLabel}
+              </span>
             </div>
-       </section>
+            <span className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <TrendingUp className="h-4 w-4" />
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-2">
+            <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
+              +{formatCurrency(totalIncome)}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2 font-mono">
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Rec: {((segments.recurringIncome.total / (totalIncome || 1)) * 100).toFixed(0)}%
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/55" />
+                Var: {((segments.oneTimeIncome.total / (totalIncome || 1)) * 100).toFixed(0)}%
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-      <main className="flex-1 grid gap-8 lg:grid-cols-2 px-4 md:px-6 lg:px-8">
-        <section className="space-y-2">
-            <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingUp className="text-accent"/> Income Details</h2>
-            <Accordion type="multiple" className="w-full space-y-2" defaultValue={[]}>
-                 {renderCategorySection("income-rf", "Recurring - Fixed", "Regular income, same amount (e.g., Salary).", categorizedIncome.recurringFixed, incomeTotals.recurringFixed)}
-                 {renderCategorySection("income-rv", "Recurring - Variable", "Regular income, amount changes.", categorizedIncome.recurringVariable, incomeTotals.recurringVariable)}
-                 {renderCategorySection("income-otf", "One-Time - Fixed", "Non-recurring income, fixed amount (e.g., Bonus).", categorizedIncome.oneTimeFixed, incomeTotals.oneTimeFixed)}
-                 {renderCategorySection("income-otv", "One-Time - Variable", "Non-recurring income, varying amount (e.g., Freelance).", categorizedIncome.oneTimeVariable, incomeTotals.oneTimeVariable)}
-                 {categorizedIncome.uncategorized.length > 0 && renderCategorySection("income-uncat", "Uncategorized Income", "Missing frequency/variability info.", categorizedIncome.uncategorized, incomeTotals.uncategorized)}
+        {/* Total Expenses */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block">Total expenses</span>
+              <span className="text-[10px] text-muted-foreground capitalize font-mono">
+                {durationLabel}
+              </span>
+            </div>
+            <span className="p-1.5 rounded-md bg-rose-500/10 text-destructive">
+              <TrendingDown className="h-4 w-4" />
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-2">
+            <div className="text-2xl font-bold font-mono text-destructive tracking-tight">
+              -{formatCurrency(totalExpenses)}
+            </div>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2 font-mono">
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                Fixed: {((segments.fixedExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}%
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400/55" />
+                Var: {((segments.variableExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}%
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Net Cash Flow & Retention */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block">Net cash flow</span>
+              <span className="text-[10px] text-muted-foreground">Inflow retention efficacy</span>
+            </div>
+            <span className="p-1.5 rounded-md bg-primary/10 text-primary">
+              <Scale className="h-4 w-4" />
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-2">
+            <div className={cn(
+              "text-2xl font-bold font-mono tracking-tight",
+              netCashFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+            )}>
+              {netCashFlow >= 0 ? `+${formatCurrency(netCashFlow)}` : `-${formatCurrency(Math.abs(netCashFlow))}`}
+            </div>
+            <div className="space-y-1 border-t border-border/40 pt-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">Retention rate:</span>
+                <span className={cn(
+                  "font-mono font-bold",
+                  retentionRate >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                )}>
+                  {retentionRate.toFixed(1)}%
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    retentionRate > 25 ? "bg-emerald-500" : retentionRate > 0 ? "bg-amber-500" : "bg-destructive"
+                  )}
+                  style={{ width: `${Math.max(0, Math.min(100, retentionRate))}%` }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ========================================================= */}
+      {/* 🚀 BENTO GRID - THE 4 SEGMENTED QUADRANTS */}
+      {/* ========================================================= */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        {/* Q1: Recurring Income */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-xs font-semibold text-foreground">Recurring Income</CardTitle>
+                  <CardDescription className="text-[10px] text-muted-foreground/80">Predictable regular inflows</CardDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-emerald-500/20 bg-emerald-500/5">
+                {((segments.recurringIncome.total / (totalIncome || 1)) * 100).toFixed(0)}% of income
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-3">
+            <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
+              <span className="text-[10px] text-muted-foreground">Segment Total:</span>
+              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                +{formatCurrency(segments.recurringIncome.total)}
+              </span>
+            </div>
+
+            {/* Collapsible details list */}
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="items" className="border-none">
+                <AccordionTrigger className="hover:no-underline py-1 text-xs font-semibold text-primary/90 hover:text-primary">
+                  View Transactions ({segments.recurringIncome.items.length})
+                </AccordionTrigger>
+                <AccordionContent className="pt-2">
+                  {segments.recurringIncome.items.length > 0 ? (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {segments.recurringIncome.items.map((tx) => {
+                        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+                        return (
+                          <div key={tx.id} className="flex justify-between items-center text-[11px] p-2 rounded-md bg-muted/30 border border-border/40">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground">{tx.description}</span>
+                              <span className="text-[9px] text-muted-foreground">
+                                {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
+                              </span>
+                            </div>
+                            <span className="font-mono font-bold text-emerald-600">
+                              +{formatCurrency(tx.amount)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-[10px] text-muted-foreground/75 py-2">No records found.</p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
             </Accordion>
-        </section>
+          </CardContent>
+        </Card>
 
-         <section className="space-y-2">
-             <h2 className="text-xl font-semibold flex items-center gap-2 mb-3 pl-1"><TrendingDown className="text-destructive"/> Expense Details</h2>
-             <Accordion type="multiple" className="w-full space-y-2" defaultValue={[]}>
-                  {renderCategorySection("expense-rf", "Recurring - Fixed", "Regular expenses, same amount (e.g., Rent).", categorizedExpenses.recurringFixed, expenseTotals.recurringFixed, true)}
-                  {renderCategorySection("expense-rv", "Recurring - Variable", "Regular expenses, amount changes (e.g., Groceries).", categorizedExpenses.recurringVariable, expenseTotals.recurringVariable, true)}
-                  {renderCategorySection("expense-otf", "One-Time - Fixed", "Non-recurring expenses, fixed amount.", categorizedExpenses.oneTimeFixed, expenseTotals.oneTimeFixed, true)}
-                  {renderCategorySection("expense-otv", "One-Time - Variable", "Non-recurring expenses, varying amount (e.g., Dining out).", categorizedExpenses.oneTimeVariable, expenseTotals.oneTimeVariable, true)}
-                  {categorizedExpenses.uncategorized.length > 0 && renderCategorySection("expense-uncat", "Uncategorized Expenses", "Missing frequency/variability info.", categorizedExpenses.uncategorized, expenseTotals.uncategorized, true)}
-             </Accordion>
-        </section>
-      </main>
+        {/* Q2: Variable Income */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-500">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-xs font-semibold text-foreground">Variable Income</CardTitle>
+                  <CardDescription className="text-[10px] text-muted-foreground/80">One-time bonuses or gifts</CardDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-emerald-500/20 bg-emerald-500/5">
+                {((segments.oneTimeIncome.total / (totalIncome || 1)) * 100).toFixed(0)}% of income
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-3">
+            <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
+              <span className="text-[10px] text-muted-foreground">Segment Total:</span>
+              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                +{formatCurrency(segments.oneTimeIncome.total)}
+              </span>
+            </div>
+
+            {/* Collapsible details list */}
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="items" className="border-none">
+                <AccordionTrigger className="hover:no-underline py-1 text-xs font-semibold text-primary/90 hover:text-primary">
+                  View Transactions ({segments.oneTimeIncome.items.length})
+                </AccordionTrigger>
+                <AccordionContent className="pt-2">
+                  {segments.oneTimeIncome.items.length > 0 ? (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {segments.oneTimeIncome.items.map((tx) => {
+                        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+                        return (
+                          <div key={tx.id} className="flex justify-between items-center text-[11px] p-2 rounded-md bg-muted/30 border border-border/40">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground">{tx.description}</span>
+                              <span className="text-[9px] text-muted-foreground">
+                                {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
+                              </span>
+                            </div>
+                            <span className="font-mono font-bold text-emerald-600">
+                              +{formatCurrency(tx.amount)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-[10px] text-muted-foreground/75 py-2">No records found.</p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+
+        {/* Q3: Fixed Expenses */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-rose-500/10 text-destructive">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-xs font-semibold text-foreground">Fixed Expenses</CardTitle>
+                  <CardDescription className="text-[10px] text-muted-foreground/80">Rent, utilities, regular commitments</CardDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-destructive/20 bg-destructive/5 text-destructive">
+                {((segments.fixedExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}% of expenses
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-3">
+            <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
+              <span className="text-[10px] text-muted-foreground">Segment Total:</span>
+              <span className="text-lg font-bold text-destructive">
+                -{formatCurrency(segments.fixedExpenses.total)}
+              </span>
+            </div>
+
+            {/* Collapsible details list */}
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="items" className="border-none">
+                <AccordionTrigger className="hover:no-underline py-1 text-xs font-semibold text-primary/90 hover:text-primary">
+                  View Transactions ({segments.fixedExpenses.items.length})
+                </AccordionTrigger>
+                <AccordionContent className="pt-2">
+                  {segments.fixedExpenses.items.length > 0 ? (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {segments.fixedExpenses.items.map((tx) => {
+                        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+                        return (
+                          <div key={tx.id} className="flex justify-between items-center text-[11px] p-2 rounded-md bg-muted/30 border border-border/40">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground">{tx.description}</span>
+                              <span className="text-[9px] text-muted-foreground">
+                                {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
+                              </span>
+                            </div>
+                            <span className="font-mono font-bold text-destructive">
+                              -{formatCurrency(Math.abs(tx.amount))}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-[10px] text-muted-foreground/75 py-2">No records found.</p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+
+        {/* Q4: Variable Expenses */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-rose-500/10 text-destructive">
+                  <ShoppingBag className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-xs font-semibold text-foreground">Variable Expenses</CardTitle>
+                  <CardDescription className="text-[10px] text-muted-foreground/80">Shopping, dining and leisure</CardDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-destructive/20 bg-destructive/5 text-destructive">
+                {((segments.variableExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}% of expenses
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-3">
+            <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
+              <span className="text-[10px] text-muted-foreground">Segment Total:</span>
+              <span className="text-lg font-bold text-destructive">
+                -{formatCurrency(segments.variableExpenses.total)}
+              </span>
+            </div>
+
+            {/* Collapsible details list */}
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="items" className="border-none">
+                <AccordionTrigger className="hover:no-underline py-1 text-xs font-semibold text-primary/90 hover:text-primary">
+                  View Transactions ({segments.variableExpenses.items.length})
+                </AccordionTrigger>
+                <AccordionContent className="pt-2">
+                  {segments.variableExpenses.items.length > 0 ? (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {segments.variableExpenses.items.map((tx) => {
+                        const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+                        return (
+                          <div key={tx.id} className="flex justify-between items-center text-[11px] p-2 rounded-md bg-muted/30 border border-border/40">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground">{tx.description}</span>
+                              <span className="text-[9px] text-muted-foreground">
+                                {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
+                              </span>
+                            </div>
+                            <span className="font-mono font-bold text-destructive">
+                              -{formatCurrency(Math.abs(tx.amount))}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-[10px] text-muted-foreground/75 py-2">No records found.</p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+
+      </div>
+
+      {/* ========================================================= */}
+      {/* 🧭 BOTTOM ACTIONS AREA */}
+      {/* ========================================================= */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-muted/30 border border-border/40 rounded-xl p-4 gap-4">
+        <div className="space-y-0.5">
+          <h4 className="text-xs font-semibold text-foreground">Need to add, import or edit individual items?</h4>
+          <p className="text-[11px] text-muted-foreground">Manage your full ledger records, link bank accounts or filter specific keywords.</p>
+        </div>
+        <Link href="/transactions" className="w-full sm:w-auto">
+          <Button size="sm" className="w-full sm:w-auto h-9 text-xs font-semibold gap-1.5 shadow-xs rounded-lg">
+            Go to Transactions Ledger
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </div>
+
     </div>
   );
 }

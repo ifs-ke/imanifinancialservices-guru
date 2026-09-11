@@ -5,9 +5,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  turbopack: {},
   images: {
     remotePatterns: [
       {
@@ -16,13 +14,32 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'api.dicebear.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.run.app',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
   webpack: (config, {isServer}) => {
-    if (isServer) {
+    if (!isServer) {
+      config.resolve = config.resolve || {};
       config.resolve.fallback = {
         ...config.resolve.fallback,
-        fs: false, // Fix: Tell webpack not to resolve 'fs'
+        fs: false,
       };
     }
 
@@ -31,3 +48,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

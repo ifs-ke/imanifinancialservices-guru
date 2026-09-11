@@ -42,7 +42,8 @@ import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
-import { UserButton, useUser, useAuth } from "@clerk/nextjs";
+import { UserButton } from "@/components/auth/UserButton";
+import { useUser, useAuth } from "@/context/AuthContext";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "./scroll-area";
 import { logInfo, logWarn, logDebug, logError } from "@/lib/logger";
@@ -98,7 +99,13 @@ const SidebarContext = React.createContext<SidebarContextProps | undefined>(
 export const useSidebar = () => {
   const context = React.useContext(SidebarContext);
   if (context === undefined) {
-    throw new Error("useSidebar must be used within a SidebarProvider");
+    return {
+      isMobile: false,
+      state: "expanded" as SidebarState,
+      collapseSidebar: () => {},
+      expandSidebar: () => {},
+      toggleSidebar: () => {},
+    };
   }
   return context;
 };

@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useInvestmentStore, selectTotalInvestmentsValue } from '@/store/investmentStore';
 import type { InvestmentItem } from '@/lib/types';
-import InvestmentFormSheet from './InvestmentFormSheet';
+import InvestmentFormPopover from '@/components/investments/InvestmentFormPopover';
+import PortfolioDiversityDashboard from '@/components/investments/PortfolioDiversityDashboard';
 import { DataTable } from '@/components/ui/data-table';
 import { getInvestmentColumns } from './columns';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -132,7 +133,17 @@ export default function InvestmentsPage() {
           icon={Briefcase}
         >
           <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Investment</Button>
+            <InvestmentFormPopover
+              isOpen={isFormSheetOpen && !editingItem}
+              onClose={handleFormSheetClose}
+              item={null}
+              trigger={
+                <Button variant="outline" onClick={handleAddClick}>
+                  <PlusCircle className="mr-2 h-4 w-4 text-emerald-500" /> 
+                  Add Investment
+                </Button>
+              }
+            />
           </div>
         </PageHeader>
 
@@ -154,6 +165,8 @@ export default function InvestmentsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <PortfolioDiversityDashboard />
 
         <Card className="shadow-sm">
            <CardHeader className="p-4 md:p-6 border-b">
@@ -199,13 +212,11 @@ export default function InvestmentsPage() {
 
       </main>
 
-      {(editingItem || (isFormSheetOpen && !editingItem)) && (
-        <InvestmentFormSheet
-          isOpen={isFormSheetOpen}
-          onClose={handleFormSheetClose}
-          item={editingItem}
-        />
-      )}
+      <InvestmentFormPopover
+        isOpen={isFormSheetOpen && !!editingItem}
+        onClose={handleFormSheetClose}
+        item={editingItem}
+      />
 
       <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
         {itemToDelete && (

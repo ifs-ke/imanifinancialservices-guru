@@ -9,7 +9,7 @@
  import { startOfMonth, endOfMonth, format as formatDateFns } from 'date-fns'; // Renamed format to avoid conflict
  import type { NotificationType } from '@/lib/types';
  import { logInfo, logWarn, logError } from '@/lib/logger';
- import { useAuth } from "@clerk/nextjs";
+ import { useAuth } from "@/context/AuthContext";
 
 
  const BUDGET_WARNING_THRESHOLD_PERCENT = 0.9;
@@ -148,6 +148,99 @@
           recipientUserId,
           type: 'collaboration_received'
       }, currentUserIdForLog);
+ }
+
+ /**
+  * Notifies both User 1 (Owner) and User 2 (Recipient) when a review share is initiated.
+  */
+ export function triggerShareInitiatedNotifications(
+   ownerName: string,
+   recipientName: string,
+   periodLabel: string,
+   scope: string = 'week'
+ ) {
+   const addNotification = useNotificationStore.getState().addNotification;
+
+   // 1. Notify User 1 (Sharer / Owner)
+   addNotification({
+     type: 'collaboration',
+     title: 'Share Active: Access Granted',
+     message: `You shared your ${periodLabel} transactions with ${recipientName}. They have comment rights but cannot alter your financial data.`,
+     link: '/weekly-review?tab=owned',
+   });
+
+   // 2. Notify User 2 (Recipient)
+   addNotification({
+     type: 'collaboration',
+     title: 'New Review Shared With You',
+     message: `${ownerName} shared their ${periodLabel} transactions with you. You have comment rights to review and provide feedback.`,
+     link: '/weekly-review?tab=shared',
+   });
+
+   logInfo(`Collaboration share notifications emitted for both parties`, {
+     ownerName,
+     recipientName,
+     periodLabel,
+     scope,
+   });
+ }
+
+ /**
+  * Notifies the counterpart when a collaborator leaves a comment on a shared transaction.
+  */
+ export function triggerCommentAddedNotification(
+   commenterName: string,
+   txDescription: string,
+   periodLabel: string,
+   isOwner: boolean
+ ) {
+   const addNotification = useNotificationStore.getState().addNotification;
+
+   addNotification({
+     type: 'collaboration',
+     title: isOwner ? 'Owner Comment Added' : 'Reviewer Feedback Received',
+     message: `${commenterName} commented on transaction "${txDescription}" in ${periodLabel}.`,
+     link: isOwner ? '/weekly-review?tab=shared' : '/weekly-review?tab=owned',
+   });
+
+   logInfo(`Collaboration comment notification emitted`, {
+     commenterName,
+     txDescription,
+     periodLabel,
+   });
+ }
+
+ /**
+  * Notifies both users when the owner revokes share access, highlighting that comments are preserved.
+  */
+ export function triggerShareRevokedNotifications(
+   ownerName: string,
+   recipientName: string,
+   periodLabel: string
+ ) {
+   const addNotification = useNotificationStore.getState().addNotification;
+
+   // 1. Notify Owner confirming comments are retained
+   addNotification({
+     type: 'collaboration',
+     title: 'Share Revoked — Comments Preserved',
+     message: `You revoked access for ${recipientName} on ${periodLabel}. All feedback and comments set by ${recipientName} have been permanently retained in your review.`,
+     link: '/weekly-review?tab=owned',
+   });
+
+   // 2. Notify Recipient that access was revoked
+   addNotification({
+     type: 'collaboration',
+     title: 'Review Access Revoked',
+     message: `Your view access to ${ownerName}'s ${periodLabel} transactions has been revoked by the owner.`,
+     link: '/weekly-review?tab=shared',
+   });
+
+   logInfo(`Share revocation notifications emitted`, {
+     ownerName,
+     recipientName,
+     periodLabel,
+   });
  }
 
  export function triggerAppUpdateNotification(title: string, message: string, link?: string, triggeredByUserId?: string | null) {

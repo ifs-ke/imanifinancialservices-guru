@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "IFC user profile and role details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID matching Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User full name" },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "Application permission role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin authorization entry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Admin user ID" },
+        "assignedAt": { "type": "string", "format": "date-time", "description": "Timestamp when admin role was granted" }
+      },
+      "required": ["uid"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System operational and security log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Log ID" },
+        "userId": { "type": "string", "description": "User who initiated the action" },
+        "action": { "type": "string", "description": "Action performed" },
+        "details": { "type": "object", "description": "Contextual metadata" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Log timestamp" }
+      },
+      "required": ["id", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Individual user accounts and profile data"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Registry of system administrators"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Security and operational audit trail"
+    }
+  }
+}

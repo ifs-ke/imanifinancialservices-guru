@@ -1,10 +1,11 @@
-
 // src/app/page.tsx
 import { redirect } from 'next/navigation';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/lib/serverAuth';
 
-export default function Home() {
-  const { userId } = auth();
+export const dynamic = 'force-dynamic';
+
+export default async function Home() {
+  const { userId } = await auth();
 
   if (userId) {
     redirect('/dashboard');

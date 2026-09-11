@@ -7,11 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, XCircle, Share2, MessageSquareText, ListChecks, Trash } from 'lucide-react';
 import { useNotificationStore } from '@/store/notificationStore';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isValid } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import type { NotificationType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+
+const formatNotificationTime = (timestamp: Date | string | number | undefined): string => {
+  if (!timestamp) return 'Recently';
+  const d = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  return isValid(d) ? formatDistanceToNow(d, { addSuffix: true }) : 'Recently';
+};
 
 export default function NotificationsPage() {
   const { 
@@ -139,9 +145,7 @@ export default function NotificationsPage() {
                       <div className="flex justify-between items-center">
                          <p className={cn("font-medium text-sm", !notification.read && "text-primary")}>{notification.title}</p>
                          <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                            {notification.timestamp instanceof Date && !isNaN(notification.timestamp.getTime())
-                                ? formatDistanceToNow(notification.timestamp, { addSuffix: true })
-                                : 'Invalid Date'}
+                           {formatNotificationTime(notification.timestamp)}
                          </p>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{notification.message}</p>

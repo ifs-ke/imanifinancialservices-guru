@@ -1,0 +1,6 @@
+{
+  "name": "IFC - Guru",
+  "description": "Take control of your finances and conquer your debt with personal finance dashboards and amortization tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

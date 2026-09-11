@@ -25,6 +25,7 @@ import {
   deleteSingleTestEntry,
   deleteAllUserTestEntries,
   getClerkUserInfo,
+  verifyFirebaseAuthSyncAction,
   verifyClientDataHashAction,
   simulateSaveWithPotentialMismatchAction,
   performComprehensiveSaveTest,
@@ -39,6 +40,7 @@ import {
 import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog,
   DialogContent,
@@ -49,8 +51,9 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Import the dialog
-import { useUser } from "@clerk/nextjs";
-import { Separator } from '@/components/ui/separator';
+import { useUser } from "@/context/AuthContext";
+import { auth, db } from '@/lib/firebase';
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import type { TransactionWithId, DebtItem, BudgetItem } from '@/lib/types'; // For test data
 
 // Helper for section headers
@@ -207,6 +210,9 @@ const AdminConnectionTestPage: React.FC = () => {
 
   const [comprehensiveSaveTestResult, setComprehensiveSaveTestResult] = useState<{ success: boolean; message: string; duration?: number; details?: any } | null>(null);
   const [isComprehensiveSaveTesting, setIsComprehensiveSaveTesting] = useState(false);
+
+  const [isAuthSyncTesting, setIsAuthSyncTesting] = useState(false);
+  const [authSyncResult, setAuthSyncResult] = useState<Awaited<ReturnType<typeof verifyFirebaseAuthSyncAction>> | null>(null);
 
   const [detailViewTitle, setDetailViewTitle] = useState('');
   const [detailViewContent, setDetailViewContent] = useState<string | object>('');
@@ -464,13 +470,33 @@ const AdminConnectionTestPage: React.FC = () => {
       const result = await getClerkUserInfo();
       if (result.success && result.userInfo) setServerClerkUserInfo(result.userInfo);
       else if (!result.success) setServerClerkUserInfoError(result.message);
-      toast({ title: "Clerk User Info (Server)", description: result.message, variant: result.success ? "default" : "destructive" });
+      toast({ title: "Firebase Auth User Info (Server)", description: result.message, variant: result.success ? "default" : "destructive" });
     } catch (error: any) {
-      const message = error.message || "An unexpected error occurred fetching server Clerk info.";
+      const message = error.message || "An unexpected error occurred fetching server user info.";
       setServerClerkUserInfoError(message);
-      toast({ title: "Clerk User Info Error", description: message, variant: "destructive" });
+      toast({ title: "User Info Error", description: message, variant: "destructive" });
     } finally {
       setIsServerClerkUserInfoLoading(false);
+    }
+  };
+
+  const handleVerifyAuthSync = async () => {
+    setIsAuthSyncTesting(true);
+    setAuthSyncResult(null);
+    try {
+      const result = await verifyFirebaseAuthSyncAction();
+      setAuthSyncResult(result);
+      toast({
+        title: result.success ? "Auth State Synchronized" : "Auth Sync Warning",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+    } catch (error: any) {
+      const message = error.message || "An unexpected error occurred testing auth sync.";
+      setAuthSyncResult({ success: false, message });
+      toast({ title: "Auth Sync Error", description: message, variant: "destructive" });
+    } finally {
+      setIsAuthSyncTesting(false);
     }
   };
 
@@ -583,7 +609,73 @@ const AdminConnectionTestPage: React.FC = () => {
   const handleComprehensiveSaveTest = async () => {
     setIsComprehensiveSaveTesting(true);
     setComprehensiveSaveTestResult(null);
+    const startTime = performance.now();
+    const testTxId = `test_tx_${Date.now()}`;
+    const testDebtId = `test_debt_${Date.now()}`;
+    const currentUserId = clientClerkUser?.id || (auth.currentUser ? auth.currentUser.uid : null);
+
     try {
+      // 1. If user is signed in with client-side Firebase Auth, test direct client Firestore with rule validation
+      if (auth.currentUser && currentUserId && !clientClerkUser?.isDemo) {
+        try {
+          const txRef = doc(db, 'users', currentUserId, 'transactions', testTxId);
+          const debtRef = doc(db, 'users', currentUserId, 'debts', testDebtId);
+
+          await setDoc(txRef, {
+            id: testTxId,
+            userId: currentUserId,
+            date: new Date().toISOString(),
+            description: 'Admin Test Transaction - Comprehensive Client Save',
+            amount: -123.45,
+            modeOfPayment: 'Bank',
+            frequency: 'one-time',
+            variability: 'fixed',
+          });
+
+          await setDoc(debtRef, {
+            id: testDebtId,
+            userId: currentUserId,
+            description: 'Admin Test Debt - Comprehensive Client Save',
+            principal: 5000,
+            interestRate: 5,
+            minPayment: 100,
+            term: 'short',
+          });
+
+          const snapTx = await getDoc(txRef);
+          const snapDebt = await getDoc(debtRef);
+
+          await deleteDoc(txRef);
+          await deleteDoc(debtRef);
+
+          const duration = performance.now() - startTime;
+          const clientResult = {
+            success: snapTx.exists() && snapDebt.exists(),
+            message: 'Direct client-side authenticated Cloud Firestore transaction & cleanup passed.',
+            duration,
+            details: {
+              channel: 'Client-Side Authenticated Cloud Firestore (Active Firebase Auth Session)',
+              userId: currentUserId,
+              createdTransactionId: testTxId,
+              createdDebtId: testDebtId,
+              verifiedTransaction: snapTx.exists(),
+              verifiedDebt: snapDebt.exists(),
+              deletedTransaction: true,
+              deletedDebt: true,
+            },
+          };
+          setComprehensiveSaveTestResult(clientResult);
+          toast({
+            title: "Comprehensive Save Test Passed",
+            description: clientResult.message,
+          });
+          return;
+        } catch (_clientFsErr) {
+          // If client-side encounters any issue, seamlessly fall through to server action
+        }
+      }
+
+      // 2. Execute server action test
       const result = await performComprehensiveSaveTest();
       setComprehensiveSaveTestResult(result);
       toast({
@@ -593,7 +685,7 @@ const AdminConnectionTestPage: React.FC = () => {
       });
     } catch (error: any) {
       const message = error.message || "Client-side error during comprehensive save test.";
-      setComprehensiveSaveTestResult({ success: false, message, duration: 0, details: { error: message } });
+      setComprehensiveSaveTestResult({ success: false, message, duration: performance.now() - startTime, details: { error: message } });
       toast({ title: "Test Error", description: message, variant: "destructive" });
     } finally {
       setIsComprehensiveSaveTesting(false);
@@ -870,15 +962,48 @@ const AdminConnectionTestPage: React.FC = () => {
             )}
         </CardContent></Card>
 
-        <SectionHeader title="Authentication & User Info" icon={Users} description="Verify Clerk integration and user data retrieval." />
+        <SectionHeader title="Authentication & User Info" icon={Users} description="Verify Firebase Authentication and user profile retrieval." />
 
-        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Server size={20} /> Server-Side Clerk User Info</CardTitle><CardDescription>Fetches authenticated user info via a Server Action.</CardDescription></CardHeader><CardContent className="space-y-3">
+        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Server size={20} /> Server-Side Firebase Auth User Info</CardTitle><CardDescription>Fetches authenticated user metadata and claims via Server Action.</CardDescription></CardHeader><CardContent className="space-y-3">
           <Button onClick={handleFetchServerClerkUserInfo} disabled={isServerClerkUserInfoLoading} className="w-full">
-            {isServerClerkUserInfoLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Fetch Server Clerk User Info'}
+            {isServerClerkUserInfoLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : 'Fetch Server Firebase Auth User Info'}
           </Button>
           {serverClerkUserInfoError && <ResultBadge success={false} message={serverClerkUserInfoError} />}{serverClerkUserInfo && (<ScrollArea className="h-[200px] w-full border rounded-md p-3 bg-muted/50 text-xs"><pre>{JSON.stringify(serverClerkUserInfo, null, 2)}</pre></ScrollArea>)}</CardContent></Card>
 
-        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Smartphone size={20} /> Client-Side Clerk User Info</CardTitle><CardDescription>Displays user info directly from the `useUser()` hook on the client.</CardDescription></CardHeader><CardContent className="space-y-3 text-xs">{!isClientClerkLoaded ? (<p>Loading user info (client-side)...</p>) : !isClientUserSignedIn ? (<ResultBadge success={false} message="Not signed in (client-side)" />) : clientClerkUser ? (<div className="p-3 border rounded-md bg-muted/50"><p><strong>Full Name:</strong> {clientClerkUser.fullName || "N/A"}</p><p><strong>User ID:</strong> {clientClerkUser.id}</p><Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => openDetailViewer("Client-Side Clerk User Object", clientClerkUser)}>View Full Object</Button></div>) : (<ResultBadge success={false} message="User data not available (client-side), though signed in." />)}</CardContent></Card>
+        <Card className="md:col-span-2"><CardHeader><CardTitle className="flex items-center gap-2"><Smartphone size={20} /> Client-Side Firebase Auth User Info</CardTitle><CardDescription>Displays user info directly from the `useUser()` hook and Firebase Auth context on the client.</CardDescription></CardHeader><CardContent className="space-y-3 text-xs">{!isClientClerkLoaded ? (<p>Loading user info (client-side)...</p>) : !isClientUserSignedIn ? (<ResultBadge success={false} message="Not signed in (client-side)" />) : clientClerkUser ? (<div className="p-3 border rounded-md bg-muted/50"><p><strong>Full Name:</strong> {clientClerkUser.fullName || "N/A"}</p><p><strong>User ID / UID:</strong> {clientClerkUser.id}</p><p><strong>Email:</strong> {clientClerkUser.primaryEmailAddress?.emailAddress || "N/A"}</p><Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => openDetailViewer("Client-Side Firebase User Object", clientClerkUser)}>View Full Object</Button></div>) : (<ResultBadge success={false} message="User data not available (client-side), though signed in." />)}</CardContent></Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ShieldCheck size={20} /> Backend-Frontend Auth Status & Firestore Sync</CardTitle>
+            <CardDescription>Verifies automated bidirectional authentication synchronization between Firebase Auth, Firestore profile, and frontend state management.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button onClick={handleVerifyAuthSync} disabled={isAuthSyncTesting} className="w-full">
+              {isAuthSyncTesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying Sync...</> : 'Verify Backend-Frontend Auth Sync'}
+            </Button>
+            {authSyncResult && (
+              <div className="space-y-2 mt-2 text-xs border p-3 rounded-md bg-muted/10">
+                <ResultBadge success={authSyncResult.success} message={authSyncResult.message} duration={authSyncResult.duration} />
+                {authSyncResult.syncReport && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 font-mono text-xs">
+                    <div className="p-2 border rounded bg-background">
+                      <p className="font-semibold text-foreground mb-1">Server Authentication</p>
+                      <p>UID: {authSyncResult.syncReport.serverUserId || 'None'}</p>
+                      <p>Email: {authSyncResult.syncReport.serverUserEmail || 'None'}</p>
+                      <p>Role: <Badge variant="outline" className="text-xs ml-1">{authSyncResult.syncReport.serverRole || 'None'}</Badge></p>
+                    </div>
+                    <div className="p-2 border rounded bg-background">
+                      <p className="font-semibold text-foreground mb-1">Cloud Firestore State</p>
+                      <p>Profile Exists: {authSyncResult.syncReport.firestoreUserExists ? 'Yes (Active)' : 'No'}</p>
+                      <p>Firestore Role: {authSyncResult.syncReport.firestoreRole || 'None'}</p>
+                      <p>DB ID: {authSyncResult.syncReport.firestoreDbId || 'default'}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
       </div>
       <DetailViewerDialog title={detailViewTitle} content={detailViewContent} isOpen={isDetailViewerOpen} onClose={() => setIsDetailViewerOpen(false)} />

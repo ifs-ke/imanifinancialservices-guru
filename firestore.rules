@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email != null && (
+          request.auth.token.email.lower() == 'seanwambua@gmail.com' ||
+          request.auth.token.email.lower() == 'rashmore2020@gmail.com'
+        )) ||
+        request.auth.uid == 'admin-seanwambua-uid'
+      );
+    }
+
+    // User profile documents & all subcollections
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+
+      // User personal financial data collections (transactions, debts, assets, liabilities, budget, reviews, settings, notifications, test entries)
+      match /{allSubcollections=**} {
+        allow read: if isSignedIn() && (
+          isOwner(userId) || 
+          isAdmin() || 
+          userId == 'admin-seanwambua-uid' || 
+          userId == 'demo-user-alex-uid'
+        );
+        allow write: if isSignedIn() && (
+          isOwner(userId) || 
+          isAdmin() || 
+          userId == 'admin-seanwambua-uid' || 
+          userId == 'demo-user-alex-uid'
+        );
+      }
+    }
+
+    // Shared reviews for peer accountability and period transactions sharing
+    match /sharedReviews/{shareId} {
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.ownerUserId == request.auth.uid ||
+        resource.data.sharedWithId == request.auth.uid ||
+        resource.data.sharedWithUserId == request.auth.uid ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.ownerUserId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // Admin registry
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Operational and audit logs
+    match /auditLogs/{logId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Fallback closed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

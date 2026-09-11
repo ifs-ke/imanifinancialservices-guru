@@ -21,7 +21,7 @@ import type { UserShareInfo } from '@/lib/types';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import store hooks
 import { getSharedWithUsersApi } from '@/app/actions/shareActions'; // Import server action
 import { triggerCollaborationNotification } from '@/services/notificationService'; // Import notification trigger
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@/context/AuthContext';
 
 
 

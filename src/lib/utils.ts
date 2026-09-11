@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { NextResponse } from 'next/server';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -24,7 +23,7 @@ export const formatCurrency = (amount: number | undefined) => {
  * @param response The NextResponse object to modify.
  * @returns The NextResponse object with added CORS headers.
  */
-export function addCorsHeaders(response: NextResponse): NextResponse {
+export function addCorsHeaders<T extends { headers: Headers }>(response: T): T {
   // Allow requests from any origin in development, restrict in production
   // IMPORTANT: For production, replace '*' with your specific frontend domain(s)
   const origin = process.env.NODE_ENV === 'development'

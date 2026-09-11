@@ -1,11 +1,11 @@
 
 // src/app/(auth)/sign-up/[[...sign-up]]/page.tsx
-import { SignUp } from '@clerk/nextjs';
+import { SignUpForm } from '@/components/auth/SignUpForm';
 
 export default function SignUpPage() {
- return (
-   <div className="flex items-center justify-center min-h-screen">
-     <SignUp path="/sign-up" routing="path" signInUrl="/sign-in" />
-   </div>
- );
+  return (
+    <div className="w-full flex items-center justify-center">
+      <SignUpForm />
+    </div>
+  );
 }

@@ -1,7 +1,8 @@
 // src/app/(dashboard)/transactions/page.tsx
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import Link from 'next/link';
 import {
   flexRender,
   getCoreRowModel,
@@ -14,7 +15,60 @@ import {
   type VisibilityState,
   type RowSelectionState,
 } from '@tanstack/react-table';
+import { 
+  Plus, 
+  FileUp, 
+  FileDown, 
+  Search, 
+  SlidersHorizontal, 
+  TrendingUp, 
+  TrendingDown, 
+  Scale, 
+  Trash2, 
+  Edit3, 
+  X, 
+  Calendar as CalendarIcon, 
+  RotateCcw,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Filter
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,113 +78,214 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+} from '@/components/ui/alert-dialog';
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore } from '@/store/budgetStore';
-import type { TransactionWithId, BudgetItem } from '@/lib/types';
+import type { TransactionWithId } from '@/lib/types';
 import EditTransactionDialog from './EditTransactionDialog';
 import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog';
-import { DataTable } from '@/components/ui/data-table';
 import { getColumns } from './columns';
 import Papa from 'papaparse';
-import { format, parse, isValid as isDateValid, startOfMonth, endOfMonth } from 'date-fns';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { ReceiptText, PlusCircle, FileUp, FileDown, Edit3, XCircle, Trash2, TrendingUp, TrendingDown, Scale, Calendar as CalendarIcon } from 'lucide-react';
-import Link from 'next/link';
+import { 
+  format, 
+  subMonths, 
+  subDays, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfYear, 
+  startOfDay, 
+  endOfDay, 
+  isWithinInterval, 
+  parseISO,
+  isValid 
+} from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, cn } from '@/lib/utils';
-import { useStatementStore } from '@/store/statementStore';
-import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 
+export type TransactionDatePreset = 'this-month' | 'last-month' | 'last-30' | 'last-90' | 'ytd' | 'all' | 'custom';
+export type TransactionTypeFilter = 'all' | 'income' | 'expense';
+export type TransactionClassificationFilter = 'all' | 'recurring' | 'one-off' | 'fixed' | 'variable';
 
-// Helper for the date picker display
-const formatDateForPicker = (date: Date | undefined) => {
-    if (!date || !isDateValid(date)) return <span>Pick a date</span>;
-    return format(date, "LLL dd, y");
+const COLUMN_LABELS: Record<string, string> = {
+  date: 'Date',
+  description: 'Description',
+  modeOfPayment: 'Payment mode',
+  recurrence: 'Classification',
+  categoryName: 'Category',
+  amount: 'Amount',
 };
-
-// Helper to ensure date is valid before formatting
-const ensureValidDate = (date: Date | string): Date => {
-    const d = date instanceof Date ? date : new Date(date);
-    return isDateValid(d) ? d : new Date();
-};
-
 
 export default function TransactionsPage() {
-  const { transactions, deleteTransaction, deleteSelectedTransactions, batchUpdateTransactions } = useTransactionsStore();
+  const { transactions, deleteTransaction, deleteSelectedTransactions } = useTransactionsStore();
   const allBudgetItems = useBudgetStore(state => state.budgetItems);
   const { toast } = useToast();
 
-  const {
-      startDate,
-      endDate,
-      setStartDate,
-      setEndDate,
-      isHydrated,
-  } = useStatementStore();
-
-
+  // Dialog states
   const [isEditTransactionDialogOpen, setIsEditTransactionDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionWithId | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
   const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false);
   const [isMassDeleteDialogOpen, setIsMassDeleteDialogOpen] = useState(false);
 
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TransactionTypeFilter>('all');
+  const [classificationFilter, setClassificationFilter] = useState<TransactionClassificationFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [datePreset, setDatePreset] = useState<TransactionDatePreset>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>(
+    format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  );
+  const [customEndDate, setCustomEndDate] = useState<string>(
+    format(endOfMonth(new Date()), 'yyyy-MM-dd')
+  );
+  const [isCustomOpen, setIsCustomOpen] = useState(false);
+
   // Table state
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'date', desc: true }]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  // Effect to set default dates on initial load if they aren't already set
-  useEffect(() => {
-    if (isHydrated) {
-        if (!startDate) {
-            setStartDate(startOfMonth(new Date()));
-        }
-        if (!endDate) {
-            setEndDate(endOfMonth(new Date()));
-        }
-    }
-  }, [isHydrated, startDate, endDate, setStartDate, setEndDate]);
+  // Compute active date boundaries
+  const { dateRange, dateLabel } = useMemo(() => {
+    const now = new Date();
+    let start: Date;
+    let end: Date = endOfDay(now);
+    let label = 'This month';
 
-  // Filter transactions based on the selected date range
-  const filteredTransactions = useMemo(() => {
-      if (!startDate || !endDate || !isHydrated) {
-          return [];
+    switch (datePreset) {
+      case 'this-month':
+        start = startOfMonth(now);
+        end = endOfMonth(now);
+        label = 'This month';
+        break;
+      case 'last-month': {
+        const lastMonth = subMonths(now, 1);
+        start = startOfMonth(lastMonth);
+        end = endOfMonth(lastMonth);
+        label = 'Last month';
+        break;
       }
-      const start = startDate.getTime();
-      const end = new Date(endDate).setHours(23, 59, 59, 999);
+      case 'last-30':
+        start = startOfDay(subDays(now, 30));
+        end = endOfDay(now);
+        label = 'Last 30 days';
+        break;
+      case 'last-90':
+        start = startOfDay(subDays(now, 90));
+        end = endOfDay(now);
+        label = 'Last 90 days';
+        break;
+      case 'ytd':
+        start = startOfYear(now);
+        end = endOfDay(now);
+        label = 'YTD';
+        break;
+      case 'all':
+        start = new Date(2000, 0, 1);
+        end = new Date(2100, 0, 1);
+        label = 'All time';
+        break;
+      case 'custom': {
+        const parsedStart = parseISO(customStartDate);
+        const parsedEnd = parseISO(customEndDate);
+        start = isValid(parsedStart) ? startOfDay(parsedStart) : startOfMonth(now);
+        end = isValid(parsedEnd) ? endOfDay(parsedEnd) : endOfMonth(now);
+        label = 'Custom range';
+        break;
+      }
+      default:
+        start = startOfMonth(now);
+        end = endOfMonth(now);
+        label = 'This month';
+    }
 
-      return transactions.filter(tx => {
-          const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
-          if (!isDateValid(txDate)) return false;
-          const txTime = txDate.getTime();
-          return txTime >= start && txTime <= end;
-      });
-  }, [transactions, startDate, endDate, isHydrated]);
+    return { dateRange: { start, end }, dateLabel: label };
+  }, [datePreset, customStartDate, customEndDate]);
 
+  // Unique categories list for filter dropdown
+  const uniqueCategories = useMemo(() => {
+    const categories = new Set<string>();
+    transactions.forEach(tx => {
+      if (tx.categoryName) categories.add(tx.categoryName);
+    });
+    return Array.from(categories).sort();
+  }, [transactions]);
 
+  // Filtered transactions matching all active filter criteria
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(tx => {
+      // 1. Date filter
+      const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
+      if (!isValid(txDate)) return false;
+      if (!isWithinInterval(txDate, { start: dateRange.start, end: dateRange.end })) {
+        return false;
+      }
+
+      // 2. Type filter
+      if (typeFilter === 'income' && tx.amount <= 0) return false;
+      if (typeFilter === 'expense' && tx.amount >= 0) return false;
+
+      // 3. Classification filter
+      if (classificationFilter === 'recurring' && tx.frequency !== 'recurring') return false;
+      if (classificationFilter === 'one-off' && tx.frequency !== 'one-off') return false;
+      if (classificationFilter === 'fixed' && tx.variability !== 'fixed') return false;
+      if (classificationFilter === 'variable' && tx.variability !== 'variable') return false;
+
+      // 4. Category filter
+      if (categoryFilter !== 'all') {
+        if (tx.categoryName !== categoryFilter) return false;
+      }
+
+      // 5. Search query
+      if (searchQuery.trim() !== '') {
+        const query = searchQuery.toLowerCase();
+        const descMatch = (tx.description || '').toLowerCase().includes(query);
+        const categoryMatch = (tx.categoryName || '').toLowerCase().includes(query);
+        const modeMatch = (tx.modeOfPayment || '').toLowerCase().includes(query);
+        const amountMatch = tx.amount.toString().includes(query);
+        if (!descMatch && !categoryMatch && !modeMatch && !amountMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [transactions, dateRange, typeFilter, classificationFilter, categoryFilter, searchQuery]);
+
+  // Metric aggregates for current filtered set
   const metrics = useMemo(() => {
-    const totalIncome = filteredTransactions // Use filtered transactions
-      .filter((tx) => tx.amount > 0)
-      .reduce((sum, tx) => sum + tx.amount, 0);
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    let incomeCount = 0;
+    let expenseCount = 0;
 
-    const totalExpenses = filteredTransactions // Use filtered transactions
-      .filter((tx) => tx.amount < 0)
-      .reduce((sum, tx) => sum + tx.amount, 0); // Keep it negative
+    filteredTransactions.forEach(tx => {
+      if (tx.amount > 0) {
+        totalIncome += tx.amount;
+        incomeCount++;
+      } else if (tx.amount < 0) {
+        totalExpenses += Math.abs(tx.amount);
+        expenseCount++;
+      }
+    });
 
-    const netFlow = totalIncome + totalExpenses;
+    const netFlow = totalIncome - totalExpenses;
+    const percentageCashflow = totalIncome > 0 
+      ? (netFlow / totalIncome) * 100 
+      : (totalExpenses > 0 ? -100 : 0);
 
     return {
       totalIncome,
-      totalExpenses: Math.abs(totalExpenses), // Make positive for display
+      totalExpenses,
       netFlow,
+      percentageCashflow,
+      incomeCount,
+      expenseCount,
+      totalCount: filteredTransactions.length,
     };
-  }, [filteredTransactions]); // Depend on filteredTransactions
+  }, [filteredTransactions]);
 
   const handleAddClick = () => {
     setEditingTransaction(null);
@@ -146,22 +301,17 @@ export default function TransactionsPage() {
     setTransactionToDelete(transaction);
   }, []);
 
-  const handleEditTransactionDialogClose = () => {
-    setIsEditTransactionDialogOpen(false);
-    setEditingTransaction(null);
-  };
-
   const confirmDeleteTransaction = () => {
     if (!transactionToDelete) return;
     deleteTransaction(transactionToDelete.id);
     setTransactionToDelete(null);
-    toast({ title: 'Transaction Deleted', description: 'Successfully removed transaction.' });
+    toast({ title: 'Transaction deleted', description: 'Record removed successfully.' });
   };
 
-  const columns = React.useMemo(() => getColumns(handleEditClick, handleDeleteClick), [handleEditClick, handleDeleteClick]);
+  const columns = useMemo(() => getColumns(handleEditClick, handleDeleteClick), [handleEditClick, handleDeleteClick]);
 
   const table = useReactTable({
-    data: filteredTransactions, // Use filtered data for the table
+    data: filteredTransactions,
     columns,
     state: {
       sorting,
@@ -179,6 +329,11 @@ export default function TransactionsPage() {
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 15,
+      },
+    },
   });
 
   const selectedTransactionIds = useMemo(() => {
@@ -189,254 +344,641 @@ export default function TransactionsPage() {
   }, [rowSelection, table]);
 
   const handleBatchUpdateClick = () => {
-    if (selectedTransactionIds.length === 0) {
-      toast({ title: 'No Selection', description: 'Please select transactions to update.', variant: 'default' });
-      return;
-    }
+    if (selectedTransactionIds.length === 0) return;
     setIsBatchUpdateDialogOpen(true);
   };
 
   const handleMassDeleteClick = () => {
-     if (selectedTransactionIds.length === 0) {
-       toast({ title: 'No Selection', description: 'Please select transactions to delete.', variant: 'default' });
-       return;
-     }
-     setIsMassDeleteDialogOpen(true);
+    if (selectedTransactionIds.length === 0) return;
+    setIsMassDeleteDialogOpen(true);
   };
 
   const confirmMassDelete = () => {
     if (selectedTransactionIds.length > 0) {
       deleteSelectedTransactions(selectedTransactionIds);
-      toast({ title: 'Batch Delete Successful', description: `${selectedTransactionIds.length} transaction(s) deleted.` });
-      setRowSelection({}); // Clear selection
+      toast({ 
+        title: 'Batch delete successful', 
+        description: `${selectedTransactionIds.length} transactions removed.` 
+      });
+      setRowSelection({});
     }
     setIsMassDeleteDialogOpen(false);
   };
 
-
   const handleExportCsv = useCallback(() => {
     const dataToExport = filteredTransactions.length > 0 ? filteredTransactions : transactions;
     if (dataToExport.length === 0) {
-      toast({ title: "No data to export" });
+      toast({ title: 'No data to export', description: 'There are no transactions in the current view.' });
       return;
     }
 
-    const csvRows = dataToExport.map(({ id, date, ...rest }) => ({
-      date: format(ensureValidDate(date), 'yyyy-MM-dd'),
-      ...rest,
-      frequency: rest.frequency || '',
-      variability: rest.variability || '',
-      categoryName: rest.categoryName || '',
-    }));
+    const csvRows = dataToExport.map(({ id, date, ...rest }) => {
+      const validDate = date instanceof Date ? date : new Date(date);
+      return {
+        date: isValid(validDate) ? format(validDate, 'yyyy-MM-dd') : '',
+        ...rest,
+        frequency: rest.frequency || '',
+        variability: rest.variability || '',
+        categoryName: rest.categoryName || '',
+      };
+    });
 
     const csv = Papa.unparse(csvRows, {
-        header: true,
-        columns: ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability', 'categoryName']
+      header: true,
+      columns: ['date', 'description', 'amount', 'modeOfPayment', 'frequency', 'variability', 'categoryName'],
     });
+
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    const fileName = filteredTransactions.length > 0 && startDate && endDate
-        ? `transactions_export_${format(startDate, 'yyyyMMdd')}-${format(endDate, 'yyyyMMdd')}.csv`
-        : 'transactions_export_all.csv';
-    link.download = fileName;
+    link.download = `transactions_export_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    toast({ title: "CSV Exported", description: `${filteredTransactions.length > 0 ? 'Filtered transactions' : 'All transactions'} exported successfully.` });
-  }, [filteredTransactions, transactions, toast, startDate, endDate]);
+    toast({ 
+      title: 'CSV exported', 
+      description: `${dataToExport.length} transactions downloaded.` 
+    });
+  }, [filteredTransactions, transactions, toast]);
 
+  const hasActiveFilters = searchQuery !== '' || typeFilter !== 'all' || classificationFilter !== 'all' || categoryFilter !== 'all' || datePreset !== 'all';
+
+  const resetAllFilters = () => {
+    setSearchQuery('');
+    setTypeFilter('all');
+    setClassificationFilter('all');
+    setCategoryFilter('all');
+    setDatePreset('all');
+  };
 
   return (
-    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
-       <PageHeader
-          title="Transactions"
-          description="View and manage your financial transactions. Use the date filter to narrow your view."
-          icon={ReceiptText}
-        >
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Transaction</Button>
-            <Button asChild variant="default"><Link href="/transactions/import"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Link></Button>
-            <Button variant="secondary" onClick={handleExportCsv} disabled={transactions.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
-          </div>
-        </PageHeader>
-        
-        {/* Date Filter */}
-        <div className="flex flex-col sm:flex-row items-center gap-2 text-sm mb-6 px-4 md:px-6 lg:px-8">
-          <Label className="font-semibold shrink-0">Filter Period:</Label>
-           <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant={"outline"}
-                        className={cn("w-full sm:w-auto justify-start text-left font-normal h-9 min-w-[150px]", !startDate && "text-muted-foreground")}
-                    >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatDateForPicker(startDate)}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={(date) => {
-                            setStartDate(date);
-                            if (endDate && date && date > endDate) setEndDate(date);
-                        }}
-                        initialFocus
-                    />
-                </PopoverContent>
-           </Popover>
-           <span className="text-muted-foreground hidden sm:inline">-</span>
-           <Popover>
-                <PopoverTrigger asChild>
-                     <Button
-                        variant={"outline"}
-                        className={cn("w-full sm:w-auto justify-start text-left font-normal h-9 min-w-[150px] mt-2 sm:mt-0", !endDate && "text-muted-foreground")}
-                    >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatDateForPicker(endDate)}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={(date) => {
-                            setEndDate(date);
-                            if (startDate && date && date < startDate) setStartDate(date);
-                        }}
-                        disabled={(date) => startDate ? date < startDate : false}
-                        initialFocus
-                    />
-                </PopoverContent>
-           </Popover>
+    <div className="flex flex-col w-full min-h-screen p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* Header section with actions */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-border/40">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Transactions
+          </h1>
+          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+            Search, filter, and manage your financial records.
+          </p>
         </div>
 
-        <section className="mb-6 px-4 md:px-6 lg:px-8 grid gap-4 md:grid-cols-3">
-            <Card className="shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                <CardTitle className="text-sm font-medium">Income (Period)</CardTitle>
-                <TrendingUp className="h-4 w-4 text-accent" />
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-2xl font-bold text-accent">{formatCurrency(metrics.totalIncome)}</div>
-                <p className="text-xs text-muted-foreground">For selected date range</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                <CardTitle className="text-sm font-medium">Expenses (Period)</CardTitle>
-                <TrendingDown className="h-4 w-4 text-destructive" />
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-2xl font-bold text-destructive">{formatCurrency(metrics.totalExpenses)}</div>
-                <p className="text-xs text-muted-foreground">For selected date range</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4">
-                <CardTitle className="text-sm font-medium">Net Flow (Period)</CardTitle>
-                <Scale className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className={cn("text-2xl font-bold", metrics.netFlow >= 0 ? 'text-accent' : 'text-destructive')}>
-                  {formatCurrency(metrics.netFlow)}
-                </div>
-                <p className="text-xs text-muted-foreground">Income - Expenses</p>
-              </CardContent>
-            </Card>
-        </section>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={handleExportCsv} className="h-9 gap-1.5 text-xs font-medium cursor-pointer">
+            <FileDown className="h-3.5 w-3.5" />
+            <span>Export CSV</span>
+          </Button>
 
-      <main className="flex-1 px-4 md:px-6 lg:px-8">
-        <Card className="shadow-sm">
-           <CardHeader className="p-4 md:p-6 border-b">
-            <CardTitle>Transaction List</CardTitle>
-            <CardDescription>View, edit, and manage your transactions.</CardDescription>
-             {selectedTransactionIds.length > 0 && (
-                <div className="mt-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center border-t pt-4">
-                    <span className="text-sm text-muted-foreground mb-2 sm:mb-0">{selectedTransactionIds.length} selected</span>
-                    <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" onClick={handleBatchUpdateClick}>
-                            <Edit3 className="mr-2 h-4 w-4" /> Batch Update
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={handleMassDeleteClick}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setRowSelection({})}>
-                            <XCircle className="mr-2 h-4 w-4" /> Clear Selection
-                        </Button>
-                    </div>
-                </div>
-            )}
-          </CardHeader>
-          <CardContent className="p-4 md:p-6">
-            <DataTable
-              columns={columns}
-              data={filteredTransactions}
-              table={table}
-              searchColumn="description"
-              searchPlaceholder="Search descriptions..."
-            />
+          <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 text-xs font-medium">
+            <Link href="/transactions/import">
+              <FileUp className="h-3.5 w-3.5" />
+              <span>Import CSV</span>
+            </Link>
+          </Button>
+
+          <Button size="sm" onClick={handleAddClick} className="h-9 gap-1.5 text-xs font-medium shadow-xs cursor-pointer">
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add transaction</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary strip cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="border border-border/60 shadow-xs bg-card">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">
+                Total income ({dateLabel.toLowerCase()})
+              </div>
+              <div className="text-xl md:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                +{formatCurrency(metrics.totalIncome)}
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {metrics.incomeCount} incoming records
+              </div>
+            </div>
+            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <TrendingUp className="h-5 w-5" />
+            </div>
           </CardContent>
         </Card>
-      </main>
 
+        <Card className="border border-border/60 shadow-xs bg-card">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">
+                Total expenses ({dateLabel.toLowerCase()})
+              </div>
+              <div className="text-xl md:text-2xl font-bold font-mono text-destructive">
+                -{formatCurrency(metrics.totalExpenses)}
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {metrics.expenseCount} outgoing records
+              </div>
+            </div>
+            <div className="p-2 rounded-lg bg-destructive/10 text-destructive">
+              <TrendingDown className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-border/60 shadow-xs bg-card">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">
+                Net cash flow ({dateLabel.toLowerCase()})
+              </div>
+              <div className={cn(
+                "text-xl md:text-2xl font-bold font-mono",
+                metrics.netFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+              )}>
+                {metrics.netFlow >= 0 ? `+${formatCurrency(metrics.netFlow)}` : `-${formatCurrency(Math.abs(metrics.netFlow))}`}
+              </div>
+              <div className={cn(
+                "text-[11px] font-medium font-mono",
+                metrics.netFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+              )}>
+                {metrics.percentageCashflow >= 0 ? `+${metrics.percentageCashflow.toFixed(1)}%` : `${metrics.percentageCashflow.toFixed(1)}%`} cash flow margin
+              </div>
+            </div>
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <Scale className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main card with interactive filter toolbar & data table */}
+      <Card className="border border-border/60 shadow-xs bg-card overflow-hidden">
+        {/* Controls and filters toolbar */}
+        <div className="p-4 space-y-3 border-b border-border/40">
+          <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+            
+            {/* Search and filters */}
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[180px] max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search descriptions, mode..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-9 text-xs"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Type filter */}
+              <Select value={typeFilter} onValueChange={(val) => setTypeFilter(val as TransactionTypeFilter)}>
+                <SelectTrigger className="h-9 w-[120px] text-xs">
+                  <SelectValue placeholder="All types" />
+                </SelectTrigger>
+                <SelectContent className="text-xs">
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="income">Income only</SelectItem>
+                  <SelectItem value="expense">Expenses only</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Classification filter */}
+              <Select value={classificationFilter} onValueChange={(val) => setClassificationFilter(val as TransactionClassificationFilter)}>
+                <SelectTrigger className="h-9 w-[145px] text-xs">
+                  <SelectValue placeholder="All classifications" />
+                </SelectTrigger>
+                <SelectContent className="text-xs">
+                  <SelectItem value="all">All classifications</SelectItem>
+                  <SelectItem value="recurring">Recurring</SelectItem>
+                  <SelectItem value="one-off">One-off</SelectItem>
+                  <SelectItem value="fixed">Fixed</SelectItem>
+                  <SelectItem value="variable">Variable</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Category filter */}
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="h-9 w-[145px] text-xs">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent className="text-xs max-h-56">
+                  <SelectItem value="all">All categories</SelectItem>
+                  {uniqueCategories.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date range presets & column selector */}
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <div className="flex items-center p-0.5 bg-muted/60 rounded-lg border border-border/50 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDatePreset('this-month')}
+                  className={cn(
+                    "px-2 py-1 rounded-md font-medium transition-all cursor-pointer",
+                    datePreset === 'this-month' 
+                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  This month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDatePreset('last-month')}
+                  className={cn(
+                    "px-2 py-1 rounded-md font-medium transition-all cursor-pointer",
+                    datePreset === 'last-month' 
+                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Last month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDatePreset('last-30')}
+                  className={cn(
+                    "px-2 py-1 rounded-md font-medium transition-all cursor-pointer",
+                    datePreset === 'last-30' 
+                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  30 days
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDatePreset('ytd')}
+                  className={cn(
+                    "px-2 py-1 rounded-md font-medium transition-all cursor-pointer",
+                    datePreset === 'ytd' 
+                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  YTD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDatePreset('all')}
+                  className={cn(
+                    "px-2 py-1 rounded-md font-medium transition-all cursor-pointer",
+                    datePreset === 'all' 
+                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  All
+                </button>
+
+                {/* Custom date range popover */}
+                <Popover open={isCustomOpen} onOpenChange={setIsCustomOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "px-2 py-1 rounded-md font-medium transition-all flex items-center gap-1 cursor-pointer",
+                        datePreset === 'custom' 
+                          ? "bg-background text-foreground shadow-xs font-semibold" 
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="h-3 w-3" />
+                      <span>{datePreset === 'custom' ? 'Custom' : 'Custom...'}</span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-4" align="end">
+                    <div className="space-y-4 text-xs">
+                      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                        <span className="font-semibold text-foreground">Select date range</span>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 px-1.5 text-[11px] text-muted-foreground"
+                          onClick={() => {
+                            setDatePreset('this-month');
+                            setIsCustomOpen(false);
+                          }}
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                        </Button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="custom-start-tx" className="text-[11px] text-muted-foreground">
+                            Start date
+                          </Label>
+                          <Input
+                            id="custom-start-tx"
+                            type="date"
+                            value={customStartDate}
+                            onChange={(e) => setCustomStartDate(e.target.value)}
+                            className="h-8 text-xs font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label htmlFor="custom-end-tx" className="text-[11px] text-muted-foreground">
+                            End date
+                          </Label>
+                          <Input
+                            id="custom-end-tx"
+                            type="date"
+                            value={customEndDate}
+                            onChange={(e) => setCustomEndDate(e.target.value)}
+                            className="h-8 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex justify-end gap-2 border-t border-border/40">
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs font-medium w-full"
+                          onClick={() => {
+                            setDatePreset('custom');
+                            setIsCustomOpen(false);
+                          }}
+                        >
+                          <Check className="h-3.5 w-3.5 mr-1" /> Apply range
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Toggle columns visibility dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs font-medium cursor-pointer">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    <span>View</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 text-xs">
+                  <DropdownMenuLabel className="text-xs font-semibold">Toggle columns</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {table
+                    .getAllColumns()
+                    .filter(column => column.getCanHide())
+                    .map(column => (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="text-xs cursor-pointer"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                      >
+                        {COLUMN_LABELS[column.id] || column.id}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Reset active filters button */}
+              {hasActiveFilters && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={resetAllFilters} 
+                  className="h-9 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset
+                </Button>
+              )}
+            </div>
+
+          </div>
+
+          {/* Bulk selection action toolbar */}
+          {selectedTransactionIds.length > 0 && (
+            <div className="flex items-center justify-between p-2 rounded-lg bg-muted/60 border border-border/60 text-xs animate-in fade-in-50">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="font-semibold text-xs">
+                  {selectedTransactionIds.length} selected
+                </Badge>
+                <span className="text-muted-foreground hidden sm:inline">
+                  Perform actions on selected rows:
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={handleBatchUpdateClick} className="h-7 text-xs gap-1 cursor-pointer">
+                  <Edit3 className="h-3 w-3" /> Batch update
+                </Button>
+                <Button size="sm" variant="destructive" onClick={handleMassDeleteClick} className="h-7 text-xs gap-1 cursor-pointer">
+                  <Trash2 className="h-3 w-3" /> Delete
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRowSelection({})} className="h-7 text-xs cursor-pointer">
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Data Table */}
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-muted/30">
+              {table.getHeaderGroups().map(headerGroup => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map(header => (
+                    <TableHead key={header.id} className="text-xs font-semibold text-muted-foreground">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map(row => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && 'selected'}
+                    className="hover:bg-muted/40 transition-colors"
+                  >
+                    {row.getVisibleCells().map(cell => (
+                      <TableCell key={cell.id} className="py-2.5 text-xs">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-32 text-center text-xs text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Filter className="h-6 w-6 text-muted-foreground/50" />
+                      <span>No transactions found matching your criteria.</span>
+                      {hasActiveFilters && (
+                        <Button variant="outline" size="sm" onClick={resetAllFilters} className="h-7 text-xs mt-1">
+                          Reset filters
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Pagination controls footer */}
+        <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/40 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>
+              {table.getFilteredSelectedRowModel().rows.length} of{' '}
+              {table.getFilteredRowModel().rows.length} row(s) selected
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span>Rows per page:</span>
+              <Select
+                value={`${table.getState().pagination.pageSize}`}
+                onValueChange={(value) => table.setPageSize(Number(value))}
+              >
+                <SelectTrigger className="h-8 w-16 text-xs">
+                  <SelectValue placeholder={table.getState().pagination.pageSize} />
+                </SelectTrigger>
+                <SelectContent side="top" className="text-xs">
+                  {[10, 15, 25, 50, 100].map((pageSize) => (
+                    <SelectItem key={pageSize} value={`${pageSize}`}>
+                      {pageSize}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-center font-medium">
+              Page {table.getState().pagination.pageIndex + 1} of{' '}
+              {table.getPageCount() || 1}
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                className="h-8 w-8 p-0 cursor-pointer"
+                onClick={() => table.setPageIndex(0)}
+                disabled={!table.getCanPreviousPage()}
+              >
+                <span className="sr-only">Go to first page</span>
+                <ChevronsLeft className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                className="h-8 w-8 p-0 cursor-pointer"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                <span className="sr-only">Go to previous page</span>
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                className="h-8 w-8 p-0 cursor-pointer"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                <span className="sr-only">Go to next page</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                className="h-8 w-8 p-0 cursor-pointer"
+                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                disabled={!table.getCanNextPage()}
+              >
+                <span className="sr-only">Go to last page</span>
+                <ChevronsRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Add / Edit Transaction Dialog */}
       {(editingTransaction || (isEditTransactionDialogOpen && !editingTransaction)) && (
         <EditTransactionDialog
           isOpen={isEditTransactionDialogOpen}
-          onClose={handleEditTransactionDialogClose}
+          onClose={() => {
+            setIsEditTransactionDialogOpen(false);
+            setEditingTransaction(null);
+          }}
           transaction={editingTransaction!}
           allBudgetItems={allBudgetItems}
         />
       )}
 
-
+      {/* Batch Update Dialog */}
       <BatchUpdateTransactionDialog
         isOpen={isBatchUpdateDialogOpen}
         onClose={() => {
-            setIsBatchUpdateDialogOpen(false);
-            setRowSelection({});
+          setIsBatchUpdateDialogOpen(false);
+          setRowSelection({});
         }}
         transactionIds={selectedTransactionIds}
         allBudgetItems={allBudgetItems}
         onComplete={() => setRowSelection({})}
       />
 
+      {/* Delete Single Transaction Confirmation Dialog */}
       <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
         {transactionToDelete && (
-            <AlertDialogContent>
+          <AlertDialogContent className="text-xs">
             <AlertDialogHeader>
-                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the transaction: <br />
-                <strong>{transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
-                </AlertDialogDescription>
+              <AlertDialogTitle className="text-sm">Delete transaction</AlertDialogTitle>
+              <AlertDialogDescription className="text-xs">
+                Are you sure you want to permanently delete this transaction? <br />
+                <strong className="text-foreground">{transactionToDelete.description} ({formatCurrency(transactionToDelete.amount)})</strong>
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmDeleteTransaction}>Delete</AlertDialogAction>
+              <AlertDialogCancel onClick={() => setTransactionToDelete(null)} className="h-8 text-xs">
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteTransaction} className="h-8 text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete
+              </AlertDialogAction>
             </AlertDialogFooter>
-            </AlertDialogContent>
+          </AlertDialogContent>
         )}
       </AlertDialog>
 
+      {/* Mass Delete Confirmation Dialog */}
       <AlertDialog open={isMassDeleteDialogOpen} onOpenChange={setIsMassDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="text-xs">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Selected Transactions?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-sm">Delete selected transactions</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
               Are you sure you want to delete {selectedTransactionIds.length} selected transaction(s)? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmMassDelete}>Delete Selected</AlertDialogAction>
+            <AlertDialogCancel className="h-8 text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMassDelete} className="h-8 text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete selected
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
   );
 }

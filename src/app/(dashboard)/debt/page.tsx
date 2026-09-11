@@ -1,10 +1,8 @@
-
 // src/app/(dashboard)/debt/page.tsx
 'use client';
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -18,22 +16,41 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Coins, FileUp, FileDown, AlertTriangle, CalendarClock, CheckCircle, Info, XCircle, Trash2, AlertCircle } from 'lucide-react'; // Added AlertCircle
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { 
+  PlusCircle, 
+  Coins, 
+  FileUp, 
+  FileDown, 
+  AlertTriangle, 
+  CalendarClock, 
+  CheckCircle, 
+  Info, 
+  XCircle, 
+  Trash2, 
+  AlertCircle,
+  HelpCircle,
+  TrendingDown
+} from 'lucide-react';
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from "@/components/ui/alert-dialog";
 import { useDebtStore } from '@/store/debtStore';
 import { useBudgetStore, selectTotalBudgetedDebt } from '@/store/budgetStore';
-import type { DebtItem as PublicDebtItem } from '@/lib/types'; // Public type
+import type { DebtItem as PublicDebtItem } from '@/lib/types';
 import Link from 'next/link';
-import DebtFormSheet from '@/components/debt/DebtFormSheet';
+import DebtFormPopover from '@/components/debt/DebtFormPopover';
 import { formatCurrency, cn } from '@/lib/utils';
 import { DataTable } from '@/components/ui/data-table';
 import { getDebtColumns } from './columns';
-import { PageHeader } from '@/components/layout/PageHeader';
-import Papa from 'papaparse';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 
-// Internal type for the page component, matching the store's version
 interface InternalDebtItem extends PublicDebtItem {
   _acknowledgementVersion?: number;
 }
@@ -129,7 +146,7 @@ export default function DebtPage() {
         return;
     }
     if (fundsForDebtPaymentFromBudget <= 0) {
-        setDebtPayoffTimeline("Cannot estimate: No funds budgeted for debt.");
+        setDebtPayoffTimeline("Funds needed");
         return;
     }
     const totalMinPayments = debts.reduce((sum, debt) => sum + debt.minPayment, 0);
@@ -141,7 +158,7 @@ export default function DebtPage() {
         }
     });
     if (fundsForDebtPaymentFromBudget < totalMinPayments) {
-        setDebtPayoffTimeline(interestWarning ? "Warning: Min payments low relative to interest." : "Warning: Budgeted debt funds < total min payments.");
+        setDebtPayoffTimeline(interestWarning ? "Low min payments" : "Increase budget");
         return;
     }
 
@@ -166,28 +183,28 @@ export default function DebtPage() {
                  const rateDiff = b.interestRate - a.interestRate;
                  if (rateDiff !== 0) return rateDiff;
                  return b.principal - a.principal;
-             });
-             for (const debt of currentDebts) {
-                 if (debt.principal > 0.01 && availablePayment > 0.01) {
-                    const extraPayment = Math.min(availablePayment, debt.principal);
-                    debt.principal -= extraPayment;
-                    availablePayment -= extraPayment;
-                  }
-                  if(availablePayment <= 0.01) break;
-              }
+              });
+              for (const debt of currentDebts) {
+                  if (debt.principal > 0.01 && availablePayment > 0.01) {
+                     const extraPayment = Math.min(availablePayment, debt.principal);
+                     debt.principal -= extraPayment;
+                     availablePayment -= extraPayment;
+                   }
+                   if(availablePayment <= 0.01) break;
+               }
          }
          currentDebts = currentDebts.filter(debt => debt.principal > 0.01);
     }
 
     if (months >= MAX_MONTHS && currentDebts.reduce((sum, d) => sum + d.principal, 0) > 0.01) {
-       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years (estimate)`);
+       setDebtPayoffTimeline(`Over ${Math.floor(MAX_MONTHS / 12)} years`);
     } else {
         const years = Math.floor(months / 12);
         const remainingMonths = months % 12;
-         let timelineString = "";
-        if (years > 0) timelineString += `${years} year${years > 1 ? 's' : ''}`;
-        if (remainingMonths > 0) { if (years > 0) timelineString += " and "; timelineString += `${remainingMonths} month${remainingMonths > 1 ? 's' : ''}`; }
-        setDebtPayoffTimeline(`${timelineString || 'Less than a month'} (estimated)`);
+        let timelineString = "";
+        if (years > 0) timelineString += `${years} yr${years > 1 ? 's' : ''}`;
+        if (remainingMonths > 0) { if (years > 0) timelineString += " "; timelineString += `${remainingMonths} mo${remainingMonths > 1 ? 's' : ''}`; }
+        setDebtPayoffTimeline(`${timelineString || 'Less than 1 mo'}`);
      }
    }, [debts, totalBudgetedDebtPayment]);
 
@@ -201,8 +218,20 @@ export default function DebtPage() {
         Term: debt.term,
       }));
 
-      const csvData = Papa.unparse(csvRows, { header: true });
-      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      // Direct clean CSV builder
+      const headers = ['Description', 'Principal (KES)', 'Interest Rate (%)', 'Min Payment (KES)', 'Term'];
+      const csvContent = [
+        headers.join(','),
+        ...csvRows.map(row => [
+          `"${row.Description}"`,
+          row['Principal (KES)'],
+          row['Interest Rate (%)'],
+          row['Min Payment (KES)'],
+          row.Term
+        ].join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -216,103 +245,219 @@ export default function DebtPage() {
 
   const totalMinPayments = useMemo(() => debts.reduce((sum, d) => sum + d.minPayment, 0), [debts]);
   const reconciliationInsight = useMemo(() => {
-    if (debts.length === 0) return { text: "No debts to reconcile.", variant: "default" as const, icon: Info };
-    if (totalBudgetedDebtPayment <= 0) return { text: "No funds budgeted for debt repayment.", variant: "outline" as const, icon: Info };
-    if (totalBudgetedDebtPayment < totalMinPayments) return { text: "Budgeted payment is less than total minimums. Action recommended.", variant: "destructive" as const, icon: AlertTriangle };
-    if (totalBudgetedDebtPayment > totalMinPayments * 1.2) return { text: "Budgeted payment exceeds minimums. Good progress expected!", variant: "default" as const, icon: CheckCircle };
-    return { text: "Budgeted payment covers minimums.", variant: "outline" as const, icon: Info };
+    if (debts.length === 0) return { text: "No active debts to reconcile.", variant: "default" as const, icon: Info };
+    if (totalBudgetedDebtPayment <= 0) return { text: "No budget allocated to repayment.", variant: "outline" as const, icon: Info };
+    if (totalBudgetedDebtPayment < totalMinPayments) return { text: "Budget underfunds total minimums.", variant: "destructive" as const, icon: AlertTriangle };
+    if (totalBudgetedDebtPayment > totalMinPayments * 1.2) return { text: "Budget accelerates payoff! High savings potential.", variant: "default" as const, icon: CheckCircle };
+    return { text: "Allocated budget covers minimums safely.", variant: "outline" as const, icon: Info };
   }, [debts, totalBudgetedDebtPayment, totalMinPayments]);
 
+  const totalOutstandingDebt = useMemo(() => debts.reduce((sum, d) => sum + d.principal, 0), [debts]);
 
   return (
-    <div className="flex flex-col w-full min-h-screen py-4 md:py-6 lg:py-8">
-      <PageHeader
-        title="Manage Debts"
-        description="Track debts, view amortization, and reconcile with your budget."
-        icon={Coins}
-      >
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={handleAddClick}><PlusCircle className="mr-2 h-4 w-4" /> Add Debt</Button>
-           <Button asChild variant="default"><Link href="/debt/import"><FileUp className="mr-2 h-4 w-4" /> Import CSV</Link></Button>
-            <Button variant="secondary" onClick={handleExportCsv} disabled={debts.length === 0}><FileDown className="mr-2 h-4 w-4" /> Export CSV</Button>
+    <div className="flex flex-col w-full min-h-screen p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* ========================================================= */}
+      {/* 🧭 HEADER & ACTION BUTTONS */}
+      {/* ========================================================= */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-2 border-b border-border/40">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Coins className="h-6 w-6 text-primary" />
+            Manage Debts
+          </h1>
+          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+            Track debts, analyze amortization schedules, and align repayments with your monthly budget.
+          </p>
         </div>
-      </PageHeader>
 
-      <Card className="mb-6 mx-4 md:mx-6 lg:mx-8 shadow-md">
-        <CardHeader className="p-6">
-          <CardTitle className="text-lg">Debt Overview & Reconciliation</CardTitle>
+        <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+          <DebtFormPopover
+            isOpen={isFormSheetOpen && !editingDebt}
+            onClose={handleFormSheetClose}
+            debt={null}
+            trigger={
+              <Button variant="outline" size="sm" onClick={handleAddClick} className="h-9 text-xs font-semibold cursor-pointer">
+                <PlusCircle className="mr-1.5 h-4 w-4 text-emerald-500" /> 
+                Add Debt
+              </Button>
+            }
+          />
+          <Button asChild variant="outline" size="sm" className="h-9 text-xs font-semibold">
+            <Link href="/debt/import">
+              <FileUp className="mr-1.5 h-4 w-4" /> Import CSV
+            </Link>
+          </Button>
+          <Button 
+            variant="secondary" 
+            size="sm" 
+            onClick={handleExportCsv} 
+            disabled={debts.length === 0}
+            className="h-9 text-xs font-semibold cursor-pointer"
+          >
+            <FileDown className="mr-1.5 h-4 w-4" /> Export CSV
+          </Button>
+        </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* 📊 CORE STAT CARDS */}
+      {/* ========================================================= */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total Outstanding Debt */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between rounded-xl">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block">Total outstanding debt</span>
+              <span className="text-[10px] text-muted-foreground">Aggregated principal balance</span>
+            </div>
+            <span className="p-1.5 rounded-md bg-rose-500/10 text-destructive">
+              <TrendingDown className="h-4 w-4" />
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="text-2xl font-bold font-mono text-destructive tracking-tight">
+              {formatCurrency(totalOutstandingDebt)}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monthly Budgeted Allocation */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between rounded-xl">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block">Budgeted monthly payoff</span>
+              <span className="text-[10px] text-muted-foreground">Allocated from current budget</span>
+            </div>
+            <span className="p-1.5 rounded-md bg-primary/10 text-primary">
+              <Coins className="h-4 w-4" />
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="text-2xl font-bold font-mono text-primary tracking-tight">
+              {formatCurrency(totalBudgetedDebtPayment)}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Estimated Timeline */}
+        <Card className="border border-border/60 shadow-xs bg-card flex flex-col justify-between rounded-xl">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <span className="text-xs font-medium text-muted-foreground block">Payoff timeline</span>
+              <span className="text-[10px] text-muted-foreground">Estimated clearance duration</span>
+            </div>
+            <span className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <CalendarClock className="h-4 w-4" />
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
+              {debtPayoffTimeline}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ========================================================= */}
+      {/* 🤝 RECONCILIATION & ACTION INSIGHTS */}
+      {/* ========================================================= */}
+      <Card className="border border-border/60 shadow-xs bg-card rounded-xl">
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-sm font-semibold text-foreground">Reconciliation Status</CardTitle>
+          <CardDescription className="text-xs">How your scheduled budget covers mandatory loan structures.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm p-6">
-          <div className="space-y-3">
-            <div className="flex justify-between items-baseline">
-              <span className="text-muted-foreground">Total Outstanding Debt:</span>
-              <span className="font-bold text-xl font-mono text-destructive">{formatCurrency(debts.reduce((sum, d) => sum + d.principal, 0))}</span>
-            </div>
-             <div className="flex justify-between items-baseline">
-              <span className="text-muted-foreground">Monthly Budgeted Debt Payment:</span>
-              <span className="font-bold text-xl font-mono text-primary">{formatCurrency(totalBudgetedDebtPayment)}</span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <span className="text-muted-foreground flex items-center gap-1"><CalendarClock size={14}/> Estimated Payoff Timeline:</span>
-              <span className="font-bold text-lg font-mono text-primary">{debtPayoffTimeline}</span>
+        <CardContent className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border/40">
+            <reconciliationInsight.icon className={cn(
+              "h-5 w-5 mt-0.5 flex-shrink-0",
+              reconciliationInsight.variant === 'destructive' ? "text-destructive" :
+              reconciliationInsight.variant === 'default' ? "text-emerald-500" : "text-muted-foreground"
+            )}/>
+            <div className="space-y-1">
+              <span className="font-semibold block text-foreground">Budget Alignment</span>
+              <p className="text-muted-foreground">{reconciliationInsight.text}</p>
             </div>
           </div>
-          <div className="md:border-l md:pl-6 space-y-3">
-            <h4 className="font-medium text-base text-muted-foreground">Reconciliation Insights</h4>
-             <Badge variant={reconciliationInsight.variant} className="text-sm p-2 w-full justify-start gap-2">
-                <reconciliationInsight.icon className="h-4 w-4 flex-shrink-0"/>
-                <span>{reconciliationInsight.text}</span>
-             </Badge>
-             {totalMinPayments > 0 && (
-                <p className="text-xs text-muted-foreground">Total Minimum Payments Required: {formatCurrency(totalMinPayments)}</p>
-             )}
+
+          <div className="flex flex-col justify-center space-y-1 md:border-l md:pl-4">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Required Minimum Monthly Payments:</span>
+              <span className="font-mono font-bold text-foreground">{formatCurrency(totalMinPayments)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Budget Repayment Coverage Ratio:</span>
+              <span className={cn(
+                "font-mono font-bold",
+                totalMinPayments > 0 && totalBudgetedDebtPayment >= totalMinPayments ? "text-emerald-500" : "text-amber-500"
+              )}>
+                {totalMinPayments > 0 ? `${((totalBudgetedDebtPayment / totalMinPayments) * 100).toFixed(0)}%` : 'N/A'}
+              </span>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <main className="flex-1 px-4 md:px-6 lg:px-8">
-        <Card className="shadow-sm">
-           <CardHeader className="p-4 md:p-6 border-b">
-            <CardTitle className="text-lg">Debt List</CardTitle>
-            <CardDescription>Your current outstanding debts. A pulsing dot <AlertCircle className="inline h-3 w-3 text-destructive" /> indicates an unacknowledged principal change or a new item. Click dot to acknowledge.</CardDescription>
-            {selectedDebtIds.length > 0 && (
-                <div className="mt-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center border-t pt-4">
-                    <span className="text-sm text-muted-foreground mb-2 sm:mb-0">{selectedDebtIds.length} selected</span>
-                    <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="destructive" onClick={handleMassDeleteClick}>
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setRowSelection({})}>
-                            <XCircle className="mr-2 h-4 w-4" /> Clear Selection
-                        </Button>
-                    </div>
-                </div>
-            )}
-          </CardHeader>
-          <CardContent className="p-4 md:p-6">
-            <DataTable
-              columns={columns}
-              data={debts as InternalDebtItem[]} // Cast here for DataTable if columns expect InternalDebtItem
-              table={table}
-              searchColumn="description"
-              searchPlaceholder="Search debt descriptions..."
-            />
-          </CardContent>
-           {debts.length > 0 && (
-             <CardFooter className="p-4 border-t text-xs text-muted-foreground">
-               {table.getFilteredRowModel().rows.length} debt(s) showing.
-             </CardFooter>
-           )}
-        </Card>
-      </main>
+      {/* ========================================================= */}
+      {/* 📋 DEBT REGISTRY TABLE */}
+      {/* ========================================================= */}
+      <Card className="border border-border/60 shadow-xs bg-card rounded-xl overflow-hidden">
+        <CardHeader className="p-4 border-b border-border/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-sm font-semibold text-foreground">Active Debt Portfolio</CardTitle>
+            <CardDescription className="text-xs">
+              List of current outstanding debts. A pulsing dot <AlertCircle className="inline h-3.5 w-3.5 text-destructive align-middle animate-pulse" /> indicates unacknowledged balance or rate updates. Click it to accept.
+            </CardDescription>
+          </div>
 
-         <DebtFormSheet isOpen={isFormSheetOpen} onClose={handleFormSheetClose} debt={editingDebt} />
+          {selectedDebtIds.length > 0 && (
+            <div className="flex items-center gap-2 self-start md:self-center">
+              <span className="text-[11px] text-muted-foreground font-mono">{selectedDebtIds.length} selected</span>
+              <Button size="xs" variant="destructive" onClick={handleMassDeleteClick} className="h-8 text-xs font-semibold px-2.5">
+                <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete Selected
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => setRowSelection({})} className="h-8 text-xs font-semibold px-2.5">
+                <XCircle className="mr-1 h-3.5 w-3.5" /> Clear Selection
+              </Button>
+            </div>
+          )}
+        </CardHeader>
 
-        <AlertDialog open={!!debtToDelete} onOpenChange={(open) => !open && setDebtToDelete(null)}>
+        <CardContent className="p-4">
+          <DataTable
+            columns={columns}
+            data={debts as InternalDebtItem[]}
+            table={table}
+            searchColumn="description"
+            searchPlaceholder="Search outstanding debts..."
+          />
+        </CardContent>
+
+        {debts.length > 0 && (
+          <CardFooter className="p-3 border-t border-border/40 text-[10px] text-muted-foreground font-mono">
+            Showing {table.getFilteredRowModel().rows.length} of {debts.length} active debt instruments.
+          </CardFooter>
+        )}
+      </Card>
+
+      {/* Form & Confirmation Dialogs */}
+      <DebtFormPopover isOpen={isFormSheetOpen && !!editingDebt} onClose={handleFormSheetClose} debt={editingDebt} />
+
+      <AlertDialog open={!!debtToDelete} onOpenChange={(open) => !open && setDebtToDelete(null)}>
         {debtToDelete && (
-            <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>Delete: <strong>{debtToDelete.description} ({formatCurrency(debtToDelete.principal)})</strong>?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteDebt}>Delete</AlertDialogAction></AlertDialogFooter>
-            </AlertDialogContent>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Delete <strong>{debtToDelete.description} ({formatCurrency(debtToDelete.principal)})</strong>? This action will permanently remove this instrument from your financial forecasts.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDebtToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteDebt} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
         )}
       </AlertDialog>
 
@@ -326,7 +471,9 @@ export default function DebtPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmMassDelete}>Delete Selected</AlertDialogAction>
+            <AlertDialogAction onClick={confirmMassDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              Delete Selected
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

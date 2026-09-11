@@ -1,7 +1,7 @@
 
 // src/app/api/client-log/route.ts
 import { NextResponse } from 'next/server';
-import { currentUser } from '@clerk/nextjs/server';
+import { currentUser } from '@/lib/serverAuth';
 import { ClientLogPayloadSchema } from '@/lib/schemas';
 
 export async function POST(request: Request) {

@@ -92,11 +92,47 @@ export interface InvestmentItem {
 export type InvestmentFormData = InvestmentFormDataZod;
 
 
+export type ShareScopeType = 'week' | 'month' | 'period';
+
+export interface CollaboratorComment {
+  id: string;
+  transactionId: string;
+  authorId: string;
+  authorName: string;
+  authorEmail?: string;
+  role: 'owner' | 'reviewer';
+  comment: string;
+  createdAt: string;
+}
+
+export interface SharedReviewRecord {
+  id: string;
+  scope: ShareScopeType;
+  periodKey: string;
+  periodLabel: string;
+  startDate: string;
+  endDate: string;
+  ownerUserId: string;
+  ownerName?: string;
+  ownerEmail?: string;
+  sharedWithUserId: string;
+  sharedWithName?: string;
+  sharedWithEmail?: string;
+  permissions: 'comment_only';
+  status: 'active' | 'revoked';
+  transactionsSnapshot?: TransactionWithId[];
+  comments: Record<string, CollaboratorComment[]>;
+  journal?: string;
+  createdAt: string;
+  revokedAt?: string;
+}
+
 export interface WeeklyReviewData {
   ownerId: string;
   ownerUsername?: string;
   journal: string;
   transactionComments?: Record<string, string>;
+  collaboratorComments?: Record<string, CollaboratorComment[]>;
   sharedWith?: string[];
   weekKey?: string;
 }

@@ -26,7 +26,7 @@ import { useBudgetStore } from '@/store/budgetStore';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { logError, logInfo } from '@/lib/logger';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@/context/AuthContext';
 
 interface DataImportDialogProps {
   isOpen: boolean;
