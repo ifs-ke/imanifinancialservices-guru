@@ -20,8 +20,7 @@ import {
   Zap, 
   Layers,
   Wallet,
-  Compass,
-  HelpCircle
+  Compass
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { 
@@ -327,10 +326,6 @@ export default function SinglePageHome() {
           
           {/* Section Header */}
           <div className="text-center space-y-3">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold text-xs font-semibold mx-auto">
-              <HelpCircle className="h-3.5 w-3.5" />
-              <span>Help & Guidance</span>
-            </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
               Frequently Asked Questions
             </h2>

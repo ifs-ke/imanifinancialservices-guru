@@ -393,6 +393,19 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - ESLint verification: `0 errors / 0 warnings`.
   - Production build: `Compiled successfully`.
 
+### ✅ Phase 53: Dashboard Monthly Budget Threshold Warning Engine
+- [x] **Run-Rate & Pace Projection Calculation Engine (`src/lib/budgetThresholdUtils.ts`)**:
+  - Implemented `calculateBudgetThresholdWarnings()` to evaluate actual and month-end projected spending per category against allocated monthly envelopes.
+  - Automatically flags categories where spending pace or actual recorded expenses exceed the monthly budget by >10% (`ratio > 110%`).
+- [x] **Interactive Dashboard Threshold Card Component (`src/components/dashboard/BudgetThresholdWarningCard.tsx`)**:
+  - Integrated a dedicated warning card into the main Financial Dashboard with visual progress bars, 100% budget markers, overage percentages, severity indicators (`warning` vs `critical`), and quick-action navigation to adjust envelopes.
+- [x] **Automated Unit & Integration Test Coverage (`src/__tests__/budgetThresholdWarning.test.ts`)**:
+  - Added unit test suite covering pace projections, actual overrun detection, healthy threshold states, and invalid period handling.
+- [x] **Verification Milestone**:
+  - Automated test coverage: **17 test suites, 78 unit tests (100% passing)**.
+  - ESLint verification: `0 errors / 0 warnings`.
+  - Production build: `Compiled successfully`.
+
 
 
 

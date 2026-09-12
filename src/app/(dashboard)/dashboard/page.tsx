@@ -57,6 +57,9 @@ import { useTransactionsStore } from '@/store/transactionsStore';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useInvestmentStore } from '@/store/investmentStore';
+import { useBudgetStore } from '@/store/budgetStore';
+import { calculateBudgetThresholdWarnings } from '@/lib/budgetThresholdUtils';
+import BudgetThresholdWarningCard from '@/components/dashboard/BudgetThresholdWarningCard';
 
 export type DateFilterPreset = 'this-month' | 'last-month' | 'last-30' | 'last-90' | 'ytd' | 'all' | 'custom';
 
@@ -102,6 +105,7 @@ export default function DashboardPage() {
   const assetItems = useStatementStore(state => state.assetItems);
   const otherLiabilityItems = useStatementStore(state => state.otherLiabilityItems);
   const investmentItems = useInvestmentStore(state => state.investmentItems);
+  const budgetItems = useBudgetStore(state => state.budgetItems);
 
   // Date range filter state
   const [datePreset, setDatePreset] = useState<DateFilterPreset>('all');
@@ -198,6 +202,17 @@ export default function DashboardPage() {
       selectionSubtitle: subtitle,
     };
   }, [datePreset, customStartDate, customEndDate, transactions]);
+
+  // Compute active budget period key ('yyyy-MM') and budget threshold warnings
+  const activeBudgetPeriod = useMemo(() => {
+    if (datePreset === 'this-month') return format(new Date(), 'yyyy-MM');
+    if (datePreset === 'last-month') return format(subMonths(new Date(), 1), 'yyyy-MM');
+    return format(dateRange.start, 'yyyy-MM');
+  }, [datePreset, dateRange.start]);
+
+  const budgetThresholdWarnings = useMemo(() => {
+    return calculateBudgetThresholdWarnings(budgetItems, transactions, activeBudgetPeriod);
+  }, [budgetItems, transactions, activeBudgetPeriod]);
 
   // Core financial metrics calculated from stores
   const financialMetrics = useMemo(() => {
@@ -644,6 +659,12 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Budget threshold warning banner/card */}
+      <BudgetThresholdWarningCard 
+        warnings={budgetThresholdWarnings} 
+        periodLabel={selectionSubtitle} 
+      />
 
       {/* ========================================================= */}
       {/* 🍱 BENTO GRID (Clean, simple, sentence case) */}
