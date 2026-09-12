@@ -69,27 +69,27 @@ export async function hashData(data: string): Promise<string> {
   const dataBuffer = encoder.encode(data);
 
   try {
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-      // Browser environment (SubtleCrypto is preferred)
-      const hashBuffer = await window.crypto.subtle.digest('SHA-256', dataBuffer);
+    const subtle = (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle)
+      ? globalThis.crypto.subtle
+      : (typeof window !== 'undefined' && window.crypto && window.crypto.subtle)
+        ? window.crypto.subtle
+        : null;
+
+    if (subtle) {
+      const hashBuffer = await subtle.digest('SHA-256', dataBuffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       return hashHex;
-    } else if (typeof crypto !== 'undefined' && crypto.createHash) {
-      // Node.js / Edge environment (using Node.js crypto module)
-      // Ensure crypto is available (should be in modern Node/Edge)
-      const hash = crypto.createHash('sha256');
+    } else if (typeof crypto !== 'undefined' && (crypto as any).createHash) {
+      const hash = (crypto as any).createHash('sha256');
       hash.update(dataBuffer);
       return hash.digest('hex');
     } else {
-      // Fallback or error if no crypto implementation found
       console.error("SHA-256 Hashing environment not supported: Missing crypto.subtle or Node.js crypto.");
       throw new Error('Hashing environment not supported.');
     }
   } catch (error) {
     console.error("SHA-256 Hashing failed:", error);
-    // Fallback or rethrow depending on desired error handling
-    // Returning a predictable string helps identify hashing failures vs mismatches
     return 'hashing_failed_error';
   }
 }

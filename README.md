@@ -296,11 +296,63 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - Removed "Wealth" and replaced "Operations" with "Finance", delivering a crisp, high-impact headline: **"Financial Clarity for Personal & SME Finance"**.
   - Synchronized the footer brand value statement to **"Personal & SME Cash Management"**.
 
-### ✅ Phase 40: UI Toolkit & Store Synchronization Resolution
-- [x] **Statement Date Synchronization Fix**:
-  - Implemented missing `setStatementDates(startDate, endDate)` in `StatementState` and `useStatementStore` to ensure atomic state rehydration in `useSyncManager`.
-- [x] **UI Toolkit Component Hardening**:
-  - Made `ThemeToggle` resilient by making `sidebarState` optional with fallback and adding standard `className` passthrough support.
+### ✅ Phase 41: Deployment Readiness & Automated Unit Test Suite
+- [x] **Test Infrastructure Setup**:
+  - Configured `vitest` unit test harness integrated with Vite build configuration and npm scripts (`npm test`).
+  - Implemented cross-runtime cryptographic hashing in `src/lib/storage-utils.ts` utilizing `globalThis.crypto.subtle` with Node fallback for deterministic integrity checks.
+- [x] **Comprehensive Test Suite Coverage**:
+  - **`src/__tests__/utils.test.ts`**: Validated `formatCurrency` with KES formatting, NaN/undefined protection, large financial sums, and `cn` utility Tailwind conflict resolution.
+  - **`src/__tests__/storage-utils.test.ts`**: Tested isomorphic Base64 `encode`/`decode`, deterministic SHA-256 `hashData`, and `verifyHash` tampering detection.
+  - **`src/__tests__/prepareDataForHashing.test.ts`**: Verified canonical item sorting, ISO date string formatting, and floating-point precision normalization.
+  - **`src/__tests__/roles.test.ts`**: Verified RBAC `normalizeRole` and metadata inspection across `admin`, `auditor`, and `client` roles.
+  - **`src/__tests__/debtCalculations.test.ts`**: Tested loan amortization schedules, zero-interest financing, and unserviceable debt warnings (payment <= interest).
+  - **`src/__tests__/statementStore.test.ts`**: Tested asset/liability state management, sorting, and atomic `setStatementDates` updates.
+  - **`src/__tests__/debtStore.test.ts`**: Tested debt additions, auto-generated UUIDs, term-based sorting, and acknowledged principal revision tracking.
+  - **`src/__tests__/budgetStore.test.ts`**: Tested envelope management, planned vs. actual allocations, and variance reporting.
+  - **`src/__tests__/transactionsStore.test.ts`**: Tested ledger entries, batch updates, and category reclassification.
+- [x] **Production Verification**:
+  - Static analysis (`eslint src/`) passed with 0 errors.
+  - Production build (`vite build`) compiled successfully with minified static assets and PWA manifest generation.
+  - Full test suite passed (9 test files, 39 unit tests).
+
+### ✅ Phase 42: Continuous Integration & Automated Pull Request Pipeline
+- [x] **GitHub Actions Workflow Automation (`.github/workflows/test.yml`)**:
+  - Automated continuous integration triggers on `push` and `pull_request` to `main` and `master` branches.
+  - Configured multi-stage verification pipeline running ESLint static analysis, Vitest unit test execution, and production bundle compilation (`npm run build`).
+  - Integrated dependency caching with `actions/setup-node@v4` for fast, reproducible CI runtimes.
+
+### ✅ Phase 43: Firestore Connection, LocalStorage & PWA Test Suites
+- [x] **Firestore Connection & Backend Reliability (`src/__tests__/firestoreConnection.test.ts`)**:
+  - Validated Firebase configuration resolution against environment variables and embedded project credentials (`ai-studio-imanifinancialse-19b5c1d0-a9f8-40d0-9637-ae5bff0b1ce0`).
+  - Tested Firestore database client instance initialization with custom `databaseId` binding.
+  - Verified `handleFirestoreError` structured JSON error serialization with operation type, collection path, and authentication state.
+  - Tested `checkDatabaseConnection` diagnostic health check action.
+- [x] **LocalStorage & Offline Queue Testing (`src/__tests__/localStorage.test.ts`)**:
+  - Tested zero-latency offline financial snapshot persistence and JSON hydration in `localStorage` with ISO timestamps.
+  - Tested offline mutation queue management (`enqueueOfflineMutation`, `getOfflineMutations`, `getPendingMutationsCount`, `clearOfflineMutations`).
+  - Hardened `logger.ts` with isomorphic window/location safety guards for Node and Edge test environments.
+- [x] **Progressive Web App Compliance (`src/__tests__/pwa.test.ts`)**:
+  - Validated Web App Manifest metadata (`standalone` display, `portrait-primary` orientation, theme color, background color).
+  - Verified icon asset matrix: standard 192x192, 512x512, and maskable icons.
+  - Tested PWA platform installation triggers, iOS Safari user-agent detection, and standalone display mode matching.
+
+### ✅ Phase 44: PDF Export, Import/Export Engine & pnpm Package Manager Default
+- [x] **pnpm as Default Package Manager (`package.json`, `.github/workflows/test.yml`)**:
+  - Configured `"packageManager": "pnpm@9.15.4"` in `package.json` to establish pnpm as the authoritative package manager.
+  - Integrated `pnpm/action-setup@v4` in GitHub Actions CI workflow with pnpm store caching.
+- [x] **PDF Export & Print Layout Testing (`src/__tests__/pdfExport.test.ts`)**:
+  - Tested print media isolation styles (`@media print`, `.no-print`), background color resets, full-width container overrides, and grid columns.
+  - Tested print break avoidance rules (`.print-break-inside-avoid`, `.print-page-break`).
+  - Verified execution safety for `window.print()` triggers.
+- [x] **Data Import & Export Testing (`src/__tests__/dataImportExport.test.ts`, `src/lib/exportUtils.ts`)**:
+  - Built centralized, typed utility module `exportUtils.ts` providing `buildFullExportPayload`, `validateImportPayload`, `generateCsvExport`, and `getPdfPrintStyles`.
+  - Tested JSON state payload packaging across all stores with ISO timestamping and semantic versioning (`version: "1.0"`).
+  - Tested import payload validation, entity counters (transactions, debts, investments, budget items, assets, liabilities), and corrupt payload rejection.
+  - Tested RFC 4180 CSV export generation and empty dataset safety.
+- [x] **Verification Milestone**:
+  - Total test suite coverage: **14 test suites, 65 unit tests (100% passing)**.
+  - Linter: `0 errors / 0 warnings`.
+  - Production build: `Compiled successfully`.
 
 
 

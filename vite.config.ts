@@ -20,8 +20,8 @@ export default defineConfig({
       ],
       manifest: {
         id: '/',
-        name: 'Imani Financial - Personal Finance & Amortization',
-        short_name: 'ImaniGuru',
+        name: 'IFS-Guru - Personal Finance & Amortization',
+        short_name: 'IFS-Guru',
         description: 'Take control of your finances and conquer your debt with personal finance dashboards and amortization tools.',
         theme_color: '#0284c7',
         background_color: '#0f172a',
@@ -109,5 +109,9 @@ export default defineConfig({
   },
   define: {
     'process.env': JSON.stringify(process.env),
+  },
+  test: {
+    globals: true,
+    environment: 'node',
   },
 });

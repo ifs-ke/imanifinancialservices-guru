@@ -27,8 +27,8 @@ const getBaseContextForDirectLog = (userIdForLog?: string | null): LogContext =>
     userId: effectiveUserId,
     environment: process.env.NODE_ENV || 'unknown_env',
     clientTimestamp: new Date().toISOString(),
-    source_client_component: typeof window !== 'undefined' ? window.location.pathname : 'server_or_unknown_path',
-    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+    source_client_component: typeof window !== 'undefined' && window.location ? window.location.pathname : 'server_or_unknown_path',
+    userAgent: typeof navigator !== 'undefined' && navigator.userAgent ? navigator.userAgent : undefined,
   };
 };
 

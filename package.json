@@ -6,7 +6,8 @@
     "dev": "vite --port 3000 --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --port 3000 --host 0.0.0.0",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test": "vitest run"
   },
   "dependencies": {
     "@genkit-ai/googleai": "latest",
@@ -76,6 +77,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5",
     "vite": "^8.3.0",
-    "vite-plugin-pwa": "^1.3.0"
-  }
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^5.0.0"
+  },
+  "packageManager": "pnpm@9.15.4"
 }
