@@ -73,6 +73,7 @@ export interface StatementState {
     isHydrated: boolean;
     setStartDate: (date: Date | undefined) => void;
     setEndDate: (date: Date | undefined) => void;
+    setStatementDates: (startDate: Date | undefined, endDate: Date | undefined) => void;
     setAssetItems: (items: StatementItem[]) => void;
     setOtherLiabilityItems: (items: OtherLiabilityItem[]) => void;
     addAssetItem: (itemData: Omit<StatementItem, 'id'>) => void;
@@ -98,6 +99,7 @@ export const useStatementStore = create<StatementState>()(
             ...initialState,
             setStartDate: (date) => set({ startDate: date }),
             setEndDate: (date) => set({ endDate: date }),
+            setStatementDates: (startDate, endDate) => set({ startDate, endDate }),
             setAssetItems: (items) => set({ assetItems: sortItems(items || []), isHydrated: true }),
             setOtherLiabilityItems: (items) => set({ otherLiabilityItems: sortItems(items || []), isHydrated: true }),
             addAssetItem: (itemData) => {

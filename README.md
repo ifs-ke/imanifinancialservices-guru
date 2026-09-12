@@ -296,6 +296,12 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - Removed "Wealth" and replaced "Operations" with "Finance", delivering a crisp, high-impact headline: **"Financial Clarity for Personal & SME Finance"**.
   - Synchronized the footer brand value statement to **"Personal & SME Cash Management"**.
 
+### ✅ Phase 40: UI Toolkit & Store Synchronization Resolution
+- [x] **Statement Date Synchronization Fix**:
+  - Implemented missing `setStatementDates(startDate, endDate)` in `StatementState` and `useStatementStore` to ensure atomic state rehydration in `useSyncManager`.
+- [x] **UI Toolkit Component Hardening**:
+  - Made `ThemeToggle` resilient by making `sidebarState` optional with fallback and adding standard `className` passthrough support.
+
 
 
 

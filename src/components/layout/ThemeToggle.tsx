@@ -9,10 +9,11 @@ import { cn } from "@/lib/utils";
 import type { SidebarState } from "@/components/ui/sidebar";
 
 interface ThemeToggleProps {
-  sidebarState: SidebarState;
+  sidebarState?: SidebarState;
+  className?: string;
 }
 
-export function ThemeToggle({ sidebarState }: ThemeToggleProps) {
+export function ThemeToggle({ sidebarState = "expanded", className }: ThemeToggleProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
@@ -36,7 +37,8 @@ export function ThemeToggle({ sidebarState }: ThemeToggleProps) {
         disabled
         className={cn(
           "w-full justify-start px-2",
-          sidebarState === "collapsed" && "justify-center"
+          sidebarState === "collapsed" && "justify-center",
+          className
         )}
       >
         <Sun className="h-[1.2rem] w-[1.2rem]" />
@@ -59,7 +61,8 @@ export function ThemeToggle({ sidebarState }: ThemeToggleProps) {
       onClick={toggleTheme}
       className={cn(
         "w-full justify-start px-2",
-        sidebarState === "collapsed" && "justify-center"
+        sidebarState === "collapsed" && "justify-center",
+        className
       )}
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
