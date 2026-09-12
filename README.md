@@ -349,9 +349,16 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - Tested JSON state payload packaging across all stores with ISO timestamping and semantic versioning (`version: "1.0"`).
   - Tested import payload validation, entity counters (transactions, debts, investments, budget items, assets, liabilities), and corrupt payload rejection.
   - Tested RFC 4180 CSV export generation and empty dataset safety.
+### ✅ Phase 46: Vercel & Multi-Cloud Deployment Configuration
+- [x] **Peer Dependency Resolution (`.npmrc`, `package.json`)**:
+  - Upgraded `next-themes` from `^0.3.0` to `^0.4.4` to natively satisfy React 19 peer dependencies and eliminate `ERESOLVE` npm installation errors on Vercel and CI runners.
+  - Aligned `@types/react` and `@types/react-dom` to `^19.0.0`.
+  - Added `.npmrc` configuring `legacy-peer-deps=true` and `auto-install-peers=true` for universal package manager resilience.
+- [x] **Vercel Build Target Optimization (`vercel.json`)**:
+  - Configured `vercel.json` with `"framework": "vite"`, `"buildCommand": "npm run build"`, `"outputDirectory": "dist"`, and SPA client-side wildcard rewrites (`/.* -> /index.html`).
 - [x] **Verification Milestone**:
-  - Total test suite coverage: **14 test suites, 65 unit tests (100% passing)**.
-  - Linter: `0 errors / 0 warnings`.
+  - Automated test coverage: **15 test suites, 68 unit tests (100% passing)**.
+  - ESLint validation: `0 errors / 0 warnings`.
   - Production build: `Compiled successfully`.
 
 

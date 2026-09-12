@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
 import { AuthProvider } from '@/context/AuthContext';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import App from './App';
 import './app/globals.css';
 
@@ -28,12 +29,14 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );
