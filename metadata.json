@@ -1,6 +1,6 @@
 {
-  "name": "IFS - Guru",
-  "description": "Take control of your finances and conquer your debt with personal finance dashboards and amortization tools.",
+  "name": "IFS-Guru",
+  "description": "Unified personal wealth intelligence and SME business cashflow operating system with offline-first sync, statement parsing, debt elimination, and DPA 2019 audit compliance.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -187,7 +187,7 @@ export function ReviewChat({
         if (finalText.trim()) {
           sendReviewChatMessageApi(activeShareId, finalText, {
             userId: 'gemini-ai-advisor-uid',
-            name: 'Imani AI Advisor',
+            name: 'IFS-Guru AI Advisor',
             role: 'assistant'
           }).catch(console.error);
         }
@@ -258,7 +258,7 @@ export function ReviewChat({
           )}
           <div>
             <CardTitle className="text-sm font-bold text-foreground">
-              {chatMode === 'ai' ? 'Imani AI Advisor' : 'Collaborator Chat'}
+              {chatMode === 'ai' ? 'IFS-Guru AI Advisor' : 'Collaborator Chat'}
             </CardTitle>
             <CardDescription className="text-[10px] text-muted-foreground flex items-center gap-1">
               {isOnline ? (
@@ -325,7 +325,7 @@ export function ReviewChat({
                       <Sparkles className="h-6 w-6 animate-pulse" />
                     </div>
                     <div className="space-y-1 max-w-xs">
-                      <p className="text-xs font-bold text-foreground">Imani AI Financial Coach</p>
+                      <p className="text-xs font-bold text-foreground">IFS-Guru AI Financial Coach</p>
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
                         I am your private financial assistant. Select one of the quick suggestions below or write a query to audit this week's review.
                       </p>
@@ -375,7 +375,7 @@ export function ReviewChat({
                       "flex items-center gap-1.5 text-[9px] text-muted-foreground",
                       isMe && "justify-end"
                     )}>
-                      <span className="font-semibold text-foreground/80">{isAI ? 'Imani AI Advisor' : msg.senderName}</span>
+                      <span className="font-semibold text-foreground/80">{isAI ? 'IFS-Guru AI Advisor' : msg.senderName}</span>
                       <span>•</span>
                       <span>{format(new Date(msg.timestamp), 'h:mm a')}</span>
                     </div>
@@ -404,7 +404,7 @@ export function ReviewChat({
                 </Avatar>
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
-                    <span className="font-semibold text-primary">Imani AI Advisor</span>
+                    <span className="font-semibold text-primary">IFS-Guru AI Advisor</span>
                     <span>•</span>
                     <span className="flex items-center gap-1 text-primary animate-pulse">
                       <Loader2 className="h-2 w-2 animate-spin" /> Streaming...

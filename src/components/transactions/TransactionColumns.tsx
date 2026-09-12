@@ -170,7 +170,7 @@ export const getColumns = (
       return (
         <div className={cn(
           'text-right font-mono text-xs font-semibold whitespace-nowrap',
-          isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'
+          isIncome ? 'text-navy dark:text-gold' : 'text-foreground'
         )}>
           {isIncome ? `+${formatCurrency(amount)}` : formatCurrency(amount)}
         </div>

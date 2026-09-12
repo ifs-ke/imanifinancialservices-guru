@@ -307,32 +307,32 @@ export default function DashboardPage() {
     if (ratio >= 6) {
       return {
         label: 'Optimal buffer',
-        color: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-        bg: 'bg-emerald-500/10',
-        barColor: 'bg-emerald-500',
+        color: 'text-navy dark:text-gold border-gold/30',
+        bg: 'bg-gold/10',
+        barColor: 'bg-navy dark:bg-gold',
       };
     }
     if (ratio >= 3) {
       return {
         label: 'Healthy buffer',
-        color: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-        bg: 'bg-emerald-500/10',
-        barColor: 'bg-emerald-500',
+        color: 'text-navy dark:text-navy-pale border-navy/30',
+        bg: 'bg-navy/10',
+        barColor: 'bg-navy',
       };
     }
     if (ratio >= 1) {
       return {
         label: 'Moderate buffer',
-        color: 'text-amber-600 dark:text-amber-400 border-amber-500/30',
+        color: 'text-amber-700 dark:text-amber-400 border-amber-500/30',
         bg: 'bg-amber-500/10',
         barColor: 'bg-amber-500',
       };
     }
     return {
       label: 'Low buffer',
-      color: 'text-destructive border-destructive/30',
-      bg: 'bg-destructive/10',
-      barColor: 'bg-destructive',
+      color: 'text-muted-foreground border-border',
+      bg: 'bg-muted',
+      barColor: 'bg-slate-400',
     };
   }, [financialMetrics.liquidityRatio]);
 
@@ -690,17 +690,17 @@ export default function DashboardPage() {
                 {selectionSubtitle}
               </div>
             </div>
-            <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="p-1.5 rounded-md bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold">
               <TrendingUp className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-2xl lg:text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
+            <div className="text-2xl lg:text-3xl font-bold font-mono text-foreground tracking-tight">
               +{formatCurrency(financialMetrics.periodIncome)}
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40">
               <span>Retention rate:</span>
-              <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className="font-mono font-semibold text-navy dark:text-gold">
                 {financialMetrics.savingsRate.toFixed(1)}%
               </span>
             </div>
@@ -718,19 +718,19 @@ export default function DashboardPage() {
                 {selectionSubtitle}
               </div>
             </div>
-            <div className="p-1.5 rounded-md bg-destructive/10 text-destructive">
+            <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
               <TrendingDown className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-2xl lg:text-3xl font-bold font-mono text-destructive tracking-tight">
+            <div className="text-2xl lg:text-3xl font-bold font-mono text-foreground tracking-tight">
               -{formatCurrency(financialMetrics.periodExpenses)}
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40">
               <span>Net cash flow:</span>
               <span className={cn(
                 "font-mono font-semibold",
-                financialMetrics.netCashFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                financialMetrics.netCashFlow >= 0 ? "text-navy dark:text-gold" : "text-muted-foreground"
               )}>
                 {financialMetrics.netCashFlow >= 0 ? `+${formatCurrency(financialMetrics.netCashFlow)}` : `-${formatCurrency(Math.abs(financialMetrics.netCashFlow))}`}
               </span>
@@ -751,10 +751,10 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
               <span className="flex items-center gap-1.5 text-foreground">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#10b981]" /> Income
+                <span className="w-2.5 h-2.5 rounded-full bg-navy dark:bg-gold" /> Income
               </span>
               <span className="flex items-center gap-1.5 text-foreground">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#f43f5e]" /> Expenses
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-500" /> Expenses
               </span>
             </div>
           </CardHeader>
@@ -764,12 +764,12 @@ export default function DashboardPage() {
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="incomeColor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#0F2D5C" stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor="#0F2D5C" stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="expenseColor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#64748B" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#64748B" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
@@ -799,7 +799,7 @@ export default function DashboardPage() {
                     type="monotone" 
                     dataKey="income" 
                     name="income"
-                    stroke="#10b981" 
+                    stroke="#0F2D5C" 
                     strokeWidth={2} 
                     fillOpacity={1} 
                     fill="url(#incomeColor)" 
@@ -808,7 +808,7 @@ export default function DashboardPage() {
                     type="monotone" 
                     dataKey="expenses" 
                     name="expenses"
-                    stroke="#f43f5e" 
+                    stroke="#64748B" 
                     strokeWidth={2} 
                     fillOpacity={1} 
                     fill="url(#expenseColor)" 
@@ -843,7 +843,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground flex items-center gap-1.5">
-                    <TrendingUp className="h-3.5 w-3.5 text-emerald-600" /> Investments
+                    <TrendingUp className="h-3.5 w-3.5 text-navy dark:text-gold" /> Investments
                   </span>
                   <span className="font-mono font-semibold text-foreground">
                     {formatCurrency(financialMetrics.investedAssets)}
@@ -851,9 +851,9 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
                   <span className="text-muted-foreground flex items-center gap-1.5">
-                    <CreditCard className="h-3.5 w-3.5 text-destructive" /> Total debt
+                    <CreditCard className="h-3.5 w-3.5 text-slate-500" /> Total debt
                   </span>
-                  <span className="font-mono font-semibold text-destructive">
+                  <span className="font-mono font-semibold text-foreground">
                     {formatCurrency(financialMetrics.totalDebt)}
                   </span>
                 </div>
@@ -956,7 +956,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-3 truncate">
                         <div className={cn(
                           "p-1.5 rounded-md shrink-0",
-                          isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-destructive/10 text-destructive"
+                          isIncome ? "bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold" : "bg-muted text-muted-foreground"
                         )}>
                           {isIncome ? <ArrowDownRight className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
                         </div>
@@ -969,7 +969,7 @@ export default function DashboardPage() {
                       </div>
                       <div className={cn(
                         "font-mono font-semibold text-right shrink-0",
-                        isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                        isIncome ? "text-navy dark:text-gold" : "text-foreground font-medium"
                       )}>
                         {isIncome ? `+${formatCurrency(tx.amount)}` : formatCurrency(tx.amount)}
                       </div>

@@ -285,7 +285,7 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
           <span className="text-sm font-bold text-foreground">Calculated Net Worth</span>
           <span className={cn(
             "font-mono font-bold text-base tracking-tight px-3 py-1 rounded-full",
-            netWorth >= 0 ? 'text-emerald-600 bg-emerald-500/10' : 'text-rose-600 bg-rose-500/10'
+            netWorth >= 0 ? 'text-navy dark:text-gold bg-navy-pale dark:bg-navy-mid' : 'text-foreground bg-muted'
           )}>
             {formatCurrency(netWorth)}
           </span>

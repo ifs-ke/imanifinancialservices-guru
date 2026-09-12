@@ -1,6 +1,6 @@
-# IFC - Guru (Imani Financial Services)
+# IFS-Guru
 
-IFC - Guru is an enterprise-grade financial management, budgeting, investment, and debt conquest application built with **Vite**, **React 19**, **Shadcn/UI**, and **Cloud Firestore**.
+IFS-Guru is an enterprise-grade financial management, budgeting, investment, and debt conquest application built with **Vite**, **React 19**, **Shadcn/UI**, and **Cloud Firestore**.
 
 ---
 
@@ -179,6 +179,136 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
 
 ### ✅ Phase 13: Firebase Authentication Activation
 - [x] **Firebase Auth Integration**: Verified and activated Firebase Authentication (`signInWithPopup`, Google Auth Provider, Email/Password auth, and `onAuthStateChanged` observers) fully wired to the app's `AuthContext` and Firestore backing database.
+
+### ✅ Phase 14: Removal of Authentication Demo Content
+- [x] **Purged Mock/Demo Fallbacks**: Removed all preset demo users (`ADMIN_USER`, `MEMBER_USER`), mock sign-in functions (`signInDemo`), and role-switching shortcuts from the authentication system.
+- [x] **Strict Real Authentication**: Ensured that the application relies exclusively on real Firebase Auth credentials and state observers.
+
+### ✅ Phase 15: Strict Admin Authorization Guards
+- [x] **Admin-Only Routes Protected**: Added rigorous role-based guard checks (`role !== 'admin'`) to all sensitive administrative pages including `/logger` and `/admin/connection-test`.
+- [x] **Restricted Access Fallback View**: Configured a secure access-denied state card with a return-to-dashboard action for any non-admin users attempting to access administrative diagnostics.
+
+### ✅ Phase 17: Public & Private Route Enforcement
+- [x] **Strict Proxy Enforcement**: Verified Next.js 16 Proxy configuration (`src/proxy.ts`) and client route guards (`ProtectedRoute.tsx`) ensuring that only the Home page (`/`), authentication pages (`/sign-in`, `/sign-up`), Privacy Policy (`/privacy`), and Terms (`/terms`) remain public, while all other app routes are strictly private and redirect unauthenticated visitors to `/sign-in`.
+
+### ✅ Phase 18: Progressive Web App (PWA) Implementation
+- [x] **Vite PWA Plugin Integration**: Configured `vite-plugin-pwa` with `registerType: 'autoUpdate'`, full precaching manifests (`workbox`), and runtime caching for Google Fonts.
+- [x] **Web App Manifest (`public/manifest.json` & `src/app/manifest.ts`)**: Defined standard PWA manifest metadata, including `standalone` display mode, `#0284c7` theme color, and `#0f172a` splash background color.
+- [x] **Icon Suite Generated**: Built high-resolution vector and PNG icons (`icon.svg`, `pwa-192x192.png`, `pwa-512x512.png`, `pwa-maskable-512x512.png`, `apple-touch-icon.png`).
+- [x] **In-App PWA Install Trigger**: Created `usePWAInstall` and `PWAInstallButton` integrated into the sidebar footer with native installation triggers and guided iOS Safari instructions.
+- [x] **Service Worker Registration**: Initialized service worker registration in `src/main.tsx` for immediate background precaching and offline operation.
+
+### ✅ Phase 19: Offline-First Support & Sync Architecture Redesign
+- [x] **useOffline Hook & Next.js Shim**: Created `src/hooks/useOffline.ts` and `src/shims/next-offline.ts` to provide reactive, real-time detection of browser network connectivity.
+- [x] **Offline Snapshot Local Cache**: Implemented `saveOfflineSnapshot` and `loadOfflineSnapshot` in `src/lib/offlineQueue.ts` providing instantaneous, zero-latency rehydration of financial stores when starting offline.
+- [x] **Persistent Offline Mutation Queue**: Any mutations executed while disconnected are queued in `imf_offline_queue_${userId}` with incremental delta tracking.
+- [x] **Auto-Drain & Reconnection Reconciliation**: When network reconnects, `useSyncManager` automatically triggers `drainOfflineQueue()`, pushing accumulated changes to Cloud Firestore in a single atomic batch and alerting the user via toast.
+- [x] **Dynamic Offline Banner**: Integrated `OfflineBanner` displaying live offline status, count of queued mutations, and a manual "Sync Now" trigger upon reconnection.
+
+### ✅ Phase 20: Firebase Hosting Template Elimination & Runtime Fixes
+- [x] **Eliminated Placeholder Collision**: Removed rogue legacy `public/index.html` static placeholder that attempted to access global compat `firebase` on window (`firebase is not defined`), ensuring only the production Vite App (`/index.html`) mounts.
+- [x] **Verified Modular SDK Initialization**: Ensured all Firestore and Firebase Auth modules strictly utilize the modular v11+ SDK imports (`@/lib/firebase.ts`) targeting database `ai-studio-imanifinancialse-19b5c1d0-a9f8-40d0-9637-ae5bff0b1ce0`.
+- [x] **Rules Deployment**: Successfully deployed hardened `firestore.rules` to the project instance.
+
+### ✅ Phase 21: Separation of Concerns, Folder Structure Refactoring & Hosting Disablement
+- [x] **Disabled Firebase Hosting**: Confirmed complete eradication of static hosting stubs (`public/index.html` and `public/404.html`) to prevent static template conflicts with the Cloud Run / Vite application container.
+- [x] **Enforced Separation of Concerns & Clean Architecture**:
+  - Cleared all non-route components, dialogs, forms, and table columns from `src/app/(dashboard)` subdirectories.
+  - Relocated components into appropriate domain subdirectories within `src/components/`:
+    - `src/components/transactions/`: `EditTransactionDialog`, `BatchUpdateTransactionDialog`, `TransactionColumns`
+    - `src/components/debt/`: `DebtColumns`
+    - `src/components/investments/`: `InvestmentForecastingTool`, `GovernmentBondProjectionTool`, `InvestmentColumns`
+    - `src/components/statements/`: `CashFlowStatementSection`, `BudgetVarianceReportSection`, `NetWorthStatementSection`
+    - `src/components/budget/`: Consolidated enhanced `BudgetItemFormSheet`, `PublishedBudgetPreviewDialog`
+    - `src/components/weekly-review/`: Upgraded `ShareReviewDialog` with permanent comments preservation and access revocation flows
+    - `src/components/layout/`: Extracted `ThemeToggle` to layout components with backward-compatible re-export.
+- [x] **Dead Code Elimination**: Purged deprecated `src/components/ui/AppSidebar.tsx` (Clerk relic), `src/components/layout/AppSidebar.tsx`, and unused `src/services/transaction-importer.ts` stub.
+- [x] **Normalized Naming Conventions & DRY Standards**: Standardized camelCase utility module `src/lib/storageUtils.ts` with JSDoc typing, maintaining backward-compatible aliases.
+- [x] **Homepage Default & Responsive Auth Switching**:
+  - Root route (`/`) reliably displays the public landing page with zero flicker.
+  - Authenticated visitors see dynamic "Go to Dashboard" / "Open Your Dashboard" CTAs pointing to `/dashboard`.
+  - Unauthenticated visitors see "Sign In" and "Start Free Today / Get Started" actions pointing to `/sign-in` and `/sign-up`.
+  - Auto-redirect implemented in `SignInForm` and `SignUpForm` so logged-in users are smoothly routed directly to the dashboard.
+
+### ✅ Phase 22: Tri-Role Governance, Dedicated Role Dashboards, Admin Log Reviews & Pay-Per-Use Engine
+- [x] **3-Tier Role Architecture (Admin, Auditor, Client)**:
+  - Formally implemented Role-Based Access Control (RBAC) with `'admin'`, `'auditor'`, and `'client'` classifications synchronized between Firebase Auth and Cloud Firestore.
+  - Security rules deployed to Firestore enforcing multi-tier permissions (`isAdmin()`, `isAuditor()`, `isOwner()`).
+  - Strict Registry sub-collections (`admins/{uid}`, `auditors/{uid}`) for instantaneous, cache-friendly `exists()` verification.
+- [x] **Dedicated Admin Dashboard (`/admin`)**:
+  - **User Governance & Role Assignments**: Interactive CRUD interface for provisioning accounts, assigning roles (`admin`, `auditor`, `client`), toggling status (`active`, `suspended`), custom spending quotas, and granular feature permissions.
+  - **Application Operational & Audit Log Reviews**: Real-time searchable log review console with multi-level severity filtering (`INFO`, `WARN`, `ERROR`), category categorization (`AUTH`, `USER_MANAGEMENT`, `DATA_SYNC`, `USAGE_BILLING`, `SECURITY`, `SYSTEM`), payload inspection dialog, and full CSV/JSON export tools.
+  - **Pay-Per-Use Usage Cost Billing**: Automated telemetry tracking of reads, writes, storage (KB/MB), and AI forecast runs. Configurable platform rate card in KES, individual user quota tracking, quota alerts, and itemized account statement generation.
+- [x] **Dedicated Auditor Compliance Dashboard (`/auditor`)**:
+  - **Kenya Data Protection Act (DPA 2019) Scorecard**: Statutory audit readiness checklist, ODPC compliance guidelines verification, and data minimization monitors.
+  - **Read-Only Client Financial Inspection**: Privileged inspector workspace allowing certified auditors to review client balance sheets, transactions, and debts with automatic anomaly flags (e.g. transactions ≥ KES 100,000, high expense variances) with strictly disabled mutations.
+  - **Audit Verification & Sign-Off Stamps**: Official ledger recording periodic audit seals (`VERIFIED`, `FLAGGED`, `PENDING_CLARIFICATION`) with DPA compliance endorsements.
+- [x] **Role-Adaptive Sidebar & Protected Routes**:
+  - `ProtectedRoute` component now validates `allowedRoles` and presents an informative clearance card with instant redirection to the user's specific role dashboard if permission is insufficient.
+  - Adaptive sidebar displays role-relevant navigation items and displays active role badges in the profile drawer.
+
+### ✅ Phase 28: 3-Section Streamlined Architecture (Hero, Features, Footer)
+- [x] **Strict 3-Section Hierarchy**:
+  - Restructured the landing page layout into exactly three focused, high-clarity sections: **Hero**, **Features**, and **Footer**.
+  - **Hero Section (`#hero`)**: High-contrast headline (*"Financial Chaos ➔ Instant Calm"*), instant problem vs. relief comparison box, Personal vs. SME business audience toggle, authentic photography with floating status metrics, and direct CTA buttons.
+  - **Features Section (`#features`)**: Interactive 10-second M-Pesa statement parser simulator and 6 core intelligence modules (Statement Ingestion, Debt Payoff Engine, Cashflow Segregation, 90-Day Runway Radar, SACCO/MMF Growth, Auditor Vault) styled with Navy and Gold brand accents.
+  - **Footer Section (`#footer`)**: Clean brand identity block, essential navigation anchors, privacy/terms links, and Kenya Data Protection Act (DPA 2019) compliance notice.
+- [x] **Brand Palette Integration**:
+  - Leveraged user-defined Navy (`#0F2D5C`), Gold (`#C9971A`, `#D4AF37`), Off-White (`#F7F9FC`), and Deep Slate (`#0F172A`) across buttons, badges, and card boundaries.
+
+### ✅ Phase 34: Centered Feature Icons & "Back to Top" Footer Navigation
+- [x] **Centered Feature Cards & Icons**:
+  - Centered icon containers (`mx-auto`, `h-12 w-12`) with Navy and Gold accents.
+  - Aligned title and description typography to center (`flex flex-col items-center text-center`) across all cards in the Core Features section.
+- [x] **"Back to Top" Footer Action**:
+  - Replaced the direct dashboard CTA button in the footer with a dedicated **Back to Top** button featuring an upward arrow (`ArrowUp`).
+  - Implemented smooth scrolling behavior (`window.scrollTo({ top: 0, behavior: 'smooth' })`).
+
+### ✅ Phase 35: Dashboard & Statements Theme Harmonization (Navy, Gold & Slate Palette)
+- [x] **Reduced Green/Red Financial Semantic Dependence**:
+  - Migrated primary dashboard KPI cards (Income, Expenses, Net Cash Flow) from legacy emerald/red styling to the institutional brand palette: Navy (`#0F2D5C`), Gold (`#C9971A`), and neutral Slate (`#64748B`).
+  - Cash flow chart redesigned with Navy gradients for inflows and Slate tones for outflows, maintaining visual serenity and institutional authority.
+  - Financial metric text styled in clear `text-foreground` and `font-mono` rather than jarring saturated red or green.
+- [x] **Income & Expense Diagnostic Quadrants Refined**:
+  - Refactored recurring and variable income cards to Navy and Gold accents (`bg-navy-pale`, `text-navy`, `text-gold`).
+  - Fixed and variable expenses shifted to balanced neutral slate and muted backgrounds, eliminating cognitive alarm fatigue.
+- [x] **Statement & Ledger Components Modernized**:
+  - Harmonized `CashFlowStatementSection`, `NetWorthStatementSection`, and `BudgetVarianceReportSection` with Navy and Gold surplus badges and Slate variance markers.
+  - Synchronized transaction tables and recent activity logs to consistent brand aesthetics.
+
+### ✅ Phase 36: Authentication Header Simplification
+- [x] **Sign-in Header Refinement**:
+  - Updated sign-in card title from `Signin to IFS-KE` to clean, standardized `Sign in` typography for improved UX consistency.
+
+### ✅ Phase 37: Brand Name Synchronization ("IFS-Guru")
+- [x] **Comprehensive Brand Identity Update**:
+  - Transitioned all occurrences of "Imani Financial" across the entire application to **IFS-Guru**.
+  - Updated main landing page header and footer identity badges, copyright statements, and terms/privacy policy entity definitions.
+  - Aligned PWA manifest configurations (`src/app/manifest.ts`, `public/manifest.json`), install prompt dialogs, and platform metadata.
+  - Updated AI Advisor system instructions, reports ledger print headers, and internal communication domains to `@ifs-guru.com`.
+
+### ✅ Phase 38: Landing Page Hero Typography Harmonization
+- [x] **Hero Headline Styling**:
+  - Styled "Personal Wealth" in `text-gold dark:text-gold-bright` to perfectly match the accent color of "SME Operations", creating balanced visual symmetry in the primary hero display headline.
+
+### ✅ Phase 39: Hero & Branding Terminology Refinement
+- [x] **Headline Copy Streamlining**:
+  - Removed "Wealth" and replaced "Operations" with "Finance", delivering a crisp, high-impact headline: **"Financial Clarity for Personal & SME Finance"**.
+  - Synchronized the footer brand value statement to **"Personal & SME Cash Management"**.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

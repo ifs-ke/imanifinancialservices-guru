@@ -12,7 +12,7 @@ import { useBudgetStore, selectCurrentBudgetPeriod, selectTotalBudgetedIncome, s
 import type { BudgetItem, BudgetItemCategory, PublishedBudget } from '@/lib/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import BudgetItemFormSheet from './BudgetItemFormSheet';
+import BudgetItemFormSheet from '@/components/budget/BudgetItemFormSheet';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { format, startOfMonth, addMonths, subMonths, parse, isValid as isDateValid } from 'date-fns';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger as ShadAccordionTrigger } from "@/components/ui/accordion";
-import PublishedBudgetPreviewDialog from './PublishedBudgetPreviewDialog';
+import PublishedBudgetPreviewDialog from '@/components/budget/PublishedBudgetPreviewDialog';
 
 
 const budgetCategories: { name: string; key: BudgetItemCategory; icon: React.ElementType; description: string; }[] = [

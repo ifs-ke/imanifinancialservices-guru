@@ -113,7 +113,7 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
       </TableCell>
       <TableCell className={cn(
         "text-right font-mono text-xs py-2 pr-4 font-bold shrink-0",
-        type === 'income' ? 'text-emerald-500' : 'text-rose-500'
+        type === 'income' ? 'text-navy dark:text-gold' : 'text-foreground font-medium'
       )}>
         {type === 'income' ? '+' : '-'}{formatCurrency(type === 'income' ? item.amount : Math.abs(item.amount))}
       </TableCell>
@@ -126,9 +126,9 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
         <div>
           <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
             {cashFlow >= 0 ? (
-              <TrendingUp className="h-4.5 w-4.5 text-emerald-500 animate-pulse" />
+              <TrendingUp className="h-4.5 w-4.5 text-navy dark:text-gold" />
             ) : (
-              <TrendingDown className="h-4.5 w-4.5 text-rose-500 animate-pulse" />
+              <TrendingDown className="h-4.5 w-4.5 text-muted-foreground" />
             )}
             Cash Flow Statement
           </CardTitle>
@@ -200,7 +200,7 @@ const CashFlowStatementSection: React.FC<CashFlowStatementSectionProps> = ({ sta
           <span className="text-sm font-bold text-foreground">Net Cash Surplus / (Deficit)</span>
           <span className={cn(
             "font-mono font-bold text-base tracking-tight px-3 py-1 rounded-full",
-            cashFlow >= 0 ? 'text-emerald-600 bg-emerald-500/10' : 'text-rose-600 bg-rose-500/10'
+            cashFlow >= 0 ? 'text-navy dark:text-gold bg-navy-pale dark:bg-navy-mid' : 'text-foreground bg-muted'
           )}>
             {formatCurrency(cashFlow)}
           </span>

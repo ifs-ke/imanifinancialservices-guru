@@ -31,7 +31,7 @@ export const UserButton: React.FC<UserButtonProps> = ({
   afterSignOutUrl = '/',
   appearance,
 }) => {
-  const { user, signOut, role, switchUserRole } = useAuth();
+  const { user, signOut, role } = useAuth();
   const router = useRouter();
 
   if (!user) return null;
@@ -111,20 +111,6 @@ export const UserButton: React.FC<UserButtonProps> = ({
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="cursor-pointer text-xs flex items-center gap-2"
-          onClick={() => {
-            const nextRole = role === 'admin' ? 'user' : 'admin';
-            switchUserRole(nextRole);
-          }}
-        >
-          <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-          <span>
-            {role === 'admin'
-              ? 'Switch to User 2: Alex Morgan (Collaborator)'
-              : 'Switch to User 1: Sean Wambua (Owner)'}
-          </span>
-        </DropdownMenuItem>
         <DropdownMenuItem
           className="cursor-pointer text-xs flex items-center gap-2"
           onClick={() => router.push('/dashboard')}

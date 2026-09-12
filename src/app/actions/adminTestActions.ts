@@ -36,7 +36,7 @@ export async function checkDatabaseConnection(): Promise<{ success: boolean; mes
   if (!userId) {
     return { success: false, message: 'User not authenticated.' };
   }
-  const primaryEmail = user.email || 'admin@imanifinancial.com';
+  const primaryEmail = user.email || 'admin@ifs-guru.com';
   const startTime = performance.now();
   try {
     let firestoreStatus = 'Active';
@@ -95,7 +95,7 @@ export async function createTestEntry(data: string): Promise<{ success: boolean;
   }
   const startTime = performance.now();
   try {
-    const primaryEmail = user.email || 'admin@imanifinancial.com';
+    const primaryEmail = user.email || 'admin@ifs-guru.com';
     await ensureUserInFirestore(userId, primaryEmail, user.fullName || user.name || 'IFC Member');
 
     let entryId = `test_${Date.now()}`;
@@ -297,7 +297,7 @@ export async function createMultipleTestEntries(
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
-    const primaryEmail = user.email || 'admin@imanifinancial.com';
+    const primaryEmail = user.email || 'admin@ifs-guru.com';
     await ensureUserInFirestore(userId, primaryEmail, user.fullName || user.name || 'IFC Member');
     const createdIds: string[] = [];
 

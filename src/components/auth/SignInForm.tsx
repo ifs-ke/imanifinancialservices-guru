@@ -1,7 +1,7 @@
 // src/components/auth/SignInForm.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -14,11 +14,17 @@ import { Loader2 } from 'lucide-react';
 
 export function SignInForm() {
   const router = useRouter();
-  const { signInWithGoogle, signInWithEmail } = useAuth();
+  const { signInWithGoogle, signInWithEmail, isSignedIn, isLoaded } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.push('/dashboard');
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +69,7 @@ export function SignInForm() {
     <Card className="w-full max-w-[440px] mx-auto shadow-xl border-border/70 backdrop-blur-sm transition-all duration-200">
       <CardHeader className="space-y-2 text-center pb-4 pt-6 px-6">
         <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-          Signin to IFS-KE
+          Sign in
         </CardTitle>
         <CardDescription className="text-sm sm:text-base text-muted-foreground leading-relaxed">
           Financial insights and management tools that help you grow

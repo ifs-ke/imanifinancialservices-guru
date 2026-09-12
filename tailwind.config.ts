@@ -9,7 +9,23 @@ export default {
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			jakarta: ['var(--font-jakarta)', 'Plus Jakarta Sans', 'sans-serif'],
+  		},
   		colors: {
+  			navy: {
+  				DEFAULT: '#0F2D5C',
+  				mid: '#1A3F7A',
+  				light: '#2C5282',
+  				pale: '#EBF0FA',
+  			},
+  			gold: {
+  				DEFAULT: '#C9971A',
+  				bright: '#D4AF37',
+  			},
+  			'off-white': '#F7F9FC',
+  			'slate-deep': '#0F172A',
+  			steel: '#334155',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -82,11 +98,31 @@ export default {
   				to: {
   					height: '0'
   				}
+  			},
+  			'pulse-glow': {
+  				'0%, 100%': {
+  					boxShadow: '0 0 15px rgba(201, 151, 26, 0.2), 0 0 30px rgba(201, 151, 26, 0.1)'
+  				},
+  				'50%': {
+  					boxShadow: '0 0 25px rgba(212, 175, 55, 0.4), 0 0 50px rgba(201, 151, 26, 0.2)'
+  				}
+  			},
+  			'slide-up': {
+  				from: {
+  					opacity: '0',
+  					transform: 'translateY(20px)'
+  				},
+  				to: {
+  					opacity: '1',
+  					transform: 'translateY(0)'
+  				}
   			}
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
+  			'slide-up': 'slide-up 0.5s ease-out'
   		}
   	}
   },

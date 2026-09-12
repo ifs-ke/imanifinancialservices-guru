@@ -240,7 +240,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
       variance = 0;
     }
 
-    const varianceColor = variance > 0 ? 'text-emerald-500' : variance < 0 ? 'text-rose-500' : 'text-muted-foreground';
+    const varianceColor = variance > 0 ? 'text-navy dark:text-gold' : variance < 0 ? 'text-muted-foreground font-medium' : 'text-muted-foreground';
 
     return (
       <TableRow key={`${category}-${description}`} className="hover:bg-muted/10 border-b border-border/20 text-xs">
@@ -271,7 +271,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
           <TableCell className="pl-4 py-2">Total {title}</TableCell>
           <TableCell className="text-right font-mono text-muted-foreground py-2">{formatCurrency(totals.budgeted)}</TableCell>
           <TableCell className="text-right font-mono text-foreground py-2">{formatCurrency(totals.actual)}</TableCell>
-          <TableCell className={cn("text-right font-mono pr-4 py-2", totals.variance >= 0 ? 'text-emerald-500' : 'text-rose-500')}>
+          <TableCell className={cn("text-right font-mono pr-4 py-2", totals.variance >= 0 ? 'text-navy dark:text-gold' : 'text-foreground')}>
             {totals.variance >= 0 ? '+' : ''}{formatCurrency(totals.variance)}
           </TableCell>
         </TableRow>
@@ -299,7 +299,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
           <Badge variant={isPositive ? 'outline' : 'secondary'} className={cn(
             "text-[9px] font-bold px-1.5 py-0.5 border/50 uppercase",
-            isPositive ? "bg-emerald-500/5 text-emerald-600 border-emerald-500/20" : "bg-rose-500/5 text-rose-600 border-rose-500/20"
+            isPositive ? "bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold border-navy/20 dark:border-gold/20" : "bg-muted text-muted-foreground border-border"
           )}>
             {isPositive ? 'Surplus' : 'Deficit'}
           </Badge>
@@ -310,7 +310,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
         </div>
         {budgeted > 0 && (
           <div className="flex items-center gap-1.5 text-xs font-semibold pt-1 border-t border-border/30">
-            <span className={cn(isPositive ? 'text-emerald-500' : 'text-rose-500')}>
+            <span className={cn(isPositive ? 'text-navy dark:text-gold' : 'text-muted-foreground')}>
               {isPositive ? '+' : ''}{percentageVariance.toFixed(1)}%
             </span>
             <span className="text-muted-foreground text-[10px]">from targeted benchmark</span>
@@ -381,7 +381,7 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
               <span className="text-sm font-bold text-foreground">Overall Strategic Variance</span>
               <span className={cn(
                 "font-mono font-bold text-base tracking-tight px-3 py-1 rounded-full",
-                varianceTotalsByCategory.overallVariance >= 0 ? 'text-emerald-600 bg-emerald-500/10' : 'text-rose-600 bg-rose-500/10'
+                varianceTotalsByCategory.overallVariance >= 0 ? 'text-navy dark:text-gold bg-navy-pale dark:bg-navy-mid' : 'text-foreground bg-muted'
               )}>
                 {varianceTotalsByCategory.overallVariance >= 0 ? '+' : ''}{formatCurrency(varianceTotalsByCategory.overallVariance)}
               </span>
@@ -413,10 +413,10 @@ const BudgetVarianceReportSection: React.FC<BudgetVarianceReportSectionProps> = 
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {renderSection("Revenue Flows", varianceDataByCategory.income.concat(varianceDataByCategory['unbudgeted-income']), 'income', { budgeted: varianceTotalsByCategory.income.budgeted, actual: varianceTotalsByCategory.totalActualIncome, variance: varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.income.budgeted }, TrendingUp, 'text-emerald-600')}
-                {renderSection("Recurring Expenses", varianceDataByCategory['recurring-expense'], 'recurring-expense', varianceTotalsByCategory['recurring-expense'], TrendingDown, 'text-rose-600')}
-                {renderSection("One-Time Expenses", varianceDataByCategory['one-time-expense'], 'one-time-expense', varianceTotalsByCategory['one-time-expense'], MinusCircle, 'text-rose-600')}
-                {renderSection("Unplanned Spending", varianceDataByCategory['unplanned-expense'], 'unplanned-expense', varianceTotalsByCategory['unplanned-expense'], HelpCircle, 'text-rose-600')}
+                {renderSection("Revenue Flows", varianceDataByCategory.income.concat(varianceDataByCategory['unbudgeted-income']), 'income', { budgeted: varianceTotalsByCategory.income.budgeted, actual: varianceTotalsByCategory.totalActualIncome, variance: varianceTotalsByCategory.totalActualIncome - varianceTotalsByCategory.income.budgeted }, TrendingUp, 'text-navy dark:text-gold')}
+                {renderSection("Recurring Expenses", varianceDataByCategory['recurring-expense'], 'recurring-expense', varianceTotalsByCategory['recurring-expense'], TrendingDown, 'text-slate-600 dark:text-slate-300')}
+                {renderSection("One-Time Expenses", varianceDataByCategory['one-time-expense'], 'one-time-expense', varianceTotalsByCategory['one-time-expense'], MinusCircle, 'text-slate-600 dark:text-slate-300')}
+                {renderSection("Unplanned Spending", varianceDataByCategory['unplanned-expense'], 'unplanned-expense', varianceTotalsByCategory['unplanned-expense'], HelpCircle, 'text-slate-600 dark:text-slate-300')}
                 {renderSection("Strategic Goals", varianceDataByCategory.goal, 'goal', varianceTotalsByCategory.goal, TargetIcon, 'text-blue-600')}
                 {renderSection("Amortized Debt", varianceDataByCategory.debt, 'debt', varianceTotalsByCategory.debt, Coins, 'text-amber-600')}
               </TableBody>

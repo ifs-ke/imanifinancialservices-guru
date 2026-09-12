@@ -32,7 +32,7 @@ export default function TermsPage() {
               <div>
                 <CardTitle className="text-2xl font-bold text-foreground tracking-tight">Terms and Conditions</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Last updated: September 11, 2026 • Imani Financial Platform Agreement
+                  Last updated: September 11, 2026 • IFS-Guru Platform Agreement
                 </p>
               </div>
             </div>
@@ -46,10 +46,10 @@ export default function TermsPage() {
                 <span className="text-primary font-mono text-sm">01.</span> Acceptance of Terms
               </h2>
               <p>
-                By accessing, registering for, or using Imani Financial (&ldquo;the Platform&rdquo;), you agree to be bound by these Terms and Conditions. If you do not agree to these terms, you must refrain from using the platform immediately.
+                By accessing, registering for, or using IFS-Guru (&ldquo;the Platform&rdquo;), you agree to be bound by these Terms and Conditions. If you do not agree to these terms, you must refrain from using the platform immediately.
               </p>
               <p>
-                These terms constitute a legally binding agreement between you and Imani Financial, operating in accordance with the laws of the Republic of Kenya.
+                These terms constitute a legally binding agreement between you and IFS-Guru, operating in accordance with the laws of the Republic of Kenya.
               </p>
             </section>
 
@@ -74,7 +74,7 @@ export default function TermsPage() {
                   <span>Not Certified Financial Advice</span>
                 </div>
                 <p>
-                  Imani Financial provides budgeting tools, financial analytics, and AI-assisted coaching for informational and organizational purposes only. We are not a licensed financial institution or certified investment advisor. Users should consult professional advisors before making major financial commitments.
+                  IFS-Guru provides budgeting tools, financial analytics, and AI-assisted coaching for informational and organizational purposes only. We are not a licensed financial institution or certified investment advisor. Users should consult professional advisors before making major financial commitments.
                 </p>
               </div>
             </section>
@@ -95,7 +95,7 @@ export default function TermsPage() {
                 <span className="text-primary font-mono text-sm">05.</span> Limitation of Liability
               </h2>
               <p>
-                To the maximum extent permitted by Kenyan law, Imani Financial shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use of the platform, transaction inaccuracies, or third-party service interruptions.
+                To the maximum extent permitted by Kenyan law, IFS-Guru shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use of the platform, transaction inaccuracies, or third-party service interruptions.
               </p>
             </section>
 

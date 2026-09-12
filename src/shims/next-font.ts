@@ -1,3 +1,10 @@
+export function Plus_Jakarta_Sans(_options?: any) {
+  return {
+    className: 'font-jakarta',
+    variable: '--font-jakarta',
+  };
+}
+
 export function Inter(_options?: any) {
   return {
     className: 'font-sans',
@@ -11,3 +18,4 @@ export function Roboto_Mono(_options?: any) {
     variable: '--font-roboto-mono',
   };
 }
+

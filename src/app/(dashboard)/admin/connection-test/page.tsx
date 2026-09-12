@@ -35,7 +35,7 @@ import {
     TestTube, DatabaseZap, AlertTriangle, CheckCircle, RotateCcw, Save,
     Download, HashIcon, Server, Timer, Info, Eye, Copy as CopyIcon,
     Database, UserCircle2, ShieldCheck, ShieldAlert, FileSignature,
-    Loader2, Settings, Layers, Users, Lock, Smartphone, UploadCloud, DownloadCloud
+    Loader2, Settings, Layers, Users, Lock, Smartphone, UploadCloud, DownloadCloud, Activity
 } from 'lucide-react';
 import { format, isValid, parse } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -51,7 +51,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import DataSyncMismatchDialog from '@/components/layout/DataSyncMismatchDialog'; // Import the dialog
-import { useUser } from "@/context/AuthContext";
+import { useUser, useAuth } from "@/context/AuthContext";
 import { auth, db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import type { TransactionWithId, DebtItem, BudgetItem } from '@/lib/types'; // For test data
@@ -148,6 +148,44 @@ const AdminConnectionTestPage: React.FC = () => {
   const { toast } = useToast();
   const { startDate, setStartDate, isHydrated: isStatementStoreHydrated } = useStatementStore();
   const { isSignedIn: isClientUserSignedIn, user: clientClerkUser, isLoaded: isClientClerkLoaded } = useUser();
+  const { role, isLoaded: isAuthLoaded } = useAuth();
+
+  if (!isAuthLoaded || !isClientClerkLoaded) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[75vh] w-full">
+        <Activity className="h-8 w-8 text-primary animate-pulse" />
+        <span className="mt-2.5 text-xs text-muted-foreground font-medium font-sans">Checking authorization...</span>
+      </div>
+    );
+  }
+
+  if (role !== 'admin') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[75vh] p-4 text-center w-full animate-in fade-in duration-300">
+        <Card className="max-w-md w-full border border-border/40 bg-card/60 backdrop-blur-xs shadow-md rounded-2xl p-6 space-y-6">
+          <div className="flex flex-col items-center space-y-3">
+            <div className="p-4 bg-rose-500/10 rounded-full text-rose-500">
+              <ShieldAlert className="h-10 w-10 stroke-[1.5]" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground font-sans tracking-tight">Administrative Access Only</h2>
+            <p className="text-muted-foreground text-xs leading-relaxed max-w-sm font-sans">
+              The administrative connection tests and database diagnostic tools are restricted to authorized administrators.
+            </p>
+          </div>
+
+          <div className="border-t border-border/20 pt-4 flex flex-col gap-2">
+            <Button 
+              variant="default"
+              className="w-full h-10 rounded-xl text-xs font-semibold"
+              onClick={() => window.location.href = '/dashboard'}
+            >
+              Return to Dashboard
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const [dbConnectionResult, setDbConnectionResult] = useState<{ success: boolean; message: string; duration?: number } | null>(null);
   const [isDbConnectionTesting, setIsDbConnectionTesting] = useState(false);

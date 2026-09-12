@@ -234,21 +234,21 @@ export default function IncomeExpensesPage() {
                 {durationLabel}
               </span>
             </div>
-            <span className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <span className="p-1.5 rounded-md bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold">
               <TrendingUp className="h-4 w-4" />
             </span>
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
+            <div className="text-2xl font-bold font-mono text-foreground tracking-tight">
               +{formatCurrency(totalIncome)}
             </div>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2 font-mono">
               <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="w-1.5 h-1.5 rounded-full bg-navy dark:bg-gold" />
                 Rec: {((segments.recurringIncome.total / (totalIncome || 1)) * 100).toFixed(0)}%
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/55" />
+                <span className="w-1.5 h-1.5 rounded-full bg-navy/50 dark:bg-gold/50" />
                 Var: {((segments.oneTimeIncome.total / (totalIncome || 1)) * 100).toFixed(0)}%
               </span>
             </div>
@@ -264,21 +264,21 @@ export default function IncomeExpensesPage() {
                 {durationLabel}
               </span>
             </div>
-            <span className="p-1.5 rounded-md bg-rose-500/10 text-destructive">
+            <span className="p-1.5 rounded-md bg-muted text-muted-foreground">
               <TrendingDown className="h-4 w-4" />
             </span>
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-2xl font-bold font-mono text-destructive tracking-tight">
+            <div className="text-2xl font-bold font-mono text-foreground tracking-tight">
               -{formatCurrency(totalExpenses)}
             </div>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2 font-mono">
               <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
                 Fixed: {((segments.fixedExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}%
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-400/55" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                 Var: {((segments.variableExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}%
               </span>
             </div>
@@ -292,14 +292,14 @@ export default function IncomeExpensesPage() {
               <span className="text-xs font-medium text-muted-foreground block">Net cash flow</span>
               <span className="text-[10px] text-muted-foreground">Inflow retention efficacy</span>
             </div>
-            <span className="p-1.5 rounded-md bg-primary/10 text-primary">
+            <span className="p-1.5 rounded-md bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold">
               <Scale className="h-4 w-4" />
             </span>
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
             <div className={cn(
               "text-2xl font-bold font-mono tracking-tight",
-              netCashFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+              netCashFlow >= 0 ? "text-navy dark:text-gold" : "text-foreground"
             )}>
               {netCashFlow >= 0 ? `+${formatCurrency(netCashFlow)}` : `-${formatCurrency(Math.abs(netCashFlow))}`}
             </div>
@@ -308,7 +308,7 @@ export default function IncomeExpensesPage() {
                 <span className="text-muted-foreground">Retention rate:</span>
                 <span className={cn(
                   "font-mono font-bold",
-                  retentionRate >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                  retentionRate >= 0 ? "text-navy dark:text-gold" : "text-muted-foreground"
                 )}>
                   {retentionRate.toFixed(1)}%
                 </span>
@@ -317,7 +317,7 @@ export default function IncomeExpensesPage() {
                 <div 
                   className={cn(
                     "h-full rounded-full transition-all duration-500",
-                    retentionRate > 25 ? "bg-emerald-500" : retentionRate > 0 ? "bg-amber-500" : "bg-destructive"
+                    retentionRate > 25 ? "bg-navy dark:bg-gold" : retentionRate > 0 ? "bg-slate-500" : "bg-slate-400"
                   )}
                   style={{ width: `${Math.max(0, Math.min(100, retentionRate))}%` }}
                 />
@@ -337,7 +337,7 @@ export default function IncomeExpensesPage() {
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <div className="p-1.5 rounded bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold">
                   <Building2 className="h-4 w-4" />
                 </div>
                 <div>
@@ -345,7 +345,7 @@ export default function IncomeExpensesPage() {
                   <CardDescription className="text-[10px] text-muted-foreground/80">Predictable regular inflows</CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-emerald-500/20 bg-emerald-500/5">
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-navy/20 bg-navy/5 text-navy dark:border-gold/20 dark:bg-gold/5 dark:text-gold">
                 {((segments.recurringIncome.total / (totalIncome || 1)) * 100).toFixed(0)}% of income
               </Badge>
             </div>
@@ -353,7 +353,7 @@ export default function IncomeExpensesPage() {
           <CardContent className="p-4 pt-1 space-y-3">
             <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
               <span className="text-[10px] text-muted-foreground">Segment Total:</span>
-              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="text-lg font-bold text-navy dark:text-gold">
                 +{formatCurrency(segments.recurringIncome.total)}
               </span>
             </div>
@@ -377,7 +377,7 @@ export default function IncomeExpensesPage() {
                                 {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
                               </span>
                             </div>
-                            <span className="font-mono font-bold text-emerald-600">
+                            <span className="font-mono font-semibold text-navy dark:text-gold">
                               +{formatCurrency(tx.amount)}
                             </span>
                           </div>
@@ -398,7 +398,7 @@ export default function IncomeExpensesPage() {
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-500">
+                <div className="p-1.5 rounded bg-gold/10 text-gold">
                   <Sparkles className="h-4 w-4" />
                 </div>
                 <div>
@@ -406,7 +406,7 @@ export default function IncomeExpensesPage() {
                   <CardDescription className="text-[10px] text-muted-foreground/80">One-time bonuses or gifts</CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-emerald-500/20 bg-emerald-500/5">
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-gold/20 bg-gold/5 text-gold">
                 {((segments.oneTimeIncome.total / (totalIncome || 1)) * 100).toFixed(0)}% of income
               </Badge>
             </div>
@@ -414,7 +414,7 @@ export default function IncomeExpensesPage() {
           <CardContent className="p-4 pt-1 space-y-3">
             <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
               <span className="text-[10px] text-muted-foreground">Segment Total:</span>
-              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="text-lg font-bold text-navy dark:text-gold">
                 +{formatCurrency(segments.oneTimeIncome.total)}
               </span>
             </div>
@@ -438,7 +438,7 @@ export default function IncomeExpensesPage() {
                                 {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
                               </span>
                             </div>
-                            <span className="font-mono font-bold text-emerald-600">
+                            <span className="font-mono font-semibold text-navy dark:text-gold">
                               +{formatCurrency(tx.amount)}
                             </span>
                           </div>
@@ -459,7 +459,7 @@ export default function IncomeExpensesPage() {
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded bg-rose-500/10 text-destructive">
+                <div className="p-1.5 rounded bg-muted text-muted-foreground">
                   <Lock className="h-4 w-4" />
                 </div>
                 <div>
@@ -467,7 +467,7 @@ export default function IncomeExpensesPage() {
                   <CardDescription className="text-[10px] text-muted-foreground/80">Rent, utilities, regular commitments</CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-destructive/20 bg-destructive/5 text-destructive">
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-border bg-muted/40 text-muted-foreground">
                 {((segments.fixedExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}% of expenses
               </Badge>
             </div>
@@ -475,7 +475,7 @@ export default function IncomeExpensesPage() {
           <CardContent className="p-4 pt-1 space-y-3">
             <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
               <span className="text-[10px] text-muted-foreground">Segment Total:</span>
-              <span className="text-lg font-bold text-destructive">
+              <span className="text-lg font-bold text-foreground">
                 -{formatCurrency(segments.fixedExpenses.total)}
               </span>
             </div>
@@ -499,7 +499,7 @@ export default function IncomeExpensesPage() {
                                 {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
                               </span>
                             </div>
-                            <span className="font-mono font-bold text-destructive">
+                            <span className="font-mono font-medium text-foreground">
                               -{formatCurrency(Math.abs(tx.amount))}
                             </span>
                           </div>
@@ -520,7 +520,7 @@ export default function IncomeExpensesPage() {
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded bg-rose-500/10 text-destructive">
+                <div className="p-1.5 rounded bg-muted text-muted-foreground">
                   <ShoppingBag className="h-4 w-4" />
                 </div>
                 <div>
@@ -528,7 +528,7 @@ export default function IncomeExpensesPage() {
                   <CardDescription className="text-[10px] text-muted-foreground/80">Shopping, dining and leisure</CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-destructive/20 bg-destructive/5 text-destructive">
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 border-border bg-muted/40 text-muted-foreground">
                 {((segments.variableExpenses.total / (totalExpenses || 1)) * 100).toFixed(0)}% of expenses
               </Badge>
             </div>
@@ -536,7 +536,7 @@ export default function IncomeExpensesPage() {
           <CardContent className="p-4 pt-1 space-y-3">
             <div className="flex justify-between items-baseline font-mono pb-2 border-b border-border/40">
               <span className="text-[10px] text-muted-foreground">Segment Total:</span>
-              <span className="text-lg font-bold text-destructive">
+              <span className="text-lg font-bold text-foreground">
                 -{formatCurrency(segments.variableExpenses.total)}
               </span>
             </div>
@@ -560,7 +560,7 @@ export default function IncomeExpensesPage() {
                                 {isValid(txDate) ? format(txDate, 'MMM d, yyyy') : ''} • {tx.categoryName || 'General'}
                               </span>
                             </div>
-                            <span className="font-mono font-bold text-destructive">
+                            <span className="font-mono font-medium text-foreground">
                               -{formatCurrency(Math.abs(tx.amount))}
                             </span>
                           </div>

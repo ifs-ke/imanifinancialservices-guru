@@ -15,6 +15,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { logInfo } from '@/lib/logger';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/context/AuthContext';
+import { OfflineBanner } from '@/components/pwa/OfflineBanner';
 
 export default function DashboardLayout({
   children,
@@ -94,6 +95,8 @@ export default function DashboardLayout({
             onCancel={syncManager.cancelLocalChangesPreview}
           />
         )}
+
+        <OfflineBanner />
       </div>
     </SidebarProvider>
   );

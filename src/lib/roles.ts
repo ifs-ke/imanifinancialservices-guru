@@ -1,15 +1,44 @@
 // src/lib/roles.ts
+/**
+ * @file roles.ts
+ * @description Role-Based Access Control (RBAC) definition and Firestore synchronization.
+ * Supports three first-class roles: 'admin', 'auditor', and 'client'.
+ */
+
 import { logInfo, logWarn, logError } from '@/lib/logger';
 import { db, auth } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
-export type AppRole = 'admin' | 'user';
+export type AppRole = 'admin' | 'auditor' | 'client';
 
 export interface RoleUser {
   id: string;
-  role?: AppRole;
-  privateMetadata?: { role?: AppRole };
-  publicMetadata?: { role?: AppRole };
+  role?: AppRole | 'user';
+  privateMetadata?: { role?: AppRole | 'user' };
+  publicMetadata?: { role?: AppRole | 'user' };
+}
+
+export interface AppUserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: AppRole;
+  status: 'active' | 'suspended';
+  spendingLimitKes?: number;
+  incurredCostKes?: number;
+  totalReads?: number;
+  totalWrites?: number;
+  totalStorageKb?: number;
+  totalApiCalls?: number;
+  totalAiForecasts?: number;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+  permissions?: {
+    canExportData?: boolean;
+    canShareReviews?: boolean;
+    canRunAiProjections?: boolean;
+  };
 }
 
 function getActiveClientUserId(): string | null {
@@ -29,20 +58,27 @@ function getActiveClientUserId(): string | null {
 }
 
 /**
- * Checks if the given user has the specified role.
+ * Normalizes any legacy 'user' string to modern 'client' role.
  */
-export const hasRole = (roleToCheck: AppRole, user: RoleUser | null): boolean => {
-  const userRole = user?.role || user?.privateMetadata?.role || user?.publicMetadata?.role;
-  logInfo(`Role check for user: requested '${roleToCheck}', actual '${userRole || 'none'}'`, {
-    userId: user?.id || 'unauthenticated_or_null_user',
-    requestedRole: roleToCheck,
-    actualRole: userRole,
-  });
-  return userRole === roleToCheck;
+export const normalizeRole = (role?: string | null): AppRole => {
+  if (!role) return 'client';
+  if (role === 'admin') return 'admin';
+  if (role === 'auditor') return 'auditor';
+  return 'client';
 };
 
 /**
- * Sets a user's role in Firestore.
+ * Checks if the given user has the specified role.
+ */
+export const hasRole = (roleToCheck: AppRole, user: RoleUser | null): boolean => {
+  const rawRole = user?.role || user?.privateMetadata?.role || user?.publicMetadata?.role;
+  const normalized = normalizeRole(rawRole);
+  
+  return normalized === roleToCheck;
+};
+
+/**
+ * Sets a user's role in Firestore and updates registry documents.
  */
 export const setUserRole = async (userIdToUpdate: string, role: AppRole): Promise<void> => {
   const adminUserId = getActiveClientUserId();
@@ -51,11 +87,30 @@ export const setUserRole = async (userIdToUpdate: string, role: AppRole): Promis
     const userRef = doc(db, 'users', userIdToUpdate);
     await setDoc(userRef, { role, updatedAt: new Date().toISOString() }, { merge: true });
 
+    // Synchronize admin registry
+    const adminRef = doc(db, 'admins', userIdToUpdate);
     if (role === 'admin') {
-      await setDoc(doc(db, 'admins', userIdToUpdate), {
+      await setDoc(adminRef, {
         uid: userIdToUpdate,
         assignedAt: new Date().toISOString(),
       }, { merge: true });
+    } else {
+      try {
+        await deleteDoc(adminRef);
+      } catch {}
+    }
+
+    // Synchronize auditor registry
+    const auditorRef = doc(db, 'auditors', userIdToUpdate);
+    if (role === 'auditor') {
+      await setDoc(auditorRef, {
+        uid: userIdToUpdate,
+        assignedAt: new Date().toISOString(),
+      }, { merge: true });
+    } else {
+      try {
+        await deleteDoc(auditorRef);
+      } catch {}
     }
 
     logInfo(`Role updated for ${userIdToUpdate} to ${role} by admin ${adminUserId}`, {
@@ -69,30 +124,35 @@ export const setUserRole = async (userIdToUpdate: string, role: AppRole): Promis
       targetUser: userIdToUpdate,
       newRole: role,
     });
+    throw error;
   }
 };
 
 /**
  * Gets a user's role from Firestore.
  */
-export const getUserRole = async (userIdToQuery: string): Promise<AppRole | undefined> => {
-  const requestorId = getActiveClientUserId();
+export const getUserRole = async (userIdToQuery: string): Promise<AppRole> => {
   try {
     const userRef = doc(db, 'users', userIdToQuery);
     const snap = await getDoc(userRef);
-    const role = (snap.data()?.role as AppRole) || (userIdToQuery === 'admin-seanwambua-uid' ? 'admin' : 'user');
+    if (snap.exists()) {
+      const data = snap.data();
+      return normalizeRole(data?.role);
+    }
 
-    logInfo(`Retrieved role for ${userIdToQuery}`, {
-      role,
-      requestorId: requestorId || 'system_or_unauthenticated_requestor',
-    });
+    // Check bootstrap admin
+    if (
+      userIdToQuery === 'admin-seanwambua-uid' ||
+      auth.currentUser?.email?.toLowerCase() === 'seanwambua@gmail.com'
+    ) {
+      return 'admin';
+    }
 
-    return role;
+    return 'client';
   } catch (error) {
-    logWarn("Failed to fetch user role from Firestore, defaulting based on ID", {
+    logWarn("Failed to fetch user role from Firestore, applying fallback role", {
       targetUser: userIdToQuery,
-      requestorId: requestorId || 'system_or_unauthenticated_requestor',
     });
-    return userIdToQuery === 'admin-seanwambua-uid' ? 'admin' : 'user';
+    return (auth.currentUser?.email?.toLowerCase() === 'seanwambua@gmail.com') ? 'admin' : 'client';
   }
 };

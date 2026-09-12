@@ -70,7 +70,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ShareReviewDialog } from './ShareReviewDialog';
+import { ShareReviewDialog } from '@/components/weekly-review/ShareReviewDialog';
 import { ReviewChat } from '@/components/weekly-review/ReviewChat';
 import {
   Dialog,

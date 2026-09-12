@@ -31,13 +31,13 @@ import type { InvestmentItem } from '@/lib/types';
 import InvestmentFormPopover from '@/components/investments/InvestmentFormPopover';
 import PortfolioDiversityDashboard from '@/components/investments/PortfolioDiversityDashboard';
 import { DataTable } from '@/components/ui/data-table';
-import { getInvestmentColumns } from './columns';
+import { getInvestmentColumns } from '@/components/investments/InvestmentColumns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Briefcase, PlusCircle, Trash2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
-import InvestmentForecastingTool from './InvestmentForecastingTool';
-import GovernmentBondProjectionTool from './GovernmentBondProjectionTool'; // Import new component
+import InvestmentForecastingTool from '@/components/investments/InvestmentForecastingTool';
+import GovernmentBondProjectionTool from '@/components/investments/GovernmentBondProjectionTool';
 import { Separator } from '@/components/ui/separator';
 
 export default function InvestmentsPage() {

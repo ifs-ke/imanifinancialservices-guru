@@ -1,8 +1,26 @@
 // src/context/AuthContext.tsx
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
-import type { AppRole } from '@/lib/roles';
-import { auth, googleProvider } from '@/lib/firebase';
-import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+/**
+ * @file AuthContext.tsx
+ * @description Enhanced Authentication and Role Context fully integrating Firebase Auth with Firestore.
+ * Supports 3 distinct platform roles: 'admin', 'auditor', and 'client'.
+ */
+
+'use client';
+
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import { AppRole, normalizeRole } from '@/lib/roles';
+import { auth, googleProvider, db } from '@/lib/firebase';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { recordAuditLog } from '@/services/adminLogService';
+import { trackUserUsage } from '@/lib/payPerUse';
 
 export interface AuthUser {
   id: string;
@@ -13,11 +31,13 @@ export interface AuthUser {
   lastName: string | null;
   imageUrl?: string;
   role: AppRole;
+  status: 'active' | 'suspended';
+  spendingLimitKes?: number;
+  incurredCostKes?: number;
   primaryEmailAddress?: { emailAddress: string } | null;
   emailAddresses?: Array<{ emailAddress: string }>;
   privateMetadata?: { role?: AppRole };
   publicMetadata?: { role?: AppRole };
-  isDemo?: boolean;
 }
 
 interface AuthContextType {
@@ -27,49 +47,19 @@ interface AuthContextType {
   sessionId: string | null;
   user: AuthUser | null;
   role: AppRole;
+  isAdmin: boolean;
+  isAuditor: boolean;
+  isClient: boolean;
   isFireAuthDisabled: boolean;
   getToken: () => Promise<string | null>;
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
-  signInDemo: (asAdmin?: boolean) => Promise<void>;
-  switchUserRole: (role: AppRole) => void;
+  refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const ADMIN_USER: AuthUser = {
-  id: 'admin-seanwambua-uid',
-  uid: 'admin-seanwambua-uid',
-  email: 'seanwambua@gmail.com',
-  fullName: 'Sean Wambua (Admin)',
-  firstName: 'Sean',
-  lastName: 'Wambua',
-  imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=SeanWambua',
-  role: 'admin',
-  primaryEmailAddress: { emailAddress: 'seanwambua@gmail.com' },
-  emailAddresses: [{ emailAddress: 'seanwambua@gmail.com' }],
-  privateMetadata: { role: 'admin' },
-  publicMetadata: { role: 'admin' },
-  isDemo: true,
-};
-
-const MEMBER_USER: AuthUser = {
-  id: 'demo-user-alex-uid',
-  uid: 'demo-user-alex-uid',
-  email: 'demo.member@imanifinancial.com',
-  fullName: 'Alex Morgan',
-  firstName: 'Alex',
-  lastName: 'Morgan',
-  imageUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=AlexMorgan',
-  role: 'user',
-  primaryEmailAddress: { emailAddress: 'demo.member@imanifinancial.com' },
-  emailAddresses: [{ emailAddress: 'demo.member@imanifinancial.com' }],
-  privateMetadata: { role: 'user' },
-  publicMetadata: { role: 'user' },
-  isDemo: true,
-};
 
 function setAuthCookies(uid: string | null, token: string | null) {
   if (typeof document === 'undefined') return;
@@ -88,138 +78,229 @@ function setAuthCookies(uid: string | null, token: string | null) {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isFireAuthDisabled = false;
 
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('ifc_active_user');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          return parsed;
-        }
-      } catch {}
-    }
-    return ADMIN_USER;
-  });
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  const [isLoaded, setIsLoaded] = useState(true);
+  // Sync user profile from Firestore users/{uid}
+  const syncProfile = useCallback(async (uid: string, email: string, displayName?: string | null, photoURL?: string | null) => {
+    try {
+      const userRef = doc(db, 'users', uid);
+      const snap = await getDoc(userRef);
+
+      const isBootstrapAdmin =
+        email.toLowerCase() === 'seanwambua@gmail.com' ||
+        email.toLowerCase() === 'rashmore2020@gmail.com' ||
+        uid === 'admin-seanwambua-uid';
+
+      let resolvedRole: AppRole = isBootstrapAdmin ? 'admin' : 'client';
+      let resolvedStatus: 'active' | 'suspended' = 'active';
+      let spendingLimitKes = 1500;
+      let incurredCostKes = 0;
+
+      if (snap.exists()) {
+        const data = snap.data();
+        resolvedRole = isBootstrapAdmin ? 'admin' : normalizeRole(data.role);
+        resolvedStatus = (data.status === 'suspended' ? 'suspended' : 'active');
+        spendingLimitKes = data.spendingLimitKes ?? (resolvedRole === 'admin' ? 50000 : 1500);
+        incurredCostKes = data.incurredCostKes ?? 0;
+
+        // Keep lastLogin updated
+        await setDoc(userRef, {
+          lastLoginAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          role: resolvedRole,
+        }, { merge: true });
+      } else {
+        // First-time profile initialization
+        await setDoc(userRef, {
+          uid,
+          email,
+          displayName: displayName || email.split('@')[0] || 'Member',
+          role: resolvedRole,
+          status: 'active',
+          spendingLimitKes: isBootstrapAdmin ? 50000 : 1500,
+          incurredCostKes: 0,
+          totalReads: 1,
+          totalWrites: 1,
+          totalStorageKb: 64,
+          totalApiCalls: 1,
+          totalAiForecasts: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          permissions: {
+            canExportData: true,
+            canShareReviews: true,
+            canRunAiProjections: true,
+          }
+        }, { merge: true });
+
+        // If admin, ensure admins registry entry exists
+        if (resolvedRole === 'admin') {
+          await setDoc(doc(db, 'admins', uid), {
+            uid,
+            assignedAt: new Date().toISOString(),
+          }, { merge: true });
+        }
+      }
+
+      // Track usage read
+      trackUserUsage(uid, 'read', 1);
+
+      const resolvedName = displayName || email.split('@')[0] || 'User';
+      const activeAuthUser: AuthUser = {
+        id: uid,
+        uid: uid,
+        email: email,
+        fullName: resolvedName,
+        firstName: resolvedName.split(' ')[0] || 'User',
+        lastName: resolvedName.split(' ').slice(1).join(' ') || '',
+        imageUrl: photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email || uid)}`,
+        role: resolvedRole,
+        status: resolvedStatus,
+        spendingLimitKes,
+        incurredCostKes,
+        primaryEmailAddress: email ? { emailAddress: email } : null,
+        emailAddresses: email ? [{ emailAddress: email }] : [],
+        privateMetadata: { role: resolvedRole },
+        publicMetadata: { role: resolvedRole },
+      };
+
+      setCurrentUser(activeAuthUser);
+    } catch (err) {
+      console.warn('Failed to sync Firestore user profile, using fallback:', err);
+      const isBootstrapAdmin = email.toLowerCase() === 'seanwambua@gmail.com';
+      const fallbackRole: AppRole = isBootstrapAdmin ? 'admin' : 'client';
+      const resolvedName = displayName || email.split('@')[0] || 'User';
+
+      setCurrentUser({
+        id: uid,
+        uid: uid,
+        email: email,
+        fullName: resolvedName,
+        firstName: resolvedName.split(' ')[0] || 'User',
+        lastName: resolvedName.split(' ').slice(1).join(' ') || '',
+        imageUrl: photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email || uid)}`,
+        role: fallbackRole,
+        status: 'active',
+        spendingLimitKes: 1500,
+        incurredCostKes: 0,
+        primaryEmailAddress: email ? { emailAddress: email } : null,
+        emailAddresses: email ? [{ emailAddress: email }] : [],
+      });
+    }
+  }, []);
 
   // Synchronize with Firebase Auth
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const email = firebaseUser.email || '';
-        const isAdmin =
-          email.toLowerCase() === 'seanwambua@gmail.com' ||
-          email.toLowerCase() === 'rashmore2020@gmail.com' ||
-          email.toLowerCase().includes('admin');
+        await syncProfile(
+          firebaseUser.uid, 
+          email, 
+          firebaseUser.displayName, 
+          firebaseUser.photoURL
+        );
 
-        const activeAuthUser: AuthUser = {
-          id: firebaseUser.uid,
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          fullName: firebaseUser.displayName || email.split('@')[0] || 'User',
-          firstName: firebaseUser.displayName?.split(' ')[0] || email.split('@')[0] || 'User',
-          lastName: firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
-          imageUrl: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email || firebaseUser.uid)}`,
-          role: isAdmin ? 'admin' : 'user',
-          primaryEmailAddress: email ? { emailAddress: email } : null,
-          emailAddresses: email ? [{ emailAddress: email }] : [],
-          isDemo: false,
-        };
-
-        setCurrentUser(activeAuthUser);
-        setAuthCookies(firebaseUser.uid, 'firebase-session');
+        try {
+          const token = await firebaseUser.getIdToken();
+          setAuthCookies(firebaseUser.uid, token);
+        } catch {
+          setAuthCookies(firebaseUser.uid, 'firebase-session');
+        }
+      } else {
+        setCurrentUser(null);
+        setAuthCookies(null, null);
       }
+      setIsLoaded(true);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [syncProfile]);
 
-  useEffect(() => {
-    if (currentUser) {
-      setAuthCookies(currentUser.id, 'mock-auth-token');
-      try {
-        localStorage.setItem('ifc_active_user', JSON.stringify(currentUser));
-      } catch {}
-    } else {
-      setAuthCookies(null, null);
-      try {
-        localStorage.removeItem('ifc_active_user');
-      } catch {}
+  const refreshUserProfile = async () => {
+    if (auth.currentUser && auth.currentUser.email) {
+      await syncProfile(
+        auth.currentUser.uid,
+        auth.currentUser.email,
+        auth.currentUser.displayName,
+        auth.currentUser.photoURL
+      );
     }
-    setIsLoaded(true);
-  }, [currentUser]);
-
-  const signInWithGoogle = async () => {
-    try {
-      const cred = await signInWithPopup(auth, googleProvider);
-      if (cred.user) return;
-    } catch {
-      setCurrentUser(ADMIN_USER);
-    }
-    setIsLoaded(true);
   };
 
-  const signInWithEmail = async (email: string, _pass: string) => {
-    const isAdmin =
-      email.toLowerCase().includes('admin') ||
-      email.toLowerCase() === 'seanwambua@gmail.com' ||
-      email.toLowerCase() === 'rashmore2020@gmail.com';
+  const signInWithGoogle = async () => {
+    const res = await signInWithPopup(auth, googleProvider);
+    if (res.user?.email) {
+      await recordAuditLog(
+        `AUTH_SIGNIN: Google login for ${res.user.email}`,
+        'AUTH',
+        'INFO',
+        { userId: res.user.uid, userEmail: res.user.email }
+      );
+    }
+  };
 
-    const uid = auth.currentUser?.uid || (isAdmin ? 'admin-seanwambua-uid' : `user-${email.split('@')[0]}`);
-    const newUser: AuthUser = {
-      id: uid,
-      uid: uid,
-      email,
-      fullName: email.split('@')[0],
-      firstName: email.split('@')[0],
-      lastName: '',
-      imageUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(email)}`,
-      role: isAdmin ? 'admin' : 'user',
-      primaryEmailAddress: { emailAddress: email },
-      emailAddresses: [{ emailAddress: email }],
-      privateMetadata: { role: isAdmin ? 'admin' : 'user' },
-      publicMetadata: { role: isAdmin ? 'admin' : 'user' },
-      isDemo: !auth.currentUser,
-    };
-    setCurrentUser(newUser);
-    setIsLoaded(true);
+  const signInWithEmail = async (email: string, pass: string) => {
+    const res = await signInWithEmailAndPassword(auth, email, pass);
+    if (res.user?.email) {
+      await recordAuditLog(
+        `AUTH_SIGNIN: Email login for ${res.user.email}`,
+        'AUTH',
+        'INFO',
+        { userId: res.user.uid, userEmail: res.user.email }
+      );
+    }
   };
 
   const signUpWithEmail = async (email: string, pass: string, name: string) => {
-    await signInWithEmail(email, pass);
-    if (currentUser) {
-      setCurrentUser((prev) => (prev ? { ...prev, fullName: name, firstName: name } : null));
-    }
-  };
-
-  const signInDemo = async (asAdmin = true) => {
-    setCurrentUser(asAdmin ? ADMIN_USER : MEMBER_USER);
-    setIsLoaded(true);
-  };
-
-  const switchUserRole = (role: AppRole) => {
-    if (role === 'admin') {
-      setCurrentUser(ADMIN_USER);
-    } else {
-      setCurrentUser(MEMBER_USER);
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    if (cred.user) {
+      await updateProfile(cred.user, { displayName: name });
+      await recordAuditLog(
+        `AUTH_SIGNUP: New user registered ${email}`,
+        'AUTH',
+        'INFO',
+        { userId: cred.user.uid, userEmail: email }
+      );
     }
   };
 
   const signOut = async () => {
+    const email = currentUser?.email;
+    const uid = currentUser?.uid;
     try {
       await firebaseSignOut(auth);
     } catch {}
     setCurrentUser(null);
     setAuthCookies(null, null);
-    try {
-      localStorage.removeItem('ifc_active_user');
-    } catch {}
+
+    if (email) {
+      recordAuditLog(
+        `AUTH_SIGNOUT: User logged out ${email}`,
+        'AUTH',
+        'INFO',
+        { userId: uid, userEmail: email }
+      );
+    }
   };
 
   const getToken = React.useCallback(async (): Promise<string | null> => {
-    return 'mock-auth-token';
+    if (auth.currentUser) {
+      try {
+        return await auth.currentUser.getIdToken();
+      } catch {
+        return 'firebase-token';
+      }
+    }
+    return null;
   }, []);
+
+  const role = currentUser?.role || 'client';
+  const isAdmin = role === 'admin';
+  const isAuditor = role === 'auditor';
+  const isClient = role === 'client';
 
   const value = useMemo(
     () => ({
@@ -228,17 +309,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId: currentUser?.id || null,
       sessionId: currentUser ? `session-${currentUser.id}` : null,
       user: currentUser,
-      role: currentUser?.role || 'user',
+      role,
+      isAdmin,
+      isAuditor,
+      isClient,
       isFireAuthDisabled,
       getToken,
       signOut,
       signInWithGoogle,
       signInWithEmail,
       signUpWithEmail,
-      signInDemo,
-      switchUserRole,
+      refreshUserProfile,
     }),
-    [currentUser, isLoaded, getToken]
+    [currentUser, isLoaded, role, isAdmin, isAuditor, isClient, getToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

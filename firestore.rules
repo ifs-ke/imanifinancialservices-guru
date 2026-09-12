@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
+    // Core helper functions
     function isSignedIn() {
       return request.auth != null;
     }
@@ -21,20 +21,33 @@ service cloud.firestore {
       );
     }
 
-    // User profile documents & all subcollections
+    function isAuditor() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/auditors/$(request.auth.uid)) ||
+        isAdmin()
+      );
+    }
+
+    // User profile documents & their subcollections
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      // Read access allowed for owner, admin, or auditor
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin() || isAuditor());
+      // Users can create/update their profile, admin can manage all
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
       allow delete: if isAdmin();
 
-      // User personal financial data collections (transactions, debts, assets, liabilities, budget, reviews, settings, notifications, test entries)
+      // User personal financial data collections (transactions, debts, assets, liabilities, budget, reviews, settings, notifications)
       match /{allSubcollections=**} {
+        // Auditors and Admins can review client data in read-only mode; Owner has full read/write
         allow read: if isSignedIn() && (
           isOwner(userId) || 
           isAdmin() || 
+          isAuditor() ||
           userId == 'admin-seanwambua-uid' || 
           userId == 'demo-user-alex-uid'
         );
+        // Only owner or admin can write; auditors are strictly forbidden from modifying financial data
         allow write: if isSignedIn() && (
           isOwner(userId) || 
           isAdmin() || 
@@ -44,7 +57,7 @@ service cloud.firestore {
       }
     }
 
-    // Shared reviews for peer accountability and period transactions sharing
+    // Shared reviews for peer accountability and period review discussions
     match /sharedReviews/{shareId} {
       allow read: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
@@ -52,6 +65,7 @@ service cloud.firestore {
         resource.data.sharedWithId == request.auth.uid ||
         resource.data.sharedWithUserId == request.auth.uid ||
         isAdmin() ||
+        isAuditor() ||
         request.auth.uid == 'admin-seanwambua-uid' ||
         request.auth.uid == 'demo-user-alex-uid'
       );
@@ -62,19 +76,45 @@ service cloud.firestore {
         resource.data.ownerUserId == request.auth.uid ||
         isAdmin()
       );
+
+      // Realtime discussion comments subcollection
+      match /chats/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin();
+      }
     }
 
-    // Admin registry
+    // System Administrator registry
     match /admins/{adminId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // Operational and audit logs
+    // Compliance & Financial Auditor registry
+    match /auditors/{auditorId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Operational, security, and pay-per-use audit logs
     match /auditLogs/{logId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isAuditor() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
+    }
+
+    // Official Auditor Period Verifications and Sign-Offs
+    match /auditVerifications/{verificationId} {
+      allow read: if isAdmin() || isAuditor() || (isSignedIn() && resource.data.clientId == request.auth.uid);
+      allow create, update: if isAdmin() || isAuditor();
+      allow delete: if isAdmin();
+    }
+
+    // Global application configuration (e.g., pricingRateCard)
+    match /config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // Fallback closed

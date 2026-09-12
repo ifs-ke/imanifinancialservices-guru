@@ -25,6 +25,14 @@ import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { logInfo, logWarn, logError } from '@/lib/logger';
 import { fetchAllUserDataFromFirestore, saveAllUserDataToFirestore } from '@/lib/firestoreBackend';
+import { useOffline } from '@/hooks/useOffline';
+import {
+  saveOfflineSnapshot,
+  loadOfflineSnapshot,
+  enqueueOfflineMutation,
+  clearOfflineMutations,
+  getPendingMutationsCount,
+} from '@/lib/offlineQueue';
 
 export const COMPONENT_UNMOUNTING_ABORT_REASON = 'ComponentUnmounting';
 export const NEW_REQUEST_ABORT_REASON = 'NewFetchInitiated';
@@ -32,7 +40,7 @@ export const API_TIMEOUT_ABORT_REASON = 'APICallTimedOut';
 export const FETCH_TIMEOUT_SYMBOL = Symbol.for('FETCH_TIMEOUT');
 export const FETCH_ABORTED_BENIGNLY_SYMBOL = Symbol.for('FETCH_ABORTED_BENIGNLY');
 
-interface SyncedData {
+export interface SyncedData {
   transactions: TransactionWithId[];
   debts: DebtItem[];
   assetItems: StatementItem[];
@@ -53,6 +61,8 @@ export type SyncStatus =
   | 'local_changes'
   | 'syncing'
   | 'synced'
+  | 'offline'
+  | 'offline_changes'
   | 'error'
   | 'error_local'
   | 'hash_mismatch';
@@ -68,16 +78,16 @@ interface SyncState {
   isInitialClientSyncPending: boolean;
   isPreviewingLocalChanges: boolean;
   localChangesPayloadPreview: null | string;
+  pendingOfflineCount: number;
 }
 
-const HASH_CHECK_ENABLED = true;
 const API_TIMEOUT_MS = 30000;
 const AUTO_SAVE_DEBOUNCE_DELAY_MS = 2500;
 
 /**
  * Compares current local state against the last known synced snapshot of objects
  * to compute incremental changes (created, updated, deleted).
- * 
+ *
  * @template T - The structure of the entity containing an id string property.
  * @param {T[]} current - The active local copy of the data.
  * @param {T[] | null | undefined} lastSynced - The cached baseline of the last successful sync.
@@ -129,7 +139,7 @@ function calculateCollectionChanges<T extends { id: string }>(
 /**
  * Compares current local Weekly Review states against the last known synced snapshot
  * to compute incremental journal and comment adjustments.
- * 
+ *
  * @param {Record<string, WeeklyReviewData>} current - The active local copy of review records.
  * @param {Record<string, WeeklyReviewData> | null | undefined} lastSynced - The baseline of the last successful sync.
  * @returns {{ created: any[]; updated: any[]; deletedIds: string[] }} The itemized delta arrays.
@@ -174,9 +184,10 @@ function calculateReviewChanges(
 export function useSyncManager() {
   const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth();
   const { toast } = useToast();
+  const isOffline = useOffline();
 
   const [syncState, setSyncStateInternal] = useState<SyncState>({
-    status: 'idle',
+    status: isOffline ? 'offline' : 'idle',
     lastFetchTime: null,
     lastSaveTime: null,
     lastServerHash: null,
@@ -186,6 +197,7 @@ export function useSyncManager() {
     isInitialClientSyncPending: true,
     isPreviewingLocalChanges: false,
     localChangesPayloadPreview: null,
+    pendingOfflineCount: 0,
   });
 
   const lastSyncedData = useRef<SyncedData | null>(null);
@@ -197,6 +209,7 @@ export function useSyncManager() {
   const hasLocalChangesRef = useRef(false);
   const activeFetchControllerRef = useRef<AbortController | null>(null);
   const autoSaveDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const previousOfflineRef = useRef(isOffline);
 
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
@@ -268,6 +281,48 @@ export function useSyncManager() {
     };
   }, [getCurrentLocalDataForFullSnapshot]);
 
+  // Rehydrate stores from a SyncedData payload (used for both remote and offline snapshot)
+  const rehydrateStores = useCallback((data: SyncedData) => {
+    if (Array.isArray(data.transactions)) {
+      getTransactionsState().setTransactions(data.transactions);
+    }
+    if (Array.isArray(data.debts)) {
+      getDebtState().setDebts(data.debts);
+    }
+    if (Array.isArray(data.investmentItems)) {
+      getInvestmentState().setInvestmentItems(data.investmentItems);
+    }
+    if (Array.isArray(data.assetItems)) {
+      getStatementState().setAssetItems(data.assetItems);
+    }
+    if (Array.isArray(data.otherLiabilityItems)) {
+      getStatementState().setOtherLiabilityItems(data.otherLiabilityItems);
+    }
+    if (Array.isArray(data.budgetItems)) {
+      getBudgetState().setBudgetItems(data.budgetItems);
+    }
+    if (data.ownedReviews || data.sharedReviews) {
+      getWeeklyReviewState().setReviews(data.ownedReviews || {}, data.sharedReviews || {});
+    }
+    if (Array.isArray(data.notifications)) {
+      getNotificationState().setNotifications(data.notifications);
+    }
+    if (data.startDate || data.endDate) {
+      getStatementState().setStatementDates(
+        data.startDate ? new Date(data.startDate) : undefined,
+        data.endDate ? new Date(data.endDate) : undefined
+      );
+    }
+  }, [
+    getTransactionsState,
+    getDebtState,
+    getInvestmentState,
+    getStatementState,
+    getBudgetState,
+    getWeeklyReviewState,
+    getNotificationState,
+  ]);
+
   const clearAllLocalStoreData = useCallback(() => {
     const currentUserIdForLog = previousUserIdRef.current || userId || 'unknown_user_at_clear';
     if (isClearingRef.current) return;
@@ -289,7 +344,7 @@ export function useSyncManager() {
       getNotificationState().clearAllNotifications();
       lastSyncedData.current = null;
       updateSyncState({
-        status: 'idle',
+        status: isOffline ? 'offline' : 'idle',
         lastFetchTime: null,
         lastSaveTime: null,
         lastServerHash: null,
@@ -299,6 +354,7 @@ export function useSyncManager() {
         isInitialClientSyncPending: true,
         isPreviewingLocalChanges: false,
         localChangesPayloadPreview: null,
+        pendingOfflineCount: 0,
       });
       hasLocalChangesRef.current = false;
     } catch (error: any) {
@@ -317,16 +373,35 @@ export function useSyncManager() {
     getNotificationState,
     updateSyncState,
     userId,
+    isOffline,
   ]);
 
   const fetchData = useCallback(
     async (isPreCheck = false): Promise<string | false | typeof FETCH_TIMEOUT_SYMBOL | typeof FETCH_ABORTED_BENIGNLY_SYMBOL> => {
       const currentUserId = userId;
       if (!isClerkLoaded || !isSignedIn || !currentUserId) {
-        if (!isPreCheck && syncStateRef.current.status !== 'idle') {
+        if (!isPreCheck && syncStateRef.current.status !== 'idle' && !isOffline) {
           updateSyncState({ status: 'idle', isInitialClientSyncPending: true });
         }
         return false;
+      }
+
+      // If offline, load seamlessly from local snapshot cache
+      if (isOffline) {
+        logInfo('SyncManager: Offline mode detected. Rehydrating from cached snapshot.', { userId: currentUserId });
+        const cachedSnapshot = loadOfflineSnapshot(currentUserId);
+        if (cachedSnapshot) {
+          rehydrateStores(cachedSnapshot);
+          lastSyncedData.current = cachedSnapshot;
+        }
+        const pendingCount = getPendingMutationsCount(currentUserId);
+        updateSyncState({
+          status: pendingCount > 0 ? 'offline_changes' : 'offline',
+          pendingOfflineCount: pendingCount,
+          isInitialClientSyncPending: false,
+          lastFetchTime: new Date(),
+        });
+        return 'offline-cached-hash';
       }
 
       if (isFetchingRef.current) {
@@ -375,39 +450,9 @@ export function useSyncManager() {
         const serverHash = data?.dataHash || 'local-active-hash';
 
         if (!isPreCheck && data) {
-          // Rehydrate client Zustand stores from Cloud Firestore sync payload
-          if (Array.isArray(data.transactions)) {
-            getTransactionsState().setTransactions(data.transactions);
-          }
-          if (Array.isArray(data.debts)) {
-            getDebtState().setDebts(data.debts);
-          }
-          if (Array.isArray(data.investmentItems)) {
-            getInvestmentState().setInvestmentItems(data.investmentItems);
-          }
-          if (Array.isArray(data.assetItems)) {
-            getStatementState().setAssetItems(data.assetItems);
-          }
-          if (Array.isArray(data.otherLiabilityItems)) {
-            getStatementState().setOtherLiabilityItems(data.otherLiabilityItems);
-          }
-          if (Array.isArray(data.budgetItems)) {
-            getBudgetState().setBudgetItems(data.budgetItems);
-          }
-          if (data.ownedReviews || data.sharedReviews) {
-            getWeeklyReviewState().setReviews(data.ownedReviews || {}, data.sharedReviews || {});
-          }
-          if (Array.isArray(data.notifications)) {
-            getNotificationState().setNotifications(data.notifications);
-          }
-          if (data.startDate || data.endDate) {
-            getStatementState().setStatementDates(
-              data.startDate ? new Date(data.startDate) : undefined,
-              data.endDate ? new Date(data.endDate) : undefined
-            );
-          }
+          rehydrateStores(data);
 
-          lastSyncedData.current = {
+          const syncedSnapshot: SyncedData = {
             transactions: data.transactions || [],
             debts: data.debts || [],
             investmentItems: data.investmentItems || [],
@@ -421,16 +466,25 @@ export function useSyncManager() {
             endDate: data.endDate,
           };
 
+          lastSyncedData.current = syncedSnapshot;
+
+          // Always update local offline snapshot cache with fresh cloud data
+          saveOfflineSnapshot(currentUserId, syncedSnapshot);
+
           hasLocalChangesRef.current = false;
+          const pendingCount = getPendingMutationsCount(currentUserId);
+
           updateSyncState({
             status: 'synced',
             lastFetchTime: new Date(),
             lastServerHash: serverHash,
             isInitialClientSyncPending: false,
+            pendingOfflineCount: pendingCount,
           });
         } else if (!isPreCheck) {
-          // Seamless local state active
-          lastSyncedData.current = getCurrentLocalDataForFullSnapshot();
+          const currentSnapshot = getCurrentLocalDataForFullSnapshot();
+          lastSyncedData.current = currentSnapshot;
+          saveOfflineSnapshot(currentUserId, currentSnapshot);
           hasLocalChangesRef.current = false;
           updateSyncState({
             status: 'synced',
@@ -450,7 +504,11 @@ export function useSyncManager() {
           }
           return FETCH_ABORTED_BENIGNLY_SYMBOL;
         }
-        logWarn('Sync fetch graceful fallback to local state', { userId: currentUserId });
+        logWarn('Sync fetch graceful fallback to offline snapshot', { userId: currentUserId });
+        const cached = loadOfflineSnapshot(currentUserId);
+        if (cached) {
+          rehydrateStores(cached);
+        }
         updateSyncState({ status: 'synced', isInitialClientSyncPending: false });
         return 'local-active-hash';
       } finally {
@@ -461,14 +519,10 @@ export function useSyncManager() {
       userId,
       isClerkLoaded,
       isSignedIn,
+      isOffline,
       updateSyncState,
-      getTransactionsState,
-      getDebtState,
-      getInvestmentState,
-      getStatementState,
-      getBudgetState,
-      getWeeklyReviewState,
-      getNotificationState,
+      rehydrateStores,
+      getCurrentLocalDataForFullSnapshot,
     ]
   );
 
@@ -479,8 +533,27 @@ export function useSyncManager() {
     ): Promise<boolean> => {
       const currentUserId = userId;
       if (!isClerkLoaded || !isSignedIn || !currentUserId) {
-        if (syncStateRef.current.status !== 'idle') updateSyncState({ status: 'idle' });
+        if (syncStateRef.current.status !== 'idle' && !isOffline) updateSyncState({ status: 'idle' });
         return false;
+      }
+
+      const deltaPayload = directPayloadObject || computeDelta();
+      const currentSnapshot = getCurrentLocalDataForFullSnapshot();
+
+      // If offline: save snapshot locally, queue mutation, and avoid network calls
+      if (isOffline) {
+        saveOfflineSnapshot(currentUserId, currentSnapshot);
+        enqueueOfflineMutation(currentUserId, deltaPayload);
+        const pendingCount = getPendingMutationsCount(currentUserId);
+        lastSyncedData.current = currentSnapshot;
+        hasLocalChangesRef.current = false;
+        updateSyncState({
+          status: 'offline_changes',
+          pendingOfflineCount: pendingCount,
+          lastSaveTime: new Date(),
+        });
+        logInfo('SyncManager: Saved changes offline in local queue.', { userId: currentUserId, pendingCount });
+        return true;
       }
 
       if (isSavingRef.current) {
@@ -492,7 +565,6 @@ export function useSyncManager() {
       updateSyncState({ status: 'syncing' });
 
       try {
-        const deltaPayload = directPayloadObject || computeDelta();
         const preparedDataForHashingObj = prepareDataForHashing(deltaPayload as any);
         const payloadDataHash = await hashData(stringify(preparedDataForHashingObj));
 
@@ -530,7 +602,7 @@ export function useSyncManager() {
             saveSucceeded = true;
           }
         } catch (_apiErr) {
-          // Vite SPA mode fallback
+          // Vite SPA mode fallback to direct Firestore save
         }
 
         if (!saveSucceeded) {
@@ -538,24 +610,37 @@ export function useSyncManager() {
             await saveAllUserDataToFirestore(currentUserId, fullPayload as any);
             saveSucceeded = true;
           } catch (_fsErr) {
-            // Local persistence in Zustand/localStorage succeeded
-            saveSucceeded = true;
+            // If remote save fails due to network drop, save to offline queue gracefully
+            logWarn('Remote save failed, falling back to offline queue', { userId: currentUserId });
+            saveOfflineSnapshot(currentUserId, currentSnapshot);
+            enqueueOfflineMutation(currentUserId, deltaPayload, payloadDataHash);
+            const pendingCount = getPendingMutationsCount(currentUserId);
+            updateSyncState({
+              status: 'offline_changes',
+              pendingOfflineCount: pendingCount,
+            });
+            return true;
           }
         }
 
+        // On successful save: update cached snapshot, clear offline mutations, and update synced state
+        saveOfflineSnapshot(currentUserId, currentSnapshot);
+        clearOfflineMutations(currentUserId);
         hasLocalChangesRef.current = false;
-        lastSyncedData.current = getCurrentLocalDataForFullSnapshot();
+        lastSyncedData.current = currentSnapshot;
 
         updateSyncState({
           status: 'synced',
           lastSaveTime: new Date(),
           lastServerHash: newServerHash || syncStateRef.current.lastServerHash,
           isMismatchDialogOpen: false,
+          pendingOfflineCount: 0,
         });
 
         return true;
       } catch (error: any) {
-        logWarn('Save operation completed locally', { userId: currentUserId });
+        logWarn('Save operation completed locally with offline cache', { userId: currentUserId });
+        saveOfflineSnapshot(currentUserId, currentSnapshot);
         updateSyncState({ status: 'synced' });
         return true;
       } finally {
@@ -566,25 +651,96 @@ export function useSyncManager() {
       userId,
       isClerkLoaded,
       isSignedIn,
+      isOffline,
       computeDelta,
       updateSyncState,
       getCurrentLocalDataForFullSnapshot,
       fetchData,
-      toast,
     ]
   );
+
+  // Drains all pending offline mutations to Firestore when reconnected
+  const drainOfflineQueue = useCallback(async (): Promise<boolean> => {
+    if (!isSignedIn || !userId || isOffline) return false;
+
+    const pendingCount = getPendingMutationsCount(userId);
+    if (pendingCount === 0) return true;
+
+    logInfo(`SyncManager: Draining offline queue with ${pendingCount} mutations...`, { userId });
+    updateSyncState({ status: 'syncing' });
+
+    try {
+      // Perform a full state save to synchronize everything accumulated offline
+      const success = await saveData(true);
+      if (success) {
+        clearOfflineMutations(userId);
+        updateSyncState({ status: 'synced', pendingOfflineCount: 0 });
+        toast({
+          title: 'Back Online',
+          description: `Successfully synchronized ${pendingCount} offline update${pendingCount > 1 ? 's' : ''} with Cloud Firestore.`,
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      logError('SyncManager: Error draining offline queue', error, { userId });
+      updateSyncState({ status: 'error' });
+      return false;
+    }
+  }, [isSignedIn, userId, isOffline, saveData, updateSyncState, toast]);
+
+  // Monitor network status transitions (offline -> online)
+  useEffect(() => {
+    if (previousOfflineRef.current && !isOffline) {
+      // Reconnected to internet!
+      logInfo('Network status changed: Reconnected online.', { userId });
+      toast({
+        title: 'Network Reconnected',
+        description: 'Connecting to Cloud Firestore and reconciling data...',
+      });
+      drainOfflineQueue();
+    } else if (!previousOfflineRef.current && isOffline) {
+      // Disconnected from internet
+      logInfo('Network status changed: Went offline.', { userId });
+      const pendingCount = getPendingMutationsCount(userId || '');
+      updateSyncState({
+        status: pendingCount > 0 ? 'offline_changes' : 'offline',
+        pendingOfflineCount: pendingCount,
+      });
+      toast({
+        title: 'Offline Mode Active',
+        description: 'Your changes are safely saved locally and will auto-sync when connection resumes.',
+      });
+    }
+
+    previousOfflineRef.current = isOffline;
+  }, [isOffline, userId, drainOfflineQueue, updateSyncState, toast]);
 
   const manualSync = useCallback(async () => {
     if (!isSignedIn || !userId) {
       toast({ title: 'Not Signed In', description: 'Please sign in to sync with Firestore.', variant: 'destructive' });
       return;
     }
-    toast({ title: 'Syncing Data', description: 'Synchronizing with Cloud Firestore...' });
-    const success = await fetchData();
-    if (success) {
-      toast({ title: 'Firestore Synced', description: 'Your data is synchronized with Cloud Firestore.' });
+
+    if (isOffline) {
+      toast({
+        title: 'Offline Mode',
+        description: 'You are currently offline. Local data is active and will auto-sync once connected.',
+      });
+      return;
     }
-  }, [isSignedIn, userId, fetchData, toast]);
+
+    toast({ title: 'Syncing Data', description: 'Synchronizing with Cloud Firestore...' });
+    const pendingCount = getPendingMutationsCount(userId);
+    if (pendingCount > 0) {
+      await drainOfflineQueue();
+    } else {
+      const success = await fetchData();
+      if (success) {
+        toast({ title: 'Firestore Synced', description: 'Your data is synchronized with Cloud Firestore.' });
+      }
+    }
+  }, [isSignedIn, userId, isOffline, fetchData, drainOfflineQueue, toast]);
 
   // Debounced auto-save listener on local store changes
   useEffect(() => {
@@ -592,7 +748,22 @@ export function useSyncManager() {
       if (syncStateRef.current.status === 'syncing' || !initialLoadDoneRef.current || !isSignedIn) {
         return;
       }
+
       hasLocalChangesRef.current = true;
+
+      if (isOffline) {
+        const currentUserId = userId;
+        if (currentUserId) {
+          const snapshot = getCurrentLocalDataForFullSnapshot();
+          saveOfflineSnapshot(currentUserId, snapshot);
+          const delta = computeDelta();
+          enqueueOfflineMutation(currentUserId, delta);
+          const pendingCount = getPendingMutationsCount(currentUserId);
+          updateSyncState({ status: 'offline_changes', pendingOfflineCount: pendingCount });
+        }
+        return;
+      }
+
       updateSyncState({ status: 'local_changes' });
 
       if (autoSaveDebounceTimerRef.current) {
@@ -616,7 +787,15 @@ export function useSyncManager() {
       unsubscribes.forEach((unsubscribe) => unsubscribe());
       if (autoSaveDebounceTimerRef.current) clearTimeout(autoSaveDebounceTimerRef.current);
     };
-  }, [updateSyncState, isSignedIn, saveData]);
+  }, [
+    updateSyncState,
+    isSignedIn,
+    saveData,
+    isOffline,
+    userId,
+    getCurrentLocalDataForFullSnapshot,
+    computeDelta,
+  ]);
 
   // Initial load effect
   useEffect(() => {
@@ -639,20 +818,36 @@ export function useSyncManager() {
 
     if (isSignedIn && currentUserId && !initialLoadDoneRef.current) {
       initialLoadDoneRef.current = true;
-      updateSyncState({ status: 'loading_local', isInitialClientSyncPending: true });
+      updateSyncState({
+        status: isOffline ? 'offline' : 'loading_local',
+        isInitialClientSyncPending: true,
+        pendingOfflineCount: getPendingMutationsCount(currentUserId),
+      });
       fetchData();
     }
 
     if (previousUserIdRef.current !== currentUserId) {
       previousUserIdRef.current = currentUserId;
     }
-  }, [userId, isSignedIn, isClerkLoaded, clearAllLocalStoreData, updateSyncState, fetchData]);
+  }, [
+    userId,
+    isSignedIn,
+    isClerkLoaded,
+    isOffline,
+    clearAllLocalStoreData,
+    updateSyncState,
+    fetchData,
+  ]);
 
   return {
     syncStatus: syncState.status,
     hashMismatch: syncState.status === 'hash_mismatch',
+    isOffline,
+    isOnline: !isOffline,
+    pendingOfflineCount: syncState.pendingOfflineCount,
     isFetchDisabled: false,
     manualSync,
+    drainOfflineQueue,
     forceSave: () => saveData(true),
     forceFetch: () => fetchData(),
     isMismatchDialogOpen: syncState.isMismatchDialogOpen,

@@ -37,10 +37,13 @@ import {
   Download,
   Upload,
   BarChart,
+  ShieldCheck,
+  Scale,
 } from "lucide-react";
 import Link from "next/link";
 import { useSyncManager } from "@/hooks/useSyncManager";
 import { ThemeToggle } from "./ThemeToggle";
+import { PWAInstallButton } from "@/components/pwa/PWAInstallButton";
 import { useNotificationStore } from "@/store/notificationStore";
 import { Badge } from "@/components/ui/badge";
 import { UserButton } from "@/components/auth/UserButton";
@@ -65,12 +68,16 @@ import { Separator } from "./separator";
 interface SidebarMenuItem {
   href: string;
   label: string;
-  icon: React.ElementType; // Changed to ElementType for cleaner rendering
+  icon: React.ElementType;
   adminOnly?: boolean;
+  auditorOnly?: boolean;
+  clientOnly?: boolean;
 }
 
 const menuItems: SidebarMenuItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Client Dashboard", icon: LayoutDashboard },
+  { href: "/admin", label: "Admin Console", icon: ShieldCheck, adminOnly: true },
+  { href: "/auditor", label: "Auditor Console", icon: Scale, auditorOnly: true },
   { href: "/transactions", label: "Transactions", icon: ReceiptText },
   { href: "/debt", label: "Debts", icon: Coins },
   { href: "/investments", label: "Investments", icon: Briefcase },
@@ -197,11 +204,12 @@ export const SidebarContent = React.forwardRef<
   const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
 
   const { user, isLoaded: isClerkLoaded } = useUser();
-  const { isSignedIn } = useAuth();
-  const isUserAdmin = user?.privateMetadata?.role === 'admin';
+  const { isSignedIn, role, isAdmin, isAuditor } = useAuth();
+  const isUserAdmin = isAdmin;
+  const isUserAuditor = isAuditor;
 
   const syncManager = useSyncManager();
-  const { syncStatus, manualSync, isFetchDisabled } = syncManager;
+  const { syncStatus, manualSync, isFetchDisabled, isOffline, pendingOfflineCount } = syncManager;
 
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
@@ -296,6 +304,18 @@ export const SidebarContent = React.forwardRef<
   } else {
     isSyncButtonClickable = true;
     switch (syncStatus) {
+      case 'offline':
+        SyncIcon = CloudOff;
+        syncStatusText = 'Offline';
+        syncTooltipText = 'Operating in offline mode. Local cached data active.';
+        iconColor = 'text-amber-500';
+        break;
+      case 'offline_changes':
+        SyncIcon = UploadCloud;
+        syncStatusText = `${pendingOfflineCount} Queued`;
+        syncTooltipText = `${pendingOfflineCount} offline changes queued. Will auto-sync when connection resumes.`;
+        iconColor = 'text-amber-400';
+        break;
       case 'syncing': SyncIcon = RefreshCw; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
       case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
       case 'local_changes': SyncIcon = UploadCloud; syncStatusText = 'Review & Sync'; syncTooltipText = 'You have unsaved changes. Click to review and sync.'; iconColor = 'text-yellow-500'; break;
@@ -372,8 +392,14 @@ export const SidebarContent = React.forwardRef<
 
         <ScrollArea className="flex-grow">
           <nav className="space-y-1 p-2.5">
-            {menuItems.filter(item => !item.adminOnly || (item.adminOnly && isUserAdmin)).map((item) => {
-              const Icon = item.icon; // Get the component type
+            {menuItems
+              .filter((item) => {
+                if (item.adminOnly) return isUserAdmin;
+                if (item.auditorOnly) return isUserAuditor || isUserAdmin;
+                return true;
+              })
+              .map((item) => {
+                const Icon = item.icon; // Get the component type
               return (
               <TooltipProvider key={item.href} delayDuration={100}>
                 <Tooltip>
@@ -520,7 +546,18 @@ export const SidebarContent = React.forwardRef<
 
             <Separator className="my-2" />
 
-          <ThemeToggle sidebarState={sidebarActualState} />
+            <div className={cn("w-full", sidebarActualState === 'collapsed' ? "flex justify-center" : "")}>
+              <PWAInstallButton
+                collapsed={sidebarActualState === 'collapsed'}
+                className={cn(
+                  "w-full justify-start text-sm h-9",
+                  sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                  "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+              />
+            </div>
+
+            <ThemeToggle sidebarState={sidebarActualState} />
 
           <div className={cn(
               "flex items-center w-full",
@@ -556,9 +593,14 @@ export const SidebarContent = React.forwardRef<
               <Skeleton className={cn("rounded-full", sidebarActualState === 'collapsed' ? "h-7 w-7" : "h-8 w-8")} />
             )}
             {sidebarActualState === 'expanded' && isClerkLoaded && isSignedIn && user && (
-              <span className="ml-2 text-xs text-sidebar-muted-foreground truncate max-w-[calc(100%-2.5rem)]" title={user.primaryEmailAddress?.emailAddress ?? 'No email'}>
+              <div className="ml-2 flex flex-col min-w-0 max-w-[calc(100%-2.5rem)]">
+                <span className="text-xs font-semibold text-sidebar-foreground truncate" title={user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}>
                   {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
-              </span>
+                </span>
+                <span className="text-[10px] capitalize text-primary font-medium">
+                  {role} role
+                </span>
+              </div>
             )}
           </div>
         </div>

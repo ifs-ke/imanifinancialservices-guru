@@ -46,7 +46,7 @@ export default function PrivacyPolicyPage() {
                 <span className="text-primary font-mono text-sm">01.</span> Introduction & Scope
               </h2>
               <p>
-                Imani Financial (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) is committed to safeguarding your personal and financial data. This Privacy Policy is structured in strict compliance with <strong>Kenya&apos;s Data Protection Act, No. 24 of 2019</strong> and the regulations issued by the <strong>Office of the Data Protection Commissioner (ODPC)</strong>.
+                IFS-Guru (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) is committed to safeguarding your personal and financial data. This Privacy Policy is structured in strict compliance with <strong>Kenya&apos;s Data Protection Act, No. 24 of 2019</strong> and the regulations issued by the <strong>Office of the Data Protection Commissioner (ODPC)</strong>.
               </p>
               <p>
                 This policy governs how we collect, use, store, process, and protect your personal data when you use our financial dashboard, budgeting tools, investment trackers, and collaborative weekly reviews.
@@ -119,9 +119,9 @@ export default function PrivacyPolicyPage() {
                 For any inquiries, data access requests, or complaints regarding data privacy under Kenyan law, you may contact our designated Data Protection Officer:
               </p>
               <div className="p-4 bg-muted/40 rounded-xl border border-border/40 text-xs space-y-1 font-mono">
-                <p><strong className="text-foreground">Entity:</strong> Imani Financial DPO Office</p>
+                <p><strong className="text-foreground">Entity:</strong> IFS-Guru DPO Office</p>
                 <p><strong className="text-foreground">Location:</strong> Nairobi, Kenya</p>
-                <p><strong className="text-foreground">Email:</strong> privacy@imanifinancial.com</p>
+                <p><strong className="text-foreground">Email:</strong> privacy@ifs-guru.com</p>
                 <p><strong className="text-foreground">ODPC Registration Reference:</strong> Reg/DPO/2026/08942</p>
               </div>
             </section>

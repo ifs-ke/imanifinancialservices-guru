@@ -1,135 +1,181 @@
 // src/components/budget/BudgetItemFormSheet.tsx
 'use client';
 
-import React, { useState, useEffect, type ChangeEvent } from 'react';
+import React, { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
-import { useBudgetStore } from '@/store/budgetStore'; // Import Zustand store hook
+import { useBudgetStore } from '@/store/budgetStore';
 import type { BudgetItem, BudgetItemCategory } from '@/lib/types';
+import { BudgetItemFormDataSchema, type BudgetItemFormData } from '@/lib/schemas';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 
 interface BudgetItemFormSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  item: BudgetItem | null; // Null for Add, object for Edit
-  initialCategory?: BudgetItemCategory; // Optional initial category for Add
+  item: BudgetItem | null;
+  initialCategory?: BudgetItemCategory;
 }
-
-// Initial form data structure (without period, as it's added by the store)
-const initialFormData: Omit<BudgetItem, 'id' | 'period'> = {
-    description: '',
-    amount: 0,
-    category: 'recurring-expense' // Default category
-};
 
 const BudgetItemFormSheet: React.FC<BudgetItemFormSheetProps> = ({
   isOpen,
   onClose,
   item,
-  initialCategory = 'recurring-expense' // Default if not provided
+  initialCategory = 'recurring-expense'
 }) => {
-  // Use Zustand store hook for budget state management
   const { addBudgetItem, updateBudgetItem } = useBudgetStore();
   const { toast } = useToast();
-  const [formData, setFormData] = useState<Omit<BudgetItem, 'id' | 'period'>>(initialFormData);
 
-  // Effect to populate form when editing or setting initial category for adding
+  const form = useForm<BudgetItemFormData>({
+    resolver: zodResolver(BudgetItemFormDataSchema),
+    defaultValues: {
+      description: '',
+      amount: 0,
+      category: initialCategory,
+    },
+  });
+
   useEffect(() => {
     if (isOpen) {
-        if (item) { // Editing existing item
-            setFormData({
-                description: item.description,
-                amount: item.amount,
-                category: item.category,
-            });
-        } else { // Adding new item
-            setFormData({ ...initialFormData, category: initialCategory });
-        }
+      if (item) {
+        form.reset({
+          description: item.description,
+          amount: item.amount,
+          category: item.category,
+        });
+      } else {
+        form.reset({
+          description: '',
+          amount: 0,
+          category: initialCategory,
+        });
+      }
     }
-  }, [item, initialCategory, isOpen]);
+  }, [item, initialCategory, isOpen, form]);
 
-  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type } = event.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : value
-    }));
+  const onSubmit = (data: BudgetItemFormData) => {
+    try {
+      if (item) {
+        updateBudgetItem({ ...item, ...data });
+        toast({ title: 'Budget Item Updated', description: 'Successfully updated.' });
+      } else {
+        addBudgetItem(data);
+        toast({ title: 'Budget Item Added', description: 'Successfully added to current period.' });
+      }
+      onClose();
+    } catch (error) {
+      console.error("Error saving budget item:", error);
+      toast({ title: 'Error Saving Item', description: 'Could not save the budget item. Please try again.', variant: 'destructive' });
+    }
   };
 
-   const handleSelectChange = (value: BudgetItemCategory) => {
-     setFormData(prev => ({ ...prev, category: value }));
-   };
-
-   const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    const { description, amount, category } = formData;
-
-    if (!description || amount < 0 || !category) {
-      toast({ title: 'Invalid Input', description: 'Please fill out description, category, and use a non-negative amount.', variant: 'destructive' });
-      return;
-    }
-
-    try {
-        if (item) {
-            // Update existing item (ensure period from original item is preserved)
-            updateBudgetItem({ ...item, ...formData });
-            toast({ title: 'Budget Item Updated', description: 'Successfully updated.' });
-        } else {
-            // Add new item (store will automatically add the current period)
-            addBudgetItem(formData);
-            toast({ title: 'Budget Item Added', description: 'Successfully added to current period.' });
-        }
-        onClose(); // Close the sheet on success
-    } catch (error) {
-         console.error("Error saving budget item:", error);
-         toast({ title: 'Error Saving Item', description: 'Could not save the budget item. Please try again.', variant: 'destructive' });
-    }
-   };
-
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{item ? 'Edit Budget Item' : 'Add New Budget Item'}</SheetTitle>
-          <SheetDescription>
-            {item ? 'Update the details for this budget item.' : 'Enter the details for the new budget item for the selected period.'}
-          </SheetDescription>
-        </SheetHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="form-category" className="text-right">Category</Label>
-                 <Select name="category" value={formData.category} onValueChange={handleSelectChange} required>
-                    <SelectTrigger id="form-category" className="col-span-3">
-                    <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="income">Income</SelectItem>
-                        <SelectItem value="recurring-expense">Recurring Expense</SelectItem>
-                        <SelectItem value="one-time-expense">One-Time Expense</SelectItem>
-                        <SelectItem value="goal">Goal</SelectItem>
-                        <SelectItem value="debt">Debt Allocation</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="form-description" className="text-right">Description</Label>
-                <Input id="form-description" name="description" value={formData.description} onChange={handleInputChange} className="col-span-3" placeholder="e.g., Salary, Rent, Savings" required />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="form-amount" className="text-right">Amount (KES)</Label>
-                <Input id="form-amount" name="amount" type="number" step="0.01" min="0" value={formData.amount} onChange={handleInputChange} className="col-span-3" required />
-            </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px] rounded-2xl border border-border/50 shadow-lg p-6">
+        <DialogHeader className="space-y-1.5 text-left">
+          <DialogTitle className="text-base font-bold tracking-tight">
+            {item ? 'Edit Budget Item' : 'Add New Budget Item'}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+            {item ? 'Update the details for this target allocation.' : 'Enter the details for the new budget item for the selected period.'}
+          </DialogDescription>
+        </DialogHeader>
 
-          <SheetFooter className="mt-4">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit">{item ? 'Save Changes' : 'Add Item'}</Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-3">
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-bold text-foreground">Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="h-9 rounded-lg border-border/60 text-xs font-semibold focus:ring-primary">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="rounded-xl border border-border/50 shadow-md">
+                      <SelectItem value="income" className="text-xs">Income</SelectItem>
+                      <SelectItem value="recurring-expense" className="text-xs">Recurring Expense</SelectItem>
+                      <SelectItem value="one-time-expense" className="text-xs">One-Time Expense</SelectItem>
+                      <SelectItem value="goal" className="text-xs">Goal</SelectItem>
+                      <SelectItem value="debt" className="text-xs">Debt Allocation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage className="text-[10px] font-semibold text-rose-500" />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-bold text-foreground">Description</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="e.g., Salary, Rent, Savings" 
+                      className="h-9 rounded-lg border-border/60 text-xs font-semibold focus:ring-primary" 
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px] font-semibold text-rose-500" />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="amount"
+              render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-bold text-foreground">Amount (KES)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      min="0" 
+                      className="h-9 rounded-lg border-border/60 font-mono text-xs font-semibold focus:ring-primary"
+                      {...field} 
+                      onChange={e => field.onChange(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage className="text-[10px] font-semibold text-rose-500" />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter className="gap-2 pt-4 sm:space-x-0 border-t border-border/40 mt-2">
+              <DialogClose asChild>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => form.reset()}
+                  className="rounded-lg h-9 text-xs font-bold border-border/50 hover:bg-muted/10"
+                >
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button 
+                type="submit" 
+                size="sm"
+                disabled={form.formState.isSubmitting}
+                className="rounded-lg h-9 text-xs font-bold shadow-sm"
+              >
+                {form.formState.isSubmitting ? "Saving..." : (item ? 'Save Changes' : 'Add Item')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 };
 

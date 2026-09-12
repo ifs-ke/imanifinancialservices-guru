@@ -2,21 +2,30 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "IFC user profile and role details",
+      "description": "User profile with role-based access control, account status, permissions, and pay-per-use tracking metrics",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "Unique user ID matching Auth UID" },
         "email": { "type": "string", "format": "email", "description": "User email address" },
         "displayName": { "type": "string", "description": "User full name" },
-        "role": { "type": "string", "enum": ["admin", "user"], "description": "Application permission role" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
-        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+        "role": { "type": "string", "enum": ["admin", "auditor", "client"], "description": "Application role determining permissions and dashboard access" },
+        "status": { "type": "string", "enum": ["active", "suspended"], "description": "Account operational status" },
+        "spendingLimitKes": { "type": "number", "description": "Pay-per-use spending quota limit in KES" },
+        "incurredCostKes": { "type": "number", "description": "Total accrued usage cost in KES" },
+        "totalReads": { "type": "number", "description": "Aggregate Firestore reads count" },
+        "totalWrites": { "type": "number", "description": "Aggregate Firestore writes count" },
+        "totalStorageKb": { "type": "number", "description": "Total estimated storage consumed in kilobytes" },
+        "totalApiCalls": { "type": "number", "description": "Total API or sync invocations" },
+        "totalAiForecasts": { "type": "number", "description": "Total AI investment forecasting calls" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account registration timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Profile modification timestamp" },
+        "lastLoginAt": { "type": "string", "format": "date-time", "description": "Most recent authentication timestamp" }
       },
       "required": ["uid", "email", "role"]
     },
     "Admin": {
       "title": "Admin",
-      "description": "Admin authorization entry",
+      "description": "Administrator registry mapping granting full system governance rights",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "Admin user ID" },
@@ -24,18 +33,63 @@
       },
       "required": ["uid"]
     },
-    "AuditLog": {
-      "title": "AuditLog",
-      "description": "System operational and security log entry",
+    "Auditor": {
+      "title": "Auditor",
+      "description": "Auditor registry mapping granting compliance oversight and read-only financial review rights",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "Log ID" },
-        "userId": { "type": "string", "description": "User who initiated the action" },
-        "action": { "type": "string", "description": "Action performed" },
-        "details": { "type": "object", "description": "Contextual metadata" },
-        "timestamp": { "type": "string", "format": "date-time", "description": "Log timestamp" }
+        "uid": { "type": "string", "description": "Auditor user ID" },
+        "assignedAt": { "type": "string", "format": "date-time", "description": "Timestamp when auditor role was granted" }
       },
-      "required": ["id", "action", "timestamp"]
+      "required": ["uid"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System operational, security, and user activity log entry for admin and auditor review",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique log entry ID" },
+        "userId": { "type": "string", "description": "Identifier of the actor or subject" },
+        "userEmail": { "type": "string", "description": "Email address of the actor" },
+        "action": { "type": "string", "description": "Action performed (e.g., USER_UPDATE, ROLE_ASSIGN, DATA_SYNC, BILLING_UPDATE)" },
+        "category": { "type": "string", "enum": ["AUTH", "USER_MANAGEMENT", "DATA_SYNC", "USAGE_BILLING", "SECURITY", "SYSTEM"], "description": "Log classification category" },
+        "level": { "type": "string", "enum": ["INFO", "WARN", "ERROR"], "description": "Severity level" },
+        "details": { "type": "object", "description": "Structured contextual metadata" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "ISO timestamp of event occurrence" }
+      },
+      "required": ["id", "action", "timestamp", "category", "level"]
+    },
+    "PricingRateCard": {
+      "title": "PricingRateCard",
+      "description": "Global pay-per-use unit pricing configuration",
+      "type": "object",
+      "properties": {
+        "readCostKes": { "type": "number", "description": "Cost per Firestore read operation in KES" },
+        "writeCostKes": { "type": "number", "description": "Cost per Firestore write operation in KES" },
+        "storageMbMonthKes": { "type": "number", "description": "Cost per MB of storage per month in KES" },
+        "apiCallCostKes": { "type": "number", "description": "Cost per API/Sync request in KES" },
+        "aiForecastCostKes": { "type": "number", "description": "Cost per AI forecasting run in KES" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last rate card modification timestamp" }
+      },
+      "required": ["readCostKes", "writeCostKes", "storageMbMonthKes", "apiCallCostKes", "aiForecastCostKes"]
+    },
+    "AuditVerification": {
+      "title": "AuditVerification",
+      "description": "Auditor verification stamp and compliance assessment record for a client financial period",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique verification record ID" },
+        "auditorId": { "type": "string", "description": "UID of the verifying auditor" },
+        "auditorEmail": { "type": "string", "description": "Email address of the verifying auditor" },
+        "clientId": { "type": "string", "description": "UID of the audited client" },
+        "clientEmail": { "type": "string", "description": "Email of the audited client" },
+        "periodKey": { "type": "string", "description": "Accounting period key (e.g., 2026-09, Q3-2026)" },
+        "status": { "type": "string", "enum": ["VERIFIED", "FLAGGED", "PENDING_CLARIFICATION"], "description": "Audit outcome status" },
+        "notes": { "type": "string", "description": "Auditor audit notes and statutory observations" },
+        "dpaComplianceConfirmed": { "type": "boolean", "description": "Whether Kenya DPA 2019 compliance check passed" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Signing timestamp" }
+      },
+      "required": ["id", "auditorId", "clientId", "periodKey", "status", "timestamp"]
     },
     "ReviewChatMessage": {
       "title": "ReviewChatMessage",
@@ -56,19 +110,31 @@
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
-      "description": "Individual user accounts and profile data"
+      "description": "Individual user accounts, profile details, roles, permissions, and usage metrics"
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/Admin" },
       "description": "Registry of system administrators"
     },
+    "/auditors/{auditorId}": {
+      "schema": { "$ref": "#/entities/Auditor" },
+      "description": "Registry of authorized financial and compliance auditors"
+    },
     "/auditLogs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
-      "description": "Security and operational audit trail"
+      "description": "System operational, security, and pay-per-use audit logs"
+    },
+    "/auditVerifications/{verificationId}": {
+      "schema": { "$ref": "#/entities/AuditVerification" },
+      "description": "Auditor sign-offs, compliance reviews, and period verification records"
+    },
+    "/config/{configId}": {
+      "schema": { "$ref": "#/entities/PricingRateCard" },
+      "description": "Global application configuration documents including pricing rate cards"
     },
     "/sharedReviews/{shareId}/chats/{messageId}": {
       "schema": { "$ref": "#/entities/ReviewChatMessage" },
-      "description": "Scalable discussion feed messages for shared reviews"
+      "description": "Discussion feed messages for shared reviews"
     }
   }
 }

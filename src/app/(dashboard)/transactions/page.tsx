@@ -82,9 +82,9 @@ import {
 import { useTransactionsStore } from '@/store/transactionsStore';
 import { useBudgetStore } from '@/store/budgetStore';
 import type { TransactionWithId } from '@/lib/types';
-import EditTransactionDialog from './EditTransactionDialog';
-import BatchUpdateTransactionDialog from './BatchUpdateTransactionDialog';
-import { getColumns } from './columns';
+import EditTransactionDialog from '@/components/transactions/EditTransactionDialog';
+import BatchUpdateTransactionDialog from '@/components/transactions/BatchUpdateTransactionDialog';
+import { getColumns } from '@/components/transactions/TransactionColumns';
 import Papa from 'papaparse';
 import { 
   format, 
@@ -454,14 +454,14 @@ export default function TransactionsPage() {
               <div className="text-xs font-medium text-muted-foreground">
                 Total income ({dateLabel.toLowerCase()})
               </div>
-              <div className="text-xl md:text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+              <div className="text-xl md:text-2xl font-bold font-mono text-foreground">
                 +{formatCurrency(metrics.totalIncome)}
               </div>
               <div className="text-[11px] text-muted-foreground">
                 {metrics.incomeCount} incoming records
               </div>
             </div>
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="p-2 rounded-lg bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold">
               <TrendingUp className="h-5 w-5" />
             </div>
           </CardContent>
@@ -473,14 +473,14 @@ export default function TransactionsPage() {
               <div className="text-xs font-medium text-muted-foreground">
                 Total expenses ({dateLabel.toLowerCase()})
               </div>
-              <div className="text-xl md:text-2xl font-bold font-mono text-destructive">
+              <div className="text-xl md:text-2xl font-bold font-mono text-foreground">
                 -{formatCurrency(metrics.totalExpenses)}
               </div>
               <div className="text-[11px] text-muted-foreground">
                 {metrics.expenseCount} outgoing records
               </div>
             </div>
-            <div className="p-2 rounded-lg bg-destructive/10 text-destructive">
+            <div className="p-2 rounded-lg bg-muted text-muted-foreground">
               <TrendingDown className="h-5 w-5" />
             </div>
           </CardContent>
@@ -494,18 +494,18 @@ export default function TransactionsPage() {
               </div>
               <div className={cn(
                 "text-xl md:text-2xl font-bold font-mono",
-                metrics.netFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                metrics.netFlow >= 0 ? "text-navy dark:text-gold" : "text-foreground"
               )}>
                 {metrics.netFlow >= 0 ? `+${formatCurrency(metrics.netFlow)}` : `-${formatCurrency(Math.abs(metrics.netFlow))}`}
               </div>
               <div className={cn(
                 "text-[11px] font-medium font-mono",
-                metrics.netFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                metrics.netFlow >= 0 ? "text-navy dark:text-gold" : "text-muted-foreground"
               )}>
                 {metrics.percentageCashflow >= 0 ? `+${metrics.percentageCashflow.toFixed(1)}%` : `${metrics.percentageCashflow.toFixed(1)}%`} cash flow margin
               </div>
             </div>
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+            <div className="p-2 rounded-lg bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold">
               <Scale className="h-5 w-5" />
             </div>
           </CardContent>

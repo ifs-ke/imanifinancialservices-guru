@@ -27,13 +27,13 @@ const ADMIN_EMAILS = ['seanwambua@gmail.com'];
  * Builds a standardized ServerUser object with complete field normalization
  */
 function buildServerUser(id: string, email: string | null, nameOverride?: string | null): ServerUser {
-  const effectiveEmail = email || (id.includes('@') ? id : `${id}@user.imanifinancial.com`);
+  const effectiveEmail = email || (id.includes('@') ? id : `${id}@user.ifs-guru.com`);
   const effectiveName = nameOverride || (email ? email.split('@')[0] : 'IFC Member');
   const nameParts = effectiveName.trim().split(' ');
   const firstName = nameParts[0] || 'IFC';
   const lastName = nameParts.slice(1).join(' ') || 'Member';
   const isAdmin = effectiveEmail ? ADMIN_EMAILS.includes(effectiveEmail.toLowerCase()) : false;
-  const role: AppRole = isAdmin ? 'admin' : 'user';
+  const role: AppRole = isAdmin ? 'admin' : 'client';
 
   return {
     id,
@@ -103,7 +103,7 @@ export async function currentUser(): Promise<ServerUser | null> {
     }
 
     if (effectiveId === 'demo-user-alex-uid') {
-      return buildServerUser('demo-user-alex-uid', 'demo.member@imanifinancial.com', 'Demo Member');
+      return buildServerUser('demo-user-alex-uid', 'demo.member@ifs-guru.com', 'Demo Member');
     }
 
     // Try decoding basic payload if token is present

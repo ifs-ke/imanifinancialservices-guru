@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <!-- Background with rounded squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#grad1)" />
+  
+  <!-- Subtle Inner Border -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4" />
+
+  <!-- Center Graphic: Financial Growth & Chart Arrows -->
+  <g transform="translate(106, 106)" stroke="#ffffff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Trend upward curve -->
+    <polyline points="20,220 100,140 180,180 280,60" stroke="url(#glow)" stroke-width="28" />
+    <polyline points="210,60 280,60 280,130" stroke="url(#glow)" stroke-width="28" />
+    
+    <!-- Bar charts -->
+    <rect x="25" y="220" width="30" height="60" rx="6" fill="#ffffff" fill-opacity="0.8" stroke="none" />
+    <rect x="95" y="150" width="30" height="130" rx="6" fill="#ffffff" fill-opacity="0.9" stroke="none" />
+    <rect x="165" y="190" width="30" height="90" rx="6" fill="#ffffff" fill-opacity="0.85" stroke="none" />
+    <rect x="235" y="100" width="30" height="180" rx="6" fill="#ffffff" stroke="none" />
+  </g>
+</svg>

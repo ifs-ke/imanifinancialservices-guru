@@ -1,6 +1,21 @@
 @import "tailwindcss";
 
 @theme {
+  --font-jakarta: var(--font-jakarta), 'Plus Jakarta Sans', sans-serif;
+  --font-sans: var(--font-jakarta), 'Plus Jakarta Sans', sans-serif;
+
+  --color-navy: #0F2D5C;
+  --color-navy-mid: #1A3F7A;
+  --color-navy-light: #2C5282;
+  --color-navy-pale: #EBF0FA;
+
+  --color-gold: #C9971A;
+  --color-gold-bright: #D4AF37;
+
+  --color-off-white: #F7F9FC;
+  --color-slate-deep: #0F172A;
+  --color-steel: #334155;
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
@@ -36,94 +51,128 @@
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
+  --radius: 0.625rem;
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-pulse-glow: pulse-glow 3s ease-in-out infinite;
+  --animate-slide-up: slide-up 0.5s ease-out;
+  --animate-pulse-subtle: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 15px rgba(201, 151, 26, 0.2), 0 0 30px rgba(201, 151, 26, 0.1);
+    }
+    50% {
+      box-shadow: 0 0 25px rgba(212, 175, 55, 0.4), 0 0 50px rgba(201, 151, 26, 0.2);
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-subtle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.1); }
+  }
 }
 
 body {
-  font-family: var(--font-inter), Arial, Helvetica, sans-serif; /* Updated font family */
+  font-family: var(--font-jakarta), 'Plus Jakarta Sans', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* Pure White */
-    --foreground: 0 0% 9%; /* Charcoal Black */
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    /* Light Mode: off-white background (210 40% 98%), navy primary (#0F2D5C), gold accent (#C9971A) */
+    --background: 210 40% 98%; /* #F7F9FC Off-white */
+    --foreground: 222 47% 11%; /* #0F172A Slate Deep */
+    --card: 0 0% 100%; /* Pure white surface */
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
-    --primary: 0 0% 9%; /* Solid Black */
-    --primary-foreground: 0 0% 98%; /* White text */
-    --secondary: 0 0% 96.1%; /* Near White/Light Gray */
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%; /* Medium Slate Gray */
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%; /* Subtle danger red */
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 72% 21%; /* #0F2D5C Navy */
+    --primary-foreground: 210 40% 98%; /* #F7F9FC Off-white */
+    --secondary: 220 55% 95%; /* #EBF0FA Navy Pale */
+    --secondary-foreground: 217 72% 21%; /* Navy */
+    --muted: 215 30% 92%;
+    --muted-foreground: 215 25% 35%; /* #334155 Steel */
+    --accent: 43 77% 45%; /* #C9971A Gold */
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 83.1%; /* Solid Neutral-300 border */
-    --input: 0 0% 83.1%;
-    --ring: 0 0% 9%;
-    --radius: 0.5rem;
+    --border: 214 30% 88%;
+    --input: 214 30% 88%;
+    --ring: 43 77% 45%; /* Gold ring */
+    --radius: 0.625rem;
 
-    /* Monochrome Chart Colors (Light) */
-    --chart-1: 0 0% 9%;
-    --chart-2: 0 0% 30%;
-    --chart-3: 0 0% 50%;
-    --chart-4: 0 0% 70%;
-    --chart-5: 0 0% 85%;
+    /* Chart Colors (Light) */
+    --chart-1: 217 72% 21%; /* Navy */
+    --chart-2: 43 77% 45%;  /* Gold */
+    --chart-3: 217 64% 29%; /* Navy Mid */
+    --chart-4: 46 65% 52%;  /* Gold Bright */
+    --chart-5: 214 49% 34%; /* Navy Light */
 
-    /* Sidebar Monochrome Theme (Light) */
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 15%;
-    --sidebar-primary: 0 0% 9%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 0 0% 94%;
-    --sidebar-accent-foreground: 0 0% 9%;
-    --sidebar-border: 0 0% 92%;
-    --sidebar-ring: 0 0% 9%;
+    /* Sidebar Theme (Light - Navy Primary) */
+    --sidebar-background: 217 72% 21%; /* Navy #0F2D5C */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 43 77% 45%; /* Gold */
+    --sidebar-primary-foreground: 217 72% 21%;
+    --sidebar-accent: 217 64% 29%; /* Navy Mid */
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 50% 28%;
+    --sidebar-ring: 43 77% 45%;
   }
 
   .dark {
-    --background: 0 0% 3.9%; /* Rich Pure Near-Black */
-    --foreground: 0 0% 98%; /* High contrast soft white */
-    --card: 0 0% 6.5%; /* Card offset slightly lighter */
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 6.5%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%; /* Crisp White */
-    --primary-foreground: 0 0% 9%; /* Dark text on white */
-    --secondary: 0 0% 14.9%; /* Charcoal Gray */
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 12.9%;
-    --muted-foreground: 0 0% 63.9%; /* Mid gray */
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 40.6%; /* Pure clean warning */
+    /* Dark Mode: deep navy background (221 70% 10%), gold becomes primary (#D4AF37), navy surfaces for cards/popovers */
+    --background: 221 70% 10%; /* Deep navy #08112B */
+    --foreground: 210 40% 98%; /* Soft off-white */
+    --card: 217 65% 15%; /* Navy surface #0D2244 */
+    --card-foreground: 210 40% 98%;
+    --popover: 217 65% 15%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 46 65% 52%; /* #D4AF37 Gold bright primary in dark mode */
+    --primary-foreground: 221 70% 10%; /* Deep navy text on gold button */
+    --secondary: 217 55% 22%; /* Navy Mid */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 50% 18%;
+    --muted-foreground: 215 25% 65%; /* Steel text */
+    --accent: 43 77% 45%; /* Gold */
+    --accent-foreground: 221 70% 10%;
+    --destructive: 0 62.8% 40.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 20%; /* More visible dark border */
-    --input: 0 0% 20%;
-    --ring: 0 0% 83.1%;
-    --radius: 0.5rem;
+    --border: 217 40% 22%;
+    --input: 217 40% 22%;
+    --ring: 46 65% 52%; /* Gold bright ring */
+    --radius: 0.625rem;
 
-    /* Monochrome Chart Colors (Dark) */
-    --chart-1: 0 0% 98%;
-    --chart-2: 0 0% 80%;
-    --chart-3: 0 0% 60%;
-    --chart-4: 0 0% 40%;
-    --chart-5: 0 0% 20%;
+    /* Chart Colors (Dark) */
+    --chart-1: 46 65% 52%;  /* Gold Bright */
+    --chart-2: 214 49% 45%; /* Navy Light */
+    --chart-3: 43 77% 45%;  /* Gold */
+    --chart-4: 220 55% 75%; /* Navy Pale */
+    --chart-5: 217 64% 35%; /* Navy Mid */
 
-    /* Sidebar Monochrome Theme (Dark) */
-    --sidebar-background: 0 0% 5%;
-    --sidebar-foreground: 0 0% 92%;
-    --sidebar-primary: 0 0% 98%;
-    --sidebar-primary-foreground: 0 0% 9%;
-    --sidebar-accent: 0 0% 11%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 10%;
-    --sidebar-ring: 0 0% 83.1%;
+    /* Sidebar Theme (Dark) */
+    --sidebar-background: 221 75% 8%; /* Deepest Navy */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 46 65% 52%; /* Gold Bright */
+    --sidebar-primary-foreground: 221 70% 10%;
+    --sidebar-accent: 217 60% 16%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 45% 18%;
+    --sidebar-ring: 46 65% 52%;
   }
 }
 
@@ -135,23 +184,71 @@ body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  /* Apply monospace font to elements with font-mono class */
   .font-mono {
-    font-family: var(--font-roboto-mono), monospace; /* Added mono font */
+    font-family: var(--font-roboto-mono), monospace;
   }
 }
 
-@layer utilities {
-  @keyframes pulse-subtle {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.6; transform: scale(1.1); }
-  }
-  .animate-pulse-subtle {
-    animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
+/* Glassmorphism & Custom Surfaces */
+.glass {
+  background: rgba(15, 45, 92, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(201, 151, 26, 0.2);
+}
+.dark .glass {
+  background: rgba(13, 34, 68, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(212, 175, 55, 0.25);
 }
 
-/* HIGH FIDELITY STANDALONE BALANCE SHEET PRINT OVERRIDES */
+.glass-light {
+  background: rgba(247, 249, 252, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(15, 45, 92, 0.1);
+}
+.dark .glass-light {
+  background: rgba(15, 30, 58, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom Gold-Accented Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #C9971A;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #D4AF37;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #C9971A transparent;
+}
+
+/* Standalone Balance Sheet Print Overrides */
 @media print {
   body.print-single-variance-active {
     background: white !important;

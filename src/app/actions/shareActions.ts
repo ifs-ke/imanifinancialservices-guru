@@ -58,12 +58,12 @@ const KNOWN_USERS: UserShareInfo[] = [
   },
   {
     userId: 'demo-user-alex-uid',
-    email: 'demo.member@imanifinancial.com',
+    email: 'demo.member@ifs-guru.com',
     name: 'Alex Morgan (Collaborator)',
   },
   {
     userId: 'user-advisor-jane',
-    email: 'jane.advisor@imanifinancial.com',
+    email: 'jane.advisor@ifs-guru.com',
     name: 'Jane Doe (Financial Advisor)',
   }
 ];
@@ -150,7 +150,7 @@ export async function shareTransactionsReviewApi(params: {
     startDate,
     endDate,
     ownerUserId: ownerId,
-    ownerEmail: ownerUser.email || 'user1@imanifinancial.com',
+    ownerEmail: ownerUser.email || 'user1@ifs-guru.com',
     ownerName: ownerUser.name || 'User 1 (Owner)',
     sharedWithUserId: targetUser.userId,
     sharedWithEmail: targetUser.email,
@@ -192,9 +192,9 @@ export async function shareTransactionsReviewApi(params: {
  */
 export async function shareReviewApi(weekKey: string, targetUserId: string): Promise<void> {
   const currentUserId = getActiveUserId();
-  const targetUser = await searchUserByEmailApi(targetUserId.includes('@') ? targetUserId : `${targetUserId}@imanifinancial.com`) || {
+  const targetUser = await searchUserByEmailApi(targetUserId.includes('@') ? targetUserId : `${targetUserId}@ifs-guru.com`) || {
     userId: targetUserId,
-    email: `${targetUserId}@imanifinancial.com`,
+    email: `${targetUserId}@ifs-guru.com`,
     name: 'Collaborator',
   };
 
@@ -402,7 +402,7 @@ export async function getSharedWithUsersApi(weekKey: string): Promise<UserShareI
     .filter(s => s.periodKey === weekKey && s.status === 'active')
     .map(s => ({
       userId: s.sharedWithUserId,
-      email: s.sharedWithEmail || `${s.sharedWithUserId}@imanifinancial.com`,
+      email: s.sharedWithEmail || `${s.sharedWithUserId}@ifs-guru.com`,
       name: s.sharedWithName || s.sharedWithEmail,
     }));
 }
@@ -597,7 +597,7 @@ export async function streamAIAssistantResponse(
       model: "gemini-3.8-flash",
       contents,
       config: {
-        systemInstruction: "You are an expert AI Financial Advisor at Imani Financial. Your goal is to guide users through their weekly review, analyze their transaction expenses, highlight savings wins, and provide constructive, highly actionable financial strategy advice in Kenya (currency in KES). Keep responses clear, concise, objective, and empathetic.",
+        systemInstruction: "You are an expert AI Financial Advisor at IFS-Guru. Your goal is to guide users through their weekly review, analyze their transaction expenses, highlight savings wins, and provide constructive, highly actionable financial strategy advice in Kenya (currency in KES). Keep responses clear, concise, objective, and empathetic.",
       }
     });
 

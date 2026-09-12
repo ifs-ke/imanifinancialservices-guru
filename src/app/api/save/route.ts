@@ -150,7 +150,7 @@ export async function POST(request: Request) {
     return addCorsHeaders(response);
   }
 
-  const primaryEmail = user.email || user.primaryEmailAddress?.emailAddress || `${userId}@user.imanifinancial.com`;
+  const primaryEmail = user.email || user.primaryEmailAddress?.emailAddress || `${userId}@user.ifs-guru.com`;
 
   try {
     await Promise.allSettled([

@@ -48,7 +48,7 @@ import Link from 'next/link';
 import DebtFormPopover from '@/components/debt/DebtFormPopover';
 import { formatCurrency, cn } from '@/lib/utils';
 import { DataTable } from '@/components/ui/data-table';
-import { getDebtColumns } from './columns';
+import { getDebtColumns } from '@/components/debt/DebtColumns';
 import { Badge } from '@/components/ui/badge';
 
 interface InternalDebtItem extends PublicDebtItem {
