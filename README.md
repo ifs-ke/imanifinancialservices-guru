@@ -356,9 +356,19 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - Added `.npmrc` configuring `legacy-peer-deps=true` and `auto-install-peers=true` for universal package manager resilience.
 - [x] **Vercel Build Target Optimization (`vercel.json`)**:
   - Configured `vercel.json` with `"framework": "vite"`, `"buildCommand": "npm run build"`, `"outputDirectory": "dist"`, and SPA client-side wildcard rewrites (`/.* -> /index.html`).
+### ✅ Phase 47: Container Runtimes & Dependency Resolution Standardization
+- [x] **Container Dependency Installation Optimization**:
+  - Standardized `package.json` package manager declarations to prevent container environment conflicts during automated container provisioning.
+  - Successfully refreshed and resolved all root `node_modules` dependencies via runtime package tooling.
+### ✅ Phase 48: AI Advisor Floating Action Button (FAB) Architecture
+- [x] **De-cluttered Inline Layout & Static Section Removal**:
+  - Removed the static inline "IFS-Guru AI Advisor" card section from both Owner and Shared review page tabs to streamline vertical space and eliminate redundant nested blocks.
+- [x] **Responsive Live Streaming Chat FAB**:
+  - Implemented a floating action button (FAB) fixed at `bottom-6 right-6` with active animated pulse badge indicating `"Live Streaming Active"`.
+  - Added toggleable floating chat modal window with backdrop blur, suggestion chips, Gemini AI coaching streaming, collaborator discussion switching, and responsive close triggers.
 - [x] **Verification Milestone**:
   - Automated test coverage: **15 test suites, 68 unit tests (100% passing)**.
-  - ESLint validation: `0 errors / 0 warnings`.
+  - ESLint verification: `0 errors / 0 warnings`.
   - Production build: `Compiled successfully`.
 
 

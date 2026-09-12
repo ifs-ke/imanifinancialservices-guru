@@ -23,7 +23,8 @@ import {
   CornerDownLeft,
   Loader2,
   CheckCheck,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,8 @@ interface ReviewChatProps {
   commentsCount: number;
   journalNotes?: string;
   onCommentsUpdated?: () => void;
+  onClose?: () => void;
+  isFloating?: boolean;
 }
 
 export function ReviewChat({
@@ -57,7 +60,9 @@ export function ReviewChat({
   transactionsCount,
   commentsCount,
   journalNotes = "",
-  onCommentsUpdated
+  onCommentsUpdated,
+  onClose,
+  isFloating = false
 }: ReviewChatProps) {
   const [chatMode, setChatMode] = useState<'peer' | 'ai'>('ai');
   const [messages, setMessages] = useState<ReviewChatMessage[]>([]);
@@ -243,72 +248,89 @@ export function ReviewChat({
   };
 
   return (
-    <Card className="border border-border/40 bg-card/60 backdrop-blur-sm shadow-sm rounded-2xl flex flex-col h-[580px] overflow-hidden">
+    <Card className={cn(
+      "border border-border/40 bg-card/90 backdrop-blur-md shadow-sm rounded-2xl flex flex-col h-[580px] overflow-hidden",
+      isFloating && "border-0 shadow-none h-full bg-transparent"
+    )}>
       {/* Tab Switcher & Status Header */}
-      <CardHeader className="p-4 border-b border-border/30 bg-muted/20 flex flex-row items-center justify-between shrink-0 space-y-0">
-        <div className="flex items-center gap-2">
+      <CardHeader className="p-3.5 sm:p-4 border-b border-border/30 bg-muted/30 flex flex-row items-center justify-between shrink-0 space-y-0 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {chatMode === 'ai' ? (
-            <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
+            <div className="p-1.5 bg-primary/10 rounded-lg text-primary shrink-0">
               <Sparkles className="h-4 w-4" />
             </div>
           ) : (
-            <div className="p-1.5 bg-sky-500/10 rounded-lg text-sky-500">
+            <div className="p-1.5 bg-sky-500/10 rounded-lg text-sky-500 shrink-0">
               <Users className="h-4 w-4" />
             </div>
           )}
-          <div>
-            <CardTitle className="text-sm font-bold text-foreground">
+          <div className="min-w-0">
+            <CardTitle className="text-xs sm:text-sm font-bold text-foreground truncate">
               {chatMode === 'ai' ? 'IFS-Guru AI Advisor' : 'Collaborator Chat'}
             </CardTitle>
-            <CardDescription className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <CardDescription className="text-[10px] text-muted-foreground flex items-center gap-1 truncate">
               {isOnline ? (
                 <>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" /> Live Streaming Active
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse shrink-0" /> Live Streaming Active
                 </>
               ) : (
                 <>
-                  <AlertCircle className="h-3 w-3 text-amber-500" /> Offline mode (Auto-cached)
+                  <AlertCircle className="h-3 w-3 text-amber-500 shrink-0" /> Offline mode (Auto-cached)
                 </>
               )}
             </CardDescription>
           </div>
         </div>
 
-        {/* Navigation Mode Bar */}
-        <div className="flex bg-muted p-1 rounded-xl items-center border border-border/40 gap-1">
-          <Button
-            variant={chatMode === 'ai' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setChatMode('ai')}
-            className={cn(
-              "h-7 rounded-lg text-[10px] px-2.5 font-semibold transition-all",
-              chatMode === 'ai' && "bg-background text-foreground shadow-sm hover:bg-background"
-            )}
-          >
-            <Sparkles className="mr-1 h-3 w-3 text-primary" /> AI Advisor
-          </Button>
-          <Button
-            variant={chatMode === 'peer' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => {
-              if (!shareRecord) {
-                toast({
-                  title: "Sharing Not Active",
-                  description: "Please share this review using the Share dialog first to engage in collaborator chat.",
-                  variant: "default"
-                });
-                return;
-              }
-              setChatMode('peer');
-            }}
-            className={cn(
-              "h-7 rounded-lg text-[10px] px-2.5 font-semibold transition-all",
-              chatMode === 'peer' && "bg-background text-foreground shadow-sm hover:bg-background",
-              !shareRecord && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            <Users className="mr-1 h-3 w-3 text-sky-500" /> Peer Discussion
-          </Button>
+        {/* Navigation Mode Bar & Close Button */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex bg-muted/80 p-0.5 sm:p-1 rounded-xl items-center border border-border/40 gap-0.5 sm:gap-1">
+            <Button
+              variant={chatMode === 'ai' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setChatMode('ai')}
+              className={cn(
+                "h-6 sm:h-7 rounded-lg text-[10px] px-2 sm:px-2.5 font-semibold transition-all",
+                chatMode === 'ai' && "bg-background text-foreground shadow-xs hover:bg-background"
+              )}
+            >
+              <Sparkles className="mr-1 h-3 w-3 text-primary" /> AI Advisor
+            </Button>
+            <Button
+              variant={chatMode === 'peer' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => {
+                if (!shareRecord) {
+                  toast({
+                    title: "Sharing Not Active",
+                    description: "Please share this review using the Share dialog first to engage in collaborator chat.",
+                    variant: "default"
+                  });
+                  return;
+                }
+                setChatMode('peer');
+              }}
+              className={cn(
+                "h-6 sm:h-7 rounded-lg text-[10px] px-2 sm:px-2.5 font-semibold transition-all",
+                chatMode === 'peer' && "bg-background text-foreground shadow-xs hover:bg-background",
+                !shareRecord && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <Users className="mr-1 h-3 w-3 text-sky-500" /> Peer Discussion
+            </Button>
+          </div>
+
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80"
+              aria-label="Close Chat"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </CardHeader>
 

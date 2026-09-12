@@ -50,7 +50,8 @@ import {
   Check,
   Maximize2,
   Minimize2,
-  RotateCcw
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -175,6 +176,7 @@ export default function WeeklyReviewPage() {
   const [activeTab, setActiveTab] = useState<"owned" | "shared">("owned");
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isFocusJournalMode, setIsFocusJournalMode] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Comment Dialog states
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
@@ -1089,18 +1091,6 @@ export default function WeeklyReviewPage() {
                   <strong className="text-foreground font-medium">Privacy Guaranteed:</strong> Invited peers receive comment-only review permissions. Your raw financial data cannot be edited by reviewers.
                 </div>
               </div>
-
-              {/* Live Share Chat & AI Advisor */}
-              <ReviewChat
-                shareRecord={activeOwnedSharedRecord}
-                currentUserId={userId || 'local_user'}
-                currentUserName={user?.fullName || user?.email?.split('@')[0] || 'Owner'}
-                currentUserRole="owner"
-                transactionsCount={scopedTransactions.length}
-                commentsCount={commentsCountForCurrentPeriod}
-                journalNotes={journalEntry}
-                onCommentsUpdated={loadOwnerShares}
-              />
             </div>
           </div>
         </TabsContent>
@@ -1256,18 +1246,6 @@ export default function WeeklyReviewPage() {
                       />
                     </CardContent>
                   </Card>
-
-                  {/* Shared Review Chat */}
-                  <ReviewChat
-                    shareRecord={activeSharedRecord}
-                    currentUserId={userId || 'local_user'}
-                    currentUserName={user?.fullName || user?.email?.split('@')[0] || 'Reviewer'}
-                    currentUserRole="reviewer"
-                    transactionsCount={scopedTransactions.length}
-                    commentsCount={commentsCountForCurrentPeriod}
-                    journalNotes={journalEntry}
-                    onCommentsUpdated={loadSharedWithMe}
-                  />
                 </div>
               </div>
             </div>
@@ -1409,6 +1387,63 @@ export default function WeeklyReviewPage() {
           }}
         />
       )}
+
+      {/* Floating Action Button (FAB) & Live Chat / AI Advisor Window */}
+      <aside aria-label="AI Advisor Chat" className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 pointer-events-auto">
+        {/* Floating Chat Modal Panel */}
+        {isChatOpen && (
+          <section aria-label="IFS-Guru AI Advisor & Review Chat" className="w-[92vw] max-w-[420px] h-[580px] max-h-[82vh] shadow-2xl rounded-2xl border border-border/80 bg-card/95 backdrop-blur-md overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-5 duration-200 ring-1 ring-black/5 dark:ring-white/10">
+            <ReviewChat
+              shareRecord={activeTab === 'shared' ? activeSharedRecord : activeOwnedSharedRecord}
+              currentUserId={userId || 'local_user'}
+              currentUserName={user?.fullName || user?.email?.split('@')[0] || (activeTab === 'shared' ? 'Reviewer' : 'Owner')}
+              currentUserRole={activeTab === 'shared' ? 'reviewer' : 'owner'}
+              transactionsCount={scopedTransactions.length}
+              commentsCount={commentsCountForCurrentPeriod}
+              journalNotes={journalEntry}
+              onCommentsUpdated={activeTab === 'shared' ? loadSharedWithMe : loadOwnerShares}
+              onClose={() => setIsChatOpen(false)}
+              isFloating={true}
+            />
+          </section>
+        )}
+
+        {/* Chat FAB Trigger Button */}
+        <div className="flex items-center gap-2">
+          {!isChatOpen && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/90 border border-border/60 shadow-md text-[11px] font-medium text-muted-foreground backdrop-blur-sm select-none">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span>Live Streaming Active</span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsChatOpen(prev => !prev)}
+            className={cn(
+              "group relative flex items-center justify-center h-14 w-14 rounded-full shadow-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/40 active:scale-95 cursor-pointer",
+              isChatOpen
+                ? "bg-muted text-foreground hover:bg-muted/80 border border-border"
+                : "bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105"
+            )}
+            aria-label={isChatOpen ? "Close AI Advisor Chat" : "Open IFS-Guru AI Advisor & Review Chat"}
+          >
+            {/* Live Streaming Active Pulsing Indicator */}
+            <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-background" />
+            </span>
+
+            {isChatOpen ? (
+              <X className="h-6 w-6 transition-transform duration-150" />
+            ) : (
+              <div className="relative flex items-center justify-center">
+                <MessageSquare className="h-6 w-6" />
+                <Sparkles className="h-3 w-3 text-amber-300 absolute -top-1 -right-1 animate-pulse" />
+              </div>
+            )}
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }
