@@ -20,6 +20,13 @@ describe('Firestore Connection & Backend Reliability', () => {
         expect(resolvedFirebaseConfig.firestoreDatabaseId).toContain('ai-studio-imanifinancialse');
       }
     });
+
+    it('provides testFirestoreConnection probe that resolves safely in online or offline modes', async () => {
+      const { testFirestoreConnection } = await import('@/lib/firebase');
+      expect(typeof testFirestoreConnection).toBe('function');
+      const connectionResult = await testFirestoreConnection();
+      expect(typeof connectionResult).toBe('boolean');
+    });
   });
 
   describe('handleFirestoreError Diagnostic Serializer', () => {

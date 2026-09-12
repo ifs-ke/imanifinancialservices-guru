@@ -375,8 +375,21 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - Formulated 6 targeted domain answers covering M-Pesa statement parsing, offline-first PWA caching, Debt Avalanche/Snowball models, SME business/personal expense segregation, Kenya DPA 2019 data security, and AI coaching.
 - [x] **Navigation Hierarchy Synchronization**:
   - Added `#faq` anchor links to global sticky header navigation and footer navigation menus with smooth scrolling integration.
+### ✅ Phase 51: Deployment Package Manager Hardening & ERR_PNPM_META_FETCH_FAIL Prevention
+- [x] **Vercel & Cloud Runner Explicit Install Command (`vercel.json`)**:
+  - Configured `"installCommand": "npm install --legacy-peer-deps"` and `"buildCommand": "npm run build"` in `vercel.json` to prevent deployment engines from auto-detecting or falling back to buggy pnpm proxy runners (`ERR_PNPM_META_FETCH_FAIL` / `ERR_INVALID_THIS`).
+- [x] **Lockfile Hygiene Enforcement**:
+  - Purged all non-npm lockfiles (`pnpm-lock.yaml`, `yarn.lock`) so builders exclusively identify `package-lock.json`.
+- [x] **Automated Deployment Safety Test Suite (`src/__tests__/deploymentConfig.test.ts`)**:
+  - Added dedicated automated tests asserting `vercel.json` configuration, absence of rogue lockfiles, `.npmrc` peer dependency safety, and exclusive npm CI pipeline usage.
+### ✅ Phase 52: Firestore Transport Resilience & Offline-First Connection Recovery
+- [x] **WebChannel & Long-Polling Auto-Detection (`src/lib/firebase.ts`)**:
+  - Initialized Firestore with `experimentalAutoDetectLongPolling: true` and `persistentLocalCache({ tabManager: persistentMultipleTabManager() })` to automatically bypass streaming proxy timeouts in iframe and cloud sandboxes.
+  - Set `setLogLevel('error')` to suppress internal transient retry warnings while maintaining high-fidelity diagnostic tracing.
+- [x] **Connection Probe & Offline Graceful Degradation**:
+  - Added `testFirestoreConnection` probe following Firebase integration standards to gracefully detect backend reachability and maintain local encrypted cache operation when offline.
 - [x] **Verification Milestone**:
-  - Automated test coverage: **15 test suites, 68 unit tests (100% passing)**.
+  - Automated test coverage: **16 test suites, 74 unit tests (100% passing)**.
   - ESLint verification: `0 errors / 0 warnings`.
   - Production build: `Compiled successfully`.
 

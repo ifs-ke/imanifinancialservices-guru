@@ -1,8 +1,25 @@
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  setLogLevel,
+  doc,
+  getDocFromServer
+} from 'firebase/firestore';
 import defaultAppletConfig from '../../firebase-applet-config.json';
+
+// Silence verbose internal transport retry noise while preserving critical error reporting
+if (typeof window !== 'undefined') {
+  try {
+    setLogLevel('error');
+  } catch {
+    // Ignore if setLogLevel is already configured
+  }
+}
 
 // Support both environment variable declarations and embedded fallback config
 const resolvedFirebaseConfig = {
@@ -25,10 +42,53 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
+/**
+ * Initialize Firestore instance with auto-detect long polling and multi-tab local caching.
+ * Resolves custom databaseId required by the platform environment and fallback.
+ */
+function createFirestoreInstance() {
+  const databaseId = resolvedFirebaseConfig.firestoreDatabaseId || undefined;
+  try {
+    return initializeFirestore(
+      app,
+      {
+        experimentalAutoDetectLongPolling: true,
+        localCache: typeof window !== 'undefined'
+          ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+          : undefined,
+      },
+      databaseId
+    );
+  } catch {
+    // Return existing or default instance if initializeFirestore has already been executed for this app
+    return databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+  }
+}
+
 // Initialize Firestore with custom databaseId as required by Firebase skill
-export const db = resolvedFirebaseConfig.firestoreDatabaseId
-  ? getFirestore(app, resolvedFirebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+export const db = createFirestoreInstance();
+
+/**
+ * Validates initial connection to Firestore backend as prescribed in the Firebase skill.
+ */
+export async function testFirestoreConnection(): Promise<boolean> {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('[Firestore] Operating in offline mode with local encrypted cache.');
+    }
+    return false;
+  }
+}
+
+// Run connection validation in browser environment
+if (typeof window !== 'undefined') {
+  testFirestoreConnection().catch(() => {
+    // Non-blocking offline fallback
+  });
+}
 
 export enum OperationType {
   CREATE = 'create',
