@@ -20,9 +20,16 @@ import {
   Zap, 
   Layers,
   Wallet,
-  Compass
+  Compass,
+  HelpCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { 
+  Accordion, 
+  AccordionContent, 
+  AccordionItem, 
+  AccordionTrigger 
+} from '@/components/ui/accordion';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from 'next-themes';
 
@@ -35,6 +42,48 @@ interface FeatureItem {
   title: string;
   description: string;
 }
+
+/**
+ * Structured FAQ item for homepage knowledge base.
+ */
+interface FAQItem {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+const FAQ_ITEMS: readonly FAQItem[] = [
+  {
+    id: 'faq-statement-parsing',
+    question: 'How does M-Pesa and bank statement import work?',
+    answer: 'IFS-Guru processes M-Pesa PDF statements, merchant Till receipts, and Kenyan bank export PDFs directly in your browser. Our engine extracts transactions, categorizes expenses, detects duplicate entries, and populates your journal without sending your raw statement documents to third-party servers.'
+  },
+  {
+    id: 'faq-offline-capability',
+    question: 'Can I use IFS-Guru when offline?',
+    answer: 'Yes! IFS-Guru is architected as an Offline-First Progressive Web App (PWA). You can view your ledgers, add transactions, adjust budgets, and draft weekly reviews without an active internet connection. All changes are encrypted and queued locally, then automatically synchronized once connection is restored.'
+  },
+  {
+    id: 'faq-debt-strategies',
+    question: 'Which debt reduction methodologies are supported?',
+    answer: 'We provide automated calculators and amortization tables for both the Debt Avalanche (highest interest rate first for maximum cost savings) and Debt Snowball (smallest balance first for behavioral momentum) payoff strategies, complete with exact projected debt-free milestone dates.'
+  },
+  {
+    id: 'faq-sme-segregation',
+    question: 'How does IFS-Guru assist small businesses and SME owners?',
+    answer: 'We solve the common challenge of co-mingling personal and business funds. IFS-Guru provides separate ledgers for working capital, tracking supplier payables, inventory costs, and owner drawings so you maintain clear cash runway visibility and accurate tax records.'
+  },
+  {
+    id: 'faq-data-security',
+    question: 'How is my financial data protected?',
+    answer: 'Your financial privacy is our highest priority. IFS-Guru implements client-side encryption, granular role-based access control (RBAC), and strict adherence to the Kenya Data Protection Act (DPA 2019). We never sell, monetize, or share your financial records with advertisers.'
+  },
+  {
+    id: 'faq-ai-advisor',
+    question: 'How does the AI Financial Advisor coaching work?',
+    answer: 'Our AI coaching engine is powered by server-side Gemini intelligence tailored for Kenyan economic contexts (KES currency, M-Pesa nuances, and local SME cash flow dynamics). You can launch conversational weekly reviews via the Live Streaming Chat FAB anytime to receive actionable cash flow insights.'
+  }
+];
 
 const PLATFORM_FEATURES: readonly FeatureItem[] = [
   {
@@ -112,6 +161,7 @@ export default function SinglePageHome() {
           <nav className="hidden sm:flex items-center gap-8 text-sm font-medium text-muted-foreground">
             <a href="#hero" className="hover:text-foreground transition-colors">Overview</a>
             <a href="#features" className="hover:text-foreground transition-colors">Features</a>
+            <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -270,7 +320,57 @@ export default function SinglePageHome() {
       </section>
 
       {/* ========================================================================= */}
-      {/* SECTION 3: FOOTER */}
+      {/* SECTION 3: FREQUENTLY ASKED QUESTIONS (FAQ) */}
+      {/* ========================================================================= */}
+      <section id="faq" className="py-20 lg:py-28 border-b border-border/40 scroll-mt-16">
+        <div className="max-w-4xl mx-auto px-6 lg:px-8 space-y-12">
+          
+          {/* Section Header */}
+          <div className="text-center space-y-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold text-xs font-semibold mx-auto">
+              <HelpCircle className="h-3.5 w-3.5" />
+              <span>Help & Guidance</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed font-normal">
+              Everything you need to know about M-Pesa statements, privacy protocols, debt reduction models, and offline operations.
+            </p>
+          </div>
+
+          {/* Accordion List */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-40px' }}
+            transition={{ duration: 0.4 }}
+            className="rounded-2xl border border-border/70 bg-card p-4 sm:p-6 shadow-xs"
+          >
+            <Accordion type="single" collapsible className="w-full space-y-3">
+              {FAQ_ITEMS.map((faq) => (
+                <AccordionItem 
+                  key={faq.id} 
+                  value={faq.id}
+                  id={faq.id}
+                  className="border border-border/50 rounded-xl px-4 sm:px-5 data-[state=open]:border-gold/50 data-[state=open]:bg-muted/30 transition-colors"
+                >
+                  <AccordionTrigger className="text-left text-sm sm:text-base font-semibold text-foreground py-4 hover:no-underline hover:text-gold dark:hover:text-gold-bright transition-colors">
+                    {faq.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-sm text-muted-foreground leading-relaxed pt-1 pb-4">
+                    {faq.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </motion.div>
+
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* SECTION 4: FOOTER */}
       {/* ========================================================================= */}
       <footer id="footer" className="py-14 bg-background text-xs text-muted-foreground">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 space-y-8">
@@ -294,6 +394,7 @@ export default function SinglePageHome() {
             <div className="flex items-center gap-6 text-xs">
               <a href="#hero" className="hover:text-foreground transition-colors">Overview</a>
               <a href="#features" className="hover:text-foreground transition-colors">Features</a>
+              <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
               <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
               <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
             </div>

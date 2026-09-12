@@ -336,10 +336,9 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - Verified icon asset matrix: standard 192x192, 512x512, and maskable icons.
   - Tested PWA platform installation triggers, iOS Safari user-agent detection, and standalone display mode matching.
 
-### ✅ Phase 44: PDF Export, Import/Export Engine & pnpm Package Manager Default
-- [x] **pnpm as Default Package Manager (`package.json`, `.github/workflows/test.yml`)**:
-  - Configured `"packageManager": "pnpm@9.15.4"` in `package.json` to establish pnpm as the authoritative package manager.
-  - Integrated `pnpm/action-setup@v4` in GitHub Actions CI workflow with pnpm store caching.
+### ✅ Phase 44: PDF Export, Import/Export Engine & Print Media Subsystem
+- [x] **Universal Dependency Management**:
+  - Maintained npm compatibility across standard Node.js LTS toolchains with `.npmrc` peer dependency handling.
 - [x] **PDF Export & Print Layout Testing (`src/__tests__/pdfExport.test.ts`)**:
   - Tested print media isolation styles (`@media print`, `.no-print`), background color resets, full-width container overrides, and grid columns.
   - Tested print break avoidance rules (`.print-break-inside-avoid`, `.print-page-break`).
@@ -366,6 +365,16 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
 - [x] **Responsive Live Streaming Chat FAB**:
   - Implemented a floating action button (FAB) fixed at `bottom-6 right-6` with active animated pulse badge indicating `"Live Streaming Active"`.
   - Added toggleable floating chat modal window with backdrop blur, suggestion chips, Gemini AI coaching streaming, collaborator discussion switching, and responsive close triggers.
+### ✅ Phase 49: npm Package Manager Standardization
+- [x] **Standard npm Workflow & CI Integration**:
+  - Standardized all scripts, CI actions (`.github/workflows/test.yml`), and deployment recipes on `npm` (`npm install --legacy-peer-deps`, `npm test`, `npm run lint`, `npm run build`).
+  - Configured GitHub Actions with native `actions/setup-node@v4` caching (`cache: 'npm'`) across Node.js 20.x and 22.x LTS matrix.
+### ✅ Phase 50: Landing Page Knowledge Base & FAQ Architecture
+- [x] **Accessible FAQ Accordion Subsystem (`src/app/page.tsx`)**:
+  - Implemented an animated, keyboard-accessible FAQ accordion section with smooth expansion transitions powered by Radix UI and Motion.
+  - Formulated 6 targeted domain answers covering M-Pesa statement parsing, offline-first PWA caching, Debt Avalanche/Snowball models, SME business/personal expense segregation, Kenya DPA 2019 data security, and AI coaching.
+- [x] **Navigation Hierarchy Synchronization**:
+  - Added `#faq` anchor links to global sticky header navigation and footer navigation menus with smooth scrolling integration.
 - [x] **Verification Milestone**:
   - Automated test coverage: **15 test suites, 68 unit tests (100% passing)**.
   - ESLint verification: `0 errors / 0 warnings`.
