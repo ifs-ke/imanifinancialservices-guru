@@ -20,6 +20,7 @@ export type IncomeCategory = IncomeCategoryZod;
 
 
 export interface TransactionWithId {
+  userId?: string;
   id: string;
   date: Date;
   description: string;
@@ -40,14 +41,25 @@ export interface StatementItem {
 
 
 export type DebtTerm = DebtTermZod;
+export type DebtClassification = 'personal' | 'institutional';
+export type DebtStatus = 'active' | 'overdue' | 'paid_off' | 'in_grace';
+export type DebtSecurityType = 'unsecured' | 'secured';
 
 export interface DebtItem {
+    userId?: string;
     id: string;
+    date: string; // ISO date string (YYYY-MM-DD)
+    dueDate?: string | null; // Expected payoff or maturity date (YYYY-MM-DD)
     description: string;
+    classification: DebtClassification;
     principal: number;
-    interestRate: number;
+    interestRate?: number | null; // Optional interest rate (0 or null for interest-free loans)
     minPayment: number;
     term: DebtTerm;
+    status?: DebtStatus;
+    securityType?: DebtSecurityType;
+    securityDescription?: string | null;
+    notes?: string | null;
 }
 
 
@@ -119,11 +131,13 @@ export interface SharedReviewRecord {
   sharedWithName?: string;
   sharedWithEmail?: string;
   permissions: 'comment_only';
-  status: 'active' | 'revoked';
+  status: 'pending' | 'active' | 'declined' | 'revoked';
   transactionsSnapshot?: TransactionWithId[];
   comments: Record<string, CollaboratorComment[]>;
   journal?: string;
   createdAt: string;
+  acceptedAt?: string;
+  declinedAt?: string;
   revokedAt?: string;
 }
 

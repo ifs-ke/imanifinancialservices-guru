@@ -16,7 +16,13 @@ import {
   ArrowRight,
   Check,
   RotateCcw,
-  ShieldCheck
+  ShieldCheck,
+  Zap,
+  Compass,
+  FileSpreadsheet,
+  Layers,
+  Sparkles,
+  Activity
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +65,7 @@ import { useStatementStore } from '@/store/statementStore';
 import { useInvestmentStore } from '@/store/investmentStore';
 import { useBudgetStore } from '@/store/budgetStore';
 import { calculateBudgetThresholdWarnings } from '@/lib/budgetThresholdUtils';
+import { isDebtActive } from '@/lib/debtUtils';
 import BudgetThresholdWarningCard from '@/components/dashboard/BudgetThresholdWarningCard';
 
 export type DateFilterPreset = 'this-month' | 'last-month' | 'last-30' | 'last-90' | 'ytd' | 'all' | 'custom';
@@ -220,7 +227,7 @@ export default function DashboardPage() {
     const investedAssets = investmentItems.reduce((sum, item) => sum + (Number(item?.currentValue || item?.amountInvested) || 0), 0);
     const totalAssets = liquidAssets + investedAssets;
 
-    const totalDebt = debts.reduce((sum, debt) => sum + (Number(debt?.principal) || 0), 0);
+    const totalDebt = debts.filter(isDebtActive).reduce((sum, debt) => sum + (Number(debt?.principal) || 0), 0);
     const otherLiabilities = otherLiabilityItems.reduce((sum, item) => sum + (Number(item?.amount) || 0), 0);
     const totalLiabilities = totalDebt + otherLiabilities;
 
@@ -493,92 +500,72 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col w-full min-h-screen p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
-      {/* Header with date range controls */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-2 border-b border-border/40">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Financial dashboard
-          </h1>
-          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-            Summary of net worth, cash flow, and asset allocation.
-          </p>
+      
+      {/* ========================================================= */}
+      {/* EXECUTIVE HERO BANNER (Homepage Design Language) */}
+      {/* ========================================================= */}
+      <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs relative overflow-hidden transition-all hover:border-gold/30">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative z-10">
+          
+          <div className="space-y-2">
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground leading-tight">
+              Financial Dashboard
+            </h1>
+            <p className="text-xs md:text-sm text-muted-foreground max-w-2xl font-normal leading-relaxed">
+              Consolidated real-time overview of net worth, cash flow, asset allocation, and emergency runway with zero-based envelope tracking.
+            </p>
+          </div>
+
+          {/* Action CTAs */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto shrink-0">
+            <Link href="/transactions">
+              <Button id="dashboard-record-tx-btn" className="h-10 px-4 text-xs font-semibold rounded-xl gap-2 shadow-xs bg-navy text-gold hover:bg-navy-mid dark:bg-gold dark:text-navy dark:hover:bg-gold-bright w-full sm:w-auto">
+                <PlusCircle className="h-4 w-4" />
+                <span>Record transaction</span>
+              </Button>
+            </Link>
+          </div>
+
         </div>
 
-        {/* Date presets and quick action */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <div className="flex items-center p-1 bg-muted/60 rounded-xl border border-border/50 text-xs">
-            <button
-              type="button"
-              onClick={() => setDatePreset('this-month')}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
-                datePreset === 'this-month' 
-                  ? "bg-background text-foreground shadow-xs font-semibold" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              This month
-            </button>
-            <button
-              type="button"
-              onClick={() => setDatePreset('last-month')}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
-                datePreset === 'last-month' 
-                  ? "bg-background text-foreground shadow-xs font-semibold" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Last month
-            </button>
-            <button
-              type="button"
-              onClick={() => setDatePreset('last-30')}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
-                datePreset === 'last-30' 
-                  ? "bg-background text-foreground shadow-xs font-semibold" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              30 days
-            </button>
-            <button
-              type="button"
-              onClick={() => setDatePreset('last-90')}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
-                datePreset === 'last-90' 
-                  ? "bg-background text-foreground shadow-xs font-semibold" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              90 days
-            </button>
-            <button
-              type="button"
-              onClick={() => setDatePreset('ytd')}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
-                datePreset === 'ytd' 
-                  ? "bg-background text-foreground shadow-xs font-semibold" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              YTD
-            </button>
-            <button
-              type="button"
-              onClick={() => setDatePreset('all')}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
-                datePreset === 'all' 
-                  ? "bg-background text-foreground shadow-xs font-semibold" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              All
-            </button>
+        {/* Date Filter Bar */}
+        <div className="mt-6 pt-4 border-t border-border/50 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+              <CalendarIcon className="h-3.5 w-3.5 text-gold" /> Active range:
+            </span>
+            <span className="text-xs font-semibold text-foreground bg-muted/60 px-2.5 py-1 rounded-lg border border-border/40 font-mono">
+              {selectionSubtitle}
+            </span>
+          </div>
+
+          {/* Date presets pill bar */}
+          <div className="flex items-center p-1 bg-muted/60 rounded-xl border border-border/50 text-xs flex-wrap gap-0.5">
+            {(['this-month', 'last-month', 'last-30', 'last-90', 'ytd', 'all'] as const).map((preset) => {
+              const labels: Record<string, string> = {
+                'this-month': 'This month',
+                'last-month': 'Last month',
+                'last-30': '30 days',
+                'last-90': '90 days',
+                'ytd': 'YTD',
+                'all': 'All'
+              };
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setDatePreset(preset)}
+                  className={cn(
+                    "px-2.5 py-1.5 rounded-lg font-medium transition-all cursor-pointer",
+                    datePreset === preset 
+                      ? "bg-navy text-gold dark:bg-gold dark:text-navy shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {labels[preset]}
+                </button>
+              );
+            })}
 
             {/* Custom range popover */}
             <Popover open={isCustomOpen} onOpenChange={setIsCustomOpen}>
@@ -588,7 +575,7 @@ export default function DashboardPage() {
                   className={cn(
                     "px-2.5 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer",
                     datePreset === 'custom' 
-                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      ? "bg-navy text-gold dark:bg-gold dark:text-navy shadow-xs font-semibold" 
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -667,29 +654,31 @@ export default function DashboardPage() {
       />
 
       {/* ========================================================= */}
-      {/* 🍱 BENTO GRID (Clean, simple, sentence case) */}
+      {/* 🍱 HIGH-CONTRAST METRIC CARDS & BENTO GRID */}
       {/* ========================================================= */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
-
-        {/* Tile 1: Total net worth */}
-        <Card className="lg:col-span-4 border border-border shadow-xs bg-card flex flex-col justify-between">
-          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+      
+      {/* Top Metric Cards (4 Grid Columns) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* Metric 1: Total Net Worth */}
+        <Card className="border border-border/80 shadow-xs bg-card hover:border-gold/40 transition-all rounded-2xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-2">
             <div>
-              <div className="text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-semibold text-muted-foreground block">
                 Total net worth
-              </div>
-              <div className="text-[11px] text-muted-foreground/80">
-                Current balance
-              </div>
+              </span>
+              <span className="text-[11px] text-muted-foreground/80">
+                Asset & liability balance
+              </span>
             </div>
-            <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-              <Scale className="h-4 w-4" />
+            <div className="w-10 h-10 rounded-xl bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center shrink-0">
+              <Scale className="h-5 w-5" />
             </div>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 space-y-2">
+          </div>
+          <div className="space-y-2 pt-1">
             <div className={cn(
-               "text-2xl lg:text-3xl font-bold font-mono tracking-tight",
-               financialMetrics.netWorth >= 0 ? "text-foreground" : "text-destructive"
+              "text-2xl lg:text-3xl font-extrabold font-mono tracking-tight",
+              financialMetrics.netWorth >= 0 ? "text-foreground" : "text-destructive"
             )}>
               {formatCurrency(financialMetrics.netWorth)}
             </div>
@@ -697,80 +686,115 @@ export default function DashboardPage() {
               <span>Assets: <strong className="text-foreground">{formatCurrency(financialMetrics.totalAssets)}</strong></span>
               <span>Liabilities: <strong className="text-muted-foreground">{formatCurrency(financialMetrics.totalLiabilities)}</strong></span>
             </div>
-          </CardContent>
+          </div>
         </Card>
 
-        {/* Tile 2: Income with dynamic duration */}
-        <Card className="lg:col-span-4 border border-border shadow-xs bg-card flex flex-col justify-between">
-          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+        {/* Metric 2: Income */}
+        <Card className="border border-border/80 shadow-xs bg-card hover:border-gold/40 transition-all rounded-2xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-2">
             <div>
-              <div className="text-xs font-medium text-muted-foreground">
-                Income ({selectionDurationLabel})
-              </div>
-              <div className="text-[11px] text-muted-foreground/80">
-                {selectionSubtitle}
-              </div>
+              <span className="text-xs font-semibold text-muted-foreground block">
+                Period income
+              </span>
+              <span className="text-[11px] text-muted-foreground/80">
+                {selectionDurationLabel}
+              </span>
             </div>
-            <div className="p-1.5 rounded-md bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold">
-              <TrendingUp className="h-4 w-4" />
+            <div className="w-10 h-10 rounded-xl bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center shrink-0">
+              <TrendingUp className="h-5 w-5" />
             </div>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-2xl lg:text-3xl font-bold font-mono text-foreground tracking-tight">
+          </div>
+          <div className="space-y-2 pt-1">
+            <div className="text-2xl lg:text-3xl font-extrabold font-mono text-foreground tracking-tight">
               +{formatCurrency(financialMetrics.periodIncome)}
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40">
               <span>Retention rate:</span>
-              <span className="font-mono font-semibold text-navy dark:text-gold">
+              <span className="font-mono font-semibold text-navy dark:text-gold bg-transparent">
                 {financialMetrics.savingsRate.toFixed(1)}%
               </span>
             </div>
-          </CardContent>
+          </div>
         </Card>
 
-        {/* Tile 3: Expenses with dynamic duration */}
-        <Card className="lg:col-span-4 border border-border shadow-xs bg-card flex flex-col justify-between">
-          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+        {/* Metric 3: Expenses */}
+        <Card className="border border-border/80 shadow-xs bg-card hover:border-gold/40 transition-all rounded-2xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-2">
             <div>
-              <div className="text-xs font-medium text-muted-foreground">
-                Expenses ({selectionDurationLabel})
-              </div>
-              <div className="text-[11px] text-muted-foreground/80">
-                {selectionSubtitle}
-              </div>
+              <span className="text-xs font-semibold text-muted-foreground block">
+                Period expenses
+              </span>
+              <span className="text-[11px] text-muted-foreground/80">
+                {selectionDurationLabel}
+              </span>
             </div>
-            <div className="p-1.5 rounded-md bg-muted text-muted-foreground">
-              <TrendingDown className="h-4 w-4" />
+            <div className="w-10 h-10 rounded-xl bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center shrink-0">
+              <TrendingDown className="h-5 w-5" />
             </div>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-2xl lg:text-3xl font-bold font-mono text-foreground tracking-tight">
+          </div>
+          <div className="space-y-2 pt-1">
+            <div className="text-2xl lg:text-3xl font-extrabold font-mono text-foreground tracking-tight">
               -{formatCurrency(financialMetrics.periodExpenses)}
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40">
               <span>Net cash flow:</span>
               <span className={cn(
                 "font-mono font-semibold",
-                financialMetrics.netCashFlow >= 0 ? "text-navy dark:text-gold" : "text-muted-foreground"
+                financialMetrics.netCashFlow >= 0 ? "text-navy dark:text-gold" : "text-destructive"
               )}>
                 {financialMetrics.netCashFlow >= 0 ? `+${formatCurrency(financialMetrics.netCashFlow)}` : `-${formatCurrency(Math.abs(financialMetrics.netCashFlow))}`}
               </span>
             </div>
-          </CardContent>
+          </div>
         </Card>
 
-        {/* Bento Centerpiece: Cash flow chart dynamically synced to selected date range (8 cols) */}
-        <Card className="lg:col-span-8 border border-border shadow-xs bg-card flex flex-col justify-between">
-          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+        {/* Metric 4: Liquidity Runway */}
+        <Card className="border border-border/80 shadow-xs bg-card hover:border-gold/40 transition-all rounded-2xl p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-sm font-semibold text-foreground">
+              <span className="text-xs font-semibold text-muted-foreground block">
+                Liquidity runway
+              </span>
+              <span className="text-[11px] text-muted-foreground/80">
+                Emergency coverage
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center shrink-0">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="space-y-2 pt-1">
+            <div className="text-2xl lg:text-3xl font-extrabold font-mono text-foreground tracking-tight flex items-baseline justify-between">
+              <span>{financialMetrics.liquidityRatio.toFixed(1)} <span className="text-xs font-normal text-muted-foreground">mos</span></span>
+              <Badge variant="outline" className={cn("text-[10px] font-semibold py-0.5 px-2", liquidityHealth.color)}>
+                {liquidityHealth.label}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border/40 font-mono">
+              <span>Monthly burn:</span>
+              <span className="font-semibold text-foreground">{formatCurrency(financialMetrics.monthlyExpenses)}</span>
+            </div>
+          </div>
+        </Card>
+
+      </div>
+
+      {/* Main Bento Grid: Cash Flow Chart & Asset Allocation */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
+
+        {/* Bento Centerpiece: Cash Flow Area Chart (8 cols) */}
+        <Card className="lg:col-span-8 border border-border/80 shadow-xs bg-card rounded-2xl flex flex-col justify-between">
+          <CardHeader className="p-5 pb-2 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                <Activity className="h-4 w-4 text-gold dark:text-gold-bright" />
                 Cash flow overview
               </CardTitle>
-              <CardDescription className="text-xs text-muted-foreground">
+              <CardDescription className="text-xs text-muted-foreground mt-0.5">
                 {chartSubtitle}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-4 text-xs font-medium">
+            <div className="flex items-center gap-4 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-foreground">
                 <span className="w-2.5 h-2.5 rounded-full bg-navy dark:bg-gold" /> Income
               </span>
@@ -779,17 +803,17 @@ export default function DashboardPage() {
               </span>
             </div>
           </CardHeader>
-          <CardContent className="p-4 pt-2 flex-1 flex flex-col justify-center">
-            <div className="h-[280px] lg:h-[320px] w-full">
+          <CardContent className="p-5 pt-2 flex-1 flex flex-col justify-center">
+            <div className="h-[290px] lg:h-[330px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="incomeColor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#0F2D5C" stopOpacity={0.35}/>
-                      <stop offset="95%" stopColor="#0F2D5C" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#0F2D5C" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#C9971A" stopOpacity={0.05}/>
                     </linearGradient>
                     <linearGradient id="expenseColor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#64748B" stopOpacity={0.25}/>
+                      <stop offset="5%" stopColor="#64748B" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="#64748B" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
@@ -821,7 +845,7 @@ export default function DashboardPage() {
                     dataKey="income" 
                     name="income"
                     stroke="#0F2D5C" 
-                    strokeWidth={2} 
+                    strokeWidth={2.5} 
                     fillOpacity={1} 
                     fill="url(#incomeColor)" 
                   />
@@ -840,23 +864,24 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Bento Side Stack: Asset allocation + Liquidity ratio (4 cols) */}
+        {/* Bento Side Stack: Asset Allocation + Liquidity (4 cols) */}
         <div className="lg:col-span-4 flex flex-col gap-4">
-          {/* Card A: Asset allocation */}
-          <Card className="border border-border shadow-xs bg-card flex flex-col justify-between">
+          
+          {/* Card A: Asset Allocation Breakdown */}
+          <Card className="border border-border/80 shadow-xs bg-card rounded-2xl flex flex-col justify-between">
             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-sm font-semibold text-foreground">
+              <CardTitle className="text-sm font-bold text-foreground">
                 Asset allocation
               </CardTitle>
-              <Link href="/investments" className="text-xs text-primary hover:underline flex items-center gap-1">
+              <Link href="/statements" className="text-xs text-gold dark:text-gold-bright hover:underline flex items-center gap-1 font-semibold">
                 Details <ArrowRight className="h-3 w-3" />
               </Link>
             </CardHeader>
             <CardContent className="p-4 pt-2 space-y-3">
-              <div className="p-2.5 rounded-lg bg-muted/40 border border-border/40 space-y-1.5">
+              <div className="p-3 rounded-xl bg-muted/40 border border-border/40 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Wallet className="h-3.5 w-3.5 text-primary" /> Liquid accounts
+                    <Wallet className="h-3.5 w-3.5 text-gold" /> Liquid accounts
                   </span>
                   <span className="font-mono font-semibold text-foreground">
                     {formatCurrency(financialMetrics.liquidAssets)}
@@ -870,7 +895,7 @@ export default function DashboardPage() {
                     {formatCurrency(financialMetrics.investedAssets)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
+                <div className="flex items-center justify-between text-xs pt-1.5 border-t border-border/40">
                   <span className="text-muted-foreground flex items-center gap-1.5">
                     <CreditCard className="h-3.5 w-3.5 text-slate-500" /> Total debt
                   </span>
@@ -880,35 +905,35 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Balance ratio bar */}
+              {/* Equity ratio progress bar */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-muted-foreground">
-                  <span>Asset vs debt</span>
-                  <span>{financialMetrics.totalAssets > 0 ? (((financialMetrics.totalAssets - financialMetrics.totalLiabilities) / financialMetrics.totalAssets) * 100).toFixed(0) : 0}% equity</span>
+                  <span>Asset equity share</span>
+                  <span className="font-semibold text-foreground">{financialMetrics.totalAssets > 0 ? (((financialMetrics.totalAssets - financialMetrics.totalLiabilities) / financialMetrics.totalAssets) * 100).toFixed(0) : 0}% equity</span>
                 </div>
-                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden flex">
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden flex">
                   <div 
-                    className="bg-primary h-full transition-all" 
+                    className="bg-navy dark:bg-gold h-full transition-all" 
                     style={{ width: `${financialMetrics.totalAssets > 0 ? Math.min((financialMetrics.netWorth / financialMetrics.totalAssets) * 100, 100) : 0}%` }} 
                   />
                 </div>
               </div>
             </CardContent>
-            <div className="p-2.5 px-4 bg-muted/20 border-t border-border/40 flex justify-between items-center text-xs">
-              <span className="text-muted-foreground">Active assets:</span>
+            <div className="p-2.5 px-4 bg-muted/20 border-t border-border/40 flex justify-between items-center text-xs rounded-b-2xl">
+              <span className="text-muted-foreground">Active holdings:</span>
               <span className="font-semibold text-foreground">{assetItems.length + investmentItems.length} items</span>
             </div>
           </Card>
 
-          {/* Card B: Liquidity ratio */}
-          <Card className="border border-border shadow-xs bg-card flex flex-col justify-between">
+          {/* Card B: Emergency Reserve Coverage */}
+          <Card className="border border-border/80 shadow-xs bg-card rounded-2xl flex flex-col justify-between">
             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
               <div>
-                <CardTitle className="text-sm font-semibold text-foreground">
-                  Liquidity ratio
+                <CardTitle className="text-sm font-bold text-foreground">
+                  Emergency runway
                 </CardTitle>
                 <CardDescription className="text-xs text-muted-foreground">
-                  Emergency runway & coverage
+                  6-month safety buffer target
                 </CardDescription>
               </div>
               <div className={cn("p-1.5 rounded-md", liquidityHealth.bg, liquidityHealth.color)}>
@@ -916,27 +941,12 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-2 space-y-3">
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <div className="text-2xl font-bold font-mono text-foreground tracking-tight">
-                    {financialMetrics.liquidityRatio.toFixed(1)} <span className="text-xs font-normal text-muted-foreground">months</span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    Weighted burn: {formatCurrency(financialMetrics.monthlyExpenses)}/mo ({financialMetrics.monthsAnalyzed} {financialMetrics.monthsAnalyzed === 1 ? 'mo' : 'mos'})
-                  </div>
-                </div>
-                <Badge variant="outline" className={cn("text-[11px] font-medium py-0.5 px-2", liquidityHealth.color)}>
-                  {liquidityHealth.label}
-                </Badge>
-              </div>
-
-              {/* Safety buffer progress bar */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-muted-foreground">
-                  <span>6-month safety target</span>
-                  <span>{Math.min(100, Math.round((financialMetrics.liquidityRatio / 6) * 100))}% funded</span>
+                  <span>Target funding</span>
+                  <span className="font-semibold text-foreground">{Math.min(100, Math.round((financialMetrics.liquidityRatio / 6) * 100))}% funded</span>
                 </div>
-                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden flex">
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden flex">
                   <div 
                     className={cn("h-full transition-all", liquidityHealth.barColor)}
                     style={{ width: `${Math.min(100, (financialMetrics.liquidityRatio / 6) * 100)}%` }} 
@@ -944,26 +954,27 @@ export default function DashboardPage() {
                 </div>
               </div>
             </CardContent>
-            <div className="p-2.5 px-4 bg-muted/20 border-t border-border/40 flex justify-between items-center text-xs">
-              <span className="text-muted-foreground">Liquid share of assets:</span>
+            <div className="p-2.5 px-4 bg-muted/20 border-t border-border/40 flex justify-between items-center text-xs rounded-b-2xl">
+              <span className="text-muted-foreground">Liquid asset share:</span>
               <span className="font-mono font-semibold text-foreground">{financialMetrics.liquidPercentage.toFixed(1)}%</span>
             </div>
           </Card>
+
         </div>
 
-        {/* Bento Bottom Tile: Recent transactions (12 cols) */}
-        <Card className="lg:col-span-12 border border-border shadow-xs bg-card">
+        {/* Bento Bottom Tile: Recent Transactions (12 cols) */}
+        <Card className="lg:col-span-12 border border-border/80 shadow-xs bg-card rounded-2xl">
           <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-sm font-semibold text-foreground">
+              <CardTitle className="text-sm font-bold text-foreground">
                 Recent transactions
               </CardTitle>
               <CardDescription className="text-xs text-muted-foreground">
                 Latest recorded activity
               </CardDescription>
             </div>
-            <Link href="/transactions" className="text-xs text-primary hover:underline flex items-center gap-1">
-              View all <ArrowRight className="h-3 w-3" />
+            <Link href="/transactions" className="text-xs text-gold dark:text-gold-bright hover:underline flex items-center gap-1 font-semibold">
+              View all transactions <ArrowRight className="h-3 w-3" />
             </Link>
           </CardHeader>
           <CardContent className="p-4 pt-1">
@@ -973,24 +984,24 @@ export default function DashboardPage() {
                   const isIncome = tx.amount > 0;
                   const txDate = tx.date instanceof Date ? tx.date : new Date(tx.date);
                   return (
-                    <div key={tx.id} className="py-2.5 flex items-center justify-between gap-3 text-xs first:pt-0 last:pb-0">
+                    <div key={tx.id} className="py-2.5 flex items-center justify-between gap-3 text-xs hover:bg-muted/30 px-2 rounded-lg transition-colors">
                       <div className="flex items-center gap-3 truncate">
                         <div className={cn(
-                          "p-1.5 rounded-md shrink-0",
+                          "p-2 rounded-lg shrink-0",
                           isIncome ? "bg-navy-pale dark:bg-navy-mid text-navy dark:text-gold" : "bg-muted text-muted-foreground"
                         )}>
-                          {isIncome ? <ArrowDownRight className="h-3.5 w-3.5" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
+                          {isIncome ? <ArrowDownRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
                         </div>
                         <div className="truncate">
-                          <div className="font-medium text-foreground truncate">{tx.description}</div>
+                          <div className="font-semibold text-foreground truncate">{tx.description}</div>
                           <div className="text-[11px] text-muted-foreground">
                             {!isNaN(txDate.getTime()) ? format(txDate, 'MMM d, yyyy') : 'No date'} • {tx.modeOfPayment || 'Direct'}
                           </div>
                         </div>
                       </div>
                       <div className={cn(
-                        "font-mono font-semibold text-right shrink-0",
-                        isIncome ? "text-navy dark:text-gold" : "text-foreground font-medium"
+                        "font-mono font-bold text-right shrink-0",
+                        isIncome ? "text-navy dark:text-gold" : "text-foreground"
                       )}>
                         {isIncome ? `+${formatCurrency(tx.amount)}` : formatCurrency(tx.amount)}
                       </div>
@@ -1007,6 +1018,82 @@ export default function DashboardPage() {
         </Card>
 
       </div>
+
+      {/* ========================================================= */}
+      {/* HOMEPAGE FEATURE SHORTCUTS STRIP */}
+      {/* ========================================================= */}
+      <div className="pt-2">
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Quick module shortcuts
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Link href="/statements" className="group p-3.5 rounded-2xl bg-card border border-border/80 hover:border-gold/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-lg bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center group-hover:scale-105 transition-transform">
+                <FileSpreadsheet className="h-4 w-4" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-gold group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-foreground group-hover:text-gold transition-colors">Statements</div>
+              <div className="text-[11px] text-muted-foreground">Assets & liabilities</div>
+            </div>
+          </Link>
+
+          <Link href="/budget" className="group p-3.5 rounded-2xl bg-card border border-border/80 hover:border-gold/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-lg bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Wallet className="h-4 w-4" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-gold group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-foreground group-hover:text-gold transition-colors">Budget Envelopes</div>
+              <div className="text-[11px] text-muted-foreground">Zero-based limit tracking</div>
+            </div>
+          </Link>
+
+          <Link href="/debt" className="group p-3.5 rounded-2xl bg-card border border-border/80 hover:border-gold/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-lg bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Zap className="h-4 w-4" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-gold group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-foreground group-hover:text-gold transition-colors">Debt Strategies</div>
+              <div className="text-[11px] text-muted-foreground">Avalanche vs snowball</div>
+            </div>
+          </Link>
+
+          <Link href="/weekly-review" className="group p-3.5 rounded-2xl bg-card border border-border/80 hover:border-gold/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-lg bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Activity className="h-4 w-4" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-gold group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-foreground group-hover:text-gold transition-colors">Weekly Review</div>
+              <div className="text-[11px] text-muted-foreground">Reflect & plan journal</div>
+            </div>
+          </Link>
+
+          <Link href="/ai-chat" className="group p-3.5 rounded-2xl bg-card border border-border/80 hover:border-gold/40 transition-all flex flex-col justify-between col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-lg bg-navy-pale text-navy dark:bg-navy-mid dark:text-gold flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Compass className="h-4 w-4" />
+              </div>
+              <ArrowUpRight className="h-4 w-4 text-muted-foreground group-hover:text-gold group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-foreground group-hover:text-gold transition-colors">AI Advisor</div>
+              <div className="text-[11px] text-muted-foreground">Financial coaching</div>
+            </div>
+          </Link>
+        </div>
+      </div>
+
     </div>
   );
 }

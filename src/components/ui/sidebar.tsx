@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Home,
   LayoutDashboard,
   ReceiptText,
   FileText,
@@ -23,7 +24,7 @@ import {
   BookOpen,
   Bell,
   Cloud,
-  CloudOff,
+  CloudOff, ShieldAlert,
   UploadCloud,
   AlertTriangle,
   ClipboardList,
@@ -31,12 +32,10 @@ import {
   Menu,
   PieChart,
   Users,
-  Briefcase,
   TestTube,
   Database,
   Download,
   Upload,
-  BarChart,
   ShieldCheck,
   Scale,
 } from "lucide-react";
@@ -63,6 +62,7 @@ import { useWeeklyReviewStore } from '@/store/weeklyReviewStore';
 import { useNotificationStore as useNotificationStateForDownload } from '@/store/notificationStore';
 import { useToast } from "@/hooks/use-toast";
 import DataImportDialog from "../layout/DataImportDialog";
+import { SecurityAuditDialog } from "../security/SecurityAuditDialog";
 import { Separator } from "./separator";
 
 interface SidebarMenuItem {
@@ -75,14 +75,13 @@ interface SidebarMenuItem {
 }
 
 const menuItems: SidebarMenuItem[] = [
-  { href: "/dashboard", label: "Client Dashboard", icon: LayoutDashboard },
+  { href: "/", label: "Home", icon: Home },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin", label: "Admin Console", icon: ShieldCheck, adminOnly: true },
   { href: "/auditor", label: "Auditor Console", icon: Scale, auditorOnly: true },
   { href: "/transactions", label: "Transactions", icon: ReceiptText },
   { href: "/debt", label: "Debts", icon: Coins },
-  { href: "/investments", label: "Investments", icon: Briefcase },
   { href: "/statements", label: "Statements", icon: FileText },
-  { href: "/reports", label: "Reports", icon: BarChart },
   { href: "/budget", label: "Budget", icon: PieChart },
   { href: "/weekly-review", label: "Weekly Review", icon: BookOpen },
   { href: "/notifications", label: "Notifications", icon: Bell },
@@ -202,6 +201,7 @@ export const SidebarContent = React.forwardRef<
   const [clientUnreadCount, setClientUnreadCount] = React.useState(0);
   const [hasMounted, setHasMounted] = React.useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
+  const [isSecurityAuditOpen, setIsSecurityAuditOpen] = React.useState(false);
 
   const { user, isLoaded: isClerkLoaded } = useUser();
   const { isSignedIn, role, isAdmin, isAuditor } = useAuth();
@@ -209,7 +209,7 @@ export const SidebarContent = React.forwardRef<
   const isUserAuditor = isAuditor;
 
   const syncManager = useSyncManager();
-  const { syncStatus, manualSync, isFetchDisabled, isOffline, pendingOfflineCount } = syncManager;
+  const { syncStatus, isFetchDisabled, isOffline, pendingOfflineCount } = syncManager;
 
   const getTransactionsState = useTransactionsStore.getState;
   const getDebtState = useDebtStore.getState;
@@ -317,7 +317,7 @@ export const SidebarContent = React.forwardRef<
         iconColor = 'text-amber-400';
         break;
       case 'syncing': SyncIcon = RefreshCw; syncStatusText = 'Syncing...'; syncTooltipText = 'Syncing data with cloud.'; iconColor = 'text-primary'; animateIcon = true; isSyncButtonClickable = false; break;
-      case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data synced with cloud. Click to refresh.'; iconColor = 'text-accent'; break;
+      case 'synced': SyncIcon = Cloud; syncStatusText = 'Synced'; syncTooltipText = 'Data is up to date.'; iconColor = 'text-green-500'; isSyncButtonClickable = false; break;
       case 'local_changes': SyncIcon = UploadCloud; syncStatusText = 'Review & Sync'; syncTooltipText = 'You have unsaved changes. Click to review and sync.'; iconColor = 'text-yellow-500'; break;
       case 'error': SyncIcon = AlertTriangle; syncStatusText = 'Sync Error'; syncTooltipText = 'Sync failed. Click to retry.'; iconColor = 'text-destructive'; break;
       case 'hash_mismatch': SyncIcon = AlertTriangle; syncStatusText = 'Data Conflict'; syncTooltipText = 'Data mismatch detected. A resolution is required.'; iconColor = 'text-destructive'; isSyncButtonClickable = false; break;
@@ -345,10 +345,12 @@ export const SidebarContent = React.forwardRef<
       logWarn("Sync click attempted but user not signed in or Clerk not loaded.", { isSignedIn, isClerkLoaded, userId: user?.id});
       return;
     }
-    if (isSyncButtonClickable || syncStatus === 'error' || syncStatus === 'error_local') {
-      manualSync();
+    if (syncStatus === 'local_changes' || syncStatus === 'offline_changes' || syncStatus === 'error' || syncStatus === 'error_local') {
+      syncManager.forceSave();
+    } else {
+      syncManager.forceFetch();
     }
-  }, [isClerkLoaded, isSignedIn, user?.id, isSyncButtonClickable, syncStatus, manualSync, isFetchDisabled]);
+  }, [isClerkLoaded, isSignedIn, user?.id, isFetchDisabled, syncStatus, syncManager]);
 
 
   const sidebarActualState = isMobile ? "expanded" : state;
@@ -458,6 +460,33 @@ export const SidebarContent = React.forwardRef<
                 Data Management
             </div>
             
+            
+            {/* Security Audit Button */}
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setIsSecurityAuditOpen(true)}
+                    className={cn(
+                      "w-full justify-start text-sm h-9 mt-1",
+                      sidebarActualState === "collapsed" && "justify-center px-0 w-9 h-9",
+                      "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                    aria-label="Security Audit"
+                  >
+                    <ShieldAlert size={18} className="flex-shrink-0 text-primary" />
+                    <span className={cn("ml-2 truncate text-xs", sidebarActualState === "collapsed" && "hidden")}>
+                      Security Audit
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Run Client-Side Data Leak Audit</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             {/* Sync Button */}
              <TooltipProvider delayDuration={100}>
               <Tooltip>
@@ -597,8 +626,14 @@ export const SidebarContent = React.forwardRef<
                 <span className="text-xs font-semibold text-sidebar-foreground truncate" title={user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}>
                   {user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'User'}
                 </span>
-                <span className="text-[10px] capitalize text-primary font-medium">
-                  {role} role
+                <span className="text-[10px] font-medium">
+                  {user.isGuest ? (
+                    <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                      Guest (Local Only)
+                    </span>
+                  ) : (
+                    <span className="capitalize text-primary">{role} role</span>
+                  )}
                 </span>
               </div>
             )}
@@ -606,6 +641,7 @@ export const SidebarContent = React.forwardRef<
         </div>
       </div>
       <DataImportDialog isOpen={isImportDialogOpen} onClose={() => setIsImportDialogOpen(false)} />
+      <SecurityAuditDialog open={isSecurityAuditOpen} onOpenChange={setIsSecurityAuditOpen} />
     </>
   );
 });

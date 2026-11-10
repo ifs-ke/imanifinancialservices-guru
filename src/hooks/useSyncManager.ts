@@ -24,7 +24,7 @@ import { hashData } from '@/lib/storage-utils';
 import { prepareDataForHashing } from '@/lib/prepareDataForHashing';
 import stringify from 'fast-json-stable-stringify';
 import { logInfo, logWarn, logError } from '@/lib/logger';
-import { fetchAllUserDataFromFirestore, saveAllUserDataToFirestore } from '@/lib/firestoreBackend';
+import { fetchAllUserDataFromFirestore, saveAllUserDataToFirestore, isGuestOrLocalUserId } from '@/lib/firestoreBackend';
 import { useOffline } from '@/hooks/useOffline';
 import {
   saveOfflineSnapshot,
@@ -32,7 +32,9 @@ import {
   enqueueOfflineMutation,
   clearOfflineMutations,
   getPendingMutationsCount,
+  clearOfflineSnapshot,
 } from '@/lib/offlineQueue';
+import { runComprehensiveSecurityAudit, type SecurityAuditReport } from '@/lib/securityAudit';
 
 export const COMPONENT_UNMOUNTING_ABORT_REASON = 'ComponentUnmounting';
 export const NEW_REQUEST_ABORT_REASON = 'NewFetchInitiated';
@@ -72,6 +74,7 @@ interface SyncState {
   lastFetchTime: Date | null;
   lastSaveTime: Date | null;
   lastServerHash: string | null;
+  lastServerTimestamp: string | null;
   isMismatchDialogOpen: boolean;
   conflictingLocalDataString: null | string;
   conflictingServerDataString: null | string;
@@ -81,8 +84,25 @@ interface SyncState {
   pendingOfflineCount: number;
 }
 
-const API_TIMEOUT_MS = 30000;
-const AUTO_SAVE_DEBOUNCE_DELAY_MS = 2500;
+const API_TIMEOUT_MS = 10000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Connection timed out'));
+    }, timeoutMs);
+
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 /**
  * Compares current local state against the last known synced snapshot of objects
@@ -181,24 +201,52 @@ function calculateReviewChanges(
   return { created, updated, deletedIds };
 }
 
+// Isomorphic global sync state shared across all hook callers
+let globalSyncState: SyncState = {
+  status: typeof window !== 'undefined' && !navigator.onLine ? 'offline' : 'idle',
+  lastFetchTime: null,
+  lastSaveTime: null,
+  lastServerHash: null,
+  lastServerTimestamp: null,
+  isMismatchDialogOpen: false,
+  conflictingLocalDataString: null,
+  conflictingServerDataString: null,
+  isInitialClientSyncPending: true,
+  isPreviewingLocalChanges: false,
+  localChangesPayloadPreview: null,
+  pendingOfflineCount: 0,
+};
+
+const syncListeners = new Set<() => void>();
+
+function notifySyncListeners() {
+  syncListeners.forEach((listener) => listener());
+}
+
+export function setGlobalSyncState(partial: Partial<SyncState>) {
+  globalSyncState = { ...globalSyncState, ...partial };
+  notifySyncListeners();
+}
+
 export function useSyncManager() {
-  const { isSignedIn, userId, isLoaded: isClerkLoaded } = useAuth();
+  const { isSignedIn, userId, isLoaded: isClerkLoaded, user, isGuest } = useAuth();
   const { toast } = useToast();
   const isOffline = useOffline();
+  const isGuestUser = isGuest || user?.isGuest || (typeof userId === 'string' && isGuestOrLocalUserId(userId));
+  const [hasSuccessfulConnection, setHasSuccessfulConnection] = useState<boolean>(false);
 
-  const [syncState, setSyncStateInternal] = useState<SyncState>({
-    status: isOffline ? 'offline' : 'idle',
-    lastFetchTime: null,
-    lastSaveTime: null,
-    lastServerHash: null,
-    isMismatchDialogOpen: false,
-    conflictingLocalDataString: null,
-    conflictingServerDataString: null,
-    isInitialClientSyncPending: true,
-    isPreviewingLocalChanges: false,
-    localChangesPayloadPreview: null,
-    pendingOfflineCount: 0,
-  });
+  const [syncState, setSyncStateInternal] = useState<SyncState>(globalSyncState);
+
+  useEffect(() => {
+    const handleChange = () => {
+      setSyncStateInternal(globalSyncState);
+    };
+    syncListeners.add(handleChange);
+    setSyncStateInternal(globalSyncState);
+    return () => {
+      syncListeners.delete(handleChange);
+    };
+  }, []);
 
   const lastSyncedData = useRef<SyncedData | null>(null);
   const isSavingRef = useRef(false);
@@ -225,7 +273,7 @@ export function useSyncManager() {
   }, [syncState]);
 
   const updateSyncState = useCallback((partialState: Partial<SyncState>) => {
-    setSyncStateInternal((prev) => ({ ...prev, ...partialState }));
+    setGlobalSyncState(partialState);
   }, []);
 
   const getCurrentLocalDataForFullSnapshot = useCallback((): SyncedData => {
@@ -323,6 +371,7 @@ export function useSyncManager() {
     getNotificationState,
   ]);
 
+
   const clearAllLocalStoreData = useCallback(() => {
     const currentUserIdForLog = previousUserIdRef.current || userId || 'unknown_user_at_clear';
     if (isClearingRef.current) return;
@@ -342,12 +391,20 @@ export function useSyncManager() {
       getBudgetState().clearBudgetItems();
       getWeeklyReviewState().clearReviews();
       getNotificationState().clearAllNotifications();
+      
+      // Prevent data leaks by wiping offline copies for the outgoing user
+      if (currentUserIdForLog && currentUserIdForLog !== 'unknown_user_at_clear') {
+        clearOfflineSnapshot(currentUserIdForLog);
+        clearOfflineMutations(currentUserIdForLog);
+      }
+
       lastSyncedData.current = null;
       updateSyncState({
         status: isOffline ? 'offline' : 'idle',
         lastFetchTime: null,
         lastSaveTime: null,
         lastServerHash: null,
+    lastServerTimestamp: null,
         isMismatchDialogOpen: false,
         conflictingLocalDataString: null,
         conflictingServerDataString: null,
@@ -379,11 +436,39 @@ export function useSyncManager() {
   const fetchData = useCallback(
     async (isPreCheck = false): Promise<string | false | typeof FETCH_TIMEOUT_SYMBOL | typeof FETCH_ABORTED_BENIGNLY_SYMBOL> => {
       const currentUserId = userId;
+
+      // Perform client-side verification to prevent data leaks
+      // If a leak is found, it will wipe the local store. We should continue fetching the correct data.
+      performSecurityAudit();
+
       if (!isClerkLoaded || !isSignedIn || !currentUserId) {
         if (!isPreCheck && syncStateRef.current.status !== 'idle' && !isOffline) {
           updateSyncState({ status: 'idle', isInitialClientSyncPending: true });
         }
         return false;
+      }
+
+      // Guest Mode: strictly local storage persistence with zero remote calls
+      if (isGuestUser) {
+        logInfo('SyncManager: Guest user session active. Hydrating from local storage only.', { userId: currentUserId });
+        const cachedSnapshot = loadOfflineSnapshot(currentUserId);
+        if (cachedSnapshot) {
+          rehydrateStores(cachedSnapshot);
+          lastSyncedData.current = cachedSnapshot;
+        } else {
+          const currentSnapshot = getCurrentLocalDataForFullSnapshot();
+          saveOfflineSnapshot(currentUserId, currentSnapshot);
+          lastSyncedData.current = currentSnapshot;
+        }
+        updateSyncState({
+          status: 'local',
+          isInitialClientSyncPending: false,
+          lastFetchTime: new Date(),
+          lastServerHash: 'guest-local-hash',
+          lastServerTimestamp: new Date().toISOString(),
+          pendingOfflineCount: 0,
+        });
+        return 'guest-local-hash';
       }
 
       // If offline, load seamlessly from local snapshot cache
@@ -427,7 +512,12 @@ export function useSyncManager() {
           const response = await fetch('/api/sync', {
             method: 'GET',
             signal: controller.signal,
-            headers: { 'Cache-Control': 'no-cache' },
+            headers: {
+              'Cache-Control': 'no-cache',
+              'x-user-id': currentUserId,
+              'x-user-email': user?.email || '',
+            },
+            credentials: 'same-origin',
           });
 
           if (response.ok) {
@@ -441,10 +531,17 @@ export function useSyncManager() {
 
         if (!data) {
           try {
-            data = await fetchAllUserDataFromFirestore(currentUserId);
+            data = await withTimeout(fetchAllUserDataFromFirestore(currentUserId), 10000);
           } catch (_fsErr) {
+            console.error('Firestore fallback failed:', _fsErr);
             // Local store fallback
           }
+        }
+
+        if (data) {
+          setHasSuccessfulConnection(true);
+        } else {
+          setHasSuccessfulConnection(false);
         }
 
         const serverHash = data?.dataHash || 'local-active-hash';
@@ -478,6 +575,7 @@ export function useSyncManager() {
             status: 'synced',
             lastFetchTime: new Date(),
             lastServerHash: serverHash,
+            lastServerTimestamp: data?.serverTimestamp || new Date().toISOString(),
             isInitialClientSyncPending: false,
             pendingOfflineCount: pendingCount,
           });
@@ -490,26 +588,30 @@ export function useSyncManager() {
             status: 'synced',
             lastFetchTime: new Date(),
             lastServerHash: 'local-active-hash',
+            lastServerTimestamp: new Date().toISOString(),
             isInitialClientSyncPending: false,
           });
         }
 
         return serverHash;
       } catch (error: any) {
+        setHasSuccessfulConnection(false);
         clearTimeout(timeoutId);
         if (controller.signal.aborted) {
           if (controller.signal.reason === API_TIMEOUT_ABORT_REASON) {
-            updateSyncState({ status: 'synced' });
+            updateSyncState({ status: 'error_local' });
             return FETCH_TIMEOUT_SYMBOL;
           }
           return FETCH_ABORTED_BENIGNLY_SYMBOL;
         }
-        logWarn('Sync fetch graceful fallback to offline snapshot', { userId: currentUserId });
+        logError('Sync fetch failed, falling back to offline snapshot', error, { userId: currentUserId });
         const cached = loadOfflineSnapshot(currentUserId);
         if (cached) {
           rehydrateStores(cached);
+          updateSyncState({ status: 'offline_changes', isInitialClientSyncPending: false });
+        } else {
+          updateSyncState({ status: 'error', isInitialClientSyncPending: false });
         }
-        updateSyncState({ status: 'synced', isInitialClientSyncPending: false });
         return 'local-active-hash';
       } finally {
         isFetchingRef.current = false;
@@ -539,6 +641,22 @@ export function useSyncManager() {
 
       const deltaPayload = directPayloadObject || computeDelta();
       const currentSnapshot = getCurrentLocalDataForFullSnapshot();
+
+      // Guest Mode: persist exclusively to local storage snapshot, zero remote network calls
+      if (isGuestUser) {
+        saveOfflineSnapshot(currentUserId, currentSnapshot);
+        lastSyncedData.current = currentSnapshot;
+        hasLocalChangesRef.current = false;
+        updateSyncState({
+          status: 'local',
+          pendingOfflineCount: 0,
+          lastSaveTime: new Date(),
+          lastServerHash: 'guest-local-hash',
+          lastServerTimestamp: new Date().toISOString(),
+        });
+        logInfo('SyncManager: Saved changes to local storage snapshot for guest user.', { userId: currentUserId });
+        return true;
+      }
 
       // If offline: save snapshot locally, queue mutation, and avoid network calls
       if (isOffline) {
@@ -572,15 +690,28 @@ export function useSyncManager() {
           ...deltaPayload,
           payloadDataHash,
           lastKnownServerHash: force ? undefined : syncStateRef.current.lastServerHash || undefined,
+          lastKnownServerTimestamp: force ? undefined : syncStateRef.current.lastServerTimestamp || undefined,
         };
 
         let saveSucceeded = false;
         let newServerHash = payloadDataHash;
+        let newServerTimestamp = syncStateRef.current.lastServerTimestamp;
+
+        const saveController = new AbortController();
+        const saveTimeoutId = setTimeout(() => {
+          saveController.abort(API_TIMEOUT_ABORT_REASON);
+        }, API_TIMEOUT_MS);
 
         try {
           const response = await fetch('/api/save', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            signal: saveController.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': currentUserId,
+              'x-user-email': user?.email || '',
+            },
+            credentials: 'same-origin',
             body: JSON.stringify(fullPayload),
           });
 
@@ -599,30 +730,38 @@ export function useSyncManager() {
           if (response.ok) {
             const resJson = await response.json();
             newServerHash = resJson.newServerHash || payloadDataHash;
+            newServerTimestamp = resJson.serverTimestamp || newServerTimestamp;
             saveSucceeded = true;
           }
         } catch (_apiErr) {
           // Vite SPA mode fallback to direct Firestore save
+        } finally {
+          clearTimeout(saveTimeoutId);
         }
 
         if (!saveSucceeded) {
           try {
-            await saveAllUserDataToFirestore(currentUserId, fullPayload as any);
+            await withTimeout(saveAllUserDataToFirestore(currentUserId, fullPayload as any), 10000);
             saveSucceeded = true;
           } catch (_fsErr) {
             // If remote save fails due to network drop, save to offline queue gracefully
+            setHasSuccessfulConnection(false);
             logWarn('Remote save failed, falling back to offline queue', { userId: currentUserId });
             saveOfflineSnapshot(currentUserId, currentSnapshot);
-            enqueueOfflineMutation(currentUserId, deltaPayload, payloadDataHash);
+            const existingQueueCount = getPendingMutationsCount(currentUserId);
+            if (!force && existingQueueCount === 0) {
+              enqueueOfflineMutation(currentUserId, deltaPayload, payloadDataHash);
+            }
             const pendingCount = getPendingMutationsCount(currentUserId);
             updateSyncState({
               status: 'offline_changes',
               pendingOfflineCount: pendingCount,
             });
-            return true;
+            return false;
           }
         }
 
+        setHasSuccessfulConnection(true);
         // On successful save: update cached snapshot, clear offline mutations, and update synced state
         saveOfflineSnapshot(currentUserId, currentSnapshot);
         clearOfflineMutations(currentUserId);
@@ -633,12 +772,14 @@ export function useSyncManager() {
           status: 'synced',
           lastSaveTime: new Date(),
           lastServerHash: newServerHash || syncStateRef.current.lastServerHash,
+          lastServerTimestamp: newServerTimestamp || new Date().toISOString(),
           isMismatchDialogOpen: false,
           pendingOfflineCount: 0,
         });
 
         return true;
       } catch (error: any) {
+        setHasSuccessfulConnection(false);
         logWarn('Save operation completed locally with offline cache', { userId: currentUserId });
         saveOfflineSnapshot(currentUserId, currentSnapshot);
         updateSyncState({ status: 'synced' });
@@ -661,7 +802,7 @@ export function useSyncManager() {
 
   // Drains all pending offline mutations to Firestore when reconnected
   const drainOfflineQueue = useCallback(async (): Promise<boolean> => {
-    if (!isSignedIn || !userId || isOffline) return false;
+    if (!isSignedIn || !userId || isOffline || isGuestUser) return false;
 
     const pendingCount = getPendingMutationsCount(userId);
     if (pendingCount === 0) return true;
@@ -680,14 +821,58 @@ export function useSyncManager() {
           description: `Successfully synchronized ${pendingCount} offline update${pendingCount > 1 ? 's' : ''} with Cloud Firestore.`,
         });
         return true;
+      } else {
+        toast({
+          title: 'Synchronization Warning',
+          description: `Unable to save offline updates to Cloud Firestore. To prevent data loss, your offline changes have been safely preserved. Please check your internet connection and try again.`,
+          variant: 'destructive',
+        });
+        return false;
       }
-      return false;
     } catch (error) {
       logError('SyncManager: Error draining offline queue', error, { userId });
       updateSyncState({ status: 'error' });
       return false;
     }
   }, [isSignedIn, userId, isOffline, saveData, updateSyncState, toast]);
+
+  const performSecurityAudit = useCallback((autoRemediate = true): boolean => {
+    const currentUserId = userId;
+    if (!currentUserId) return true;
+
+    const report = runComprehensiveSecurityAudit({
+      currentUserId,
+      isGuest: isGuestUser,
+      userRole: user?.role,
+      autoRemediate,
+    });
+
+    if (report.overallStatus === 'failed') {
+      logWarn(
+        'Security Audit: Critical security issue detected in local store',
+        { report },
+        currentUserId
+      );
+      if (report.quarantinedCount > 0) {
+        clearAllLocalStoreData();
+      }
+      return false;
+    }
+
+    logInfo('Security Audit Passed: Local store is clean and securely isolated.', { healthScore: report.healthScore, currentUserId }, currentUserId);
+    return true;
+  }, [userId, isGuestUser, user?.role, clearAllLocalStoreData]);
+
+  const getDetailedSecurityAudit = useCallback((autoRemediate = true): SecurityAuditReport => {
+    const currentUserId = userId;
+    return runComprehensiveSecurityAudit({
+      currentUserId,
+      isGuest: isGuestUser,
+      userRole: user?.role,
+      autoRemediate,
+    });
+  }, [userId, isGuestUser, user?.role]);
+
 
   // Monitor network status transitions (offline -> online)
   useEffect(() => {
@@ -716,31 +901,6 @@ export function useSyncManager() {
     previousOfflineRef.current = isOffline;
   }, [isOffline, userId, drainOfflineQueue, updateSyncState, toast]);
 
-  const manualSync = useCallback(async () => {
-    if (!isSignedIn || !userId) {
-      toast({ title: 'Not Signed In', description: 'Please sign in to sync with Firestore.', variant: 'destructive' });
-      return;
-    }
-
-    if (isOffline) {
-      toast({
-        title: 'Offline Mode',
-        description: 'You are currently offline. Local data is active and will auto-sync once connected.',
-      });
-      return;
-    }
-
-    toast({ title: 'Syncing Data', description: 'Synchronizing with Cloud Firestore...' });
-    const pendingCount = getPendingMutationsCount(userId);
-    if (pendingCount > 0) {
-      await drainOfflineQueue();
-    } else {
-      const success = await fetchData();
-      if (success) {
-        toast({ title: 'Firestore Synced', description: 'Your data is synchronized with Cloud Firestore.' });
-      }
-    }
-  }, [isSignedIn, userId, isOffline, fetchData, drainOfflineQueue, toast]);
 
   // Debounced auto-save listener on local store changes
   useEffect(() => {
@@ -750,6 +910,19 @@ export function useSyncManager() {
       }
 
       hasLocalChangesRef.current = true;
+
+      // Guest Mode: auto-save directly to local storage snapshot, zero cloud network operations
+      if (isGuestUser) {
+        const currentUserId = userId;
+        if (currentUserId) {
+          const snapshot = getCurrentLocalDataForFullSnapshot();
+          saveOfflineSnapshot(currentUserId, snapshot);
+          lastSyncedData.current = snapshot;
+          hasLocalChangesRef.current = false;
+          updateSyncState({ status: 'local', lastSaveTime: new Date() });
+        }
+        return;
+      }
 
       if (isOffline) {
         const currentUserId = userId;
@@ -769,9 +942,10 @@ export function useSyncManager() {
       if (autoSaveDebounceTimerRef.current) {
         clearTimeout(autoSaveDebounceTimerRef.current);
       }
+      const debounceDelayMs = hasSuccessfulConnection ? 60000 : 30000;
       autoSaveDebounceTimerRef.current = setTimeout(() => {
         saveData();
-      }, AUTO_SAVE_DEBOUNCE_DELAY_MS);
+      }, debounceDelayMs);
     };
 
     const storesToWatch = [
@@ -795,6 +969,7 @@ export function useSyncManager() {
     userId,
     getCurrentLocalDataForFullSnapshot,
     computeDelta,
+    hasSuccessfulConnection,
   ]);
 
   // Initial load effect
@@ -816,6 +991,38 @@ export function useSyncManager() {
       initialLoadDoneRef.current = false;
     }
 
+    // Tenant isolation check: if store contains items belonging to an authenticated foreign user, purge immediately
+    if (isSignedIn && currentUserId && !isGuestUser) {
+      const txs = getTransactionsState().transactions;
+      const debts = getDebtState().debts;
+      const budgetItems = getBudgetState().budgetItems;
+      const assetItems = getStatementState().assetItems;
+
+      const isForeignItem = (i: any) => {
+        if (!i || !i.userId) return false;
+        if (i.userId === currentUserId) return false;
+        if (i.userId === 'anonymous_or_server' || i.userId === 'unknown') return false;
+        if (i.userId.startsWith('guest_') || i.userId.startsWith('usr_local_')) return false;
+        return true;
+      };
+
+      const hasForeignItems =
+        txs.some(isForeignItem) ||
+        debts.some(isForeignItem) ||
+        budgetItems.some(isForeignItem) ||
+        assetItems.some(isForeignItem);
+
+      if (hasForeignItems) {
+        logWarn(
+          'SyncManager: Detected foreign user data in local store on session start. Purging local storage for tenant isolation.',
+          { currentUserId },
+          currentUserId
+        );
+        clearAllLocalStoreData();
+        initialLoadDoneRef.current = false;
+      }
+    }
+
     if (isSignedIn && currentUserId && !initialLoadDoneRef.current) {
       initialLoadDoneRef.current = true;
       updateSyncState({
@@ -835,6 +1042,7 @@ export function useSyncManager() {
     isClerkLoaded,
     isOffline,
     clearAllLocalStoreData,
+    performSecurityAudit,
     updateSyncState,
     fetchData,
   ]);
@@ -844,9 +1052,10 @@ export function useSyncManager() {
     hashMismatch: syncState.status === 'hash_mismatch',
     isOffline,
     isOnline: !isOffline,
+    isGuest: isGuestUser,
     pendingOfflineCount: syncState.pendingOfflineCount,
     isFetchDisabled: false,
-    manualSync,
+
     drainOfflineQueue,
     forceSave: () => saveData(true),
     forceFetch: () => fetchData(),
@@ -864,5 +1073,8 @@ export function useSyncManager() {
     cancelLocalChangesPreview: () => {
       updateSyncState({ isPreviewingLocalChanges: false, localChangesPayloadPreview: null, status: 'synced' });
     },
+    clearAllLocalStoreData,
+    performSecurityAudit,
+    getDetailedSecurityAudit,
   };
 }

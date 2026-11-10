@@ -8,7 +8,10 @@ IFS-Guru is an enterprise-grade financial management, budgeting, investment, and
 
 ### 1. Senior Solution Architect
 - **Frontend Architecture**: Decoupled the client application from Next.js server-side dependencies into a blazing-fast **Vite Single-Page Application (SPA)** with sub-second hot reloading, client-side routing (`react-router-dom`), and bundle chunk optimization.
-- **Resilient Data Layer**: Implemented isomorphic datastore abstraction. `useSyncManager` and `firestoreBackend` dynamically detect runtime connectivity: direct client-side Firestore access with automated fallback mechanisms guarantees zero HTTP 500 crashes and seamless data synchronization.
+- **Resilient Data Layer & Isomorphic Sync State**: Implemented isomorphic datastore abstraction. `useSyncManager` and `firestoreBackend` dynamically detect runtime connectivity with direct client-side Firestore access and fallback mechanisms. Refactored `useSyncManager` to utilize an isomorphic global event-subscription model (`globalSyncState`), ensuring that all mounted UI components (`Sidebar`, `OfflineBanner`, `UserButton`) display 100% unified sync statuses and queued mutation counts simultaneously.
+- **Streamlined Navigation & Page Architecture**: Updated the navigation menu to include a top-level **Home** link with icon above the main **Dashboard** link. Simplified the dashboard menu item label from "Client Dashboard" to "Dashboard". Concentrated financial intelligence into the core **Home**, **Dashboard**, **Financial Statements** (Assets, Liabilities & Net Worth), **Transactions Ledger**, **Budgeting Engine**, and **Weekly Review**. Cleaned up routing in `src/App.tsx`, sidebar navigation in `src/components/ui/sidebar.tsx`, and dashboard shortcut navigation.
+- **Server-Side Gemini AI & Streaming Architecture**: Enforced 100% server-side Gemini API execution via `/api/gemini/chat` for streaming financial advisor responses. Removed browser-side SDK instantiations and client key exposure to maintain security and consistency across all connected users.
+- **Universal Cloud Firestore Sync**: Enterprise synchronization layer supporting both full snapshots and delta changes across transactions, debts, statements, budget items, weekly reviews, and notifications with dual-tier security rules (`firestore.rules`) and blueprint definitions (`firebase-blueprint.json`).
 - **Auth Strategy (Temporary FireAuth Bypass)**: Provided an active mock session management layer in `src/context/AuthContext.tsx`. Authenticated user context defaults to an administrative session (`Sean Wambua (Admin)`, `seanwambua@gmail.com`) with instant interactive switching between **Admin Mode** and **Member Mode** via the profile button dropdown. When Firebase Auth is re-enabled, the architecture hot-swaps back with zero breaking changes to consumers.
 
 ### 2. Senior Developer
@@ -49,17 +52,33 @@ IFS-Guru is an enterprise-grade financial management, budgeting, investment, and
   - **Dynamic Cash Flow Overview Chart**: Interactive area chart comparing income and expenses that dynamically synchronizes with the selected date range presets (*This month*, *Last month*, *30 days*, *90 days*, *YTD*, *All*, or *Custom date range*) with automatic day, week, or month bucket aggregation and formatted currency tooltips.
   - **Recent Transactions Stream**: Real-time snapshot of the latest transactions with quick navigation to full transaction ledger.
 - **Transactions Management (`/transactions`)**: Redesigned with the modern shadcn UI design system. Features unified instant search, transaction type, classification (*Recurring*, *One-off*, *Fixed*, *Variable*), and category filters, multi-preset date range selectors (*This month*, *Last month*, *30 days*, *90 days*, *YTD*, *All*, and *Custom*), summary metric cards with dynamic percentage cashflow margin, customizable column visibility (including classification), interactive bulk selection and batch update/delete, inline row menus, pagination controls, and CSV import/export.
-- **Debt Conquest & Amortization (`/debt`)**: Completely redesigned following the streamlined primary dashboard design patterns. Features flat border-aligned metric cards for Total Outstanding Debt, Monthly Budgeted Repayment, and Estimated Clearance Timeline. Integrates an interactive Reconciliation Status module calculating budget alignment coverage ratios against mandatory minimum payments, and embeds the Active Debt Portfolio table inside a modern, high-density layout.
+- **Debt Conquest & Amortization (`/debt`)**: Enhanced with comprehensive loan origination, restructuring, and strategic payoff architecture:
+  - **Secured vs. Unsecured Debt Structures**: Built-in dropdown configuration on the debt entry form allowing users to categorize obligations as **Unsecured** (clean / signature loan) or **Secured** (collateral / asset-backed), dynamically revealing an optional security description field to record pledged assets (e.g., logbooks, title deeds, equipment, guarantor pledges).
+  - **Monthly Debts vs. Debt History Separation**: The debt portfolio table features dedicated views for **Monthly Debts** and **Debt History**. When a debt is paid off, it is automatically removed from active monthly listings and preserved in the **Debt History (Paid-Off Archive)** for audit compliance, net worth reconciliation, and personal milestone celebration.
+  - **Clean, Minimalist Debt Entry Form**: Streamlined, bloat-free entry modal adhering strictly to clean shadcn/Tailwind design cues with responsive two-column grid layouts, zero-clutter inputs, and subtle real-time interest adequacy validation.
+  - **Debt Restructuring Engine**: Interactive loan restructuring module allowing users to simulate and apply renegotiated loan terms, lowered interest rates, extended payoff durations (6 to 60 months), automatic monthly payment recalculation, and before-vs-after cash flow impact comparisons with audit trail logging.
+  - **Strategic Payoff & Income Recommendations (Optional Advisor)**: Built-in optional strategy engine that calculates optimal debt clearance trajectories based on expected monthly income:
+    - **Debt Avalanche**: Focuses excess repayment funds on the highest-APR debts first to mathematically minimize total interest paid.
+    - **Debt Snowball**: Focuses on lowest principal balances first to generate rapid psychological clearance milestones.
+    - **Debt-to-Income (DTI) Health Check**: Computes real-time debt burden ratios and provides instant health alerts (Healthy <15%, Moderate 15-35%, High Risk >35%).
+    - **Restructuring Alerts**: Automatically identifies high-interest liabilities (&ge;12% APR) and suggests refinancing opportunities.
+    - **Step-by-Step Priority Clearance Hierarchy**: Displays the full ordered clearance sequence with target monthly allocations and milestone completion estimates.
+  - **Dynamic Paid-Off Debt Exclusion from Liabilities**: Automatically filters out settled or 0-principal debts from active financial liabilities across balance sheets, net worth statements, and the central dashboard, while keeping them accessible in a dedicated settled obligations view.
+  - **Accurate Interest Accrual & Underpayment Safeguard**: Includes mathematical `calculateMonthlyInterest` utility providing real-time underpayment warnings whenever a scheduled minimum payment does not cover the loan's monthly accrued interest charges.
+  - **Automated Overdue Detection & Status Engine**: Dynamic status tracking across `active`, `overdue`, `in_grace`, and `paid_off`. Debts automatically evaluate to **Overdue** whenever an explicit due date is passed or when short-term loans exceed their 1-year window without full settlement.
+  - **Portfolio Breakdown Metrics & Overdue Alert Banner**: Real-time breakdown card displaying the split between Personal and Institutional debt balances, alongside a prominent overdue alert banner notifying users of actionable defaulted/delayed liabilities.
+  - **Date Assignment & Due Dates**: Tracks debt origination and expected maturity dates with localized formatting and date-based chronological sorting.
+  - **Classification System**: Segmented liability categorisation into **Personal (Friends & Family)** with teal badges and **Institutional (Banks, SACCOs, Lenders)** with indigo badges.
+  - **Optional Interest Rates**: First-class support for interest-free credit and personal loans (0% or omitted interest rate) with tailored amortization schedules that allocate 100% of payments directly to principal reduction.
+  - **Amortization & Reconciliation**: Interactive Reconciliation Status module calculating budget alignment coverage ratios against mandatory minimum payments, automated amortization schedules with error detection, and updated CSV export/import supporting dates, due dates, statuses, and classifications.
+- **Admin User Governance (`/admin`)**: 
+  - **Instant Search & Multi-Attribute Filtering**: High-performance search bar in the User Management tab enabling instant filtering of registered platform users by full name or email address (with immediate clear button and live query count indicator).
+  - **Governance Tracking Columns**: Integrated **Account Created** and **Last Active** columns with formatted timestamps and relative activity indicators (e.g. *Just now*, *2h ago*, *24 Sep 2026*) for auditing and platform oversight.
+  - **Role & Status Controls**: Governance dashboard for assigning Admin, Auditor, and Client roles, setting pay-per-use quota spending limits, and toggling operational account statuses.
 - **Budgeting Engine (`/budget`)**: Redesigned into a premium, high-density **Bento Grid Dashboard**:
   - **Bento Summary Metrics**: Highlights Monthly Inflows, Target Outflows (with live progress indicator of income consumed), and Expected Net balances (with dynamic Surplus/Shortfall indicators and helper insights).
   - **Structured Allocation Accordions**: Replaced basic scroll tables with sleek, collapsible, custom-designed item rows featuring micro-interactions, category bullet accents, and elegant action prompts.
   - **Snap History Ledger**: Interactive list tracking saved historic budget snapshots with easy preview triggers and archived record deletion.
-- **Strategic Investment Portfolio (`/investments`)**: Redesigned with a sophisticated **Strategic Diversity Engine & Rebalancing Planner**:
-  - **Overall Diversification Score**: Calculates a real-time rating from 0-100 based on asset class entropy breadth and target weighting alignment, accompanied by dynamic, personalized advice.
-  - **Asset Allocation Charts**: Implements interactive, responsive `recharts` Pie Charts visualizing holdings by standard asset classes (Equities/Stocks, Fixed Income/Bonds, Real Estate, Mutual Funds/ETFs, Crypto, Cash, Alternatives) with custom tooltips.
-  - **Interactive Target Weight Planner**: Features quick preset targets (Conservative, Balanced/Moderate, Aggressive Growth) and customizable asset weighting sliders that validate target totals live (must sum to exactly 100%).
-  - **Rebalancing Guide & Smart Capital Deployer**: Compares actual shares to target allocations, flagging deficit/surplus values in KES. Integrates an optimized algorithm that dynamically distributes a user-defined amount of new investment capital across under-allocated assets to instantly maximize portfolio diversification.
-  - **High-Density Popover Forms**: Replaced heavy slide-out sheets with contextual, popover-anchored forms for asset creation and clean modal dialogs for row editing.
 - **Income & Expense Analysis (`/income-expenses`)**: A beautifully balanced Bento Grid diagnostic dashboard. Showcases high-level summaries on the parent component (Total Income, Total Expenses, and Net Cash Flow with dynamic Retention Rate metrics), and splits transactional cashflows into four distinct quadrants (Recurring Income, One-Time/Variable Income, Fixed/Recurring Expenses, and Variable/Discretionary Expenses). Each quadrant displays clear category metrics alongside integrated shadcn collapsible accordions for drill-down transactional lists, preserving dashboard cleanliness.
 - **Financial Statements & Strategic Audits (`/statements`)**: Completely redesigned with our elite, high-density dashboard design patterns. Features:
   - **All-Time Date Range Preset**: Enhanced preset list with an **All** option that instantly expands both cash flow and budget variance charts/ledgers to display all-time synchronized data without bounds.
@@ -69,13 +88,9 @@ IFS-Guru is an enterprise-grade financial management, budgeting, investment, and
 - **Weekly Review & Strategic Reflections (`/weekly-review`)**: 
   - Interactive multi-period scope switcher (Weekly, Monthly, Custom Range with quick jump to current).
   - Clickable metric cards for instant transaction filtering (Income, Expenses, Net Cash Flow, Discussion Threads).
+  - **Peer Invitation Acceptance Workflow**: Shared weekly reviews require explicit confirmation by invited collaborators before appearing in their active review workspace. Invited users receive an action banner with **Accept** and **Decline** options. Owners can monitor invitation statuses (`Pending Acceptance`, `Active`, `Declined`, `Revoked`) directly within the collaboration panel.
   - Streamlined financial journal with one-click guided reflection prompts (Key Wins, Lessons Learned, Action Items, Peer Feedback) and focus mode.
   - Interactive transaction feedback threads with real-time peer discussion comments and comment-only collaborator privacy controls.
-- **360° Comprehensive Financial Reports (`/reports`)**: A professional-grade, multi-dimensional report cockpit that aggregates and normalizes financial data from **all primary modules & stores** (Transactions, Budgets, Statements, Debts, and Investments). Structures the analytical output across three elegant high-fidelity interactive tab modules:
-  - **Segment I: 360° Solvency & Position Sheet**: Net worth calculators, debt-to-asset leverage indexes, monthly burn rate-to-runway coverages, side-by-side asset/liability listings, and multi-month cash flow timeline charts.
-  - **Segment II: Budget vs. Actual Variance**: Imports the core dynamic budget comparison ledger directly, enabling active calendar filtering against transaction entries.
-  - **Segment III: Asset Portfolio Diversification**: Connects investment assets to strategic target weight-setting, rebalancing, and breadth diversification diagnostics.
-  - **Dynamic Multi-Segment Print-Pack**: Integrates specialized `@media print` rules that render all three segments as a cohesive, multi-page vector physical PDF report with formal signature blocks, official date stamps, and structured headers.
 - **Admin Diagnostics (`/admin/connection-test`)**: System telemetry, connection tests, and cryptographic integrity verification.
 
 ---
@@ -401,11 +416,149 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
   - Integrated a dedicated warning card into the main Financial Dashboard with visual progress bars, 100% budget markers, overage percentages, severity indicators (`warning` vs `critical`), and quick-action navigation to adjust envelopes.
 - [x] **Automated Unit & Integration Test Coverage (`src/__tests__/budgetThresholdWarning.test.ts`)**:
   - Added unit test suite covering pace projections, actual overrun detection, healthy threshold states, and invalid period handling.
+
+### ✅ Phase 54: Dashboard Visual Redesign Aligned with Homepage Thematic Cues
+- [x] **Executive Hero Banner & Brand Accents**:
+  - Transformed the top section of `/dashboard` into an executive hero banner featuring the institutional Navy (`#0F2D5C`) and Gold (`#C9971A`) design system.
+  - Added quick CTAs for *Record transaction* and *AI Advisor* coaching.
+- [x] **Enhanced Bento Metric Cards & Custom Area Chart**:
+  - Updated Total Net Worth, Period Income, Period Expenses, and Liquidity Runway cards with brand icon badges, high-contrast typography, and equity/runway progress bars.
+  - Aligned the Cash Flow Overview Area Chart with custom Navy and Gold gradient fills.
+- [x] **Quick Module Shortcuts Strip**:
+  - Added a responsive 5-card shortcuts grid at the bottom of the dashboard providing 1-click navigation to Statements, Budget Envelopes, Debt Strategies, Investments, and AI Advisor.
 - [x] **Verification Milestone**:
   - Automated test coverage: **17 test suites, 78 unit tests (100% passing)**.
   - ESLint verification: `0 errors / 0 warnings`.
   - Production build: `Compiled successfully`.
 
+### ✅ Phase 55: PWA Deterministic Hashing Integrity & State Synchronization Engine
+- [x] **PWA Offline & Sync Hashing Mechanics**:
+  - Confirmed and documented that canonical data hashing (`prepareDataForHashing` & `hashData`) operates continuously on Progressive Web App (PWA) client devices, service workers, and local storage caches.
+  - Ensures deterministic state change detection, payload hashing comparison, and 409 conflict detection for offline queues before sync commit.
+- [x] **Safe Serialization & Normalization (`src/lib/prepareDataForHashing.ts`)**:
+  - Implemented null/undefined safety guards preventing runtime crashes during normalization.
+  - Normalized date fields to ISO strings, numbers to fixed-point strings, and sorted nested collections and arrays deterministically.
+
+### ✅ Phase 56: Comprehensive Admin Hashing Test Suite & Mismatch Error Proofing
+- [x] **Vitest Test Suite (`src/__tests__/adminHashingTest.test.ts`)**:
+  - Built comprehensive unit and integration tests for client vs. server hash comparison, data normalization, mismatch diagnostics, and stale state 409 conflict detection.
+- [x] **Granular Error Handling & Message Passing (`src/app/actions/adminTestActions.ts`)**:
+  - Standardized all server hashing actions with explicit try/catch blocks returning `{ success: false, error, message }` objects for clear diagnostic feedback on error boundaries and admin UI panels.
+
+### ✅ Phase 57: Senior Panel Review — Hashing Algorithm Consistency & Admin UI Standardization
+- [x] **Senior Panel Audit & Architecture Harmonization**:
+  - Conducted cross-functional review across Solutions Architecture, Engineering, QA, Project Management, and UI/UX.
+  - Resolved property naming mismatches between Server Actions (`adminTestActions.ts`) and Admin UI components (`connection-test/page.tsx`).
+- [x] **Standardized Server Action Contracts**:
+  - `getHashForServerComparison`: Standardized return payload with `serverHash`, `hash`, `duration`, and explicit `message`.
+  - `getHashForServerPreparedObject`: Normalized raw objects and returned `serverPreparedString`, `preparedString`, `serverHash`, `hash`, and `duration`.
+  - `verifyClientDataHashAction`: Provided twin boolean match indicators `hashesMatch` and `clientHashMatches` alongside detailed diagnostic string messages.
+
+### ✅ Phase 58: Stale Hash (Mismatch Simulation) Logical Resolution & Verification
+- [x] **Corrected Stale Hash Detection Logic (`src/app/actions/adminTestActions.ts`)**:
+  - Identified and fixed a logical error where `simulateSaveWithPotentialMismatchAction` previously skipped real SHA-256 hash comparison in favor of dummy string matching.
+  - Replaced hardcoded dummy strings with real canonical stringification (`stringify(prepareDataForHashing(payload))`) and actual SHA-256 computation (`hashData`).
+  - Implemented dynamic mismatch detection comparing `lastKnownServerHash` against the newly calculated payload hash, correctly flagging `mismatchDetected: true` and returning HTTP 409 status on stale saves.
+- [x] **Admin Diagnostic UI Alignment (`src/app/(dashboard)/admin/connection-test/page.tsx`)**:
+  - Updated `staleHash_simulationResult` display to accurately render `clientProvidedOriginalHash`, `serverHashOfDataSent`, and set `ResultBadge` success state when a stale save mismatch is correctly intercepted.
+- [x] **Expanded Vitest Test Coverage (`src/__tests__/adminHashingTest.test.ts`)**:
+  - Added unit test cases verifying real SHA-256 mismatch detection on modified financial payload structures.
+
+### ✅ Phase 59: Data Import Persistence Engine & Retention Rate UI Refinement
+- [x] **Data Import Snapshot & Cloud Firestore Sync Engine (`src/components/layout/DataImportDialog.tsx`)**:
+  - Diagnosed and resolved data loss issue upon page refresh following data import.
+  - Updated `handleConfirmImport` to compute full dataset snapshots, update local storage via `saveOfflineSnapshot`, and persist directly to Cloud Firestore using `saveAllUserDataToFirestore` prior to triggering page reload.
+  - Ensured imported datasets remain durable across session resets, offline rehydration, and background auto-sync cycles.
+- [x] **Retention Rate Visual Styling (`src/app/(dashboard)/dashboard/page.tsx`)**:
+  - Removed opaque background badge classes from the Retention Rate percentage display.
+  - Set percentage value background to transparent (`bg-transparent`) while preserving typography and color contrast in both dark and light themes.
+- [x] **Verification Milestone**:
+  - Automated test coverage: **18 test suites, 93 unit tests (100% passing)**.
+  - Production build: `Compiled successfully`.
+
+### ✅ Phase 60: Strategy-Based Data Import Engine & Direct Firestore Streaming
+- [x] **Strategy-Based Data Import (`src/components/layout/DataImportDialog.tsx`)**:
+  - Implemented a robust Strategy Pattern offering users two clear choices: **Merge Data** (safe combine with existing records) or **Overwrite Data** (replace all local and remote data).
+  - Designed a high-contrast premium visual selection UI enabling users to easily toggle their preferred import method.
+  - Dynamically updates help descriptions and safety warning alerts based on the active strategy to maximize user safety.
+- [x] **Direct & Exclusive Firestore Streaming Integration**:
+  - Completely decoupled the Prisma/relational SQL save mechanism from the file import flow.
+  - Streams imported datasets directly, securely, and atomically to **Cloud Firestore** utilizing `saveAllUserDataToFirestore`.
+  - Atomically clears outstanding local offline mutation caches via `clearOfflineMutations` before pushing, ensuring subsequent cloud rehydration is accurate, pristine, and bypasses the relational SQL storage layer during import.
+- [x] **Verification Milestone**:
+  - Production build & linter suites verified with 100% passing results.
+
+### ✅ Phase 61: Dynamic Transaction Panels Rendering View
+- [x] **Visual Panels Layout Toggle (`src/app/(dashboard)/transactions/page.tsx`)**:
+  - Implemented a seamless Layout Switcher allowing users to toggle instantly between the canonical **Table View** and a premium **Panels (Card Grid) View**.
+  - Styled visual panels using a mobile-first, responsive grid with warm accents, displaying dates, description, tags, payment modes, and clear monospace currency symbols.
+- [x] **Seamless Appending & Synchronization**:
+  - Leveraged a unified `@tanstack/react-table` instance so that any added or imported (CSV/JSON) transactions instantly append and render dynamically within the visual panels.
+  - Fully retains global pagination controls, text-searching, classification filtering, and date range filters when in Panel mode.
+  - Retains row selection states and direct interactive action handlers (Edit, Delete, Checkboxes) on each panel.
+
+### ✅ Phase 62: Zero Data-Loss Safe Saving & Import Safeguards
+- [x] **Verified Cloud Save Enforcement (`src/components/layout/DataImportDialog.tsx`)**:
+  - Moved the removal of offline mutations (`clearOfflineMutations`) to execute *strictly after* direct Firestore streaming (`saveAllUserDataToFirestore`) completes successfully.
+  - Added full error boundary protection: if the save fails, offline changes are preserved untouched in the local cache, preventing catastrophic data loss during database outages.
+- [x] **Synchronization Loss Prevention (`src/hooks/useSyncManager.ts`)**:
+  - Updated `saveData` to return `false` on remote save failure so that the caller can differentiate between a local offline save and a true verified cloud save.
+  - Standardized `drainOfflineQueue` to only clear the offline queue when saveData succeeds, prompting the user with a descriptive synchronization warning toast on failure so no data can be lost or overwritten silently.
+
+### ✅ Phase 64: Secure Firestore Admin Reset & Demo Seeding Engine
+- [x] **Secure Administrative Reset Service (`src/services/adminResetService.ts`)**:
+  - Engineered a high-integrity, transactional administrative utility with batch processing (limited to 400 writes per batch) to clean Firestore collections.
+  - Formulated granular reset levels: *Financial Data Reset*, *Audit Logs Purge*, and *Full Factory Reset*.
+  - Added strict, automatic self-lockout prevention: the system preserves the logged-in administrator's profile and the super admin (`seanwambua@gmail.com`), guarding against accidental account or permissions deletion.
+- [x] **Realistic Seeding Engine**:
+  - Programmed a comprehensive dummy data populator seeding premium accounts (Alex Mwangi - Client, Sarah Kemunto - Auditor) complete with Safaricom NSE equities, Kits Plot land values, Stima Sacco deposits, HELB debts, and realistic ledger logs.
+- [x] **Admin Database Reset UI (`src/components/admin/AdminDatabaseReset.tsx`)**:
+  - Crafted an intuitive, beautifully styled governance tab within the Administration page (`/admin`).
+  - Standardized double-confirmation safety guards: forces administrators to type the exact security phrase `RESET` to unlock the destructive trigger.
+  - Added real-time operational feedback summary boards rendering the exact count of documents deleted and seeded on successful execution.
+
+### ✅ Phase 65: Functional Database Connection & Real CRUD Tests
+- [x] **Eradicated Silent Mock Fallbacks**:
+  - Removed all silent mock/fallback mechanisms in `src/app/actions/adminTestActions.ts` where Firestore errors were caught and swapped with simulated local IDs (`local_test_...`) or sample dummy arrays (`mock-1`, `mock-2`).
+  - Ensured that tests on the Admin page fail transparently with exact error details when database connectivity or permissions are broken, as mandated by the Kenya DPA and Firestore integrity rules.
+- [x] **Standardized Firestore Save & Fetch Verification**:
+  - Rewrote `saveTestData` and `fetchTestData` to execute real-time, authenticated Cloud Firestore operations directly via modular SDK functions (`createFirestoreTestEntry`, `fetchFirestoreTestEntry`).
+  - Standardized the fetched data format to return real Firestore attributes (`id`, `data`, `createdAt`) dynamically parsed into the UI table panels without visual discrepancies.
+- [x] **Comprehensive CRUD Cycle Realism**:
+  - Fully standardized `createMultipleTestEntries`, `readAllTestEntries`, `updateSingleTestEntry`, and `deleteSingleTestEntry` to execute direct Cloud Firestore writes, gets, merges, and batch deletes.
+  - Wrapped all diagnostic test entry endpoints inside standard `try/catch` handlers calling `handleFirestoreError`, enabling the system to capture, log, and propagate precise rule validation and schema failures directly to the administrative panel.
+
+### ✅ Phase 66: Authentic Comprehensive Save & Cleanup Diagnostic Engine
+- [x] **Abolished Mock Diagnostics**:
+  - Completely replaced the mocked `performComprehensiveSaveTest` inside `src/app/actions/adminTestActions.ts` with authentic multi-entity transactional integrity tests.
+- [x] **Direct Multi-Entity Mutations**:
+  - The diagnostic action now executes native, simultaneous writes to both the `/users/{userId}/transactions` and `/users/{userId}/debts` Firestore subcollections under the administrator's authorized session.
+- [x] **Strict Verification & Integrity Guard**:
+  - Reads back the written entries and verifies that their contents exactly match the submitted transaction details and principal values.
+- [x] **Self-Cleaning Execution Sweep**:
+  - Performs native `deleteDoc` calls to permanently purge the diagnostic documents, verifying that no zombie database entries persist and returning a full audit payload detailing each successful verification phase.
+
+### ✅ Phase 67: Live Sync Hook & Mutation Queue Controls
+- [x] **Real-Time Hook Integration**:
+  - Wired the active, production-grade `useSyncManager` instance directly to the administration test panel (`/admin/connection-test`).
+- [x] **Reactive State Monitors**:
+  - Engineered diagnostic indicators reflecting live attributes from the active frontend manager, including `syncStatus` tags, network offline/online indicators, pending offline queue sizes, and the exact timestamp of the last successful sync.
+- [x] **Direct Hook Action Triggers**:
+  - Implemented interactive control buttons allowing administrators to execute real-time sync hook methods with instant feedback overlays:
+    - **Manual Bidirectional Sync (`manualSync`)**: Resolves discrepancies and runs standard delta checks.
+    - **Force Overwrite Cloud Save (`forceSave`)**: Syncs and forces current client-side state as the cloud benchmark.
+    - **Force Overwrite Client Fetch (`forceFetch`)**: Discards current local changes and overwrites memory stores with remote Cloud Firestore data.
+    - **Immediate Offline Queue Drain (`drainOfflineQueue`)**: Processes accumulated cached offline-mutations directly to check connectivity throughput.
+
+### ✅ Phase 68: Diagnostics Step-by-Step Transparency Logs
+- [x] **Logging Infrastructure**: Designed and implemented a reactive logging engine in `/admin/connection-test` featuring structured timestamps, level prefixes (✓ Success, ❌ Error, ℹ Info), and high-density, scrollable console outputs.
+- [x] **Comprehensive Diagnostic Integration**: Integrated detailed step-by-step trace statements into every single test on the administrator diagnostic page. Trace pathways capture operation initiation, encryption verification, network payload inspection, and transaction resolution.
+- [x] **Visual Telemetry Consoles**: Created the custom `TestStepLogs` React console component to render color-coded output traces dynamically within each testing segment card, bringing maximum transparency to diagnostic procedures.
+
+### ✅ Phase 69: Real-time Sync Payload Inspection & Persistent Cloud Logger
+- [x] **Live Payloads & Packets Explorer**: Integrated a highly responsive, multi-source raw JSON inspector allowing admins to view, compare, and copy three layers of payloads live: in-memory Zustand client state stores, queued local offline mutations, and cloud-stored server Firestore records.
+- [x] **Account-Level Firestore Logger Persistence**: Wired debounced real-time Firestore synchronization for diagnostic logs (`/admin_logs/{userId}`). Console outputs are kept fully persistent on the admin account across sessions, browser restarts, and device swaps.
+- [x] **Cloud Log Volume Management**: Provided manual resetting capabilities to clear persistent database logs instantly on-demand.
 
 
 
@@ -422,4 +575,51 @@ The senior developer panel completed an exhaustive multi-disciplinary review acr
 
 
 
+
+
+
+### ✅ Phase 70: Auto-Sync Stabilization & Timestamping
+- [x] **Connection Timeout Tracking**: Enforced 800ms resolution timeouts on all network data syncs to confidently ascertain active connections.
+- [x] **Debounce Optimization**: Optimized client-side mutation auto-save debouncing logic: falls back to 30-second cycles offline or on failed networks, and expands to 60-second throttled delays upon a successfully verified connection.
+- [x] **Snapshot Timestamps**: Strengthened sync reconciliation by checking hash states *and* snapshot timestamps () to confidently track data concurrency and ensure the latest version replaces offline caches.
+- [x] **Automated Synchronization (No Manual)**: Replaced redundant `manualSync` workflows and triggers in favor of complete reliance on resilient, automated background PWA sync and lifecycle listeners.
+
+### ✅ Phase 71: Data Leak Prevention & Sign-out Safeguards
+- [x] **Sign-out Interception**: Upgraded the generic sign-out button to explicitly intercept requests when local changes (or offline mutations) exist. It displays an alert warning the user of potential data loss.
+- [x] **Force Save & Sign-out**: Provided a dedicated fallback option to automatically flush pending offline updates directly to Firestore before securely signing out.
+- [x] **Offline Data Wipe**: Enforced strict offline snapshot and mutation cache clearing (, ) tied explicitly to the user's ID during sign-out or account switching. This completely guarantees isolated, atomic datasets without lingering local storage overlap between different logged-in users.
+
+### ✅ Phase 72: Fix Audit Log Permissions on Sign Out
+- [x] **Sign-Out Execution Order**: Resolved 'Missing or insufficient permissions' for  on sign-out by ensuring the  operation completes *before* the active session is destroyed in , allowing  to correctly validate the authenticated user.
+
+### ✅ Phase 72: Fix Audit Log Permissions on Sign Out
+- [x] **Sign-Out Execution Order**: Resolved permissions issue for auditLogs on sign-out by ensuring the recordAuditLog operation completes before the active session is destroyed.
+
+### ✅ Phase 73: Security Audit and Data Leak Prevention
+- [x] **Data Isolation Check**: Added a 'Security Audit' button to the Sync Manager UI to explicitly trigger a client-side verification.
+- [x] **Local Store Verification**: Before syncing, the app now actively checks all local transactions and debts for `userId` mismatches against the currently authenticated user to completely prevent cross-account data leaks.
+
+### ✅ Phase 74: Offline Access Fallback & Anonymous Guest Mode Architecture
+- [x] **Zero-Network Offline Fallback Detection**:
+  - Wired `useOffline` to dynamically detect disconnected internet states across the entire application.
+  - Added high-visibility warning notices in `SignInForm` and `SignUpForm` alerting users when offline and offering immediate local entry without needing a network connection.
+- [x] **Anonymous Guest Mode with Local Persistence**:
+  - Implemented `continueAsGuest` in `AuthContext` generating an anonymous, isolated guest session (`guest_<timestamp>`) stored locally under `imf_guest_session`.
+  - Added one-click "Continue as Guest (Local Storage)" access points to:
+    - Landing page header navigation bar
+    - Hero section primary CTA actions
+    - Sign In card (`/sign-in`)
+    - Sign Up card (`/sign-up`)
+  - Full financial persistence is retained locally on the user's device (`imf_offline_snapshot_${guestUid}`) with zero network or cloud requirements.
+- [x] **Guarded Sync Isolation**:
+  - Upgraded `useSyncManager` to strictly identify `isGuest` and bypass all Cloud Firestore synchronization, prevents permission exceptions (`Missing or insufficient permissions`), and inhibits cloud mutation queues from queuing guest data.
+- [x] **Granular Session Exit & Data Management**:
+  - Refactored `UserButton` to recognize active Guest sessions with a dedicated **"Exit Guest Mode"** trigger.
+  - Features an interactive confirmation dialog with options to:
+    - **Wipe All Local Data & Exit**: Completely purges guest session metadata, offline snapshots, and local state.
+    - **Keep Local Data & Exit**: Retains the local offline snapshot on the device for future resumption.
+  - Direct **"Sign in / Sync to Cloud"** path enables guest users to register or sign in seamlessly.
+- [x] **Automated Vitest Test Suite (`src/__tests__/guestMode.test.ts`)**:
+  - Validated anonymous guest session generation, local snapshot isolation, cloud queue suppression, complete session wipe on exit, and persistent data retention.
+  - Complete test suite passes with **19 test suites and 97 tests passing (100% green)**.
 

@@ -14,9 +14,7 @@ service cloud.firestore {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (request.auth.token.email != null && (
-          request.auth.token.email.lower() == 'seanwambua@gmail.com' ||
-          request.auth.token.email.lower() == 'rashmore2020@gmail.com'
-        )) ||
+          request.auth.token.email.lower() == 'seanwambua@gmail.com' )) ||
         request.auth.uid == 'admin-seanwambua-uid'
       );
     }
@@ -111,10 +109,201 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Persistent diagnostic logs for admin account
+    match /admin_logs/{userId} {
+      allow read, write: if isSignedIn() && (isOwner(userId) || isAdmin());
+    }
+
     // Global application configuration (e.g., pricingRateCard)
     match /config/{configId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // Root-level collections with user isolation and administrative oversight
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /debts/{debtId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /statements/{statementId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /assetItems/{assetId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /otherLiabilityItems/{liabilityId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /budgetItems/{budgetId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /budget/{budgetId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /weeklyReviews/{reviewId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && (resource.data.userId == request.auth.uid || resource.data.ownerId == request.auth.uid)) ||
+        (request.resource != null && (request.resource.data.userId == request.auth.uid || request.resource.data.ownerId == request.auth.uid)) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+    }
+
+    match /statementSettings/{settingId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        settingId == request.auth.uid ||
+        isAdmin() ||
+        isAuditor() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
+      allow create, update, delete: if isSignedIn() && (
+        settingId == request.auth.uid ||
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid) ||
+        isAdmin() ||
+        request.auth.uid == 'admin-seanwambua-uid' ||
+        request.auth.uid == 'demo-user-alex-uid'
+      );
     }
 
     // Fallback closed

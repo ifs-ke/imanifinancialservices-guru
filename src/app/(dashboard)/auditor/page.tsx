@@ -8,6 +8,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/context/AuthContext';
 import { AuditorComplianceOverview } from '@/components/auditor/AuditorComplianceOverview';
 import { AuditorClientInspection } from '@/components/auditor/AuditorClientInspection';
@@ -24,7 +25,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 
 export default function AuditorDashboardPage() {
-  const { user } = useAuth();
+  const { user, isAdmin, isAuditor, isLoaded } = useAuth();
+
+  if (!isLoaded) return <div className="flex items-center justify-center min-h-[50vh]"><LoadingSpinner size={48} text="Authenticating..." /></div>;
+  if (!(isAuditor || isAdmin)) return <div className="p-8 text-center text-destructive">Unauthorized access</div>;
   const [activeTab, setActiveTab] = useState('inspection');
 
   return (

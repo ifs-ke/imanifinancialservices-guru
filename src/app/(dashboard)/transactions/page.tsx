@@ -34,7 +34,9 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Filter
+  Filter,
+  LayoutGrid,
+  TableProperties
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -126,6 +128,7 @@ export default function TransactionsPage() {
   const [transactionToDelete, setTransactionToDelete] = useState<TransactionWithId | null>(null);
   const [isBatchUpdateDialogOpen, setIsBatchUpdateDialogOpen] = useState(false);
   const [isMassDeleteDialogOpen, setIsMassDeleteDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'panels'>('table');
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -747,6 +750,36 @@ export default function TransactionsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {/* View mode switcher (Table vs Panels) */}
+              <div className="flex items-center p-0.5 bg-muted/60 rounded-lg border border-border/50 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={cn(
+                    "p-1.5 rounded-md transition-all cursor-pointer flex items-center justify-center",
+                    viewMode === 'table' 
+                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/20"
+                  )}
+                  title="Table view"
+                >
+                  <TableProperties className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('panels')}
+                  className={cn(
+                    "p-1.5 rounded-md transition-all cursor-pointer flex items-center justify-center",
+                    viewMode === 'panels' 
+                      ? "bg-background text-foreground shadow-xs font-semibold" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/20"
+                  )}
+                  title="Panels view"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
               {/* Reset active filters button */}
               {hasActiveFilters && (
                 <Button 
@@ -788,55 +821,158 @@ export default function TransactionsPage() {
           )}
         </div>
 
-        {/* Data Table */}
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-muted/30">
-              {table.getHeaderGroups().map(headerGroup => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map(header => (
-                    <TableHead key={header.id} className="text-xs font-semibold text-muted-foreground">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map(row => (
-                  <TableRow
+        {/* Data rendering */}
+        {viewMode === 'panels' ? (
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map(row => {
+                const tx = row.original;
+                const isIncome = tx.amount > 0;
+                return (
+                  <div 
                     key={row.id}
-                    data-state={row.getIsSelected() && 'selected'}
-                    className="hover:bg-muted/40 transition-colors"
+                    className={cn(
+                      "relative group flex flex-col justify-between p-4 rounded-xl border bg-card transition-all duration-200 hover:shadow-xs",
+                      row.getIsSelected() 
+                        ? "border-gold bg-gold/5 dark:bg-gold/10" 
+                        : "border-border/60 hover:border-border"
+                    )}
                   >
-                    {row.getVisibleCells().map(cell => (
-                      <TableCell key={cell.id} className="py-2.5 text-xs">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
+                    {/* Header: Date & Checkbox */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[11px] font-mono text-muted-foreground">
+                        {format(tx.date instanceof Date ? tx.date : new Date(tx.date), 'MMMM dd, yyyy')}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={row.getIsSelected()}
+                        onChange={(e) => row.toggleSelected(!!e.target.checked)}
+                        className="rounded border-border/60 text-gold focus:ring-gold/40 h-4 w-4 cursor-pointer accent-gold"
+                      />
+                    </div>
+
+                    {/* Body: Description & Badges */}
+                    <div className="space-y-2 mb-4">
+                      <h4 className="text-xs md:text-sm font-semibold text-foreground line-clamp-2" title={tx.description}>
+                        {tx.description}
+                      </h4>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {tx.categoryName && (
+                          <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-normal">
+                            {tx.categoryName}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal bg-muted/20 border-border/40">
+                          {tx.modeOfPayment}
+                        </Badge>
+                        {tx.frequency && (
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal capitalize bg-muted/10 border-border/30">
+                            {tx.frequency}
+                          </Badge>
+                        )}
+                        {tx.variability && (
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal capitalize bg-muted/10 border-border/30">
+                            {tx.variability}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Footer: Amount & Actions */}
+                    <div className="flex items-center justify-between pt-3 border-t border-border/30">
+                      <span className={cn(
+                        "text-xs md:text-sm font-bold font-mono",
+                        isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"
+                      )}>
+                        {isIncome ? '+' : ''}{formatCurrency(tx.amount)}
+                      </span>
+
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                          onClick={() => handleEditClick(tx)}
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                          <span className="sr-only">Edit</span>
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 rounded-md hover:text-destructive hover:bg-destructive/10 text-muted-foreground cursor-pointer"
+                          onClick={() => handleDeleteClick(tx)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span className="sr-only">Delete</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="col-span-full py-16 flex flex-col items-center justify-center text-center space-y-2 text-xs text-muted-foreground">
+                <Filter className="h-8 w-8 text-muted-foreground/50" />
+                <span className="font-medium">No transactions found matching your criteria.</span>
+                {hasActiveFilters && (
+                  <Button variant="outline" size="sm" onClick={resetAllFilters} className="h-7 text-xs mt-1">
+                    Reset filters
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-muted/30">
+                {table.getHeaderGroups().map(headerGroup => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map(header => (
+                      <TableHead key={header.id} className="text-xs font-semibold text-muted-foreground">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className="h-32 text-center text-xs text-muted-foreground">
-                    <div className="flex flex-col items-center justify-center space-y-2">
-                      <Filter className="h-6 w-6 text-muted-foreground/50" />
-                      <span>No transactions found matching your criteria.</span>
-                      {hasActiveFilters && (
-                        <Button variant="outline" size="sm" onClick={resetAllFilters} className="h-7 text-xs mt-1">
-                          Reset filters
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map(row => (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() && 'selected'}
+                      className="hover:bg-muted/40 transition-colors"
+                    >
+                      {row.getVisibleCells().map(cell => (
+                        <TableCell key={cell.id} className="py-2.5 text-xs">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="h-32 text-center text-xs text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <Filter className="h-6 w-6 text-muted-foreground/50" />
+                        <span>No transactions found matching your criteria.</span>
+                        {hasActiveFilters && (
+                          <Button variant="outline" size="sm" onClick={resetAllFilters} className="h-7 text-xs mt-1">
+                            Reset filters
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
         {/* Pagination controls footer */}
         <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/40 text-xs text-muted-foreground">

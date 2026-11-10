@@ -2,16 +2,18 @@
 /**
  * @file page.tsx (Admin Dashboard)
  * @description Dedicated executive administrator governance dashboard.
- * Houses User Management, Role Assignments, Application Log Reviews, and Pay-Per-Use Tracking.
+ * Houses User Management, Role Assignments, Application Log Reviews, Pay-Per-Use Tracking, and Database Maintenance.
  */
 
 'use client';
 
 import React, { useState } from 'react';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useAuth } from '@/context/AuthContext';
 import { AdminUserManagement } from '@/components/admin/AdminUserManagement';
 import { AdminLogReviews } from '@/components/admin/AdminLogReviews';
 import { AdminPayPerUseTracking } from '@/components/admin/AdminPayPerUseTracking';
+import { AdminDatabaseReset } from '@/components/admin/AdminDatabaseReset';
 import { 
   ShieldCheck, 
   Users, 
@@ -19,47 +21,36 @@ import {
   Coins, 
   Layers,
   Crown,
-  Lock
+  Lock,
+  Database
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 
 export default function AdminDashboardPage() {
-  const { user } = useAuth();
+  const { user, isAdmin, isAuditor, isLoaded } = useAuth();
+
+  if (!isLoaded) return <div className="flex items-center justify-center min-h-[50vh]"><LoadingSpinner size={48} text="Authenticating..." /></div>;
+  if (!isAdmin) return <div className="p-8 text-center text-destructive">Unauthorized access</div>;
   const [activeTab, setActiveTab] = useState('users');
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10" id="page-admin-dashboard">
       {/* Top Banner */}
-      <div className="p-6 rounded-2xl border border-primary/20 bg-gradient-to-r from-card to-primary/5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="mt-2 p-4 rounded-2xl border-0 bg-gradient-to-r from-card to-primary/5 shadow-none flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Badge variant="default" className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs px-2.5 py-0.5">
-              <Crown className="w-3.5 h-3.5 mr-1" /> Super Admin Control Console
-            </Badge>
-            <span className="text-xs text-muted-foreground">Tier 1 Clearance</span>
-          </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            System Administration & Governance
+            System Administration
           </h1>
           <p className="text-sm text-muted-foreground">
-            Signed in as <span className="font-semibold text-foreground">{user?.email}</span>. Manage platform users, assign roles, inspect forensic audit logs, and monitor pay-per-use billing telemetry.
+            Signed in as <span className="font-semibold text-foreground">{user?.email}</span>. Manage platform users, assign roles, inspect forensic audit logs, monitor pay-per-use billing telemetry, and perform database maintenance.
           </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-card border border-border text-xs text-muted-foreground">
-            <div className="font-semibold text-foreground flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-primary" /> Active Enforcer
-            </div>
-            <span>Firestore RBAC v2.0</span>
-          </div>
         </div>
       </div>
 
       {/* Main Tabs Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-xl h-11 bg-muted/60 p-1 border border-border">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl h-11 bg-muted/60 p-1 border border-border">
           <TabsTrigger value="users" className="gap-2 text-xs sm:text-sm" id="tab-admin-users">
             <Users className="w-4 h-4" />
             <span>Users & Roles</span>
@@ -71,6 +62,10 @@ export default function AdminDashboardPage() {
           <TabsTrigger value="billing" className="gap-2 text-xs sm:text-sm" id="tab-admin-billing">
             <Coins className="w-4 h-4" />
             <span>Pay-Per-Use</span>
+          </TabsTrigger>
+          <TabsTrigger value="database" className="gap-2 text-xs sm:text-sm" id="tab-admin-database">
+            <Database className="w-4 h-4" />
+            <span>DB Maintenance</span>
           </TabsTrigger>
         </TabsList>
 
@@ -84,6 +79,10 @@ export default function AdminDashboardPage() {
 
         <TabsContent value="billing" className="outline-none">
           <AdminPayPerUseTracking />
+        </TabsContent>
+
+        <TabsContent value="database" className="outline-none">
+          <AdminDatabaseReset />
         </TabsContent>
       </Tabs>
     </div>

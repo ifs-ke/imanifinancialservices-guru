@@ -301,27 +301,21 @@ export async function createMultipleTestEntries(
     await ensureUserInFirestore(userId, primaryEmail, user.fullName || user.name || 'IFC Member');
     const createdIds: string[] = [];
 
-    try {
-      for (const entry of entriesData) {
-        const id = await createFirestoreTestEntry(userId, entry.data);
-        createdIds.push(id);
-      }
-    } catch (_fsErr) {
-      for (let i = 0; i < entriesData.length; i++) {
-        createdIds.push(`test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
-      }
+    for (const entry of entriesData) {
+      const id = await createFirestoreTestEntry(userId, entry.data);
+      createdIds.push(id);
     }
 
     const duration = performance.now() - startTime;
     return {
       success: true,
-      message: `Created ${createdIds.length} test entries successfully.`,
+      message: `Created ${createdIds.length} test entries successfully in Cloud Firestore.`,
       createdIds,
       duration,
     };
   } catch (error: any) {
     const duration = performance.now() - startTime;
-    return { success: false, message: `Error: ${error.message}`, duration };
+    return { success: false, message: `Error creating entries: ${error.message}`, duration };
   }
 }
 
@@ -337,25 +331,18 @@ export async function readAllTestEntries(): Promise<{
   const startTime = performance.now();
   try {
     let entries: { id: string; data: string }[] = [];
-    try {
-      const colRef = collection(db, 'users', userId, 'testEntries');
-      const snap = await getDocs(colRef);
-      entries = snap.docs.map((d) => ({
-        id: d.id,
-        data: d.data().data || '',
-      }));
-    } catch (_fsErr) {
-      entries = [
-        { id: 'mock-1', data: 'Diagnostic sample entry 1' },
-        { id: 'mock-2', data: 'Diagnostic sample entry 2' },
-      ];
-    }
+    const colRef = collection(db, 'users', userId, 'testEntries');
+    const snap = await getDocs(colRef);
+    entries = snap.docs.map((d) => ({
+      id: d.id,
+      data: d.data().data || '',
+    }));
 
     const duration = performance.now() - startTime;
-    return { success: true, message: `${entries.length} entries fetched.`, entries, duration };
+    return { success: true, message: `${entries.length} entries fetched from Cloud Firestore.`, entries, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
-    return { success: false, message: `Error: ${error.message}`, duration };
+    return { success: false, message: `Error fetching entries: ${error.message}`, duration };
   }
 }
 
@@ -368,13 +355,11 @@ export async function updateSingleTestEntry(
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
-    try {
-      const entryRef = doc(db, 'users', userId, 'testEntries', id);
-      await setDoc(entryRef, { data: newData, updatedAt: new Date().toISOString() }, { merge: true });
-    } catch (_fsErr) {}
+    const entryRef = doc(db, 'users', userId, 'testEntries', id);
+    await setDoc(entryRef, { data: newData, updatedAt: new Date().toISOString() }, { merge: true });
 
     const duration = performance.now() - startTime;
-    return { success: true, message: `Entry ${id} updated successfully.`, updatedId: id, duration };
+    return { success: true, message: `Entry ${id} updated successfully in Cloud Firestore.`, updatedId: id, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
     return { success: false, message: `Error updating entry ${id}: ${error.message}`, duration };
@@ -389,12 +374,10 @@ export async function deleteSingleTestEntry(
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
-    try {
-      await deleteFirestoreTestEntry(userId, id);
-    } catch (_fsErr) {}
+    await deleteFirestoreTestEntry(userId, id);
 
     const duration = performance.now() - startTime;
-    return { success: true, message: `Entry ${id} deleted successfully.`, deletedId: id, duration };
+    return { success: true, message: `Entry ${id} deleted successfully from Cloud Firestore.`, deletedId: id, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
     return { success: false, message: `Error deleting entry ${id}: ${error.message}`, duration };
@@ -412,20 +395,15 @@ export async function deleteAllUserTestEntries(): Promise<{
   if (!userId) return { success: false, message: 'User not authenticated.' };
   const startTime = performance.now();
   try {
-    let count = 0;
-    try {
-      const colRef = collection(db, 'users', userId, 'testEntries');
-      const snap = await getDocs(colRef);
-      count = snap.docs.length;
-      const batch = writeBatch(db);
-      snap.docs.forEach((d) => batch.delete(d.ref));
-      await batch.commit();
-    } catch (_fsErr) {
-      count = 2;
-    }
+    const colRef = collection(db, 'users', userId, 'testEntries');
+    const snap = await getDocs(colRef);
+    const count = snap.docs.length;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
 
     const duration = performance.now() - startTime;
-    return { success: true, message: `${count} entries deleted successfully.`, count, duration };
+    return { success: true, message: `${count} entries deleted successfully from Cloud Firestore.`, count, duration };
   } catch (error: any) {
     const duration = performance.now() - startTime;
     return { success: false, message: `Error: ${error.message}`, duration };
@@ -549,10 +527,14 @@ export async function saveTestData(data: string): Promise<{ success: boolean; me
   try {
     const user = getActiveAdminUser();
     if (!user?.id) throw new Error('User not authenticated');
-    await createTestEntry(data);
+    
+    const primaryEmail = user.email || 'admin@ifs-guru.com';
+    await ensureUserInFirestore(user.id, primaryEmail, user.fullName || user.name || 'IFC Member');
+    const entryId = await createFirestoreTestEntry(user.id, data);
+    
     return {
       success: true,
-      message: `Test data successfully saved to datastore.`,
+      message: `Test data successfully saved to datastore. Entry ID: ${entryId}`,
       duration: performance.now() - startTime,
     };
   } catch (error: any) {
@@ -564,17 +546,35 @@ export async function saveTestData(data: string): Promise<{ success: boolean; me
   }
 }
 
-export async function fetchTestData(): Promise<{ success: boolean; message: string; data?: string; duration: number }> {
+export async function fetchTestData(): Promise<{
+  success: boolean;
+  message: string;
+  data?: { id: string; data: string; createdAt: string } | null;
+  duration: number;
+}> {
   const startTime = performance.now();
   try {
     const user = getActiveAdminUser();
     if (!user?.id) throw new Error('User not authenticated');
-    const readRes = await readAllTestEntries();
-    const latestData = readRes.entries?.[0]?.data || 'Diagnostic test data entry';
+    
+    const entry = await fetchFirestoreTestEntry(user.id);
+    if (!entry) {
+      return {
+        success: true,
+        message: 'No test data found in Cloud Firestore.',
+        data: null,
+        duration: performance.now() - startTime,
+      };
+    }
+    
     return {
       success: true,
-      message: `Test data retrieved successfully.`,
-      data: latestData,
+      message: `Test data retrieved successfully from Cloud Firestore.`,
+      data: {
+        id: entry.id,
+        data: entry.data,
+        createdAt: entry.createdAt.toISOString(),
+      },
       duration: performance.now() - startTime,
     };
   } catch (error: any) {
@@ -586,25 +586,74 @@ export async function fetchTestData(): Promise<{ success: boolean; message: stri
   }
 }
 
-export async function getHashForServerComparison(data: string): Promise<{ success: boolean; hash: string; duration: number }> {
+export async function getHashForServerComparison(data: string): Promise<{
+  success: boolean;
+  hash: string;
+  serverHash: string;
+  message?: string;
+  duration: number;
+  error?: string;
+}> {
   const startTime = performance.now();
-  const hash = await hashData(data);
-  return {
-    success: true,
-    hash,
-    duration: performance.now() - startTime,
-  };
+  try {
+    const hash = await hashData(data || '');
+    return {
+      success: true,
+      hash,
+      serverHash: hash,
+      message: 'String hash calculated successfully.',
+      duration: performance.now() - startTime,
+    };
+  } catch (error: any) {
+    const errorMsg = `Error calculating string hash: ${error.message}`;
+    return {
+      success: false,
+      hash: '',
+      serverHash: '',
+      message: errorMsg,
+      duration: performance.now() - startTime,
+      error: errorMsg,
+    };
+  }
 }
 
-export async function getHashForServerPreparedObject(data: any): Promise<{ success: boolean; hash: string; duration: number }> {
+export async function getHashForServerPreparedObject(data: any): Promise<{
+  success: boolean;
+  hash: string;
+  serverHash: string;
+  serverPreparedString: string;
+  preparedString: string;
+  message?: string;
+  duration: number;
+  error?: string;
+}> {
   const startTime = performance.now();
-  const prepared = prepareDataForHashing(data);
-  const hash = await hashData(stringify(prepared));
-  return {
-    success: true,
-    hash,
-    duration: performance.now() - startTime,
-  };
+  try {
+    const prepared = prepareDataForHashing(data);
+    const serverPreparedString = stringify(prepared);
+    const hash = await hashData(serverPreparedString);
+    return {
+      success: true,
+      hash,
+      serverHash: hash,
+      serverPreparedString,
+      preparedString: serverPreparedString,
+      message: 'Prepared object hash calculated successfully.',
+      duration: performance.now() - startTime,
+    };
+  } catch (error: any) {
+    const errorMsg = `Error calculating object hash: ${error.message}`;
+    return {
+      success: false,
+      hash: '',
+      serverHash: '',
+      serverPreparedString: '',
+      preparedString: '',
+      message: errorMsg,
+      duration: performance.now() - startTime,
+      error: errorMsg,
+    };
+  }
 }
 
 export async function getClerkUserInfo(): Promise<{ success: boolean; message: string; user?: any; duration: number }> {
@@ -629,19 +678,32 @@ export async function verifyClientDataHashAction(data: any, clientHash: string):
   message: string;
   serverCalculatedHash: string;
   hashesMatch: boolean;
+  clientHashMatches: boolean;
   duration: number;
 }> {
   const startTime = performance.now();
-  const prepared = prepareDataForHashing(data);
-  const serverCalculatedHash = await hashData(stringify(prepared));
-  const hashesMatch = serverCalculatedHash === clientHash;
-  return {
-    success: true,
-    message: hashesMatch ? 'Client & server hashes match exactly.' : 'Hash mismatch detected.',
-    serverCalculatedHash,
-    hashesMatch,
-    duration: performance.now() - startTime,
-  };
+  try {
+    const prepared = prepareDataForHashing(data);
+    const serverCalculatedHash = await hashData(stringify(prepared));
+    const hashesMatch = serverCalculatedHash === clientHash;
+    return {
+      success: true,
+      message: hashesMatch ? 'Client & server hashes match exactly.' : 'Hash mismatch detected.',
+      serverCalculatedHash,
+      hashesMatch,
+      clientHashMatches: hashesMatch,
+      duration: performance.now() - startTime,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `Failed to verify hash: ${error.message}`,
+      serverCalculatedHash: '',
+      hashesMatch: false,
+      clientHashMatches: false,
+      duration: performance.now() - startTime,
+    };
+  }
 }
 
 export async function simulateSaveWithPotentialMismatchAction(
@@ -651,52 +713,161 @@ export async function simulateSaveWithPotentialMismatchAction(
   success: boolean;
   message: string;
   status: number;
+  mismatchDetected: boolean;
+  clientProvidedOriginalHash?: string;
+  serverHashOfDataSent?: string;
   newServerHash?: string;
   currentServerHash?: string;
   duration: number;
 }> {
   const startTime = performance.now();
-  const prepared = prepareDataForHashing(payload);
-  const newServerHash = await hashData(stringify(prepared));
+  try {
+    const prepared = prepareDataForHashing(payload);
+    const serverPreparedString = stringify(prepared);
+    const newServerHash = await hashData(serverPreparedString);
 
-  if (lastKnownServerHash && lastKnownServerHash.includes('stale')) {
+    const isMismatched = Boolean(
+      lastKnownServerHash && (lastKnownServerHash !== newServerHash || lastKnownServerHash.includes('stale'))
+    );
+
+    if (isMismatched) {
+      return {
+        success: false,
+        status: 409,
+        mismatchDetected: true,
+        message: 'Conflict detected: Stale server hash.',
+        clientProvidedOriginalHash: lastKnownServerHash,
+        serverHashOfDataSent: newServerHash,
+        currentServerHash: newServerHash || 'latest-canonical-server-hash-2026',
+        newServerHash,
+        duration: performance.now() - startTime,
+      };
+    }
+
+    return {
+      success: true,
+      status: 200,
+      mismatchDetected: false,
+      message: 'Save simulation completed without conflict.',
+      clientProvidedOriginalHash: lastKnownServerHash || newServerHash,
+      serverHashOfDataSent: newServerHash,
+      currentServerHash: newServerHash,
+      newServerHash,
+      duration: performance.now() - startTime,
+    };
+  } catch (error: any) {
     return {
       success: false,
-      status: 409,
-      message: 'Conflict detected: Stale server hash.',
-      currentServerHash: 'latest-canonical-server-hash-2026',
+      status: 500,
+      mismatchDetected: false,
+      message: `Simulation error: ${error.message}`,
+      clientProvidedOriginalHash: lastKnownServerHash || '',
+      serverHashOfDataSent: '',
+      currentServerHash: '',
       duration: performance.now() - startTime,
     };
   }
-
-  return {
-    success: true,
-    status: 200,
-    message: 'Save simulation completed without conflict.',
-    newServerHash,
-    duration: performance.now() - startTime,
-  };
 }
 
 export async function performComprehensiveSaveTest(): Promise<{
   success: boolean;
   message: string;
   results?: any;
+  details?: any;
   duration: number;
 }> {
   const startTime = performance.now();
-  const user = getActiveAdminUser();
-  const testTxId = `test_tx_${Date.now()}`;
-  return {
-    success: true,
-    message: 'Comprehensive multi-entity save and verify test succeeded.',
-    results: {
-      userId: user.id,
-      createdTxId: testTxId,
-      verified: true,
-      cleanedUp: true,
-    },
-    duration: performance.now() - startTime,
-  };
+  try {
+    const user = getActiveAdminUser();
+    if (!user?.id) throw new Error('User not authenticated.');
+
+    const userId = user.id;
+    const primaryEmail = user.email || 'admin@ifs-guru.com';
+    await ensureUserInFirestore(userId, primaryEmail, user.fullName || user.name || 'IFC Member');
+
+    const testTxId = `test_tx_${Date.now()}`;
+    const testDebtId = `test_debt_${Date.now()}`;
+
+    const txRef = doc(db, 'users', userId, 'transactions', testTxId);
+    const debtRef = doc(db, 'users', userId, 'debts', testDebtId);
+
+    // 1. Write the test documents
+    await setDoc(txRef, {
+      id: testTxId,
+      userId,
+      date: new Date().toISOString(),
+      description: 'Admin Test Transaction - Comprehensive Server Save',
+      amount: -123.45,
+      modeOfPayment: 'Bank',
+      frequency: 'one-time',
+      variability: 'fixed',
+      createdAt: new Date().toISOString(),
+    });
+
+    await setDoc(debtRef, {
+      id: testDebtId,
+      userId,
+      description: 'Admin Test Debt - Comprehensive Server Save',
+      principal: 5000,
+      interestRate: 5,
+      minPayment: 100,
+      term: 'short',
+      createdAt: new Date().toISOString(),
+    });
+
+    // 2. Read them back to verify they exist
+    const snapTx = await getDoc(txRef);
+    const snapDebt = await getDoc(debtRef);
+
+    const verifiedTx = snapTx.exists() && snapTx.data().description === 'Admin Test Transaction - Comprehensive Server Save';
+    const verifiedDebt = snapDebt.exists() && snapDebt.data().principal === 5000;
+
+    if (!verifiedTx || !verifiedDebt) {
+      throw new Error(`Data verification failed. Transaction matches: ${verifiedTx}, Debt matches: ${verifiedDebt}`);
+    }
+
+    // 3. Clean up (delete the written documents)
+    await deleteDoc(txRef);
+    await deleteDoc(debtRef);
+
+    // 4. Verify clean-up succeeded
+    const snapTxAfter = await getDoc(txRef);
+    const snapDebtAfter = await getDoc(debtRef);
+
+    const cleanedUpTx = !snapTxAfter.exists();
+    const cleanedUpDebt = !snapDebtAfter.exists();
+
+    if (!cleanedUpTx || !cleanedUpDebt) {
+      throw new Error(`Data cleanup failed. Transaction deleted: ${cleanedUpTx}, Debt deleted: ${cleanedUpDebt}`);
+    }
+
+    const duration = performance.now() - startTime;
+    const testDetails = {
+      channel: 'Server-Action Authenticated Cloud Firestore (Active Admin Session)',
+      userId,
+      createdTransactionId: testTxId,
+      createdDebtId: testDebtId,
+      verifiedTransaction: verifiedTx,
+      verifiedDebt: verifiedDebt,
+      deletedTransaction: cleanedUpTx,
+      deletedDebt: cleanedUpDebt,
+    };
+
+    return {
+      success: true,
+      message: 'Comprehensive server-side Cloud Firestore multi-entity write, read-verification, and cleanup test passed successfully.',
+      results: testDetails,
+      details: testDetails,
+      duration,
+    };
+  } catch (error: any) {
+    const duration = performance.now() - startTime;
+    return {
+      success: false,
+      message: `Comprehensive save and cleanup test failed: ${error.message}`,
+      details: { error: error.message, stack: error.stack },
+      duration,
+    };
+  }
 }
 

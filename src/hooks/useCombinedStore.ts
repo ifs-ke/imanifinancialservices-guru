@@ -1,11 +1,19 @@
 
 // src/hooks/useCombinedStore.ts
 import { useTransactionsStore } from '@/store/transactionsStore';
-import { useDebtStore } from '@/store/debtStore';
+import { useDebtStore, selectTotalDebt } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import { useBudgetStore } from '@/store/budgetStore';
 import { useWeeklyReviewStore } from '@/store/weeklyReviewStore'; // Import the new store
+import { useInvestmentStore } from '@/store/investmentStore';
 import { useMemo } from 'react';
+
+export const getTransactionsState = useTransactionsStore.getState;
+export const getDebtState = useDebtStore.getState;
+export const getStatementState = useStatementStore.getState;
+export const getBudgetState = useBudgetStore.getState;
+export const getWeeklyReviewState = useWeeklyReviewStore.getState;
+export const getInvestmentState = useInvestmentStore.getState;
 
 /**
  * Custom hook to combine state and actions from all Zustand stores.
@@ -70,7 +78,7 @@ export const useCombinedStore = () => {
 // For example: Calculate Net Worth using data from statement and debt stores
 export const useNetWorth = () => {
     const totalAssets = useStatementStore(state => state.assetItems.reduce((sum, item) => sum + item.amount, 0));
-    const totalDebt = useDebtStore(state => state.debts.reduce((sum, debt) => sum + debt.principal, 0));
+    const totalDebt = useDebtStore(selectTotalDebt);
     const totalOtherLiabilities = useStatementStore(state => state.otherLiabilityItems.reduce((sum, item) => sum + item.amount, 0));
 
     return totalAssets - totalDebt - totalOtherLiabilities;

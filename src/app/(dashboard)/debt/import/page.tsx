@@ -20,14 +20,27 @@ import { cn } from '@/lib/utils';
 import { useSyncManager } from '@/hooks/useSyncManager';
 
 const POSSIBLE_HEADERS: { [key: string]: keyof DebtItem | 'ignore' } = {
+  date: 'date',
+  'debt date': 'date',
+  'origination date': 'date',
+  'start date': 'date',
+  'due date': 'dueDate',
+  'expected date': 'dueDate',
+  'maturity date': 'dueDate',
+  classification: 'classification',
+  'debt classification': 'classification',
+  type: 'classification',
+  category: 'classification',
   description: 'description',
   'debt name': 'description',
+  'lender': 'description',
   principal: 'principal',
   'balance (kes)': 'principal',
   'amount (kes)': 'principal',
   'outstanding balance': 'principal',
   'interest rate (%)': 'interestRate',
   'rate (%)': 'interestRate',
+  'interest rate': 'interestRate',
   'annual rate': 'interestRate',
   'minimum payment (kes)': 'minPayment',
   'min payment (kes)': 'minPayment',
@@ -35,9 +48,13 @@ const POSSIBLE_HEADERS: { [key: string]: keyof DebtItem | 'ignore' } = {
   term: 'term',
   'loan term': 'term',
   'debt type': 'term',
+  status: 'status',
+  'debt status': 'status',
+  notes: 'notes',
+  comments: 'notes',
 };
 
-const DEBT_FIELDS: (keyof DebtItem)[] = ['description', 'principal', 'interestRate', 'minPayment', 'term'];
+const DEBT_FIELDS: (keyof DebtItem)[] = ['date', 'dueDate', 'classification', 'description', 'principal', 'interestRate', 'minPayment', 'term', 'status', 'notes'];
 
 type ImportStage = 'upload' | 'mapping' | 'preview' | 'reconciling' | 'complete' | 'error';
 
@@ -199,8 +216,17 @@ export default function ImportDebtsPage() {
         if (!validateMapping()) return;
 
         const mapped: MappedDebtItem[] = parsedData.map((row) => {
+            const today = new Date().toISOString().split('T')[0];
             const debtItem: Partial<MappedDebtItem> = {
-                __originalData: row, __toBeImported: true, description: '', principal: 0, interestRate: 0, minPayment: 0, term: 'long',
+                __originalData: row, 
+                __toBeImported: true, 
+                date: today,
+                classification: 'personal',
+                description: '', 
+                principal: 0, 
+                interestRate: 0, 
+                minPayment: 0, 
+                term: 'short',
             };
             let parseError = '';
             for (const header in columnMapping) {
@@ -209,6 +235,22 @@ export default function ImportDebtsPage() {
                 if (field === 'ignore' || rawValue === undefined || rawValue === '') continue;
                 try {
                     switch (field) {
+                        case 'date':
+                            const parsedDate = new Date(rawValue);
+                            if (!isNaN(parsedDate.getTime())) {
+                                debtItem.date = rawValue;
+                            } else {
+                                debtItem.date = today;
+                            }
+                            break;
+                        case 'classification':
+                            const lowerClass = rawValue.toLowerCase();
+                            if (lowerClass.includes('inst') || lowerClass.includes('bank') || lowerClass.includes('sacco')) {
+                                debtItem.classification = 'institutional';
+                            } else {
+                                debtItem.classification = 'personal';
+                            }
+                            break;
                         case 'description': debtItem.description = (debtItem.description ? debtItem.description + " | " : "") + rawValue; break;
                         case 'principal': case 'minPayment':
                              const cleanedAmount = rawValue.replace(/,/g, '').replace(/[^-0-9.]/g, '');
@@ -218,23 +260,43 @@ export default function ImportDebtsPage() {
                         case 'interestRate':
                              const cleanedRate = rawValue.replace(/%/g, '');
                              const parsedRate = parseFloat(cleanedRate);
-                             if (isNaN(parsedRate)) throw new Error(`Invalid interest rate format: ${rawValue}`);
-                            debtItem.interestRate = parsedRate; break;
+                             debtItem.interestRate = isNaN(parsedRate) ? 0 : parsedRate; break;
                         case 'term':
                             const lowerTerm = rawValue.toLowerCase();
                              if (lowerTerm.includes('short')) debtItem.term = 'short';
                              else if (lowerTerm.includes('long')) debtItem.term = 'long';
-                             else { parseError += `Unrecognized term '${rawValue}'. Defaulting to long. `; debtItem.term = 'long';}
+                             else { parseError += `Unrecognized term '${rawValue}'. Defaulting to short. `; debtItem.term = 'short';}
+                            break;
+                        case 'dueDate':
+                            const parsedDueDate = new Date(rawValue);
+                            if (!isNaN(parsedDueDate.getTime())) {
+                              debtItem.dueDate = rawValue.includes('T') ? rawValue.split('T')[0] : rawValue;
+                            } else {
+                              debtItem.dueDate = null;
+                            }
+                            break;
+                        case 'status':
+                            const lowerStatus = rawValue.toLowerCase();
+                            if (lowerStatus.includes('overdue')) debtItem.status = 'overdue';
+                            else if (lowerStatus.includes('paid')) debtItem.status = 'paid_off';
+                            else if (lowerStatus.includes('grace')) debtItem.status = 'in_grace';
+                            else debtItem.status = 'active';
+                            break;
+                        case 'notes':
+                            debtItem.notes = rawValue;
                             break;
                     }
                 } catch (e: any) { parseError += `Error in column '${header}' ('${field}'): ${e.message}. `; }
             }
             if (!debtItem.description) parseError += "Missing description. ";
             if (debtItem.principal === undefined || isNaN(debtItem.principal)) parseError += "Missing or invalid principal. ";
-            if (debtItem.interestRate === undefined || isNaN(debtItem.interestRate)) parseError += "Missing or invalid interest rate. ";
+            if (debtItem.interestRate === undefined || isNaN(debtItem.interestRate)) debtItem.interestRate = 0;
             if (debtItem.minPayment === undefined || isNaN(debtItem.minPayment)) parseError += "Missing or invalid minimum payment. ";
-            if (!debtItem.term) parseError += "Missing or invalid term. ";
-             if (parseError) { debtItem.__parseError = parseError.trim(); debtItem.__toBeImported = false; }
+            if (!debtItem.term) debtItem.term = 'short';
+            if (!debtItem.date) debtItem.date = today;
+            if (!debtItem.classification) debtItem.classification = 'personal';
+            if (!debtItem.status) debtItem.status = 'active';
+            if (parseError) { debtItem.__parseError = parseError.trim(); debtItem.__toBeImported = false; }
             return debtItem as MappedDebtItem;
         });
         setMappedDebts(mapped);
@@ -277,7 +339,13 @@ export default function ImportDebtsPage() {
             return;
         }
         const newDebtData: Omit<DebtItem, 'id'>[] = debtsToImport.map(debt => ({
-            description: debt.description!, principal: debt.principal!, interestRate: debt.interestRate!, minPayment: debt.minPayment!, term: debt.term!,
+            date: debt.date || new Date().toISOString().split('T')[0],
+            classification: debt.classification || 'personal',
+            description: debt.description!, 
+            principal: debt.principal!, 
+            interestRate: debt.interestRate !== undefined && debt.interestRate !== null ? debt.interestRate : 0, 
+            minPayment: debt.minPayment!, 
+            term: debt.term!,
         }));
         try {
              const addedDebtsWithIds = importDebtsBatch(newDebtData);

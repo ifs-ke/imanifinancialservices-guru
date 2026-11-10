@@ -5,16 +5,18 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { useOffline } from '@/hooks/useOffline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2 } from 'lucide-react';
+import { Loader2, WifiOff } from 'lucide-react';
 
 export function SignUpForm() {
   const router = useRouter();
   const { signUpWithEmail, signInWithGoogle, isSignedIn, isLoaded } = useAuth();
+  const isOffline = useOffline();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,6 +29,7 @@ export function SignUpForm() {
       router.push('/dashboard');
     }
   }, [isLoaded, isSignedIn, router]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +88,18 @@ export function SignUpForm() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {isOffline && (
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs">
+            <WifiOff className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-semibold block">Offline Connection Detected</span>
+              <p className="text-[11px] opacity-90 leading-tight">
+                Account registration requires an active connection. You can start immediately with <strong>Guest Mode</strong>, which stores all your financial data locally on this device.
+              </p>
+            </div>
+          </div>
+        )}
+
         {error && (
           <Alert variant="destructive" className="py-2.5">
             <AlertDescription className="text-xs">{error}</AlertDescription>
@@ -96,7 +111,7 @@ export function SignUpForm() {
           variant="outline"
           className="w-full flex items-center justify-center gap-2 h-10 border-input"
           onClick={handleGoogleSignUp}
-          disabled={loading}
+          disabled={loading || isOffline}
           id="google-signup-btn"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -138,7 +153,7 @@ export function SignUpForm() {
               placeholder="Sean Wambua"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              disabled={loading}
+              disabled={loading || isOffline}
               required
             />
           </div>
@@ -150,7 +165,7 @@ export function SignUpForm() {
               placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
+              disabled={loading || isOffline}
               required
             />
           </div>
@@ -162,7 +177,7 @@ export function SignUpForm() {
               placeholder="Minimum 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
+              disabled={loading || isOffline}
               required
             />
           </div>
@@ -174,7 +189,7 @@ export function SignUpForm() {
               placeholder="Repeat your password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={loading}
+              disabled={loading || isOffline}
               required
             />
           </div>
@@ -185,7 +200,7 @@ export function SignUpForm() {
             <Link href="/terms" className="text-primary underline hover:text-primary/80 font-medium">Terms & Conditions</Link>.
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading} id="email-signup-btn">
+          <Button type="submit" className="w-full" disabled={loading || isOffline} id="email-signup-btn">
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

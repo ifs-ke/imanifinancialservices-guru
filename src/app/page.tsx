@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { 
   TrendingUp, 
@@ -54,13 +55,13 @@ interface FAQItem {
 const FAQ_ITEMS: readonly FAQItem[] = [
   {
     id: 'faq-statement-parsing',
-    question: 'How does M-Pesa and bank statement import work?',
-    answer: 'IFS-Guru processes M-Pesa PDF statements, merchant Till receipts, and Kenyan bank export PDFs directly in your browser. Our engine extracts transactions, categorizes expenses, detects duplicate entries, and populates your journal without sending your raw statement documents to third-party servers.'
+    question: 'How are transactions and financial statements recorded in IFS-Guru?',
+    answer: 'Transactions—including M-Pesa payments, card charges, and bank transfers—are logged using our Transaction Logger or imported via structured JSON data backups. IFS-Guru does not automatically process or upload unencrypted raw M-Pesa PDF statements to third-party servers, keeping your financial privacy and data control entirely in your hands.'
   },
   {
     id: 'faq-offline-capability',
-    question: 'Can I use IFS-Guru when offline?',
-    answer: 'Yes! IFS-Guru is architected as an Offline-First Progressive Web App (PWA). You can view your ledgers, add transactions, adjust budgets, and draft weekly reviews without an active internet connection. All changes are encrypted and queued locally, then automatically synchronized once connection is restored.'
+    question: 'Can I use IFS-Guru when offline or as a Guest?',
+    answer: 'Yes! IFS-Guru is an Offline-First Progressive Web App (PWA). You can start immediately in Guest Mode without creating an account or signing in—all records persist in local storage. For registered users, all offline changes are queued locally and automatically synchronized with Cloud Firestore when connection resumes.'
   },
   {
     id: 'faq-debt-strategies',
@@ -69,18 +70,18 @@ const FAQ_ITEMS: readonly FAQItem[] = [
   },
   {
     id: 'faq-sme-segregation',
-    question: 'How does IFS-Guru assist small businesses and SME owners?',
-    answer: 'We solve the common challenge of co-mingling personal and business funds. IFS-Guru provides separate ledgers for working capital, tracking supplier payables, inventory costs, and owner drawings so you maintain clear cash runway visibility and accurate tax records.'
+    question: 'How does IFS-Guru separate personal and small business (SME) finances?',
+    answer: 'IFS-Guru helps SME owners prevent co-mingling funds by providing distinct ledgers for business working capital, supplier expenses, inventory costs, and personal owner withdrawals—giving you clear cash runway visibility.'
   },
   {
     id: 'faq-data-security',
     question: 'How is my financial data protected?',
-    answer: 'Your financial privacy is our highest priority. IFS-Guru implements client-side encryption, granular role-based access control (RBAC), and strict adherence to the Kenya Data Protection Act (DPA 2019). We never sell, monetize, or share your financial records with advertisers.'
+    answer: 'Your financial privacy is our highest priority. IFS-Guru implements local encrypted storage, client-side Firebase encryption, granular role-based access control (RBAC), and strict adherence to data protection standards. We never sell, monetize, or share your financial records with advertisers.'
   },
   {
     id: 'faq-ai-advisor',
     question: 'How does the AI Financial Advisor coaching work?',
-    answer: 'Our AI coaching engine is powered by server-side Gemini intelligence tailored for Kenyan economic contexts (KES currency, M-Pesa nuances, and local SME cash flow dynamics). You can launch conversational weekly reviews via the Live Streaming Chat FAB anytime to receive actionable cash flow insights.'
+    answer: 'Our AI coaching engine is powered by server-side Gemini intelligence tailored for Kenyan economic contexts (KES currency, M-Pesa payment workflows, and local SME cash flow dynamics). You can launch conversational weekly reviews via the Live Streaming Chat FAB anytime to receive actionable cash flow insights.'
   }
 ];
 
@@ -89,7 +90,7 @@ const PLATFORM_FEATURES: readonly FeatureItem[] = [
     id: 'feature-financial-statements',
     icon: FileSpreadsheet,
     title: 'Financial Statements',
-    description: 'Parse M-Pesa, bank, and merchant Till PDF statements directly into reconciled transaction journals with duplicate detection.'
+    description: 'Record asset and liability balances, organize M-Pesa and bank entries into reconciled transaction journals, and export PDF/CSV ledgers.'
   },
   {
     id: 'feature-debt-management',
@@ -121,7 +122,8 @@ const PLATFORM_FEATURES: readonly FeatureItem[] = [
  * SinglePageHome renders the core 3-section landing interface.
  */
 export default function SinglePageHome() {
-  const { isSignedIn, isLoaded, role } = useAuth();
+  const router = useRouter();
+  const { isSignedIn, isLoaded, role, continueAsGuest } = useAuth();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -136,6 +138,12 @@ export default function SinglePageHome() {
   const scrollToTop = () => {
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleStartAsGuest = () => {
+    if (!isSignedIn) {
+      continueAsGuest();
     }
   };
 
@@ -187,8 +195,13 @@ export default function SinglePageHome() {
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/sign-in">
-                  <Button id="nav-signin-btn" variant="ghost" size="sm" className="h-9 px-3 text-xs text-muted-foreground hover:text-foreground font-medium">
-                    Sign In
+                  <Button
+                    id="nav-signin-btn"
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 px-3 text-xs text-muted-foreground hover:text-foreground font-medium"
+                  >
+                    Sign in
                   </Button>
                 </Link>
                 <Link href="/sign-up">
@@ -232,14 +245,18 @@ export default function SinglePageHome() {
 
               {/* Action Buttons */}
               <div className="pt-2 flex flex-col sm:flex-row gap-3">
-                <Link href={isLoaded && isSignedIn ? dashboardUrl : "/sign-up"} className="sm:w-auto">
+                <Link
+                  href={isLoaded && isSignedIn ? dashboardUrl : "/dashboard"}
+                  onClick={handleStartAsGuest}
+                  className="sm:w-auto"
+                >
                   <Button id="hero-primary-cta" className="w-full sm:w-auto h-11 px-6 text-sm font-semibold rounded-lg gap-2 shadow-xs bg-navy text-gold hover:bg-navy-mid dark:bg-gold dark:text-navy dark:hover:bg-gold-bright">
-                    <span>{isLoaded && isSignedIn ? "Go to Dashboard" : "Open Financial Dashboard"}</span>
+                    <span>{isLoaded && isSignedIn ? "Go to Dashboard" : "Open Financial Dashboard (Guest)"}</span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
                 <a href="#features" className="sm:w-auto">
-                  <Button id="hero-secondary-cta" variant="outline" className="w-full sm:w-auto h-11 px-6 text-sm font-semibold rounded-lg border-border/80 text-foreground">
+                  <Button id="hero-secondary-cta" variant="ghost" className="w-full sm:w-auto h-11 px-6 text-sm font-semibold rounded-lg border-border/80 text-foreground">
                     <span>Core Features</span>
                   </Button>
                 </a>
@@ -330,7 +347,7 @@ export default function SinglePageHome() {
               Frequently Asked Questions
             </h2>
             <p className="text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed font-normal">
-              Everything you need to know about M-Pesa statements, privacy protocols, debt reduction models, and offline operations.
+              Everything you need to know about transaction logging, data privacy, debt reduction models, and offline operations.
             </p>
           </div>
 

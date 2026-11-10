@@ -278,11 +278,11 @@ export const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({
   };
 
   const activeShares = useMemo(() => {
-    return sharesList.filter((s) => s.status === 'active');
+    return sharesList.filter((s) => s.status === 'active' || s.status === 'pending');
   }, [sharesList]);
 
   const archivedShares = useMemo(() => {
-    return sharesList.filter((s) => s.status !== 'active');
+    return sharesList.filter((s) => s.status !== 'active' && s.status !== 'pending');
   }, [sharesList]);
 
   return (
@@ -497,12 +497,21 @@ export const ShareReviewDialog: React.FC<ShareReviewDialogProps> = ({
                               <span className="text-xs font-semibold text-foreground truncate max-w-[150px] sm:max-w-none">
                                 {share.sharedWithName || share.sharedWithEmail}
                               </span>
-                              <Badge
-                                variant="default"
-                                className="text-[9px] px-1.5 py-0 rounded-full font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                              >
-                                Active
-                              </Badge>
+                              {share.status === 'pending' ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] px-1.5 py-0 rounded-full font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 flex items-center gap-1"
+                                >
+                                  <Clock className="h-2.5 w-2.5" /> Pending Acceptance
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="default"
+                                  className="text-[9px] px-1.5 py-0 rounded-full font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                >
+                                  Active
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-2.5 text-[10px] text-muted-foreground">
                               <span className="font-semibold text-foreground/70">{share.periodLabel}</span>

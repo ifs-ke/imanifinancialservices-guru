@@ -23,6 +23,7 @@ import { formatCurrency, cn } from '@/lib/utils';
 import { useDebtStore } from '@/store/debtStore';
 import { useStatementStore } from '@/store/statementStore';
 import type { StatementItem, DebtItem, OtherLiabilityItem } from '@/lib/types';
+import { isDebtActive } from '@/lib/debtUtils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import StatementItemFormPopover from '@/components/statements/StatementItemFormPopover';
 
@@ -127,8 +128,9 @@ const NetWorthStatementSection: React.FC<NetWorthStatementSectionProps> = ({
     </TableRow>
   );
 
-  const shortTermDebts = useMemo(() => debts.filter(debt => debt.term === 'short'), [debts]);
-  const longTermDebts = useMemo(() => debts.filter(debt => debt.term === 'long'), [debts]);
+  const activeDebts = useMemo(() => debts.filter(isDebtActive), [debts]);
+  const shortTermDebts = useMemo(() => activeDebts.filter(debt => debt.term === 'short'), [activeDebts]);
+  const longTermDebts = useMemo(() => activeDebts.filter(debt => debt.term === 'long'), [activeDebts]);
   const totalShortTermDebt = useMemo(() => shortTermDebts.reduce((sum, item) => sum + item.principal, 0), [shortTermDebts]);
   const totalLongTermDebt = useMemo(() => longTermDebts.reduce((sum, item) => sum + item.principal, 0), [longTermDebts]);
   const totalAssets = useMemo(() => assetItems.reduce((sum, item) => sum + item.amount, 0), [assetItems]);

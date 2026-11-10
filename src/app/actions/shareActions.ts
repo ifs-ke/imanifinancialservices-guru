@@ -156,7 +156,7 @@ export async function shareTransactionsReviewApi(params: {
     sharedWithEmail: targetUser.email,
     sharedWithName: targetUser.name || targetUser.email,
     permissions: 'comment_only',
-    status: 'active',
+    status: 'pending',
     transactionsSnapshot: transactions,
     comments: existingComments,
     journal,
@@ -362,8 +362,65 @@ export async function getSharesCreatedByOwnerApi(ownerUserId: string): Promise<S
 }
 
 /**
- * Retrieves active reviews shared with a specific user (User 2 / recipient).
- * Filters out any shares that have been revoked by the owner.
+/**
+ * Accepts a pending weekly review invitation
+ */
+export async function acceptShareInvitationApi(shareId: string): Promise<SharedReviewRecord | null> {
+  const catalog = getLocalSharedReviews();
+  const record = catalog[shareId];
+  const now = new Date().toISOString();
+
+  if (record) {
+    record.status = 'active';
+    record.acceptedAt = now;
+    saveLocalSharedReviews(catalog);
+  }
+
+  try {
+    const docRef = doc(db, 'sharedReviews', shareId);
+    await setDoc(docRef, { status: 'active', acceptedAt: now }, { merge: true });
+    logInfo(`[ShareActions] Shared review accepted: ${shareId}`);
+  } catch (err: any) {
+    logWarn(`[ShareActions] Firestore accept share fallback: ${err?.message}`);
+  }
+
+  if (record) {
+    triggerCommentAddedNotification(
+      record.sharedWithName || record.sharedWithEmail || 'Collaborator',
+      'Accepted Review Invitation',
+      record.periodLabel,
+      false
+    );
+  }
+
+  return record || null;
+}
+
+/**
+ * Declines a pending weekly review invitation
+ */
+export async function declineShareInvitationApi(shareId: string): Promise<void> {
+  const catalog = getLocalSharedReviews();
+  const record = catalog[shareId];
+  const now = new Date().toISOString();
+
+  if (record) {
+    record.status = 'declined';
+    record.declinedAt = now;
+    saveLocalSharedReviews(catalog);
+  }
+
+  try {
+    const docRef = doc(db, 'sharedReviews', shareId);
+    await setDoc(docRef, { status: 'declined', declinedAt: now }, { merge: true });
+    logInfo(`[ShareActions] Shared review invitation declined: ${shareId}`);
+  } catch (err: any) {
+    logWarn(`[ShareActions] Firestore decline share fallback: ${err?.message}`);
+  }
+}
+
+/**
+ * Retrieves all reviews shared with a specific user (User 2 / recipient), filtering out revoked shares.
  */
 export async function getSharedReviewsForRecipientApi(recipientUserId: string): Promise<SharedReviewRecord[]> {
   const localCatalog = getLocalSharedReviews();
@@ -374,13 +431,15 @@ export async function getSharedReviewsForRecipientApi(recipientUserId: string): 
   try {
     const q = query(
       collection(db, 'sharedReviews'),
-      where('sharedWithUserId', '==', recipientUserId),
-      where('status', '==', 'active')
+      where('sharedWithUserId', '==', recipientUserId)
     );
     const snap = await getDocs(q);
     const remoteList: SharedReviewRecord[] = [];
     snap.forEach(docSnap => {
-      remoteList.push(docSnap.data() as SharedReviewRecord);
+      const data = docSnap.data() as SharedReviewRecord;
+      if (data.status !== 'revoked') {
+        remoteList.push(data);
+      }
     });
 
     const map = new Map<string, SharedReviewRecord>();
@@ -565,54 +624,11 @@ export async function streamAIAssistantResponse(
       return fullText;
     }
   } catch (err) {
-    logWarn(`[ShareActions] Server-side Gemini stream failed, trying client-side fallback: ${err}`);
+    logWarn(`[ShareActions] Server-side Gemini stream failed: ${err}`);
   }
 
-  // 2. Client-side Fallback (extremely resilient for development/SPA standalone mode)
-  try {
-    const { GoogleGenAI } = await import("@google/genai");
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
-    
-    if (!apiKey) {
-      throw new Error("No Gemini API Key available on client-side environment.");
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
-
-    const contents = chatHistory.map((h) => ({
-      role: h.senderRole === "assistant" ? "model" as const : "user" as const,
-      parts: [{ text: h.message }]
-    }));
-
-    const contextStr = context 
-      ? `\n\n[Weekly Review Context:\n- Period: ${context.periodLabel || 'N/A'}\n- Journal Notes: ${context.journal || 'None'}\n- Transactions Count: ${context.transactionsCount || 0}\n- Comments Count: ${context.commentsCount || 0}]`
-      : "";
-
-    contents.push({
-      role: "user" as const,
-      parts: [{ text: `${userMessage}${contextStr}` }]
-    });
-
-    const responseStream = await ai.models.generateContentStream({
-      model: "gemini-3.8-flash",
-      contents,
-      config: {
-        systemInstruction: "You are an expert AI Financial Advisor at IFS-Guru. Your goal is to guide users through their weekly review, analyze their transaction expenses, highlight savings wins, and provide constructive, highly actionable financial strategy advice in Kenya (currency in KES). Keep responses clear, concise, objective, and empathetic.",
-      }
-    });
-
-    for await (const chunk of responseStream) {
-      const chunkText = chunk.text;
-      if (chunkText) {
-        fullText += chunkText;
-        onChunk(chunkText);
-      }
-    }
-    return fullText;
-  } catch (err: any) {
-    logError(`[ShareActions] All AI assistant routes failed: ${err?.message}`);
-    const errorMessage = "I apologize, but I am unable to connect to the Gemini service right now. Please check your network connection or verify that your GEMINI_API_KEY is properly set up in the Settings.";
-    onChunk(errorMessage);
-    return errorMessage;
-  }
+  // Pure Server-Side Architecture: Do NOT attempt client-side @google/genai initialization or API key loading in the browser.
+  const errorMessage = "I apologize, but I am unable to connect to the Gemini service right now. Please check your network connection or verify that your server environment has configured the GEMINI_API_KEY.";
+  onChunk(errorMessage);
+  return errorMessage;
 }

@@ -76,13 +76,18 @@ const normalizeItemForHashing = (item: any): any => {
     const normalized: any = { ...item };
 
     // Normalize dates
-    if (item.date !== undefined) normalized.date = toISOStringOptional(item.date);
+    if (item.date !== undefined) normalized.date = toISOStringOptional(item.date) || (typeof item.date === 'string' ? item.date : undefined);
+    if (item.dueDate !== undefined) normalized.dueDate = toISOStringOptional(item.dueDate) || (typeof item.dueDate === 'string' ? item.dueDate : null);
     if (item.purchaseDate !== undefined) normalized.purchaseDate = toISOStringOptional(item.purchaseDate);
 
     // Normalize numbers to fixed-point strings for precision consistency
     if (item.amount !== undefined) normalized.amount = toFixedIfNumber(item.amount, 2);
     if (item.principal !== undefined) normalized.principal = toFixedIfNumber(item.principal, 2);
-    if (item.interestRate !== undefined) normalized.interestRate = toFixedIfNumber(item.interestRate, 4);
+    if (item.interestRate !== undefined && item.interestRate !== null) {
+      normalized.interestRate = toFixedIfNumber(item.interestRate, 4);
+    } else if ('interestRate' in item) {
+      normalized.interestRate = toFixedIfNumber(0, 4);
+    }
     if (item.minPayment !== undefined) normalized.minPayment = toFixedIfNumber(item.minPayment, 2);
     if (item.quantity !== undefined) normalized.quantity = toFixedIfNumber(item.quantity, 8);
     if (item.purchasePrice !== undefined) normalized.purchasePrice = toFixedIfNumber(item.purchasePrice, 2);
@@ -90,6 +95,8 @@ const normalizeItemForHashing = (item: any): any => {
 
     // Normalize optional string/nullable fields to be explicitly null if falsy
     if ('categoryName' in item) normalized.categoryName = item.categoryName || null;
+    if ('classification' in item) normalized.classification = item.classification || 'personal';
+    if ('status' in item) normalized.status = item.status || 'active';
     if ('notes' in item) normalized.notes = item.notes || null;
     if ('frequency' in item) normalized.frequency = item.frequency || null;
     if ('variability' in item) normalized.variability = item.variability || null;
@@ -139,6 +146,7 @@ const formatFullSnapshotReviewData = (reviews: Record<string, WeeklyReviewData>)
 };
 
 export function prepareDataForHashing(data: SaveDataPayloadPartial | FullSnapshotData): any {
+    if (!data || typeof data !== 'object') return {};
     const isPartialUpdate = 'transactions' in data && data.transactions && (data.transactions.created || data.transactions.updated || data.transactions.deletedIds);
 
     if (isPartialUpdate) {

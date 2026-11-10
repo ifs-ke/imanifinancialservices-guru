@@ -5,31 +5,49 @@ import DashboardLayout from '@/app/(dashboard)/layout';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
+// Helper for dynamic imports with automatic retry on chunk loading failures
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch (error) {
+      // Check if session has already reloaded once to avoid infinite reload loop
+      const key = 'chunk_reload_retry';
+      const hasReloaded = typeof window !== 'undefined' ? sessionStorage.getItem(key) : null;
+      if (!hasReloaded && typeof window !== 'undefined') {
+        sessionStorage.setItem(key, 'true');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+}
+
 // Public pages
-const PublicLandingPage = lazy(() => import('@/app/page'));
-const TermsPage = lazy(() => import('@/app/terms/page'));
-const PrivacyPolicyPage = lazy(() => import('@/app/privacy/page'));
-const SignInPage = lazy(() => import('@/app/(auth)/sign-in/[[...sign-in]]/page'));
-const SignUpPage = lazy(() => import('@/app/(auth)/sign-up/[[...sign-up]]/page'));
+const PublicLandingPage = lazyWithRetry(() => import('@/app/page'));
+const TermsPage = lazyWithRetry(() => import('@/app/terms/page'));
+const PrivacyPolicyPage = lazyWithRetry(() => import('@/app/privacy/page'));
+const SignInPage = lazyWithRetry(() => import('@/app/(auth)/sign-in/[[...sign-in]]/page'));
+const SignUpPage = lazyWithRetry(() => import('@/app/(auth)/sign-up/[[...sign-up]]/page'));
 
 // Protected dashboard views
-const DashboardPage = lazy(() => import('@/app/(dashboard)/dashboard/page'));
-const TransactionsPage = lazy(() => import('@/app/(dashboard)/transactions/page'));
-const TransactionsImportPage = lazy(() => import('@/app/(dashboard)/transactions/import/page'));
-const DebtPage = lazy(() => import('@/app/(dashboard)/debt/page'));
-const DebtImportPage = lazy(() => import('@/app/(dashboard)/debt/import/page'));
-const InvestmentsPage = lazy(() => import('@/app/(dashboard)/investments/page'));
-const IncomeExpensesPage = lazy(() => import('@/app/(dashboard)/income-expenses/page'));
-const StatementsPage = lazy(() => import('@/app/(dashboard)/statements/page'));
-const ReportsPage = lazy(() => import('@/app/(dashboard)/reports/page'));
-const BudgetPage = lazy(() => import('@/app/(dashboard)/budget/page'));
-const BudgetImportPage = lazy(() => import('@/app/(dashboard)/budget/import/page'));
-const WeeklyReviewPage = lazy(() => import('@/app/(dashboard)/weekly-review/page'));
-const NotificationsPage = lazy(() => import('@/app/(dashboard)/notifications/page'));
-const LoggerPage = lazy(() => import('@/app/(dashboard)/logger/page'));
-const AdminTestPage = lazy(() => import('@/app/(dashboard)/admin/connection-test/page'));
-const AdminDashboardPage = lazy(() => import('@/app/(dashboard)/admin/page'));
-const AuditorDashboardPage = lazy(() => import('@/app/(dashboard)/auditor/page'));
+const DashboardPage = lazyWithRetry(() => import('@/app/(dashboard)/dashboard/page'));
+const TransactionsPage = lazyWithRetry(() => import('@/app/(dashboard)/transactions/page'));
+const TransactionsImportPage = lazyWithRetry(() => import('@/app/(dashboard)/transactions/import/page'));
+const DebtPage = lazyWithRetry(() => import('@/app/(dashboard)/debt/page'));
+const DebtImportPage = lazyWithRetry(() => import('@/app/(dashboard)/debt/import/page'));
+const IncomeExpensesPage = lazyWithRetry(() => import('@/app/(dashboard)/income-expenses/page'));
+const StatementsPage = lazyWithRetry(() => import('@/app/(dashboard)/statements/page'));
+const BudgetPage = lazyWithRetry(() => import('@/app/(dashboard)/budget/page'));
+const BudgetImportPage = lazyWithRetry(() => import('@/app/(dashboard)/budget/import/page'));
+const WeeklyReviewPage = lazyWithRetry(() => import('@/app/(dashboard)/weekly-review/page'));
+const NotificationsPage = lazyWithRetry(() => import('@/app/(dashboard)/notifications/page'));
+const LoggerPage = lazyWithRetry(() => import('@/app/(dashboard)/logger/page'));
+const AdminTestPage = lazyWithRetry(() => import('@/app/(dashboard)/admin/connection-test/page'));
+const AdminDashboardPage = lazyWithRetry(() => import('@/app/(dashboard)/admin/page'));
+const AuditorDashboardPage = lazyWithRetry(() => import('@/app/(dashboard)/auditor/page'));
 
 function PageFallback() {
   return (
@@ -191,18 +209,6 @@ export default function App() {
         }
       />
 
-      <Route
-        path="/investments"
-        element={
-          <ProtectedRoute>
-            <DashboardLayout>
-              <Suspense fallback={<PageFallback />}>
-                <InvestmentsPage />
-              </Suspense>
-            </DashboardLayout>
-          </ProtectedRoute>
-        }
-      />
 
       <Route
         path="/income-expenses"
@@ -230,18 +236,6 @@ export default function App() {
         }
       />
 
-      <Route
-        path="/reports"
-        element={
-          <ProtectedRoute>
-            <DashboardLayout>
-              <Suspense fallback={<PageFallback />}>
-                <ReportsPage />
-              </Suspense>
-            </DashboardLayout>
-          </ProtectedRoute>
-        }
-      />
 
       <Route
         path="/weekly-review"

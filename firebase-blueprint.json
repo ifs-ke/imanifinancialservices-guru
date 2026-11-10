@@ -105,12 +105,228 @@
         "timestamp": { "type": "string", "format": "date-time", "description": "Message creation timestamp" }
       },
       "required": ["id", "shareId", "senderId", "senderName", "senderRole", "message", "timestamp"]
+    },
+    "AdminDiagnosticLogs": {
+      "title": "AdminDiagnosticLogs",
+      "description": "Persistent diagnostic testing logs synchronized for an administrator account",
+      "type": "object",
+      "properties": {
+        "logs": {
+          "type": "object",
+          "description": "A map of test block identifiers to lists of structured output strings"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of the last logging update write"
+        }
+      },
+      "required": ["logs", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial income and expense transaction records categorized for budget and ledger tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique transaction ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "date": { "type": "string", "format": "date-time", "description": "ISO transaction date" },
+        "description": { "type": "string", "description": "Transaction description or payee" },
+        "amount": { "type": "number", "description": "Transaction monetary amount in KES" },
+        "modeOfPayment": { "type": "string", "description": "Payment instrument (M-Pesa, Bank, Cash, Card)" },
+        "frequency": { "type": "string", "description": "Frequency classification (recurring or one-time)" },
+        "variability": { "type": "string", "description": "Variability classification (fixed or variable)" },
+        "categoryName": { "type": "string", "description": "Budget category classification" },
+        "notes": { "type": "string", "description": "User notes" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Modification timestamp" }
+      },
+      "required": ["id", "userId", "amount", "date", "description"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "Structured institutional and personal debt obligations with interest and repayment terms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique debt ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "description": { "type": "string", "description": "Creditor or loan facility name" },
+        "principal": { "type": "number", "description": "Outstanding principal balance" },
+        "interestRate": { "type": "number", "description": "Annual interest rate percentage" },
+        "minPayment": { "type": "number", "description": "Minimum monthly amortization payment" },
+        "term": { "type": "string", "description": "Tenor classification (short or long)" },
+        "status": { "type": "string", "description": "Repayment status (active, paid_off, in_default)" },
+        "classification": { "type": "string", "description": "Obligation type (institutional or personal)" },
+        "securityType": { "type": "string", "description": "Collateralization (secured or unsecured)" },
+        "date": { "type": "string", "description": "Issuance date" },
+        "dueDate": { "type": "string", "description": "Maturity or monthly due date" },
+        "notes": { "type": "string", "description": "Credit agreement notes" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Modification timestamp" }
+      },
+      "required": ["id", "userId", "description", "principal"]
+    },
+    "BudgetItem": {
+      "title": "BudgetItem",
+      "description": "Monthly and periodic budget envelope limits and variance tracking items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique budget item ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "description": { "type": "string", "description": "Envelope or category label" },
+        "budgetedAmount": { "type": "number", "description": "Target allocation limit" },
+        "actualAmount": { "type": "number", "description": "Realized expenditures" },
+        "category": { "type": "string", "description": "Category classification" },
+        "period": { "type": "string", "description": "Budget cycle (monthly or weekly)" },
+        "notes": { "type": "string", "description": "Envelope notes" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Modification timestamp" }
+      },
+      "required": ["id", "userId", "description", "budgetedAmount"]
+    },
+    "AssetItem": {
+      "title": "AssetItem",
+      "description": "Balance sheet asset positions including cash, liquid accounts, property, and capital items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique asset ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "description": { "type": "string", "description": "Asset name or description" },
+        "value": { "type": "number", "description": "Current fair market valuation in KES" },
+        "category": { "type": "string", "description": "Asset class (Liquid, Property, Capital, Other)" },
+        "isAsset": { "type": "boolean", "description": "Identifies as an asset balance sheet entry" },
+        "notes": { "type": "string", "description": "Asset notes" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Modification timestamp" }
+      },
+      "required": ["id", "userId", "description", "value"]
+    },
+    "LiabilityItem": {
+      "title": "LiabilityItem",
+      "description": "Balance sheet non-debt liabilities and payable obligations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique liability ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "description": { "type": "string", "description": "Liability or payable name" },
+        "value": { "type": "number", "description": "Outstanding payable liability value in KES" },
+        "category": { "type": "string", "description": "Liability classification category" },
+        "notes": { "type": "string", "description": "Liability notes" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Modification timestamp" }
+      },
+      "required": ["id", "userId", "description", "value"]
+    },
+    "WeeklyReview": {
+      "title": "WeeklyReview",
+      "description": "Weekly and monthly financial journaling reflections, feedback threads, and action plans",
+      "type": "object",
+      "properties": {
+        "weekKey": { "type": "string", "description": "Period key (e.g., 2026-W37)" },
+        "userId": { "type": "string", "description": "Review owner UID" },
+        "ownerId": { "type": "string", "description": "Owner auth UID" },
+        "ownerUsername": { "type": "string", "description": "Owner display name" },
+        "journal": { "type": "string", "description": "Written review reflection text" },
+        "transactionComments": { "type": "object", "description": "Map of transaction feedback discussions" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Modification timestamp" }
+      },
+      "required": ["weekKey", "ownerId"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Financial alert, budget threshold warning, and account notification records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique notification ID" },
+        "userId": { "type": "string", "description": "Recipient user ID" },
+        "title": { "type": "string", "description": "Notification title" },
+        "message": { "type": "string", "description": "Notification body" },
+        "type": { "type": "string", "description": "Alert severity (info, warning, error, success)" },
+        "read": { "type": "boolean", "description": "Read status indicator" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Dispatch timestamp" }
+      },
+      "required": ["id", "userId", "title", "message"]
+    },
+    "StatementSettings": {
+      "title": "StatementSettings",
+      "description": "User statement accounting date range preferences and onboarding dismissal flags",
+      "type": "object",
+      "properties": {
+        "startDate": { "type": "string", "description": "Accounting window start date" },
+        "endDate": { "type": "string", "description": "Accounting window end date" },
+        "gettingStartedDismissed": { "type": "boolean", "description": "Onboarding banner dismissal flag" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Modification timestamp" }
+      },
+      "required": ["updatedAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "Individual user accounts, profile details, roles, permissions, and usage metrics"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "User personal financial transaction ledger items"
+    },
+    "/users/{userId}/debts/{debtId}": {
+      "schema": { "$ref": "#/entities/Debt" },
+      "description": "User debt obligations and repayment amortization schedules"
+    },
+    "/users/{userId}/budgetItems/{budgetId}": {
+      "schema": { "$ref": "#/entities/BudgetItem" },
+      "description": "User zero-based budget envelope allocations"
+    },
+    "/users/{userId}/assetItems/{assetId}": {
+      "schema": { "$ref": "#/entities/AssetItem" },
+      "description": "User statement asset valuation items"
+    },
+    "/users/{userId}/otherLiabilityItems/{liabilityId}": {
+      "schema": { "$ref": "#/entities/LiabilityItem" },
+      "description": "User statement liability and payable records"
+    },
+    "/users/{userId}/weeklyReviews/{weekKey}": {
+      "schema": { "$ref": "#/entities/WeeklyReview" },
+      "description": "User period financial reflection and accountability journals"
+    },
+    "/users/{userId}/statementSettings/{settingsId}": {
+      "schema": { "$ref": "#/entities/StatementSettings" },
+      "description": "User statement date configuration preferences"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User in-app notifications and budget alert dispatches"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Root transaction ledger collection accessible by owner, admin, and compliance auditors"
+    },
+    "/debts/{debtId}": {
+      "schema": { "$ref": "#/entities/Debt" },
+      "description": "Root debt obligations and amortizations collection"
+    },
+    "/budgetItems/{budgetId}": {
+      "schema": { "$ref": "#/entities/BudgetItem" },
+      "description": "Root budget items and envelope allocations collection"
+    },
+    "/statements/{statementId}": {
+      "schema": { "$ref": "#/entities/AssetItem" },
+      "description": "Root financial statements and balance sheet items collection"
+    },
+    "/assetItems/{assetId}": {
+      "schema": { "$ref": "#/entities/AssetItem" },
+      "description": "Root balance sheet assets collection"
+    },
+    "/otherLiabilityItems/{liabilityId}": {
+      "schema": { "$ref": "#/entities/LiabilityItem" },
+      "description": "Root balance sheet liabilities collection"
+    },
+    "/weeklyReviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/WeeklyReview" },
+      "description": "Root weekly reviews and accountability logs collection"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Root system notifications and financial alerts collection"
+    },
+    "/statementSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/StatementSettings" },
+      "description": "Root statement reporting settings collection"
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/Admin" },
@@ -123,6 +339,10 @@
     "/auditLogs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
       "description": "System operational, security, and pay-per-use audit logs"
+    },
+    "/admin_logs/{userId}": {
+      "schema": { "$ref": "#/entities/AdminDiagnosticLogs" },
+      "description": "Persistent diagnostic test logs tracked per administrator user ID"
     },
     "/auditVerifications/{verificationId}": {
       "schema": { "$ref": "#/entities/AuditVerification" },

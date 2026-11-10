@@ -34,7 +34,10 @@ import {
   AlertCircle,
   Key,
   RefreshCw,
-  Coins
+  Coins,
+  X,
+  Calendar,
+  Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -323,16 +326,28 @@ export function AdminUserManagement() {
 
       {/* Filters & Search Bar */}
       <div className="p-4 rounded-xl border border-border bg-card/60 backdrop-blur shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
           <div className="sm:col-span-6 relative">
             <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
             <Input 
               id="input-search-users"
-              placeholder="Search by name, email, or UID..."
+              placeholder="Search platform users by name or email..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="pl-9"
+              className="pl-9 pr-8"
+              aria-label="Filter users by name or email"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-2.5 p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                title="Clear search"
+                aria-label="Clear search input"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <div className="sm:col-span-3">
@@ -368,6 +383,32 @@ export function AdminUserManagement() {
             </Select>
           </div>
         </div>
+
+        {/* Search & Filter Stats Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Showing <strong className="text-foreground">{filteredUsers.length}</strong> of <strong className="text-foreground">{users.length}</strong> registered users</span>
+            {searchTerm && (
+              <Badge variant="secondary" className="text-[10px] font-normal py-0.5 px-2">
+                Filter: &quot;{searchTerm}&quot;
+              </Badge>
+            )}
+          </div>
+          {(searchTerm || roleFilter !== 'ALL' || statusFilter !== 'ALL') && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                setSearchTerm('');
+                setRoleFilter('ALL');
+                setStatusFilter('ALL');
+              }}
+              className="h-6 text-[11px] text-primary hover:underline px-2"
+            >
+              Reset all filters
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Users Table */}
@@ -379,6 +420,8 @@ export function AdminUserManagement() {
                 <th className="px-4 py-3.5 font-semibold">User Details</th>
                 <th className="px-4 py-3.5 font-semibold">Assigned Role</th>
                 <th className="px-4 py-3.5 font-semibold">Status</th>
+                <th className="px-4 py-3.5 font-semibold">Account Created</th>
+                <th className="px-4 py-3.5 font-semibold">Last Active</th>
                 <th className="px-4 py-3.5 font-semibold">Usage Cost</th>
                 <th className="px-4 py-3.5 font-semibold">Spending Limit</th>
                 <th className="px-4 py-3.5 font-semibold text-right">Actions</th>
@@ -387,89 +430,160 @@ export function AdminUserManagement() {
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                     <RefreshCw className="w-5 h-5 mx-auto animate-spin mb-2" />
                     Loading user registry...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                    No users matching criteria found.
+                  <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground space-y-3">
+                    <Users className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                    <p className="text-sm font-medium text-foreground">No matching users found</p>
+                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                      {searchTerm 
+                        ? `No users match the search query "${searchTerm}". Try a different name or email.`
+                        : 'No users match the selected role or status filters.'}
+                    </p>
+                    {(searchTerm || roleFilter !== 'ALL' || statusFilter !== 'ALL') && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSearchTerm('');
+                          setRoleFilter('ALL');
+                          setStatusFilter('ALL');
+                        }}
+                        className="mt-2 text-xs cursor-pointer"
+                      >
+                        Clear Search & Filters
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map(user => (
-                  <tr key={user.uid} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-foreground">{user.displayName}</div>
-                      <div className="text-xs text-muted-foreground">{user.email}</div>
-                      <div className="text-[11px] font-mono text-muted-foreground/70">{user.uid}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {getRoleBadge(user.role)}
-                        <Select 
-                          value={user.role} 
-                          onValueChange={(newRole: AppRole) => handleQuickRoleChange(user, newRole)}
-                        >
-                          <SelectTrigger className="h-7 w-24 text-xs border-dashed" id={`select-quick-role-${user.uid}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="auditor">Auditor</SelectItem>
-                            <SelectItem value="client">Client</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {user.status === 'active' ? (
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs">
-                          <CheckCircle2 className="w-3 h-3 mr-1" /> Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-xs">
-                          <UserX className="w-3 h-3 mr-1" /> Suspended
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-foreground">
-                      {formatCurrency(user.incurredCostKes ?? 0)}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatCurrency(user.spendingLimitKes ?? 1500)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleOpenEdit(user)}
-                          title="Edit User & Permissions"
-                          id={`btn-edit-user-${user.uid}`}
-                        >
-                          <Edit3 className="w-4 h-4 text-primary" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => {
-                            setUserToDelete(user);
-                            setIsDeleteOpen(true);
-                          }}
-                          disabled={user.email.toLowerCase() === 'seanwambua@gmail.com'}
-                          title="Delete User"
-                          className="hover:text-destructive"
-                          id={`btn-delete-user-${user.uid}`}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive/80" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filteredUsers.map(user => {
+                  const createdDate = user.createdAt ? new Date(user.createdAt) : null;
+                  const lastActiveDate = user.lastLoginAt ? new Date(user.lastLoginAt) : (user.updatedAt ? new Date(user.updatedAt) : null);
+
+                  const formatDisplayDate = (d: Date | null) => {
+                    if (!d || isNaN(d.getTime())) return 'N/A';
+                    return d.toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric'
+                    });
+                  };
+
+                  const formatDisplayTime = (d: Date | null) => {
+                    if (!d || isNaN(d.getTime())) return '';
+                    return d.toLocaleTimeString('en-GB', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+                  };
+
+                  const formatRelative = (d: Date | null) => {
+                    if (!d || isNaN(d.getTime())) return 'Active';
+                    const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+                    if (diffSec < 60) return 'Just now';
+                    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+                    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+                    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+                    return formatDisplayDate(d);
+                  };
+
+                  return (
+                    <tr key={user.uid} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-foreground">{user.displayName}</div>
+                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                        <div className="text-[11px] font-mono text-muted-foreground/70">{user.uid}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Select 
+                            value={user.role} 
+                            onValueChange={(newRole: AppRole) => handleQuickRoleChange(user, newRole)}
+                          >
+                            <SelectTrigger className="h-7 w-24 text-xs border-dashed" id={`select-quick-role-${user.uid}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="auditor">Auditor</SelectItem>
+                              <SelectItem value="client">Client</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.status === 'active' ? (
+                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs">
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-xs">
+                            <UserX className="w-3 h-3 mr-1" /> Suspended
+                          </Badge>
+                        )}
+                      </td>
+                      {/* Account Created Column */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-xs font-mono text-foreground flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-muted-foreground/70" />
+                          {formatDisplayDate(createdDate)}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground pl-4">
+                          {formatDisplayTime(createdDate)}
+                        </div>
+                      </td>
+                      {/* Last Active Column */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-xs font-mono text-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-primary/70" />
+                          {formatDisplayDate(lastActiveDate)}
+                        </div>
+                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium pl-4">
+                          {formatRelative(lastActiveDate)}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {formatCurrency(user.incurredCostKes ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {formatCurrency(user.spendingLimitKes ?? 1500)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleOpenEdit(user)}
+                            title="Edit User & Permissions"
+                            id={`btn-edit-user-${user.uid}`}
+                          >
+                            <Edit3 className="w-4 h-4 text-primary" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => {
+                              setUserToDelete(user);
+                              setIsDeleteOpen(true);
+                            }}
+                            disabled={user.email.toLowerCase() === 'seanwambua@gmail.com'}
+                            title="Delete User"
+                            className="hover:text-destructive"
+                            id={`btn-delete-user-${user.uid}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive/80" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -145,7 +145,7 @@ export async function GET() {
 
     console.info(`[API /api/sync] Firestore sync computed hash for user ${userId}: ${dataHash}`);
 
-    const response = NextResponse.json({ ...preparedData, dataHash });
+    const response = NextResponse.json({ ...preparedData, dataHash, serverTimestamp: new Date().toISOString() });
     return addCorsHeaders(response);
   } catch (error: any) {
     console.error(`[API /api/sync] Error during GET sync for user ${userId}:`, error);

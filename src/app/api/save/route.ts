@@ -187,11 +187,13 @@ export async function POST(request: Request) {
   }
 
   const payloadFromClient = validationResult.data;
-  const { payloadDataHash: clientProvidedPayloadHash, lastKnownServerHash: clientLastKnownServerHash, ...dataForDbOperations } = payloadFromClient;
+  const { payloadDataHash: clientProvidedPayloadHash, lastKnownServerHash: clientLastKnownServerHash } = payloadFromClient;
+  const { payloadDataHash: _pHash, lastKnownServerHash: _sHash, lastKnownServerTimestamp: _sTs, ...rawDeltaForHash } = rawPayload;
 
-  // Hash integrity verification
-  const dataForHashCheck = prepareDataForHashing(dataForDbOperations as any);
+  // Hash integrity verification on exact raw delta payload received from client
+  const dataForHashCheck = prepareDataForHashing(rawDeltaForHash as any);
   const serverCalculatedHashOfReceivedPayload = await hashData(stringify(dataForHashCheck));
+  const dataForDbOperations = payloadFromClient;
 
   if (HASH_CHECK_ENABLED_ON_SERVER && serverCalculatedHashOfReceivedPayload !== clientProvidedPayloadHash) {
     console.error(`[API /api/save] PAYLOAD INTEGRITY CHECK FAILED! Expected ${serverCalculatedHashOfReceivedPayload}, got ${clientProvidedPayloadHash}`);
@@ -430,7 +432,7 @@ export async function POST(request: Request) {
     const newServerHashAfterSave = await hashData(stringify(preparedNewFullServerData));
 
     console.info(`[API /api/save] Save committed to Firestore for user ${userId}. New hash: ${newServerHashAfterSave}`);
-    const response = NextResponse.json({ message: `Data saved successfully to Firestore for user ${userId}`, newServerHash: newServerHashAfterSave });
+    const response = NextResponse.json({ message: `Data saved successfully to Firestore for user ${userId}`, newServerHash: newServerHashAfterSave, serverTimestamp: new Date().toISOString() });
     return addCorsHeaders(response);
   } catch (error: any) {
     console.error(`[API /api/save] Save failed for user ${userId}:`, error);

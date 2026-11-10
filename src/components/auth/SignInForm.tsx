@@ -5,16 +5,18 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { useOffline } from '@/hooks/useOffline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2 } from 'lucide-react';
+import { Loader2, WifiOff } from 'lucide-react';
 
 export function SignInForm() {
   const router = useRouter();
   const { signInWithGoogle, signInWithEmail, isSignedIn, isLoaded } = useAuth();
+  const isOffline = useOffline();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,6 +27,7 @@ export function SignInForm() {
       router.push('/dashboard');
     }
   }, [isLoaded, isSignedIn, router]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +79,18 @@ export function SignInForm() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-6">
+        {isOffline && (
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs">
+            <WifiOff className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-semibold block">Offline Connection Detected</span>
+              <p className="text-[11px] opacity-90 leading-tight">
+                Cloud authentication requires an internet connection. You can use <strong>Guest Mode</strong> to access all financial features with local storage persistence.
+              </p>
+            </div>
+          </div>
+        )}
+
         {error && (
           <Alert variant="destructive" className="py-2.5">
             <AlertDescription className="text-xs">{error}</AlertDescription>
@@ -87,7 +102,7 @@ export function SignInForm() {
           variant="outline"
           className="w-full flex items-center justify-center gap-2 h-10 border-input"
           onClick={handleGoogleSignIn}
-          disabled={loading}
+          disabled={loading || isOffline}
           id="google-signin-btn"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -129,7 +144,7 @@ export function SignInForm() {
               placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
+              disabled={loading || isOffline}
               required
             />
           </div>
@@ -143,11 +158,11 @@ export function SignInForm() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
+              disabled={loading || isOffline}
               required
             />
           </div>
-          <Button type="submit" className="w-full" disabled={loading} id="email-signin-btn">
+          <Button type="submit" className="w-full" disabled={loading || isOffline} id="email-signin-btn">
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

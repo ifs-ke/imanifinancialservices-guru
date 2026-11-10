@@ -86,7 +86,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   getSharedReviewsForRecipientApi, 
   addCommentToSharedReviewApi, 
-  getSharesCreatedByOwnerApi 
+  getSharesCreatedByOwnerApi,
+  acceptShareInvitationApi,
+  declineShareInvitationApi
 } from '@/app/actions/shareActions';
 
 /**
@@ -277,11 +279,57 @@ export default function WeeklyReviewPage() {
     }
   }, [isSignedIn, userId, loadSharedWithMe, loadOwnerShares]);
 
+  const pendingInvitations = useMemo(() => {
+    return sharedReviewsList.filter(s => s.status === 'pending');
+  }, [sharedReviewsList]);
+
+  const acceptedSharedReviews = useMemo(() => {
+    return sharedReviewsList.filter(s => s.status === 'active');
+  }, [sharedReviewsList]);
+
+  const handleAcceptInvitation = async (shareId: string) => {
+    try {
+      const updatedRecord = await acceptShareInvitationApi(shareId);
+      toast({
+        title: "Invitation Accepted!",
+        description: "You now have access to collaborate and leave comments on this weekly review.",
+      });
+      await loadSharedWithMe();
+      setActiveTab('shared');
+      if (updatedRecord) {
+        setSelectedSharedReviewId(updatedRecord.id);
+      }
+    } catch (err: any) {
+      toast({
+        title: "Acceptance Failed",
+        description: err.message || "Failed to accept invitation.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeclineInvitation = async (shareId: string) => {
+    try {
+      await declineShareInvitationApi(shareId);
+      toast({
+        title: "Invitation Declined",
+        description: "The review invitation has been declined.",
+      });
+      await loadSharedWithMe();
+    } catch (err: any) {
+      toast({
+        title: "Decline Failed",
+        description: err.message || "Failed to decline invitation.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Active shared review when on "shared" tab
   const activeSharedRecord = useMemo(() => {
-    if (!selectedSharedReviewId) return sharedReviewsList[0] || null;
-    return sharedReviewsList.find(s => s.id === selectedSharedReviewId) || sharedReviewsList[0] || null;
-  }, [selectedSharedReviewId, sharedReviewsList]);
+    if (!selectedSharedReviewId) return acceptedSharedReviews[0] || null;
+    return acceptedSharedReviews.find(s => s.id === selectedSharedReviewId) || acceptedSharedReviews[0] || null;
+  }, [selectedSharedReviewId, acceptedSharedReviews]);
 
   // Current review record for owned tab
   const currentOwnedReview = useMemo(() => {
@@ -793,6 +841,50 @@ export default function WeeklyReviewPage() {
         </button>
       </div>
 
+      {/* Pending Invitations Banner */}
+      {pendingInvitations.length > 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5 shadow-xs p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs uppercase tracking-wider">
+              <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span>Pending Weekly Review Invitations ({pendingInvitations.length})</span>
+            </div>
+            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">Action Required</Badge>
+          </div>
+          <div className="space-y-2">
+            {pendingInvitations.map((invitation) => (
+              <div key={invitation.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-background border border-border/50 shadow-2xs">
+                <div className="space-y-0.5 min-w-0">
+                  <p className="text-xs font-bold text-foreground truncate">
+                    <span className="text-primary">{invitation.ownerName || invitation.ownerEmail}</span> invited you to collaborate on <span className="font-semibold text-foreground">{invitation.periodLabel}</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Accepting allows you to view cash flow records and exchange contextual feedback.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => handleAcceptInvitation(invitation.id)}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Accept
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs font-semibold gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 border-rose-200"
+                    onClick={() => handleDeclineInvitation(invitation.id)}
+                  >
+                    <X className="h-3.5 w-3.5" /> Decline
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Tabs: My Reviews vs Shared With Me */}
       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as "owned" | "shared")} className="w-full space-y-4">
         <TabsList className="grid w-full grid-cols-2 bg-muted/50 p-1 border border-border/40 rounded-xl">
@@ -802,9 +894,14 @@ export default function WeeklyReviewPage() {
           <TabsTrigger value="shared" className="text-xs font-semibold py-2 flex items-center justify-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
             <span>Shared With Me</span>
-            {sharedReviewsList.length > 0 && (
+            {acceptedSharedReviews.length > 0 && (
               <Badge variant="secondary" className="ml-1 text-[10px] h-4 px-1 bg-primary/10 text-primary">
-                {sharedReviewsList.length}
+                {acceptedSharedReviews.length}
+              </Badge>
+            )}
+            {pendingInvitations.length > 0 && (
+              <Badge variant="outline" className="ml-1 text-[10px] h-4 px-1 bg-amber-500/10 text-amber-600 border-amber-500/30 font-bold">
+                {pendingInvitations.length} Pending
               </Badge>
             )}
           </TabsTrigger>
@@ -1101,7 +1198,7 @@ export default function WeeklyReviewPage() {
             <div className="p-12 text-center text-muted-foreground text-xs flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading shared reviews...
             </div>
-          ) : sharedReviewsList.length > 0 ? (
+          ) : acceptedSharedReviews.length > 0 ? (
             <div className="space-y-4">
               {/* Review Picker if multiple */}
               <div className="flex flex-wrap items-center gap-2 p-2.5 bg-card rounded-xl border border-border/60 shadow-xs">
@@ -1109,7 +1206,7 @@ export default function WeeklyReviewPage() {
                   <Users className="h-3.5 w-3.5 text-primary" />
                   Select Review:
                 </span>
-                {sharedReviewsList.map((record) => (
+                {acceptedSharedReviews.map((record) => (
                   <button
                     key={record.id}
                     type="button"

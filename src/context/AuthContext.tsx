@@ -38,11 +38,15 @@ export interface AuthUser {
   emailAddresses?: Array<{ emailAddress: string }>;
   privateMetadata?: { role?: AppRole };
   publicMetadata?: { role?: AppRole };
+  isGuest?: boolean;
+  isAnonymous?: boolean;
 }
 
 interface AuthContextType {
   isLoaded: boolean;
   isSignedIn: boolean;
+  isGuest: boolean;
+  isAnonymous: boolean;
   userId: string | null;
   sessionId: string | null;
   user: AuthUser | null;
@@ -56,6 +60,8 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+  continueAsGuest: () => void;
+  exitGuestMode: (clearData?: boolean) => Promise<void>;
   refreshUserProfile: () => Promise<void>;
 }
 
@@ -195,6 +201,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem('imf_guest_session');
+        }
         const email = firebaseUser.email || '';
         await syncProfile(
           firebaseUser.uid, 
@@ -210,8 +219,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAuthCookies(firebaseUser.uid, 'firebase-session');
         }
       } else {
-        setCurrentUser(null);
-        setAuthCookies(null, null);
+        // Check for local guest session persistence (offline/anonymous fallback)
+        let restoredGuest: AuthUser | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const rawGuest = window.localStorage.getItem('imf_guest_session');
+            if (rawGuest) {
+              const parsed = JSON.parse(rawGuest);
+              if (parsed && parsed.uid) {
+                restoredGuest = {
+                  id: parsed.uid,
+                  uid: parsed.uid,
+                  email: null,
+                  fullName: parsed.fullName || 'Guest User',
+                  firstName: 'Guest',
+                  lastName: 'User',
+                  imageUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(parsed.uid)}`,
+                  role: 'client',
+                  status: 'active',
+                  spendingLimitKes: 1500,
+                  incurredCostKes: 0,
+                  primaryEmailAddress: null,
+                  emailAddresses: [],
+                  isGuest: true,
+                  isAnonymous: true,
+                };
+                setAuthCookies(parsed.uid, 'guest-session');
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to parse guest session from localStorage:', err);
+          }
+        }
+
+        if (restoredGuest) {
+          setCurrentUser(restoredGuest);
+        } else {
+          setCurrentUser(null);
+          setAuthCookies(null, null);
+        }
       }
       setIsLoaded(true);
     });
@@ -219,7 +265,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [syncProfile]);
 
+  const continueAsGuest = useCallback(() => {
+    let guestUid = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    let guestName = 'Guest User';
+    if (typeof window !== 'undefined') {
+      const existing = window.localStorage.getItem('imf_guest_session');
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing);
+          if (parsed.uid) {
+            guestUid = parsed.uid;
+            guestName = parsed.fullName || guestName;
+          }
+        } catch {}
+      } else {
+        window.localStorage.setItem(
+          'imf_guest_session',
+          JSON.stringify({
+            uid: guestUid,
+            fullName: guestName,
+            createdAt: new Date().toISOString(),
+          })
+        );
+      }
+    }
+
+    const guestUser: AuthUser = {
+      id: guestUid,
+      uid: guestUid,
+      email: null,
+      fullName: guestName,
+      firstName: 'Guest',
+      lastName: 'User',
+      imageUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(guestUid)}`,
+      role: 'client',
+      status: 'active',
+      spendingLimitKes: 1500,
+      incurredCostKes: 0,
+      primaryEmailAddress: null,
+      emailAddresses: [],
+      isGuest: true,
+      isAnonymous: true,
+    };
+
+    setCurrentUser(guestUser);
+    setAuthCookies(guestUid, 'guest-session');
+    setIsLoaded(true);
+  }, []);
+
+  const exitGuestMode = useCallback(async (clearData = true) => {
+    const guestUid = currentUser?.uid;
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('imf_guest_session');
+      if (clearData && guestUid) {
+        try {
+          window.localStorage.removeItem(`imf_offline_snapshot_${guestUid}`);
+          window.localStorage.removeItem(`imf_offline_queue_${guestUid}`);
+        } catch {}
+      }
+      try {
+        window.sessionStorage.clear();
+      } catch {}
+    }
+    setCurrentUser(null);
+    setAuthCookies(null, null);
+  }, [currentUser]);
+
   const refreshUserProfile = async () => {
+    if (currentUser?.isGuest) return;
     if (auth.currentUser && auth.currentUser.email) {
       await syncProfile(
         auth.currentUser.uid,
@@ -268,25 +381,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    if (currentUser?.isGuest) {
+      await exitGuestMode(true);
+      return;
+    }
+
     const email = currentUser?.email;
     const uid = currentUser?.uid;
-    try {
-      await firebaseSignOut(auth);
-    } catch {}
-    setCurrentUser(null);
-    setAuthCookies(null, null);
 
     if (email) {
-      recordAuditLog(
+      await recordAuditLog(
         `AUTH_SIGNOUT: User logged out ${email}`,
         'AUTH',
         'INFO',
         { userId: uid, userEmail: email }
-      );
+      ).catch(() => {});
     }
+
+    try {
+      await firebaseSignOut(auth);
+    } catch {}
+
+    setCurrentUser(null);
+    setAuthCookies(null, null);
+    
+    try {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.clear();
+      }
+    } catch (e) {}
   };
 
   const getToken = React.useCallback(async (): Promise<string | null> => {
+    if (currentUser?.isGuest) {
+      return 'guest-token';
+    }
     if (auth.currentUser) {
       try {
         return await auth.currentUser.getIdToken();
@@ -295,17 +424,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     return null;
-  }, []);
+  }, [currentUser]);
 
   const role = currentUser?.role || 'client';
   const isAdmin = role === 'admin';
   const isAuditor = role === 'auditor';
   const isClient = role === 'client';
+  const isGuest = currentUser?.isGuest === true;
+  const isAnonymous = currentUser?.isAnonymous === true;
 
   const value = useMemo(
     () => ({
       isLoaded,
       isSignedIn: !!currentUser,
+      isGuest,
+      isAnonymous,
       userId: currentUser?.id || null,
       sessionId: currentUser ? `session-${currentUser.id}` : null,
       user: currentUser,
@@ -319,9 +452,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signInWithGoogle,
       signInWithEmail,
       signUpWithEmail,
+      continueAsGuest,
+      exitGuestMode,
       refreshUserProfile,
     }),
-    [currentUser, isLoaded, role, isAdmin, isAuditor, isClient, getToken]
+    [currentUser, isLoaded, isGuest, isAnonymous, role, isAdmin, isAuditor, isClient, getToken, continueAsGuest, exitGuestMode]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -344,6 +479,8 @@ export const useUser = () => {
     isLoaded: context.isLoaded,
     isSignedIn: context.isSignedIn,
     user: context.user,
+    isGuest: context.isGuest,
+    isAnonymous: context.isAnonymous,
   };
 };
 

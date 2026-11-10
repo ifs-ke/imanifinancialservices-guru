@@ -136,9 +136,9 @@ export async function currentUser(): Promise<ServerUser | null> {
       return buildServerUser(decodedUid, decodedEmail, decodedName);
     }
 
-    // Fallback for admin diagnostic testing in authorized preview environment
-    if (sessionCookie === 'demo-token' || process.env.NODE_ENV === 'development') {
-      return buildServerUser('admin-seanwambua-uid', 'seanwambua@gmail.com', 'Sean Wambua');
+    // Fallback for demo token
+    if (sessionCookie === 'demo-token') {
+      return buildServerUser('demo-user-alex-uid', 'demo.member@ifs-guru.com', 'Demo Member');
     }
 
     return null;

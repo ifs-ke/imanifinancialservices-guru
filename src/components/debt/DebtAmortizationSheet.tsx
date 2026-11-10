@@ -25,7 +25,8 @@ const formatCurrency = (amount: number) => {
 
 // Amortization calculation logic
 const calculateAmortization = (debt: DebtItem) => {
-    const monthlyInterestRate = debt.interestRate / 100 / 12;
+    const rate = debt.interestRate !== undefined && debt.interestRate !== null ? debt.interestRate : 0;
+    const monthlyInterestRate = rate / 100 / 12;
     const monthlyPayment = debt.minPayment;
     let balance = debt.principal;
     let paymentNumber = 0;
@@ -83,8 +84,6 @@ const calculateAmortization = (debt: DebtItem) => {
             interest: interestPayment,
             endingBalance: balance,
         });
-
-         // Safety break removed as the primary checks should handle termination
     }
 
     // Add warning if schedule reaches max iterations with remaining balance
@@ -100,6 +99,8 @@ const calculateAmortization = (debt: DebtItem) => {
 
 const DebtAmortizationSheet: React.FC<DebtAmortizationSheetProps> = ({ debt, children }) => {
   const schedule = calculateAmortization(debt);
+  const rate = debt.interestRate !== undefined && debt.interestRate !== null ? debt.interestRate : 0;
+  const isInterestFree = rate === 0;
 
   return (
     <Sheet>
@@ -107,9 +108,9 @@ const DebtAmortizationSheet: React.FC<DebtAmortizationSheetProps> = ({ debt, chi
       {/* Increased max-width for better table visibility */}
       <SheetContent className="w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-5xl p-0">
         <SheetHeader className="p-6 border-b bg-background z-20 sticky top-0"> {/* Make header sticky */}
-          <SheetTitle>Amortization: {debt.description}</SheetTitle>
-          <SheetDescription>
-            Based on {formatCurrency(debt.principal)} @ {debt.interestRate.toFixed(2)}% with min. payment of {formatCurrency(debt.minPayment)}.
+          <SheetTitle className="text-lg font-bold">Amortization: {debt.description}</SheetTitle>
+          <SheetDescription className="text-xs">
+            {debt.classification === 'personal' ? 'Personal (Friends & Family)' : 'Institutional (Bank / SACCO)'} &bull; {formatCurrency(debt.principal)} @ {isInterestFree ? '0% (Interest-Free)' : `${rate.toFixed(2)}%`} with min. payment of {formatCurrency(debt.minPayment)}/mo.
             {schedule.some(row => row.error) && (
                 <span className='block text-destructive text-xs mt-1'>Warning: Issues found in calculation ({schedule.find(r=>r.error)?.error}).</span>
             )}

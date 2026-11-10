@@ -2,9 +2,10 @@
 // src/store/debtStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
-import type { DebtItem } from '@/lib/types';
+import type { DebtItem, DebtStatus } from '@/lib/types';
 import { encode, decode } from '@/lib/storage-utils';
 import { logInfo } from '@/lib/logger';
+import { computeDebtStatus, isDebtActive, isDebtPaidOff } from '@/lib/debtUtils';
 
 const generateId = (): string => {
   const prefix = 'debt';
@@ -18,9 +19,41 @@ const generateId = (): string => {
 // Helper to manage versioning for acknowledgements
 const incrementVersion = (currentVersion?: number): number => (currentVersion || 0) + 1;
 
+const normalizeDebt = (debt: any): DebtItem => {
+  const principal = Number(debt.principal) || 0;
+  const date = debt.date || new Date().toISOString().split('T')[0];
+  const dueDate = debt.dueDate || null;
+  const classification = debt.classification === 'institutional' ? 'institutional' : 'personal';
+  const term = debt.term || 'short';
+  const rawStatus: DebtStatus = debt.status || 'active';
+  const computedStatus = computeDebtStatus({
+    status: rawStatus,
+    dueDate,
+    date,
+    term,
+    principal,
+  });
+
+  return {
+    ...debt,
+    principal,
+    date,
+    dueDate,
+    classification,
+    term,
+    status: computedStatus,
+    notes: debt.notes || null,
+    interestRate: debt.interestRate !== undefined && debt.interestRate !== null ? Number(debt.interestRate) : 0,
+  };
+};
+
 const sortDebts = (debtList: DebtItem[]): DebtItem[] => {
     if (!Array.isArray(debtList)) return [];
-    return [...debtList].sort((a, b) => {
+    return [...debtList].map(normalizeDebt).sort((a, b) => {
+        // First sort by date descending (most recent first)
+        const dateA = new Date(a.date || 0).getTime();
+        const dateB = new Date(b.date || 0).getTime();
+        if (dateB !== dateA) return dateB - dateA;
         const descDiff = (a.description || '').localeCompare(b.description || '');
         if (descDiff !== 0) return descDiff;
         if (a.term === 'short' && b.term === 'long') return -1;
@@ -176,5 +209,11 @@ export const useDebtStore = create<DebtState>()(
     )
 );
 
+export const selectActiveDebts = (state: DebtState): InternalDebtItem[] =>
+    state.debts.filter(isDebtActive);
+
+export const selectPaidOffDebts = (state: DebtState): InternalDebtItem[] =>
+    state.debts.filter(isDebtPaidOff);
+
 export const selectTotalDebt = (state: DebtState): number =>
-    state.debts.reduce((sum, debt) => sum + (debt.principal || 0), 0);
+    state.debts.filter(isDebtActive).reduce((sum, debt) => sum + (Number(debt.principal) || 0), 0);

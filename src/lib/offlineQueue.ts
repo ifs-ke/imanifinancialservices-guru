@@ -66,6 +66,23 @@ export function saveOfflineSnapshot(
 }
 
 /**
+ * Clears the offline snapshot from local storage for a specific user.
+ * 
+ * @param {string} userId - The authenticated user's unique identifier.
+ */
+export function clearOfflineSnapshot(userId: string): void {
+  if (typeof window === 'undefined' || !userId) return;
+
+  try {
+    const key = `${SNAPSHOT_PREFIX}${userId}`;
+    window.localStorage.removeItem(key);
+    logInfo('OfflineQueue: Cleared offline snapshot.', { userId });
+  } catch (error) {
+    logWarn('OfflineQueue: Failed to clear offline snapshot from localStorage.', { userId, error });
+  }
+}
+
+/**
  * Loads the cached financial snapshot from local storage for offline operation.
  *
  * @param {string} userId - The authenticated user's unique identifier.

@@ -69,21 +69,47 @@ export type BudgetItemFormData = z.infer<typeof BudgetItemFormDataSchema>;
 export const DebtTermSchema = z.enum(['short', 'long']);
 export type DebtTerm = z.infer<typeof DebtTermSchema>;
 
+export const DebtClassificationSchema = z.enum(['personal', 'institutional']);
+export type DebtClassification = z.infer<typeof DebtClassificationSchema>;
+
+export const DebtStatusSchema = z.enum(['active', 'overdue', 'paid_off', 'in_grace']);
+export type DebtStatus = z.infer<typeof DebtStatusSchema>;
+
+export const DebtSecurityTypeSchema = z.enum(['unsecured', 'secured']);
+export type DebtSecurityType = z.infer<typeof DebtSecurityTypeSchema>;
+
 export const DebtItemFormDataSchema = z.object({
-  description: z.string().min(1, "Description is required").max(100, "Description too long"),
+  date: z.string().min(1, "Date is required").refine((date) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    return !isNaN(new Date(date).getTime());
+  }, {
+    message: "Invalid date format. Use YYYY-MM-DD.",
+  }),
+  dueDate: z.string().optional().nullable().refine((d) => {
+    if (!d || d.trim() === '') return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    return !isNaN(new Date(d).getTime());
+  }, {
+    message: "Invalid due date format. Use YYYY-MM-DD.",
+  }),
+  description: z.string().min(1, "Description is required").max(150, "Description too long"),
+  classification: DebtClassificationSchema.default('personal'),
   principal: z.number({
     required_error: "Principal is required",
     invalid_type_error: "Principal must be a number",
   }).positive({ message: "Principal must be positive" }),
   interestRate: z.number({
-    required_error: "Interest rate is required",
     invalid_type_error: "Interest rate must be a number",
-  }).min(0, "Interest rate cannot be negative").max(100, "Interest rate seems too high"),
+  }).min(0, "Interest rate cannot be negative").max(100, "Interest rate seems too high").optional().nullable(),
   minPayment: z.number({
     required_error: "Minimum payment is required",
     invalid_type_error: "Minimum payment must be a number",
   }).min(0, "Minimum payment cannot be negative"),
   term: DebtTermSchema,
+  status: DebtStatusSchema.default('active'),
+  securityType: DebtSecurityTypeSchema.default('unsecured'),
+  securityDescription: z.string().max(250, "Security description too long").optional().nullable(),
+  notes: z.string().max(500, "Notes too long").optional().nullable(),
 });
 export type DebtItemFormData = z.infer<typeof DebtItemFormDataSchema>;
 
@@ -135,87 +161,91 @@ export type ClientLogPayload = z.infer<typeof ClientLogPayloadSchema>;
 // Base schema for items that might have their amounts stringified by prepareDataForHashing
 const BaseItemSchemaForAPI = z.object({
   id: z.string(),
-  description: z.string(),
-  amount: z.coerce.number(), // Use coerce for server-side parsing from stringified fixed-point
-});
+  description: z.string().optional().nullable(),
+  amount: z.coerce.number().optional().nullable(),
+  value: z.coerce.number().optional().nullable(),
+}).passthrough();
 export type BaseItemForAPIType = z.infer<typeof BaseItemSchemaForAPI>;
 
 const TransactionItemSchemaForAPI = BaseItemSchemaForAPI.extend({
-  date: z.string(), // ISO string
-  modeOfPayment: ModeOfPaymentSchema,
-  frequency: TransactionFrequencySchema.nullable(),
-  variability: TransactionVariabilitySchema.nullable(),
+  date: z.string().optional().nullable(),
+  modeOfPayment: z.string().optional().nullable(),
+  frequency: z.string().optional().nullable(),
+  variability: z.string().optional().nullable(),
   categoryName: z.string().optional().nullable(),
   incomeCategory: z.string().optional().nullable(),
-});
+}).passthrough();
 export type TransactionItemForAPIType = z.infer<typeof TransactionItemSchemaForAPI>;
 
 const DebtItemAPISchema = z.object({
   id: z.string(),
-  description: z.string(),
-  principal: z.coerce.number(),
-  interestRate: z.coerce.number(),
-  minPayment: z.coerce.number(),
-  term: DebtTermSchema,
-});
+  date: z.string().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  classification: z.string().optional().nullable(),
+  principal: z.coerce.number().optional().nullable(),
+  interestRate: z.coerce.number().optional().nullable(),
+  minPayment: z.coerce.number().optional().nullable(),
+  term: z.string().optional().nullable(),
+  status: z.string().optional().nullable(),
+  securityType: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+}).passthrough();
 export type DebtItemForAPIType = z.infer<typeof DebtItemAPISchema>;
-
 
 const BudgetItemAPISchema = z.object({
   id: z.string(),
-  description: z.string(),
-  amount: z.coerce.number(),
-  category: BudgetItemCategorySchema,
-  period: z.string(),
-});
+  description: z.string().optional().nullable(),
+  amount: z.coerce.number().optional().nullable(),
+  category: z.string().optional().nullable(),
+  period: z.string().optional().nullable(),
+}).passthrough();
 export type BudgetItemForAPIType = z.infer<typeof BudgetItemAPISchema>;
 
 const InvestmentItemAPISchema = z.object({
   id: z.string(),
-  name: z.string(),
-  type: z.string(),
-  purchaseDate: z.string(), // ISO string
-  quantity: z.coerce.number(),
-  purchasePrice: z.coerce.number(),
-  currentValue: z.coerce.number(),
-  currency: z.string(),
+  name: z.string().optional().nullable(),
+  type: z.string().optional().nullable(),
+  purchaseDate: z.string().optional().nullable(),
+  quantity: z.coerce.number().optional().nullable(),
+  purchasePrice: z.coerce.number().optional().nullable(),
+  currentValue: z.coerce.number().optional().nullable(),
+  currency: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
-});
+}).passthrough();
 export type InvestmentItemForAPIType = z.infer<typeof InvestmentItemAPISchema>;
 
 const WeeklyReviewDataAPISchema = z.object({
-  ownerId: z.string(),
-  ownerUsername: z.string().optional(),
-  journal: z.string(),
-  transactionComments: z.record(z.string()).optional(),
-  sharedWith: z.array(z.string()).optional(),
-  // weekKey is usually the key in the record, not a field within
-});
+  ownerId: z.string().optional().nullable(),
+  ownerUsername: z.string().optional().nullable(),
+  journal: z.string().optional().nullable(),
+  transactionComments: z.record(z.string()).optional().nullable(),
+  sharedWith: z.array(z.string()).optional().nullable(),
+}).passthrough();
 export type WeeklyReviewDataForAPIType = z.infer<typeof WeeklyReviewDataAPISchema>;
 
 // Schema for collection changes (created, updated, deletedIds)
-// The CollectionChanges object itself is REQUIRED if the top-level key (e.g., "transactions") is present.
-// The arrays within CollectionChanges are optional.
 const createCollectionChangesSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
-  created: z.array(itemSchema).optional(),
-  updated: z.array(itemSchema.extend({ id: z.string() })).optional(), // Ensure updated items have an ID
-  deletedIds: z.array(z.string()).optional(),
-});
+  created: z.array(itemSchema).optional().nullable(),
+  updated: z.array(itemSchema).optional().nullable(),
+  deletedIds: z.array(z.string()).optional().nullable(),
+}).passthrough();
 
 export const SaveDataPayloadSchema = z.object({
-  transactions: createCollectionChangesSchema(TransactionItemSchemaForAPI).optional(), // Collections are optional in the payload
-  debts: createCollectionChangesSchema(DebtItemAPISchema).optional(),
-  assetItems: createCollectionChangesSchema(BaseItemSchemaForAPI).optional(),
-  otherLiabilityItems: createCollectionChangesSchema(BaseItemSchemaForAPI).optional(),
-  budgetItems: createCollectionChangesSchema(BudgetItemAPISchema).optional(),
-  ownedReviews: createCollectionChangesSchema(WeeklyReviewDataAPISchema.extend({ weekKey: z.string() })).optional(),
-  investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema).optional(),
+  transactions: createCollectionChangesSchema(TransactionItemSchemaForAPI).optional().nullable(),
+  debts: createCollectionChangesSchema(DebtItemAPISchema).optional().nullable(),
+  assetItems: createCollectionChangesSchema(BaseItemSchemaForAPI).optional().nullable(),
+  otherLiabilityItems: createCollectionChangesSchema(BaseItemSchemaForAPI).optional().nullable(),
+  budgetItems: createCollectionChangesSchema(BudgetItemAPISchema).optional().nullable(),
+  ownedReviews: createCollectionChangesSchema(WeeklyReviewDataAPISchema).optional().nullable(),
+  investmentItems: createCollectionChangesSchema(InvestmentItemAPISchema).optional().nullable(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   gettingStartedDismissed: z.boolean().optional(),
   payloadDataHash: z.string({ required_error: "Payload data hash is required" }),
   lastKnownServerHash: z.string().nullable().optional(),
-});
+  lastKnownServerTimestamp: z.string().nullable().optional(),
+}).passthrough();
 export type SaveDataPayload = z.infer<typeof SaveDataPayloadSchema>;
 
 // --- Share Actions Schemas ---

@@ -108,7 +108,7 @@ export async function getAllUsers(): Promise<AppUserProfile[]> {
 
     return users;
   } catch (error) {
-    logError('Failed to fetch users from Firestore', error);
+    logError('Failed to fetch users from Firestore', error, undefined, typeof window !== 'undefined' ? (document.cookie.match(/(?:(?:^|.*;\s*)uid\s*=\s*([^;]*).*$)|^.*$/)?.[1] || 'client_no_uid') : 'server');
     return [];
   }
 }

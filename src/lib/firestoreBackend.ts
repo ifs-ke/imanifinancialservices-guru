@@ -8,12 +8,13 @@ import {
   deleteDoc,
   writeBatch,
   query,
+  where,
   orderBy,
   limit,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import { db, OperationType, handleFirestoreError } from '@/lib/firebase';
+import { db, auth, OperationType, handleFirestoreError } from '@/lib/firebase';
 import type {
   TransactionWithId,
   DebtItem,
@@ -40,11 +41,37 @@ export interface SyncedFirestoreData {
   gettingStartedDismissed: boolean;
 }
 
+export function isGuestOrLocalUserId(userId: string): boolean {
+  if (!userId) return true;
+  const lower = userId.toLowerCase();
+  return (
+    lower === 'guest' ||
+    lower === 'guest_session' ||
+    lower === 'anonymous' ||
+    lower === 'anonymous_user' ||
+    lower === 'anonymous_or_server' ||
+    lower.startsWith('guest') ||
+    lower.startsWith('usr_local') ||
+    lower.startsWith('anon')
+  );
+}
+
 /**
  * Ensures user profile exists in Firestore
  */
 export async function ensureUserInFirestore(userId: string, email: string, name?: string | null) {
   if (!userId) throw new Error('User ID is required');
+  if (isGuestOrLocalUserId(userId)) {
+    return;
+  }
+  if (typeof window !== 'undefined' && auth.currentUser && auth.currentUser.uid !== userId) {
+    const isCurrentUserAdmin = 
+      auth.currentUser.email?.toLowerCase() === 'seanwambua@gmail.com' ||
+      auth.currentUser.email?.toLowerCase() === 'rashmore2020@gmail.com';
+    if (!isCurrentUserAdmin) {
+      return;
+    }
+  }
   try {
     const userRef = doc(db, 'users', userId);
     const snap = await getDoc(userRef);
@@ -93,6 +120,23 @@ export async function ensureUserInFirestore(userId: string, email: string, name?
  */
 export async function fetchUserDataFromFirestore(userId: string): Promise<SyncedFirestoreData> {
   if (!userId) throw new Error('User ID is required');
+
+  // Guest and anonymous sessions persist exclusively in offline snapshots
+  if (isGuestOrLocalUserId(userId)) {
+    return {
+      transactions: [],
+      debts: [],
+      assetItems: [],
+      otherLiabilityItems: [],
+      budgetItems: [],
+      ownedReviews: {},
+      sharedReviews: {},
+      notifications: [],
+      investmentItems: [],
+      gettingStartedDismissed: false,
+    };
+  }
+
   try {
     // 1. Transactions
     const txCol = collection(db, 'users', userId, 'transactions');
@@ -102,6 +146,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Synced
       const dateVal = data.date instanceof Timestamp ? data.date.toDate().toISOString() : data.date || new Date(0).toISOString();
       return {
         id: docSnap.id,
+        userId: userId,
         date: dateVal,
         description: data.description || '',
         amount: Number(data.amount) || 0,
@@ -118,13 +163,23 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Synced
     const debtsSnap = await getDocs(query(debtsCol, orderBy('description', 'asc')));
     const debts: DebtItem[] = debtsSnap.docs.map((docSnap) => {
       const data = docSnap.data();
+      const dateVal = data.date instanceof Timestamp ? data.date.toDate().toISOString().split('T')[0] : (typeof data.date === 'string' ? data.date : new Date().toISOString().split('T')[0]);
+      const dueDateVal = data.dueDate instanceof Timestamp ? data.dueDate.toDate().toISOString().split('T')[0] : (typeof data.dueDate === 'string' ? data.dueDate : null);
       return {
         id: docSnap.id,
+        userId: userId,
+        date: dateVal,
+        dueDate: dueDateVal,
         description: data.description || '',
+        classification: data.classification === 'institutional' ? 'institutional' : 'personal',
         principal: Number(data.principal) || 0,
-        interestRate: Number(data.interestRate) || 0,
+        interestRate: data.interestRate !== undefined && data.interestRate !== null ? Number(data.interestRate) : 0,
         minPayment: Number(data.minPayment) || 0,
         term: data.term || 'short',
+        status: data.status || 'active',
+        securityType: data.securityType === 'secured' ? 'secured' : 'unsecured',
+        securityDescription: data.securityDescription || null,
+        notes: data.notes || '',
       };
     });
 
@@ -135,6 +190,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Synced
       const data = docSnap.data();
       return {
         id: docSnap.id,
+        userId: userId,
         description: data.description || '',
         value: Number(data.value) || 0,
         category: data.category || 'Other',
@@ -150,6 +206,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Synced
       const data = docSnap.data();
       return {
         id: docSnap.id,
+        userId: userId,
         description: data.description || '',
         value: Number(data.value) || 0,
         category: data.category || 'Other',
@@ -164,6 +221,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Synced
       const data = docSnap.data();
       return {
         id: docSnap.id,
+        userId: userId,
         description: data.description || '',
         budgetedAmount: Number(data.budgetedAmount) || 0,
         actualAmount: Number(data.actualAmount) || 0,
@@ -181,6 +239,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Synced
       const purchaseDate = data.purchaseDate instanceof Timestamp ? data.purchaseDate.toDate().toISOString() : data.purchaseDate || new Date(0).toISOString();
       return {
         id: docSnap.id,
+        userId: userId,
         name: data.name || '',
         type: data.type || 'Stocks',
         amountInvested: Number(data.amountInvested) || 0,
@@ -219,6 +278,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Synced
       const ts = data.timestamp instanceof Timestamp ? data.timestamp.toDate().toISOString() : data.timestamp || new Date().toISOString();
       return {
         id: docSnap.id,
+        userId: userId,
         userId,
         title: data.title || '',
         message: data.message || '',
@@ -273,6 +333,18 @@ export async function saveUserDataToFirestore(
   }
 ): Promise<void> {
   if (!userId) throw new Error('User ID is required');
+
+  // Guest and anonymous sessions store data strictly in offline storage snapshots
+  if (isGuestOrLocalUserId(userId)) {
+    return;
+  }
+
+  // Guard client-side calls when Firebase Auth user is not signed in
+  if (typeof window !== 'undefined' && (!auth.currentUser || auth.currentUser.uid !== userId)) {
+    console.warn('[Firestore] Client is not authenticated as target user in Firebase Auth. Skipping direct Firestore save.');
+    return;
+  }
+
   try {
     const batchList: any[] = [];
     let currentBatch = writeBatch(db);
@@ -318,9 +390,17 @@ export async function saveUserDataToFirestore(
         addOperation((b) => b.set(debtRef, {
           ...debt,
           userId,
+          date: debt.date || new Date().toISOString().split('T')[0],
+          dueDate: debt.dueDate || null,
+          classification: debt.classification === 'institutional' ? 'institutional' : 'personal',
           principal: Number(debt.principal) || 0,
-          interestRate: Number(debt.interestRate) || 0,
+          interestRate: debt.interestRate !== undefined && debt.interestRate !== null ? Number(debt.interestRate) : 0,
           minPayment: Number(debt.minPayment) || 0,
+          term: debt.term || 'short',
+          status: debt.status || 'active',
+          securityType: debt.securityType === 'secured' ? 'secured' : 'unsecured',
+          securityDescription: debt.securityDescription || null,
+          notes: debt.notes || '',
           updatedAt: new Date().toISOString(),
         }, { merge: true }));
       });
@@ -481,30 +561,45 @@ export async function saveUserDataToFirestore(
 export async function createFirestoreTestEntry(userId: string, data: string): Promise<string> {
   const entryId = `test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const entryRef = doc(db, 'users', userId, 'testEntries', entryId);
-  await setDoc(entryRef, {
-    id: entryId,
-    userId,
-    data,
-    createdAt: new Date().toISOString(),
-  });
-  return entryId;
+  try {
+    await setDoc(entryRef, {
+      id: entryId,
+      userId,
+      data,
+      createdAt: new Date().toISOString(),
+    });
+    return entryId;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/testEntries/${entryId}`);
+    throw error;
+  }
 }
 
 export async function fetchFirestoreTestEntry(userId: string): Promise<{ id: string; data: string; createdAt: Date } | null> {
   const entriesCol = collection(db, 'users', userId, 'testEntries');
-  const snap = await getDocs(query(entriesCol, orderBy('createdAt', 'desc'), limit(1)));
-  if (snap.empty) return null;
-  const docData = snap.docs[0].data();
-  return {
-    id: snap.docs[0].id,
-    data: docData.data || '',
-    createdAt: new Date(docData.createdAt || Date.now()),
-  };
+  try {
+    const snap = await getDocs(query(entriesCol, orderBy('createdAt', 'desc'), limit(1)));
+    if (snap.empty) return null;
+    const docData = snap.docs[0].data();
+    return {
+      id: snap.docs[0].id,
+      data: docData.data || '',
+      createdAt: new Date(docData.createdAt || Date.now()),
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `users/${userId}/testEntries`);
+    throw error;
+  }
 }
 
 export async function deleteFirestoreTestEntry(userId: string, entryId: string): Promise<void> {
   const entryRef = doc(db, 'users', userId, 'testEntries', entryId);
-  await deleteDoc(entryRef);
+  try {
+    await deleteDoc(entryRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `users/${userId}/testEntries/${entryId}`);
+    throw error;
+  }
 }
 
 export {
